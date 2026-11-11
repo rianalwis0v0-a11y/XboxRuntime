@@ -302,7 +302,7 @@ bool XboxKernelResolveImports(const XboxKernelState& image){
     uint32_t* table=reinterpret_cast<uint32_t*>(uintptr_t(thunk));
     for(uint32_t i=0;i<kThunkMax;i++){
         if(!InImage(thunk+i*4,4))return false;
-        uint32_t v=table[i];if(v==0)return true;
+        uint32_t v=table[i];if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return true;}
         if((v&0x80000000u)==0)return false;
         uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;
         void* target=DataFor(ordinal);
