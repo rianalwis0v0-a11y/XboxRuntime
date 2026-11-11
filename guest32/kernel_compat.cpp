@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
-#include <cstdio>
+#include <cstdio>\n#include <cstdarg>\n#include <intrin.h>\n\nextern "C" __declspec(naked) void KernelDispatch();
 #include "kernel_compat.h"
 
 namespace {
@@ -209,7 +209,7 @@ bool XboxKernelResolveImports(const XboxKernelState& image){
     const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
     uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
         // Some homebrew images have no kernel imports.
-        if(encoded==0)return true;return false;
+        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return true;return false;
     }
     g_stubPage=VirtualAlloc(nullptr,0x2000,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
     if(!g_stubPage)return false;
