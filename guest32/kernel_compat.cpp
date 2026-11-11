@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cwchar>
 #include <cctype>
+#include <cwctype>
 #include "kernel_compat.h"
 
 namespace {
@@ -83,7 +84,7 @@ struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
 extern "C" void __stdcall K_RtlInitAnsiString(GuestAnsiString*d,const char*s){if(!d)return;size_t n=s?strlen(s):0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?1:0));d->Buffer=const_cast<char*>(s);}
 extern "C" void __stdcall K_RtlInitUnicodeString(GuestUnicodeString*d,const wchar_t*s){if(!d)return;size_t n=s?wcslen(s)*2:0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?2:0));d->Buffer=const_cast<wchar_t*>(s);}
-extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){return c&&EnterCriticalSection(c)?0:LONG(0xC000000Du);}
+extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){if(!c)return LONG(0xC000000Du);EnterCriticalSection(c);return 0;}
 extern "C" void __stdcall K_RtlLeaveCriticalSection(RTL_CRITICAL_SECTION*c){if(c)LeaveCriticalSection(c);}
 extern "C" void __stdcall K_RtlInitializeCriticalSection(RTL_CRITICAL_SECTION*c){if(c)InitializeCriticalSection(c);}
 extern "C" BOOL __stdcall K_RtlTryEnterCriticalSection(RTL_CRITICAL_SECTION*c){return c?TryEnterCriticalSection(c):FALSE;}
