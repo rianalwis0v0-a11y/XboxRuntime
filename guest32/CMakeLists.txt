@@ -7,6 +7,7 @@ add_executable(xbe_guest32 guest32.cpp)
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
+target_link_options(xbe_guest32 PRIVATE /LARGEADDRESSAWARE)
 set_target_properties(xbe_guest32 PROPERTIES OUTPUT_NAME "xbe_guest32"
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out")
 foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
