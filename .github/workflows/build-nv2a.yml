@@ -21,10 +21,10 @@ jobs:
       - name: Build NV2A, Insignia DNS, and XBE loader modules
         run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader
 
-      - name: Verify outputs
+      - name: Configure native x86 guest process\n        run: cmake -S guest32 -B build-guest32 -A Win32\n\n      - name: Build native x86 guest process\n        run: cmake --build build-guest32 --config Release --target xbe_guest32\n\n      - name: Verify outputs
         shell: pwsh
         run: |
-          $files = @("build/out/boot.exe", "build/out/main.dll", "build/out/nv2a.dll", "build/out/insignia_dns.dll", "build/out/xbe_loader.dll")
+          $files = @("build/out/boot.exe", "build/out/main.dll", "build/out/nv2a.dll", "build/out/insignia_dns.dll", "build/out/xbe_loader.dll", "build-guest32/out/xbe_guest32.exe")
           foreach ($file in $files) {
             if (!(Test-Path $file)) { throw "Expected output not found: $file" }
             Get-Item $file | Format-List FullName,Length
