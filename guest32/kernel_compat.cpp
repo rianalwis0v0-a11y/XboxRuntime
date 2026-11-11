@@ -4,7 +4,10 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdarg>
-#include <intrin.h>\n#include <cstring>\n#include <cwchar>\n#include <cctype>
+#include <intrin.h>
+#include <cstring>
+#include <cwchar>
+#include <cctype>
 #include "kernel_compat.h"
 
 namespace {
@@ -175,6 +178,44 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_clear_event
         cmp eax, 233
         je nt_wait
+        cmp eax, 261
+        je rtl_append_a
+        cmp eax, 262
+        je rtl_append_w
+        cmp eax, 263
+        je rtl_append_wchar
+        cmp eax, 270
+        je rtl_cmp_a
+        cmp eax, 271
+        je rtl_cmp_w
+        cmp eax, 272
+        je rtl_copy_a
+        cmp eax, 273
+        je rtl_copy_w
+        cmp eax, 275
+        je rtl_lower_w
+        cmp eax, 277
+        je rtl_enter_cs
+        cmp eax, 279
+        je rtl_equal_a
+        cmp eax, 280
+        je rtl_equal_w
+        cmp eax, 289
+        je rtl_init_a
+        cmp eax, 290
+        je rtl_init_w
+        cmp eax, 291
+        je rtl_init_cs
+        cmp eax, 294
+        je rtl_leave_cs
+        cmp eax, 296
+        je rtl_lower_a
+        cmp eax, 306
+        je rtl_try_cs
+        cmp eax, 313
+        je rtl_upper_w
+        cmp eax, 316
+        je rtl_upper_a
         cmp eax, 284
         je rtl_fill
         cmp eax, 298
@@ -219,6 +260,25 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_set_event: jmp K_NtSetEvent
     nt_clear_event: jmp K_NtClearEvent
     nt_wait: jmp K_NtWaitForSingleObject
+    rtl_append_a: jmp K_RtlAppendStringToString
+    rtl_append_w: jmp K_RtlAppendUnicodeStringToString
+    rtl_append_wchar: jmp K_RtlAppendUnicodeToString
+    rtl_cmp_a: jmp K_RtlCompareString
+    rtl_cmp_w: jmp K_RtlCompareUnicodeString
+    rtl_copy_a: jmp K_RtlCopyString
+    rtl_copy_w: jmp K_RtlCopyUnicodeString
+    rtl_lower_w: jmp K_RtlDowncaseUnicodeChar
+    rtl_enter_cs: jmp K_RtlEnterCriticalSection
+    rtl_equal_a: jmp K_RtlEqualString
+    rtl_equal_w: jmp K_RtlEqualUnicodeString
+    rtl_init_a: jmp K_RtlInitAnsiString
+    rtl_init_w: jmp K_RtlInitUnicodeString
+    rtl_init_cs: jmp K_RtlInitializeCriticalSection
+    rtl_leave_cs: jmp K_RtlLeaveCriticalSection
+    rtl_lower_a: jmp K_RtlLowerChar
+    rtl_try_cs: jmp K_RtlTryEnterCriticalSection
+    rtl_upper_w: jmp K_RtlUpcaseUnicodeChar
+    rtl_upper_a: jmp K_RtlUpperChar
     rtl_fill: jmp K_RtlFillMemory
     rtl_move: jmp K_RtlMoveMemory
     rtl_bswap32: jmp K_RtlUlongByteSwap
