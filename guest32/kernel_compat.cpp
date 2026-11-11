@@ -229,8 +229,33 @@ bool XboxKernelResolveImports(const XboxKernelState& image){
 }
 DWORD WINAPI XboxKernelStartXbe(void*){
     if(!g_entry)return ERROR_INVALID_ADDRESS;
+    DWORD tlsIndex=TLS_OUT_OF_INDEXES;void* tlsBlock=nullptr;
+    if(g_tls){
+        struct TlsDirectory { uint32_t start,end,index,callbacks,zeroFill,characteristics; };
+        if(!InImage(g_tls,sizeof(TlsDirectory)))return ERROR_INVALID_ADDRESS;
+        auto*t=reinterpret_cast<TlsDirectory*>(uintptr_t(g_tls));
+        if(t->end<t->start||!InImage(t->start,t->end-t->start)||!InImage(t->index,4))return ERROR_INVALID_ADDRESS;
+        tlsIndex=TlsAlloc();if(tlsIndex==TLS_OUT_OF_INDEXES)return ERROR_NOT_ENOUGH_MEMORY;
+        uint64_t total=uint64_t(t->end-t->start)+t->zeroFill;
+        if(total>0x1000000){TlsFree(tlsIndex);return ERROR_INVALID_DATA;}
+        tlsBlock=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,size_t(total?total:1));
+        if(!tlsBlock){TlsFree(tlsIndex);return ERROR_NOT_ENOUGH_MEMORY;}
+        if(t->end>t->start)std::memcpy(tlsBlock,reinterpret_cast<void*>(uintptr_t(t->start)),t->end-t->start);
+        *reinterpret_cast<uint32_t*>(uintptr_t(t->index))=tlsIndex;
+        if(!TlsSetValue(tlsIndex,tlsBlock)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return GetLastError();}
+        if(t->callbacks){
+            if(!InImage(t->callbacks,4)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return ERROR_INVALID_ADDRESS;}
+            auto callbacks=reinterpret_cast<uint32_t*>(uintptr_t(t->callbacks));
+            for(uint32_t i=0;i<64&&InImage(t->callbacks+i*4,4)&&callbacks[i];++i){
+                using Callback=void (NTAPI*)(void*,DWORD,void*);
+                reinterpret_cast<Callback>(uintptr_t(callbacks[i]))(g_image,DLL_PROCESS_ATTACH,nullptr);
+            }
+        }
+    }
     using Entry=void(__cdecl*)();
+    DWORD result=0;
     __try { reinterpret_cast<Entry>(uintptr_t(g_entry))(); }
-    __except(EXCEPTION_EXECUTE_HANDLER){OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");return GetExceptionCode();}
-    return 0;
+    __except(EXCEPTION_EXECUTE_HANDLER){OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");result=GetExceptionCode();}
+    if(tlsIndex!=TLS_OUT_OF_INDEXES){TlsSetValue(tlsIndex,nullptr);if(tlsBlock)HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);}
+    return result;
 }
