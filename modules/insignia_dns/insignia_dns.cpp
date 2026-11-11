@@ -33,7 +33,9 @@ struct Zone {
 SRWLOCK g_zoneLock = SRWLOCK_INIT;
 std::unordered_map<std::string, uint32_t> g_zones;
 SOCKET g_socket = INVALID_SOCKET;
+SOCKET g_tcpListener = INVALID_SOCKET;
 HANDLE g_dnsThread = nullptr;
+HANDLE g_tcpThread = nullptr;
 HANDLE g_refreshThread = nullptr;
 HANDLE g_stopEvent = nullptr;
 volatile LONG g_running = 0;
@@ -235,6 +237,57 @@ DWORD WINAPI DnsWorker(void*) {
     return 0;
 }
 
+bool RecvExact(SOCKET s, char* data, int length) {
+    int done = 0;
+    while (done < length) {
+        int n = recv(s, data + done, length - done, 0);
+        if (n <= 0) return false;
+        done += n;
+    }
+    return true;
+}
+
+bool SendExact(SOCKET s, const char* data, int length) {
+    int done = 0;
+    while (done < length) {
+        int n = send(s, data + done, length - done, 0);
+        if (n <= 0) return false;
+        done += n;
+    }
+    return true;
+}
+
+DWORD WINAPI TcpWorker(void*) {
+    uint8_t query[kPacketLimit], reply[kPacketLimit];
+    while (InterlockedCompareExchange(&g_running, 1, 1)) {
+        SOCKET client = accept(g_tcpListener, nullptr, nullptr);
+        if (client == INVALID_SOCKET) {
+            if (!InterlockedCompareExchange(&g_running, 1, 1)) break;
+            continue;
+        }
+        DWORD timeout = 3000;
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+        setsockopt(client, SOL_SOCKET, SO_SNDTIMEO,
+            reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+        uint8_t prefix[2]{};
+        if (RecvExact(client, reinterpret_cast<char*>(prefix), 2)) {
+            const size_t length = Read16(prefix);
+            if (length <= sizeof(query) && length >= 17 &&
+                RecvExact(client, reinterpret_cast<char*>(query), static_cast<int>(length))) {
+                const int replyLength = MakeReply(query, length, reply, sizeof(reply));
+                if (replyLength > 0) {
+                    Write16(prefix, static_cast<uint16_t>(replyLength));
+                    SendExact(client, reinterpret_cast<const char*>(prefix), 2);
+                    SendExact(client, reinterpret_cast<const char*>(reply), replyLength);
+                }
+            }
+        }
+        closesocket(client);
+    }
+    return 0;
+}
+
 DWORD WINAPI RefreshWorker(void*) {
     while (WaitForSingleObject(g_stopEvent, kRefreshMilliseconds) == WAIT_TIMEOUT) {
         if (InterlockedCompareExchange(&g_running, 1, 1)) FetchZones();
@@ -276,28 +329,45 @@ extern "C" int __cdecl ModuleStart(void) {
         WSACleanup(); g_winsock = false; return 0;
     }
 
+    g_tcpListener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (g_tcpListener == INVALID_SOCKET ||
+        bind(g_tcpListener, reinterpret_cast<sockaddr*>(&local), sizeof(local)) == SOCKET_ERROR ||
+        listen(g_tcpListener, SOMAXCONN) == SOCKET_ERROR) {
+        Log(L"Could not bind TCP port 53; built-in DNS will remain disabled.");
+        if (g_tcpListener != INVALID_SOCKET) closesocket(g_tcpListener);
+        g_tcpListener = INVALID_SOCKET;
+        closesocket(g_socket); g_socket = INVALID_SOCKET;
+        CloseHandle(g_stopEvent); g_stopEvent = nullptr;
+        WSACleanup(); g_winsock = false; return 0;
+    }
+
     InterlockedExchange(&g_running, 1);
     FetchZones(); // A failed first fetch is non-fatal; the refresh worker retries.
     g_dnsThread = CreateThread(nullptr, 0, DnsWorker, nullptr, 0, nullptr);
+    g_tcpThread = CreateThread(nullptr, 0, TcpWorker, nullptr, 0, nullptr);
     g_refreshThread = CreateThread(nullptr, 0, RefreshWorker, nullptr, 0, nullptr);
-    if (!g_dnsThread || !g_refreshThread) {
+    if (!g_dnsThread || !g_tcpThread || !g_refreshThread) {
         InterlockedExchange(&g_running, 0);
         SetEvent(g_stopEvent);
         closesocket(g_socket); g_socket = INVALID_SOCKET;
+        closesocket(g_tcpListener); g_tcpListener = INVALID_SOCKET;
         if (g_dnsThread) { WaitForSingleObject(g_dnsThread, 2000); CloseHandle(g_dnsThread); g_dnsThread = nullptr; }
-        if (g_refreshThread) { WaitForSingleObject(g_refreshThread, 2000); CloseHandle(g_refreshThread); g_refreshThread = nullptr; }
+        if (g_tcpThread) { WaitForSingleObject(g_tcpThread, 2000); CloseHandle(g_tcpThread); g_tcpThread = nullptr; }
+        if (g_refreshThread) { WaitForSingleObject(g_refreshThread, 3000); CloseHandle(g_refreshThread); g_refreshThread = nullptr; }
         CloseHandle(g_stopEvent); g_stopEvent = nullptr;
         WSACleanup(); g_winsock = false; return 4;
     }
-    Log(L"Insignia DNS listening on UDP port 53 (all network interfaces).");
+    Log(L"Insignia DNS listening on UDP and TCP port 53 (all network interfaces).");
     return 0;
 }
 
 extern "C" void __cdecl ModuleStop(void) {
     if (!InterlockedExchange(&g_running, 0)) return;
+    if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_socket != INVALID_SOCKET) { closesocket(g_socket); g_socket = INVALID_SOCKET; }
+    if (g_tcpListener != INVALID_SOCKET) { closesocket(g_tcpListener); g_tcpListener = INVALID_SOCKET; }
     if (g_dnsThread) { WaitForSingleObject(g_dnsThread, 2000); CloseHandle(g_dnsThread); g_dnsThread = nullptr; }
-    if (g_stopEvent) { SetEvent(g_stopEvent); }
+    if (g_tcpThread) { WaitForSingleObject(g_tcpThread, 2000); CloseHandle(g_tcpThread); g_tcpThread = nullptr; }
     if (g_refreshThread) { WaitForSingleObject(g_refreshThread, 3000); CloseHandle(g_refreshThread); g_refreshThread = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_winsock) { WSACleanup(); g_winsock = false; }
