@@ -1,9 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(XboxRuntime LANGUAGES C)
+project(XboxRuntime LANGUAGES C CXX)
 
 # Build the upstream Xbox hardware/runtime libraries as pinned source.
-# Tests are run upstream; keep this integration build focused and light.
 set(XBOXRECOMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(XBOXRECOMP_BUILD_D3D8 ON CACHE BOOL "" FORCE)
 
@@ -14,3 +13,4 @@ endif()
 
 add_subdirectory(third_party/xboxrecomp)
 add_subdirectory(modules/nv2a)
+add_subdirectory(modules/insignia_dns)
