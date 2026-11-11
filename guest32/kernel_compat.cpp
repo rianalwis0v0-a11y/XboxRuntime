@@ -13,7 +13,7 @@ constexpr uint32_t kRetailEntry=0xA8FC57ABu, kDebugEntry=0x94859D4Bu;
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
-static uint32_t g_base=0,g_size=0,g_entry=0;
+static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
@@ -51,8 +51,8 @@ extern "C" LONG __stdcall K_InterlockedExchange(volatile LONG*p,LONG v){return I
 extern "C" LONG __stdcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return 0;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
-extern "C" void __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
-    if(!interval){Sleep(0);return;}
+extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
+    if(!interval){Sleep(0);return 0;}
     LONGLONG ticks=interval->QuadPart;
     if(ticks<0){ULONGLONG ms=ULONGLONG(-ticks)/10000ull;Sleep(DWORD(ms>MAXDWORD?MAXDWORD:ms));}
     else Sleep(0);
@@ -69,7 +69,7 @@ extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
-    if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type!=0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
+    if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
 extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
@@ -205,7 +205,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
 bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
 }
 bool XboxKernelResolveImports(const XboxKernelState& image){
-    g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;
+    g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
     if(!g_image||!InImage(g_entry))return false;
     const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
     uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
