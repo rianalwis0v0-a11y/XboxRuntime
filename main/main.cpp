@@ -22,19 +22,12 @@ namespace XboxRuntime
         bool started = false;
     };
 
+    // Only implemented modules are started. Add each remaining Xbox
+    // subsystem when its real implementation and build target are ready.
     static std::vector<Module> modules =
     {
-        { L"eeprom.dll" },
-        { L"xbox_storage.dll" },
-        { L"fatx.dll" },
-        { L"xdvdfs.dll" },
-        { L"xbox_kernel.dll" },
         { L"nv2a.dll" },
-        { L"xbox_graphics.dll" },
-        { L"xbox_audio.dll" },
-        { L"xbox_input.dll" },
         { L"insignia_dns.dll" },
-        { L"xbox_network.dll" },
         { L"xbe_loader.dll" }
     };
 
