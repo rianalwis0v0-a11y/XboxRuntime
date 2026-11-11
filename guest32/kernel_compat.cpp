@@ -9,7 +9,6 @@
 
 namespace {
 extern "C" __declspec(naked) void KernelDispatch();
-constexpr uint32_t kRetailEntry=0xA8FC57ABu, kDebugEntry=0x94859D4Bu;
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
@@ -17,7 +16,6 @@ static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
-static volatile LONG g_tick=0;
 static uint32_t g_data[379]{};
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
@@ -44,11 +42,11 @@ extern "C" void __stdcall K_ExFreePool(void*p){if(p)HeapFree(GetProcessHeap(),0,
 extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
 extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
 extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
-extern "C" LONG __stdcall K_InterlockedCompareExchange(volatile LONG*p,LONG e,LONG c){return InterlockedCompareExchange(p,e,c);}
-extern "C" LONG __stdcall K_InterlockedDecrement(volatile LONG*p){return InterlockedDecrement(p);}
-extern "C" LONG __stdcall K_InterlockedIncrement(volatile LONG*p){return InterlockedIncrement(p);}
-extern "C" LONG __stdcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
-extern "C" LONG __stdcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
+extern "C" LONG __fastcall K_InterlockedCompareExchange(volatile LONG*p,LONG e,LONG c){return InterlockedCompareExchange(p,e,c);}
+extern "C" LONG __fastcall K_InterlockedDecrement(volatile LONG*p){return InterlockedDecrement(p);}
+extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return InterlockedIncrement(p);}
+extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
+extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return 0;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
 extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
@@ -56,6 +54,7 @@ extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_IN
     LONGLONG ticks=interval->QuadPart;
     if(ticks<0){ULONGLONG ms=ULONGLONG(-ticks)/10000ull;Sleep(DWORD(ms>MAXDWORD?MAXDWORD:ms));}
     else Sleep(0);
+    return 0;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
     LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
@@ -81,8 +80,8 @@ extern "C" void __stdcall K_RtlZeroMemory(void*d,uint32_t n){if(d)std::memset(d,
 extern "C" void __stdcall K_RtlFillMemory(void*d,uint32_t n,uint8_t v){if(d)std::memset(d,v,n);}
 extern "C" void __stdcall K_RtlMoveMemory(void*d,const void*s,uint32_t n){if(d&&s)std::memmove(d,s,n);}
 extern "C" uint32_t __stdcall K_RtlCompareMemory(const void*a,const void*b,uint32_t n){const uint8_t*x=(const uint8_t*)a,*y=(const uint8_t*)b;uint32_t i=0;while(i<n&&x[i]==y[i])++i;return i;}
-extern "C" uint32_t __stdcall K_RtlUlongByteSwap(uint32_t v){return _byteswap_ulong(v);}
-extern "C" uint16_t __stdcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_ushort(v);}
+extern "C" uint32_t __fastcall K_RtlUlongByteSwap(uint32_t v){return _byteswap_ulong(v);}
+extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_ushort(v);}
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
