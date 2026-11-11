@@ -1,0 +1,6 @@
+
+LIBRARY fatx
+EXPORTS
+    ModuleStart=_ModuleStart
+    ModuleStop=_ModuleStop
+    FATX_ParseBootSector=_FATX_ParseBootSector
