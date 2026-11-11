@@ -52,7 +52,7 @@ int StartGuest(const wchar_t*xbe){
   Sleep(10);
  }
  if(!connected){StopGuest();return XBE_E_PIPE;}
- DWORD mode=PIPE_READMODE_BYTE;if(!SetNamedPipeHandleState(pipe,&mode,nullptr,nullptr)){StopGuest();return XBE_E_PIPE;}
+ DWORD mode=PIPE_READMODE_BYTE|PIPE_WAIT;if(!SetNamedPipeHandleState(pipe,&mode,nullptr,nullptr)){StopGuest();return XBE_E_PIPE;}
  Reply r{};if(!ExactRead(pipe,&r,sizeof(r))||r.magic!=kReplyMagic||r.version!=1){StopGuest();return XBE_E_PIPE;}
  if(r.status!=0){StopGuest();return XBE_E_GUEST;}
  g.base=r.imageBase;g.size=r.imageSize;g.entry=r.entry;g.sections=r.sectionCount;
