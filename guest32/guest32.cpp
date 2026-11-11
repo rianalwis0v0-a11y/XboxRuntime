@@ -71,6 +71,7 @@ int wmain(int argc,wchar_t**argv){
  Reply r{};r.magic=kReplyMagic;r.version=1;r.status=Load(xbePath,r);
  HANDLE xbeThread=nullptr;
  if(r.status==OK){
+  XboxKernelSetTitlePath(xbePath);
   XboxKernelState image{r.imageBase,r.imageSize,r.entry,r.sectionCount,*reinterpret_cast<uint32_t*>(uintptr_t(r.imageBase+0x12C))};
   if(!XboxKernelResolveImports(image))r.status=FORMAT;
   else{xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);if(!xbeThread)r.status=MEMORY;}
