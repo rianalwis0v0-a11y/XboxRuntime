@@ -31,7 +31,11 @@ jobs:
         shell: pwsh
         run: Copy-Item "build-guest32/out/xbe_guest32.exe" "build/out/xbe_guest32.exe" -Force
 
-      - name: Smoke-test native x86 XBE execution\n        shell: pwsh\n        run: ./.github/scripts/test-native-x86-guest.ps1\n\n      - name: Verify outputs
+      - name: Smoke-test native x86 XBE execution
+        shell: pwsh
+        run: ./.github/scripts/test-native-x86-guest.ps1
+
+      - name: Verify outputs
         shell: pwsh
         run: |
           $files = @(
