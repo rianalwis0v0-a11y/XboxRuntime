@@ -12,8 +12,8 @@
 #include <string>
 #include "kernel_compat.h"
 
-namespace {
 extern "C" __declspec(naked) void KernelDispatch();
+namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
@@ -156,7 +156,8 @@ extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
-}\nextern "C" __declspec(naked) void KernelDispatch(){
+}\n}
+extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
         mov eax, [esp]
         add esp, 4
@@ -343,6 +344,7 @@ extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(
     rtl_zero: jmp K_RtlZeroMemory
     }
 }
+namespace {
 bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
 }
 void XboxKernelSetTitlePath(const wchar_t* path){
