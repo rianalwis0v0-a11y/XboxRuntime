@@ -20,7 +20,7 @@ static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
-static uint32_t g_data[379]{};
+static uint32_t g_data[379]{};\nstatic std::wstring g_titleDirectory;
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
 void* StubFor(uint32_t ordinal){
@@ -70,6 +70,45 @@ extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,ui
 extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,MEM_RELEASE);}
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
+struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
+std::wstring TranslateXboxPath(const GuestUnicodeString* name){
+    if(!name||!name->Buffer||!name->Length)return {};
+    std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
+    const std::wstring cd=L"\\Device\\Cdrom0";
+    const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
+    if(p.rfind(cd,0)==0)p=g_titleDirectory+p.substr(cd.size());
+    else if(p.rfind(hd,0)==0)p=g_titleDirectory+p.substr(hd.size());
+    else if(p.rfind(L"\\??\\",0)==0)p=p.substr(4);
+    else if(p.size()>2&&p[1]==L':'&&(p[2]==L'\\'||p[2]==L'/')){
+        if(p[0]==L'D'||p[0]==L'd')p=g_titleDirectory+p.substr(2);
+    }else if(p[0]==L'\\')p=g_titleDirectory+p;
+    return p;
+}
+DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
+DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
+LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
+    if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
+    DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
+    if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
+    HANDLE h=CreateFileW(path.c_str(),FileAccess(access),((share&1)?FILE_SHARE_READ:0)|((share&2)?FILE_SHARE_WRITE:0)|((share&4)?FILE_SHARE_DELETE:0),nullptr,FileDisposition(disposition),flags,nullptr);
+    if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
+    *out=h;if(io){io->Status=0;io->Information=FILE_OPENED;}return 0;
+}
+extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
+extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
+    DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
+    if(io){io->Status=read?0:LONG(0xC0000011u);io->Information=read;}if(event)SetEvent(event);return read?0:LONG(0xC0000011u);
+}
+extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
+    DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
+    if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
+}
+extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
 extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
@@ -169,6 +208,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je mm_phys
         cmp eax, 174
         je mm_valid
+        cmp eax, 190
+        je nt_create_file
+        cmp eax, 202
+        je nt_open_file
+        cmp eax, 219
+        je nt_read_file
+        cmp eax, 236
+        je nt_write_file
+        cmp eax, 198
+        je nt_flush
         cmp eax, 187
         je nt_close
         cmp eax, 189
@@ -256,6 +305,11 @@ extern "C" __declspec(naked) void KernelDispatch(){
     mm_free: jmp K_MmFreeContiguousMemory
     mm_phys: jmp K_MmGetPhysicalAddress
     mm_valid: jmp K_MmIsAddressValid
+    nt_create_file: jmp K_NtCreateFile
+    nt_open_file: jmp K_NtOpenFile
+    nt_read_file: jmp K_NtReadFile
+    nt_write_file: jmp K_NtWriteFile
+    nt_flush: jmp K_NtFlushBuffersFile
     nt_close: jmp K_NtClose
     nt_event: jmp K_NtCreateEvent
     nt_set_event: jmp K_NtSetEvent
@@ -289,7 +343,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
 }
 bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
 }
-bool XboxKernelResolveImports(const XboxKernelState& image){
+void XboxKernelSetTitlePath(const wchar_t* path){\n    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);\n}\nbool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
     if(!g_image||!InImage(g_entry))return false;
     const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
