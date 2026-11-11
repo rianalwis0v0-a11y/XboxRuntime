@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
+#include <cwchar>
 #include <string>
 #include <vector>
 #include <algorithm>
