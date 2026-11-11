@@ -67,5 +67,5 @@ extern "C" __declspec(dllexport) void __cdecl XbeUnloadImage(){StopGuest();}
 extern "C" __declspec(dllexport) int __cdecl XbeGetImageInfo(uint32_t*base,uint32_t*size,uint32_t*entry,uint32_t*count){
  if(!g.process)return XBE_E_ARGUMENT;if(base)*base=g.base;if(size)*size=g.size;if(entry)*entry=g.entry;if(count)*count=g.sections;return XBE_OK;
 }
-extern "C" __declspec(dllexport) int __cdecl LoadXbe(const wchar_t*path){return XbeLoadImage(path);}
+extern "C" __declspec(dllexport) int __cdecl LoadXbe(const wchar_t*path){int r=XbeLoadImage(path);return r==XBE_E_NO_KERNEL?XBE_OK:r;}
 BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}
