@@ -2,14 +2,16 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
-#include <cstdio>\n#include <cstdarg>\n#include <intrin.h>\n\nextern "C" __declspec(naked) void KernelDispatch();
+#include <cstdio>
+#include <cstdarg>
+#include <intrin.h>
 #include "kernel_compat.h"
 
 namespace {
+extern "C" __declspec(naked) void KernelDispatch();
 constexpr uint32_t kRetailEntry=0xA8FC57ABu, kDebugEntry=0x94859D4Bu;
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
-struct XbeHeaderView { uint8_t bytes[0x178]; };
 static uint8_t* g_image=nullptr;
 static uint32_t g_base=0,g_size=0,g_entry=0;
 static void* g_stubPage=nullptr;
@@ -19,7 +21,6 @@ static volatile LONG g_tick=0;
 static uint32_t g_data[379]{};
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
-uint32_t Read32(uint32_t va){return *reinterpret_cast<uint32_t*>(uintptr_t(va));}
 void* StubFor(uint32_t ordinal){
     if(!g_stubPage||g_stubCount>=kThunkMax)return nullptr;
     uint8_t* p=static_cast<uint8_t*>(g_stubPage)+g_stubCount*10;
