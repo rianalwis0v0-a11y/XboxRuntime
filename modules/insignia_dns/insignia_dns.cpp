@@ -5,6 +5,8 @@
 #include <winhttp.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <cstdint>
 #include <regex>
 #include <string>
@@ -33,6 +35,7 @@ std::unordered_map<std::string, uint32_t> g_zones;
 SOCKET g_socket = INVALID_SOCKET;
 HANDLE g_dnsThread = nullptr;
 HANDLE g_refreshThread = nullptr;
+HANDLE g_stopEvent = nullptr;
 volatile LONG g_running = 0;
 bool g_winsock = false;
 
@@ -233,8 +236,7 @@ DWORD WINAPI DnsWorker(void*) {
 }
 
 DWORD WINAPI RefreshWorker(void*) {
-    while (InterlockedCompareExchange(&g_running, 1, 1)) {
-        Sleep(kRefreshMilliseconds);
+    while (WaitForSingleObject(g_stopEvent, kRefreshMilliseconds) == WAIT_TIMEOUT) {
         if (InterlockedCompareExchange(&g_running, 1, 1)) FetchZones();
     }
     return 0;
@@ -249,10 +251,13 @@ extern "C" int __cdecl ModuleStart(void) {
         return 1;
     }
     g_winsock = true;
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) { WSACleanup(); g_winsock = false; return 2; }
 
     g_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (g_socket == INVALID_SOCKET) {
         Log(L"Could not create DNS socket.");
+        CloseHandle(g_stopEvent); g_stopEvent = nullptr;
         WSACleanup(); g_winsock = false; return 2;
     }
 
@@ -266,7 +271,9 @@ extern "C" int __cdecl ModuleStart(void) {
     if (bind(g_socket, reinterpret_cast<sockaddr*>(&local), sizeof(local)) == SOCKET_ERROR) {
         Log(L"Could not bind UDP port 53. Check for another DNS server or permissions.");
         closesocket(g_socket); g_socket = INVALID_SOCKET;
-        WSACleanup(); g_winsock = false; return 3;
+        // DNS is optional for offline use; don't prevent the dashboard from booting.
+        CloseHandle(g_stopEvent); g_stopEvent = nullptr;
+        WSACleanup(); g_winsock = false; return 0;
     }
 
     InterlockedExchange(&g_running, 1);
@@ -275,9 +282,11 @@ extern "C" int __cdecl ModuleStart(void) {
     g_refreshThread = CreateThread(nullptr, 0, RefreshWorker, nullptr, 0, nullptr);
     if (!g_dnsThread || !g_refreshThread) {
         InterlockedExchange(&g_running, 0);
+        SetEvent(g_stopEvent);
         closesocket(g_socket); g_socket = INVALID_SOCKET;
         if (g_dnsThread) { WaitForSingleObject(g_dnsThread, 2000); CloseHandle(g_dnsThread); g_dnsThread = nullptr; }
         if (g_refreshThread) { WaitForSingleObject(g_refreshThread, 2000); CloseHandle(g_refreshThread); g_refreshThread = nullptr; }
+        CloseHandle(g_stopEvent); g_stopEvent = nullptr;
         WSACleanup(); g_winsock = false; return 4;
     }
     Log(L"Insignia DNS listening on UDP port 53 (all network interfaces).");
@@ -288,7 +297,9 @@ extern "C" void __cdecl ModuleStop(void) {
     if (!InterlockedExchange(&g_running, 0)) return;
     if (g_socket != INVALID_SOCKET) { closesocket(g_socket); g_socket = INVALID_SOCKET; }
     if (g_dnsThread) { WaitForSingleObject(g_dnsThread, 2000); CloseHandle(g_dnsThread); g_dnsThread = nullptr; }
-    if (g_refreshThread) { WaitForSingleObject(g_refreshThread, 2000); CloseHandle(g_refreshThread); g_refreshThread = nullptr; }
+    if (g_stopEvent) { SetEvent(g_stopEvent); }
+    if (g_refreshThread) { WaitForSingleObject(g_refreshThread, 3000); CloseHandle(g_refreshThread); g_refreshThread = nullptr; }
+    if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_winsock) { WSACleanup(); g_winsock = false; }
     Log(L"Insignia DNS stopped.");
 }
