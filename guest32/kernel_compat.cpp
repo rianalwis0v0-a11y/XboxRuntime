@@ -72,7 +72,8 @@ extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,ui
 extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,MEM_RELEASE);}
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
-struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };\nstruct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
+struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
 std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     if(!name||!name->Buffer||!name->Length)return {};
