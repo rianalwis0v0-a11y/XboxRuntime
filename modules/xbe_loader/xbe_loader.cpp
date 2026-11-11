@@ -2,12 +2,13 @@
 #include <windows.h>
 #include <cstdint>
 #include <string>
+#include <cwchar>
 #include <vector>
 
 namespace {
 constexpr uint32_t kReplyMagic=0x47584258;
 enum : int { XBE_OK=0, XBE_E_ARGUMENT=1, XBE_E_START=7, XBE_E_PIPE=8,
-             XBE_E_GUEST=9, XBE_E_NO_KERNEL=10 };
+             XBE_E_GUEST=9, XBE_E_GUEST_STARTED=10 };
 #pragma pack(push,1)
 struct Reply { uint32_t magic,version,status,imageBase,imageSize,entry,sectionCount; };
 #pragma pack(pop)
@@ -56,8 +57,8 @@ int StartGuest(const wchar_t*xbe){
  Reply r{};if(!ExactRead(pipe,&r,sizeof(r))||r.magic!=kReplyMagic||r.version!=1){StopGuest();return XBE_E_PIPE;}
  if(r.status!=0){StopGuest();return XBE_E_GUEST;}
  g.base=r.imageBase;g.size=r.imageSize;g.entry=r.entry;g.sections=r.sectionCount;
- OutputDebugStringW(L"[XbeLoader] XBE mapped in dedicated native x86 guest process. Kernel startup is still pending.\n");
- return XBE_E_NO_KERNEL;
+ OutputDebugStringW(L"[XbeLoader] XBE mapped in dedicated native x86 guest process. XBE entry thread started.\n");
+ return XBE_E_GUEST_STARTED;
 }
 }
 extern "C" __declspec(dllexport) int __cdecl ModuleStart(){started=true;return XBE_OK;}
@@ -67,5 +68,5 @@ extern "C" __declspec(dllexport) void __cdecl XbeUnloadImage(){StopGuest();}
 extern "C" __declspec(dllexport) int __cdecl XbeGetImageInfo(uint32_t*base,uint32_t*size,uint32_t*entry,uint32_t*count){
  if(!g.process)return XBE_E_ARGUMENT;if(base)*base=g.base;if(size)*size=g.size;if(entry)*entry=g.entry;if(count)*count=g.sections;return XBE_OK;
 }
-extern "C" __declspec(dllexport) int __cdecl LoadXbe(const wchar_t*path){int r=XbeLoadImage(path);return r==XBE_E_NO_KERNEL?XBE_OK:r;}
+extern "C" __declspec(dllexport) int __cdecl LoadXbe(const wchar_t*path){int r=XbeLoadImage(path);return r==XBE_E_GUEST_STARTED?XBE_OK:r;}
 BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}
