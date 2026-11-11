@@ -16,7 +16,7 @@ static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static volatile LONG g_tick=0;
-static uint32_t g_data[64]{};
+static uint32_t g_data[379]{};
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
 uint32_t Read32(uint32_t va){return *reinterpret_cast<uint32_t*>(uintptr_t(va));}
@@ -33,7 +33,7 @@ void* DataFor(uint32_t ordinal){
     case 102: case 120: case 154: case 156: case 157: case 162:
     case 164: case 321: case 322: case 323: case 324: case 325:
     case 326: case 353: case 354: case 355: case 356: case 357:
-        return &g_data[ordinal%64];
+        return &g_data[ordinal];
     default:return nullptr;
     }
 }
