@@ -9,5 +9,5 @@ struct XboxKernelState {
     uint32_t sectionCount;
     uint32_t tlsAddress;
 };
-bool XboxKernelResolveImports(const XboxKernelState& image);
+void XboxKernelSetTitlePath(const wchar_t* path);\nbool XboxKernelResolveImports(const XboxKernelState& image);
 DWORD WINAPI XboxKernelStartXbe(void* context);
