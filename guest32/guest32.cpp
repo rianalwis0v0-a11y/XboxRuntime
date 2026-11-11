@@ -34,7 +34,7 @@ uint32_t Load(const wchar_t* path,Reply& reply){
  CloseHandle(f);
  if(std::memcmp(b.data(),"XBEH",4))return FORMAT;
  uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),hs=U32(b,0x110);
- uint32_t tableVa=U32(b,0x120),count=U32(b,0x11C),encodedEntry=U32(b,0x128),tlsAddress=U32(b,0x12C);
+ uint32_t tableVa=U32(b,0x120),count=U32(b,0x11C),encodedEntry=U32(b,0x128);
  if(!base||!image||headers<kHeaderMin||headers>b.size()||hs<kHeaderMin||hs>headers||image<headers||!count||count>96)return FORMAT;
  uint32_t table=0;if(!VaOffset(tableVa,base,image,table)||!Fits(table,uint64_t(count)*kSectionSize,headers))return FORMAT;
  std::vector<Section> sections;try{sections.resize(count);}catch(...){return MEMORY;}
