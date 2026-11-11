@@ -1,8 +1,6 @@
 name: Build XboxRuntime modules
 
 on:
-  push:
-    branches: [main, "work/**"]
   pull_request:
   workflow_dispatch:
 
