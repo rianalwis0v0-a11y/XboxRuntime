@@ -247,7 +247,7 @@ namespace XboxRuntime
         if (!FindDashboard(dashboard))
             return false;
 
-        Log(L"Launching discovered dashboard.xbe");
+        Log(L"Staging discovered dashboard.xbe in the native x86 guest process.");
         return loadXbe(dashboard.c_str()) == 0;
     }
 }
@@ -278,7 +278,7 @@ extern "C" int __cdecl MainStart()
 
     running = true;
 
-    Log(L"XboxRuntime initialized.");
+    Log(L"XboxRuntime host initialized; guest entry execution awaits the Xbox kernel.");
 
     return 0;
 }
