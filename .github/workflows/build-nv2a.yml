@@ -1,4 +1,4 @@
-name: Build NV2A module
+name: Build XboxRuntime modules
 
 on:
   push:
@@ -18,21 +18,23 @@ jobs:
       - name: Configure x64 build
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
-      - name: Build NV2A translation module
-        run: cmake --build build --config Release --target nv2a
+      - name: Build NV2A and Insignia DNS modules
+        run: cmake --build build --config Release --target nv2a insignia_dns
 
-      - name: Verify output
+      - name: Verify outputs
         shell: pwsh
         run: |
-          $dll = "build/out/nv2a.dll"
-          if (!(Test-Path $dll)) {
-            throw "Expected output not found: $dll"
+          $files = @("build/out/nv2a.dll", "build/out/insignia_dns.dll")
+          foreach ($file in $files) {
+            if (!(Test-Path $file)) { throw "Expected output not found: $file" }
+            Get-Item $file | Format-List FullName,Length
           }
-          Get-Item $dll | Format-List FullName,Length
 
-      - name: Upload NV2A module
+      - name: Upload runtime modules
         uses: actions/upload-artifact@v4
         with:
-          name: xboxruntime-nv2a-win-x64
-          path: build/out/nv2a.dll
+          name: xboxruntime-modules-win-x64
+          path: |
+            build/out/nv2a.dll
+            build/out/insignia_dns.dll
           if-no-files-found: error
