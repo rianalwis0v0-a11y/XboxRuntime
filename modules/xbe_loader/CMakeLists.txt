@@ -1,4 +1,5 @@
 add_library(xbe_loader MODULE xbe_loader.cpp)
+target_compile_features(xbe_loader PRIVATE cxx_std_17)
 target_compile_definitions(xbe_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 if(MSVC)
  target_compile_options(xbe_loader PRIVATE /W4 /permissive-)
