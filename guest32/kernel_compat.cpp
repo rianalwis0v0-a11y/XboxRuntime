@@ -9,6 +9,7 @@
 #include <cwchar>
 #include <cctype>
 #include <cwctype>
+#include <string>
 #include "kernel_compat.h"
 
 namespace {
@@ -20,7 +21,8 @@ static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
-static uint32_t g_data[379]{};\nstatic std::wstring g_titleDirectory;
+static uint32_t g_data[379]{};
+static std::wstring g_titleDirectory;
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
 void* StubFor(uint32_t ordinal){
@@ -343,7 +345,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
 }
 bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
 }
-void XboxKernelSetTitlePath(const wchar_t* path){\n    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);\n}\nbool XboxKernelResolveImports(const XboxKernelState& image){
+void XboxKernelSetTitlePath(const wchar_t* path){
+    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
+}
+bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
     if(!g_image||!InImage(g_entry))return false;
     const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
