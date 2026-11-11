@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
+#include "kernel_compat.h"
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -29,7 +30,7 @@ uint32_t Load(const wchar_t* path,Reply& reply){
  std::vector<uint8_t>b;try{b.resize(size_t(fs.QuadPart));}catch(...){CloseHandle(f);return MEMORY;}
  size_t pos=0;while(pos<b.size()){DWORD got=0,ask=DWORD(std::min<size_t>(b.size()-pos,1u<<20));if(!ReadFile(f,b.data()+pos,ask,&got,nullptr)||!got){CloseHandle(f);return IO;}pos+=got;}CloseHandle(f);
  if(std::memcmp(b.data(),"XBEH",4))return FORMAT;
- uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),hs=U32(b,0x110),tableVa=U32(b,0x120),count=U32(b,0x11C),entry=U32(b,0x128)^kEntryXor;
+ uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),hs=U32(b,0x110),tableVa=U32(b,0x120),count=U32(b,0x11C),encodedEntry=U32(b,0x128),entry=encodedEntry^kEntryXor;
  if(!base||!image||headers<kHeaderMin||headers>b.size()||hs<kHeaderMin||hs>headers||image<headers||!count||count>96)return FORMAT;
  uint32_t table=0;if(!VaOffset(tableVa,base,image,table)||!Fits(table,uint64_t(count)*kSectionSize,headers))return FORMAT;
  std::vector<Section> sections;try{sections.resize(count);}catch(...){return MEMORY;}
@@ -38,7 +39,7 @@ uint32_t Load(const wchar_t* path,Reply& reply){
   if(!s.vs||!VaOffset(s.va,base,image,off)||!Fits(off,s.vs,image)||!Fits(s.raw,s.rawSize,b.size())||s.rawSize>s.vs)return FORMAT;
   if((s.flags&4)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs)executable=true;sections[i]=s;
  }
- if(!executable)return FORMAT;
+ if(!executable){entry=encodedEntry^0x94859D4Bu;executable=false;for(const auto&s:sections)if((s.flags&4)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}}\n if(!executable)return FORMAT;
  void* mem=VirtualAlloc(reinterpret_cast<void*>(uintptr_t(base)),image,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
  if(!mem)return LAYOUT;
  std::memcpy(mem,b.data(),headers);
