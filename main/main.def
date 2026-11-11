@@ -1,0 +1,6 @@
+
+LIBRARY main
+
+EXPORTS
+    MainStart=_MainStart
+    MainStop=_MainStop
