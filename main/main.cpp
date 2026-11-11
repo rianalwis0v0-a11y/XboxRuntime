@@ -34,6 +34,7 @@ namespace XboxRuntime
         { L"xbox_audio.dll" },
         { L"xbox_input.dll" },
         { L"xbox_network.dll" },
+        { L"insignia_dns.dll" },
         { L"xbe_loader.dll" }
     };
 
