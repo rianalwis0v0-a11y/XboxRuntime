@@ -4,7 +4,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdarg>
-#include <intrin.h>
+#include <intrin.h>\n#include <cstring>\n#include <cwchar>\n#include <cctype>
 #include "kernel_compat.h"
 
 namespace {
@@ -76,6 +76,31 @@ extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h,BOOL alertable,const 
     DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
     DWORD r=WaitForSingleObject(h,ms);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
 }
+struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
+extern "C" void __stdcall K_RtlInitAnsiString(GuestAnsiString*d,const char*s){if(!d)return;size_t n=s?strlen(s):0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?1:0));d->Buffer=const_cast<char*>(s);}
+extern "C" void __stdcall K_RtlInitUnicodeString(GuestUnicodeString*d,const wchar_t*s){if(!d)return;size_t n=s?wcslen(s)*2:0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?2:0));d->Buffer=const_cast<wchar_t*>(s);}
+extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){return c&&EnterCriticalSection(c)?0:LONG(0xC000000Du);}
+extern "C" void __stdcall K_RtlLeaveCriticalSection(RTL_CRITICAL_SECTION*c){if(c)LeaveCriticalSection(c);}
+extern "C" void __stdcall K_RtlInitializeCriticalSection(RTL_CRITICAL_SECTION*c){if(c)InitializeCriticalSection(c);}
+extern "C" BOOL __stdcall K_RtlTryEnterCriticalSection(RTL_CRITICAL_SECTION*c){return c?TryEnterCriticalSection(c):FALSE;}
+extern "C" LONG __stdcall K_RtlCompareString(const GuestAnsiString*a,const GuestAnsiString*b,BOOL ci){
+ if(!a||!b)return 0;size_t n=a->Length<b->Length?a->Length:b->Length;int r=ci?_strnicmp(a->Buffer,b->Buffer,n):strncmp(a->Buffer,b->Buffer,n);return r?r:int(a->Length)-int(b->Length);
+}
+extern "C" BOOL __stdcall K_RtlEqualString(const GuestAnsiString*a,const GuestAnsiString*b,BOOL ci){return K_RtlCompareString(a,b,ci)==0;}
+extern "C" LONG __stdcall K_RtlCompareUnicodeString(const GuestUnicodeString*a,const GuestUnicodeString*b,BOOL ci){
+ if(!a||!b)return 0;size_t an=a->Length/2,bn=b->Length/2,n=an<bn?an:bn;int r=ci?_wcsnicmp(a->Buffer,b->Buffer,n):wcsncmp(a->Buffer,b->Buffer,n);return r?r:int(an)-int(bn);
+}
+extern "C" BOOL __stdcall K_RtlEqualUnicodeString(const GuestUnicodeString*a,const GuestUnicodeString*b,BOOL ci){return K_RtlCompareUnicodeString(a,b,ci)==0;}
+extern "C" void __stdcall K_RtlCopyString(GuestAnsiString*d,const GuestAnsiString*s){if(!d||!d->Buffer)return;USHORT n=s?s->Length:0;if(n>d->MaximumLength)n=d->MaximumLength;if(n&&s&&s->Buffer)memmove(d->Buffer,s->Buffer,n);d->Length=n;}
+extern "C" void __stdcall K_RtlCopyUnicodeString(GuestUnicodeString*d,const GuestUnicodeString*s){if(!d||!d->Buffer)return;USHORT n=s?s->Length:0;if(n>d->MaximumLength)n=d->MaximumLength&~1u;if(n&&s&&s->Buffer)memmove(d->Buffer,s->Buffer,n);d->Length=n;}
+extern "C" LONG __stdcall K_RtlAppendStringToString(GuestAnsiString*d,const GuestAnsiString*s){if(!d||!s||!d->Buffer||!s->Buffer||uint32_t(d->Length)+s->Length>d->MaximumLength)return LONG(0xC0000023u);memmove(d->Buffer+d->Length,s->Buffer,s->Length);d->Length+=s->Length;return 0;}
+extern "C" LONG __stdcall K_RtlAppendUnicodeStringToString(GuestUnicodeString*d,const GuestUnicodeString*s){if(!d||!s||!d->Buffer||!s->Buffer||uint32_t(d->Length)+s->Length>d->MaximumLength)return LONG(0xC0000023u);memmove(reinterpret_cast<uint8_t*>(d->Buffer)+d->Length,s->Buffer,s->Length);d->Length+=s->Length;return 0;}
+extern "C" LONG __stdcall K_RtlAppendUnicodeToString(GuestUnicodeString*d,const wchar_t*s){if(!d||!s||!d->Buffer)return LONG(0xC000000Du);size_t n=wcslen(s)*2;if(uint32_t(d->Length)+n>d->MaximumLength)return LONG(0xC0000023u);memcpy(reinterpret_cast<uint8_t*>(d->Buffer)+d->Length,s,n);d->Length+=USHORT(n);return 0;}
+extern "C" wchar_t __stdcall K_RtlUpcaseUnicodeChar(wchar_t c){return wchar_t(towupper(c));}
+extern "C" wchar_t __stdcall K_RtlDowncaseUnicodeChar(wchar_t c){return wchar_t(towlower(c));}
+extern "C" char __stdcall K_RtlUpperChar(char c){return char(toupper((unsigned char)c));}
+extern "C" char __stdcall K_RtlLowerChar(char c){return char(tolower((unsigned char)c));}
 extern "C" void __stdcall K_RtlZeroMemory(void*d,uint32_t n){if(d)std::memset(d,0,n);}
 extern "C" void __stdcall K_RtlFillMemory(void*d,uint32_t n,uint8_t v){if(d)std::memset(d,v,n);}
 extern "C" void __stdcall K_RtlMoveMemory(void*d,const void*s,uint32_t n){if(d&&s)std::memmove(d,s,n);}
