@@ -1,118 +1,71 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdint>
-#include <cstring>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 namespace {
-constexpr uint32_t kHeaderMin=0x178, kSectionSize=56, kEntryXor=0xA8FC57ABu;
-enum : int { XBE_OK=0, XBE_E_ARGUMENT=1, XBE_E_IO=2, XBE_E_FORMAT=3,
-             XBE_E_LAYOUT=4, XBE_E_MEMORY=5, XBE_E_NO_CPU=6 };
+constexpr uint32_t kReplyMagic=0x47584258;
+enum : int { XBE_OK=0, XBE_E_ARGUMENT=1, XBE_E_START=7, XBE_E_PIPE=8,
+             XBE_E_GUEST=9, XBE_E_NO_KERNEL=10 };
 #pragma pack(push,1)
-struct Section {
- uint32_t flags, virtualAddress, virtualSize, rawAddress, rawSize, nameAddress,
-          referenceCount, headSharedPageRefCountAddress, tailSharedPageRefCountAddress;
- uint8_t digest[20];
-};
+struct Reply { uint32_t magic,version,status,imageBase,imageSize,entry,sectionCount; };
 #pragma pack(pop)
-static_assert(sizeof(Section)==kSectionSize);
-struct State { void* base=nullptr; uint32_t imageBase=0,imageSize=0,entry=0,count=0; std::wstring path; } g;
+struct Guest {
+ HANDLE process=nullptr,thread=nullptr,pipe=nullptr;
+ uint32_t base=0,size=0,entry=0,sections=0;
+} g;
 bool started=false;
-
-uint32_t U32(const std::vector<uint8_t>& b,size_t o) { uint32_t v=0; std::memcpy(&v,b.data()+o,4); return v; }
-bool Fits(uint64_t o,uint64_t n,uint64_t limit) { return o<=limit && n<=limit-o; }
-bool VaOffset(uint32_t va,uint32_t base,uint32_t size,uint32_t& out) {
- if(va<base) return false; uint64_t d=uint64_t(va)-base; if(d>=size) return false; out=uint32_t(d); return true;
+std::wstring Quote(const std::wstring&s){std::wstring q=L"\"";for(wchar_t c:s){if(c==L'\"')q+=L'\\';q+=c;}q+=L'\"';return q;}
+bool ExactRead(HANDLE h,void*p,DWORD n){DWORD d=0;while(d<n){DWORD got=0;if(!ReadFile(h,static_cast<char*>(p)+d,n-d,&got,nullptr)||!got)return false;d+=got;}return true;}
+bool ExactWrite(HANDLE h,const void*p,DWORD n){DWORD d=0;while(d<n){DWORD sent=0;if(!WriteFile(h,static_cast<const char*>(p)+d,n-d,&sent,nullptr)||!sent)return false;d+=sent;}return true;}
+void StopGuest(){
+ if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){uint8_t quit=0;ExactWrite(g.pipe,&quit,1);FlushFileBuffers(g.pipe);CloseHandle(g.pipe);}
+ if(g.process){if(WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT)TerminateProcess(g.process,0);WaitForSingleObject(g.process,1000);}
+ if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};
 }
-DWORD Protection(uint32_t f) {
- bool x=(f&4)!=0,w=(f&1)!=0;
- return x?(w?PAGE_EXECUTE_READWRITE:PAGE_EXECUTE_READ):(w?PAGE_READWRITE:PAGE_READONLY);
+std::wstring ModuleDirectory(){
+ HMODULE self=nullptr;
+ if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+   reinterpret_cast<LPCWSTR>(&ModuleDirectory),&self))return {};
+ std::vector<wchar_t>b(32768);DWORD n=GetModuleFileNameW(self,b.data(),DWORD(b.size()));
+ if(!n||n>=b.size())return {};std::wstring p(b.data(),n);size_t slash=p.find_last_of(L"\\/");if(slash==std::wstring::npos)return {};return p.substr(0,slash);
 }
-void Unmap() { if(g.base) VirtualFree(g.base,0,MEM_RELEASE); g={}; }
-
-int MapFile(const wchar_t* path) {
- if(!path||!*path) return XBE_E_ARGUMENT;
- HANDLE h=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,
-                      FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,nullptr);
- if(h==INVALID_HANDLE_VALUE) return XBE_E_IO;
- LARGE_INTEGER fs{};
- if(!GetFileSizeEx(h,&fs)||fs.QuadPart<kHeaderMin||fs.QuadPart>0xFFFFFFFFll) { CloseHandle(h); return XBE_E_FORMAT; }
- std::vector<uint8_t> b;
- try { b.resize(size_t(fs.QuadPart)); } catch(...) { CloseHandle(h); return XBE_E_MEMORY; }
- size_t done=0;
- while(done<b.size()) { DWORD got=0,ask=DWORD(std::min<size_t>(b.size()-done,1u<<20));
-  if(!ReadFile(h,b.data()+done,ask,&got,nullptr)||!got) { CloseHandle(h); return XBE_E_IO; } done+=got; }
- CloseHandle(h);
- if(std::memcmp(b.data(),"XBEH",4)!=0) return XBE_E_FORMAT;
-
- const uint32_t base=U32(b,0x104), headers=U32(b,0x108), image=U32(b,0x10C),
-  headerStruct=U32(b,0x110), tableVa=U32(b,0x120), count=U32(b,0x11C),
-  entry=U32(b,0x128)^kEntryXor;
- if(!base||!image||headers<kHeaderMin||headers>b.size()||headerStruct<kHeaderMin||
-    headerStruct>headers||image<headers||!count||count>96) return XBE_E_FORMAT;
- uint32_t table=0;
- if(!VaOffset(tableVa,base,image,table)||
-    !Fits(table,uint64_t(count)*kSectionSize,headers)) return XBE_E_FORMAT;
-
- std::vector<Section> sections;
- try { sections.resize(count); } catch(...) { return XBE_E_MEMORY; }
- bool entryExec=false;
- for(uint32_t i=0;i<count;i++) {
-  Section s{}; std::memcpy(&s,b.data()+table+uint64_t(i)*kSectionSize,sizeof(s));
-  uint32_t vo=0;
-  if(!s.virtualSize||!VaOffset(s.virtualAddress,base,image,vo)||
-     !Fits(vo,s.virtualSize,image)||!Fits(s.rawAddress,s.rawSize,b.size())||
-     s.rawSize>s.virtualSize) return XBE_E_FORMAT;
-  uint64_t end=uint64_t(s.virtualAddress)+s.virtualSize;
-  if((s.flags&4)&&entry>=s.virtualAddress&&uint64_t(entry)<end) entryExec=true;
-  sections[i]=s;
+int StartGuest(const wchar_t*xbe){
+ if(!xbe||!*xbe)return XBE_E_ARGUMENT;StopGuest();
+ std::wstring dir=ModuleDirectory();if(dir.empty())return XBE_E_START;
+ std::wstring exe=dir+L"\\xbe_guest32.exe";
+ if(GetFileAttributesW(exe.c_str())==INVALID_FILE_ATTRIBUTES)return XBE_E_START;
+ wchar_t pipeName[128]{};swprintf_s(pipeName,L"\\\\.\\pipe\\XboxRuntimeGuest-%lu-%llu",GetCurrentProcessId(),GetTickCount64());
+ HANDLE pipe=CreateNamedPipeW(pipeName,PIPE_ACCESS_DUPLEX,PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_NOWAIT,1,256,256,0,nullptr);
+ if(pipe==INVALID_HANDLE_VALUE)return XBE_E_PIPE;
+ std::wstring cmd=Quote(exe)+L" --pipe "+Quote(pipeName)+L" --xbe "+Quote(xbe);
+ STARTUPINFOW si{};si.cb=sizeof(si);PROCESS_INFORMATION pi{};
+ if(!CreateProcessW(exe.c_str(),cmd.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,dir.c_str(),&si,&pi)){CloseHandle(pipe);return XBE_E_START;}
+ g.process=pi.hProcess;g.thread=pi.hThread;g.pipe=pipe;
+ bool connected=false;
+ for(unsigned i=0;i<1500;i++){
+  if(ConnectNamedPipe(pipe,nullptr)){connected=true;break;}
+  DWORD e=GetLastError();if(e==ERROR_PIPE_CONNECTED){connected=true;break;}
+  if(e!=ERROR_PIPE_LISTENING&&e!=ERROR_NO_DATA)break;
+  if(WaitForSingleObject(g.process,0)==WAIT_OBJECT_0)break;
+  Sleep(10);
  }
- if(!entryExec) return XBE_E_FORMAT;
-
- // Guest addresses remain 32-bit values. Reserve the declared image base
- // explicitly; never cast an XBE entry point into a native function pointer.
- void* mapped=VirtualAlloc(reinterpret_cast<void*>(uintptr_t(base)),image,
-                           MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
- if(!mapped) return XBE_E_LAYOUT;
- std::memcpy(mapped,b.data(),headers);
- for(const Section& s:sections) {
-  uint32_t off=s.virtualAddress-base; uint8_t* dst=static_cast<uint8_t*>(mapped)+off;
-  if(s.rawSize) std::memcpy(dst,b.data()+s.rawAddress,s.rawSize);
-  if(s.virtualSize>s.rawSize) std::memset(dst+s.rawSize,0,s.virtualSize-s.rawSize);
- }
- for(const Section& s:sections) {
-  constexpr uintptr_t page=0x1000;
-  uintptr_t begin=reinterpret_cast<uintptr_t>(mapped)+(s.virtualAddress-base);
-  uintptr_t first=begin&~(page-1), last=(begin+s.virtualSize+page-1)&~(page-1);
-  DWORD old=0; VirtualProtect(reinterpret_cast<void*>(first),last-first,Protection(s.flags),&old);
- }
- DWORD old=0; VirtualProtect(mapped,headers,PAGE_READONLY,&old);
- Unmap();
- g.base=mapped; g.imageBase=base; g.imageSize=image; g.entry=entry; g.count=count; g.path=path;
- OutputDebugStringW(L"[XbeLoader] XBE validated and mapped; guest CPU is not connected.\n");
- return XBE_OK;
+ if(!connected){StopGuest();return XBE_E_PIPE;}
+ DWORD mode=PIPE_READMODE_BYTE;if(!SetNamedPipeHandleState(pipe,&mode,nullptr,nullptr)){StopGuest();return XBE_E_PIPE;}
+ Reply r{};if(!ExactRead(pipe,&r,sizeof(r))||r.magic!=kReplyMagic||r.version!=1){StopGuest();return XBE_E_PIPE;}
+ if(r.status!=0){StopGuest();return XBE_E_GUEST;}
+ g.base=r.imageBase;g.size=r.imageSize;g.entry=r.entry;g.sections=r.sectionCount;
+ OutputDebugStringW(L"[XbeLoader] XBE mapped in dedicated native x86 guest process. Kernel startup is still pending.\n");
+ return XBE_E_NO_KERNEL;
 }
 }
-
-extern "C" __declspec(dllexport) int __cdecl ModuleStart() {
- started=true; OutputDebugStringW(L"[XbeLoader] Module ready.\n"); return XBE_OK;
+extern "C" __declspec(dllexport) int __cdecl ModuleStart(){started=true;return XBE_OK;}
+extern "C" __declspec(dllexport) void __cdecl ModuleStop(){StopGuest();started=false;}
+extern "C" __declspec(dllexport) int __cdecl XbeLoadImage(const wchar_t*path){if(!started)return XBE_E_ARGUMENT;return StartGuest(path);}
+extern "C" __declspec(dllexport) void __cdecl XbeUnloadImage(){StopGuest();}
+extern "C" __declspec(dllexport) int __cdecl XbeGetImageInfo(uint32_t*base,uint32_t*size,uint32_t*entry,uint32_t*count){
+ if(!g.process)return XBE_E_ARGUMENT;if(base)*base=g.base;if(size)*size=g.size;if(entry)*entry=g.entry;if(count)*count=g.sections;return XBE_OK;
 }
-extern "C" __declspec(dllexport) void __cdecl ModuleStop() { Unmap(); started=false; }
-extern "C" __declspec(dllexport) int __cdecl XbeLoadImage(const wchar_t* path) {
- if(!started) return XBE_E_ARGUMENT; Unmap(); return MapFile(path);
-}
-extern "C" __declspec(dllexport) void __cdecl XbeUnloadImage() { Unmap(); }
-extern "C" __declspec(dllexport) int __cdecl XbeGetImageInfo(
- uint32_t* base,uint32_t* size,uint32_t* entry,uint32_t* count) {
- if(!g.base) return XBE_E_ARGUMENT;
- if(base)*base=g.imageBase; if(size)*size=g.imageSize; if(entry)*entry=g.entry; if(count)*count=g.count;
- return XBE_OK;
-}
-// main.dll's launch ABI: 0 means launched. Mapping alone is not a launch;
-// return an explicit status until the x86 CPU + Xbox kernel are integrated.
-extern "C" __declspec(dllexport) int __cdecl LoadXbe(const wchar_t* path) {
- int r=XbeLoadImage(path); return r==XBE_OK?XBE_E_NO_CPU:r;
-}
-BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID) { return TRUE; }
+extern "C" __declspec(dllexport) int __cdecl LoadXbe(const wchar_t*path){return XbeLoadImage(path);}
+BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}
