@@ -19,12 +19,12 @@ jobs:
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
       - name: Build NV2A and Insignia DNS modules
-        run: cmake --build build --config Release --target nv2a insignia_dns
+        run: cmake --build build --config Release --target boot main nv2a insignia_dns
 
       - name: Verify outputs
         shell: pwsh
         run: |
-          $files = @("build/out/nv2a.dll", "build/out/insignia_dns.dll")
+          $files = @("build/out/boot.exe", "build/out/main.dll", "build/out/nv2a.dll", "build/out/insignia_dns.dll")
           foreach ($file in $files) {
             if (!(Test-Path $file)) { throw "Expected output not found: $file" }
             Get-Item $file | Format-List FullName,Length
@@ -35,6 +35,8 @@ jobs:
         with:
           name: xboxruntime-modules-win-x64
           path: |
+            build/out/boot.exe
+            build/out/main.dll
             build/out/nv2a.dll
             build/out/insignia_dns.dll
           if-no-files-found: error
