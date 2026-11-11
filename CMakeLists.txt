@@ -14,6 +14,7 @@ endif()
 add_subdirectory(third_party/xboxrecomp)
 add_subdirectory(modules/nv2a)
 add_subdirectory(modules/insignia_dns)
+add_subdirectory(modules/xbe_loader)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
