@@ -1,0 +1,10 @@
+
+LIBRARY fatx
+EXPORTS
+    ModuleStart=_ModuleStart
+    ModuleStop=_ModuleStop
+    FATX_OpenVolumeW=_FATX_OpenVolumeW
+    FATX_CloseVolume=_FATX_CloseVolume
+    FATX_GetInfo=_FATX_GetInfo
+    FATX_ListDirectoryW=_FATX_ListDirectoryW
+    FATX_ReadFileW=_FATX_ReadFileW
