@@ -5,6 +5,8 @@
 
 #include "../include/fatx.h"
 
+#include <new>
+#include <cwchar>
 #include <cstdint>
 #include <cstring>
 #include <string>
