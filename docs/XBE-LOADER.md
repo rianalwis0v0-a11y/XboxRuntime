@@ -14,6 +14,11 @@ page protections.
 - `LoadXbe(path)`: compatibility launch entry point. It maps the image, then
   returns error 6 (`XBE_E_NO_CPU`) rather than pretending it launched.
 
+## Build
+
+The `xbe_loader` CMake target produces `build/out/xbe_loader.dll`. CI builds
+and verifies this DLL alongside the boot executable and existing modules.
+
 ## Not implemented yet
 Retail executable decryption, kernel import/thunk resolution, TLS setup,
 Xbox process/thread state, hardware aliases, and x86 guest instruction
