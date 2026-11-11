@@ -1,6 +1,7 @@
 
 #include "boot.h"
 
+#include <windows.h>
 #include <commctrl.h>
 #include <mmsystem.h>
 #include <string>
@@ -12,7 +13,6 @@
 namespace XboxBoot
 {
     static HINSTANCE g_instance = nullptr;
-    static HWND g_window = nullptr;
     static HWND g_animation = nullptr;
     static HMODULE g_mainModule = nullptr;
 
@@ -22,11 +22,10 @@ namespace XboxBoot
     static MainStartFunction g_mainStart = nullptr;
     static MainStopFunction g_mainStop = nullptr;
 
-    static std::wstring g_baseDirectory;
-    static std::wstring g_assetDirectory;
+    static std::wstring g_systemDirectory;
+    static std::wstring g_runtimeDirectory;
     static std::wstring g_animationPath;
     static std::wstring g_soundPath;
-    static std::wstring g_mainDllPath;
 
     static bool g_runtimeStarted = false;
     static bool g_startupFinished = false;
@@ -40,46 +39,69 @@ namespace XboxBoot
         return first + L"\\" + second;
     }
 
-    bool InitializePaths(HINSTANCE instance)
+    static bool GetSystemDirectoryPath()
     {
         std::vector<wchar_t> buffer(32768);
 
-        DWORD length = GetModuleFileNameW(
-            instance,
+        UINT length = GetSystemDirectoryW(
             buffer.data(),
-            static_cast<DWORD>(buffer.size())
+            static_cast<UINT>(buffer.size())
         );
 
         if (length == 0 || length >= buffer.size())
             return false;
 
-        std::wstring executable(buffer.data(), length);
+        g_systemDirectory.assign(buffer.data(), length);
+        return true;
+    }
 
-        size_t separator = executable.find_last_of(L"\\/");
+    static bool GetRuntimeDirectoryPath()
+    {
+        // XboxRuntime data directory is expected beside
+        // the Windows folder, e.g. X:\XboxRuntime.
+        std::vector<wchar_t> buffer(32768);
+
+        UINT length = GetWindowsDirectoryW(
+            buffer.data(),
+            static_cast<UINT>(buffer.size())
+        );
+
+        if (length == 0 || length >= buffer.size())
+            return false;
+
+        std::wstring windowsDirectory(buffer.data(), length);
+
+        size_t separator =
+            windowsDirectory.find_last_of(L"\\/");
 
         if (separator == std::wstring::npos)
             return false;
 
-        g_baseDirectory = executable.substr(0, separator);
+        std::wstring driveRoot =
+            windowsDirectory.substr(0, separator);
 
-        g_assetDirectory = JoinPath(
-            g_baseDirectory,
-            L"assets"
-        );
+        g_runtimeDirectory =
+            JoinPath(driveRoot, L"XboxRuntime");
+
+        return true;
+    }
+
+    bool InitializePaths(HINSTANCE)
+    {
+        if (!GetSystemDirectoryPath())
+            return false;
+
+        if (!GetRuntimeDirectoryPath())
+            return false;
 
         g_animationPath = JoinPath(
-            g_assetDirectory,
+            JoinPath(g_runtimeDirectory, L"assets"),
             L"startup.avi"
         );
 
         g_soundPath = JoinPath(
-            g_assetDirectory,
+            JoinPath(g_runtimeDirectory, L"assets"),
             L"startup.wav"
-        );
-
-        g_mainDllPath = JoinPath(
-            JoinPath(g_baseDirectory, L"System32"),
-            L"main.dll"
         );
 
         return true;
@@ -87,12 +109,12 @@ namespace XboxBoot
 
     const wchar_t* GetBaseDirectory()
     {
-        return g_baseDirectory.c_str();
+        return g_systemDirectory.c_str();
     }
 
     const wchar_t* GetAssetPath()
     {
-        return g_assetDirectory.c_str();
+        return g_runtimeDirectory.c_str();
     }
 
     const wchar_t* GetAnimationPath()
@@ -107,7 +129,9 @@ namespace XboxBoot
 
     const wchar_t* GetMainDllPath()
     {
-        return g_mainDllPath.c_str();
+        static std::wstring path;
+        path = JoinPath(g_systemDirectory, L"main.dll");
+        return path.c_str();
     }
 
     bool InitializeHost(HINSTANCE instance)
@@ -118,8 +142,10 @@ namespace XboxBoot
         controls.dwSize = sizeof(controls);
         controls.dwICC = ICC_ANIMATE_CLASS;
 
-        return InitializePaths(instance) &&
-               InitCommonControlsEx(&controls);
+        if (!InitCommonControlsEx(&controls))
+            return false;
+
+        return InitializePaths(instance);
     }
 
     bool PlayStartupSound()
@@ -127,6 +153,9 @@ namespace XboxBoot
         if (GetFileAttributesW(g_soundPath.c_str()) ==
             INVALID_FILE_ATTRIBUTES)
         {
+            OutputDebugStringW(
+                L"[XboxBoot] startup.wav not found.\n"
+            );
             return false;
         }
 
@@ -163,14 +192,18 @@ namespace XboxBoot
         SetWindowPos(
             g_animation,
             HWND_TOP,
-            0,
-            0,
+            0, 0,
             client.right,
             client.bottom,
             SWP_SHOWWINDOW
         );
 
-        return Animate_Play(g_animation, 0, -1, 1) != FALSE;
+        return Animate_Play(
+            g_animation,
+            0,
+            -1,
+            1
+        ) != FALSE;
     }
 
     bool StartRuntime()
@@ -178,10 +211,22 @@ namespace XboxBoot
         if (g_runtimeStarted)
             return true;
 
-        g_mainModule = LoadLibraryW(g_mainDllPath.c_str());
+        std::wstring mainPath =
+            JoinPath(g_systemDirectory, L"main.dll");
+
+        g_mainModule = LoadLibraryExW(
+            mainPath.c_str(),
+            nullptr,
+            LOAD_WITH_ALTERED_SEARCH_PATH
+        );
 
         if (!g_mainModule)
+        {
+            OutputDebugStringW(
+                L"[XboxBoot] Failed to load main.dll.\n"
+            );
             return false;
+        }
 
         g_mainStart = reinterpret_cast<MainStartFunction>(
             GetProcAddress(g_mainModule, "MainStart")
@@ -193,6 +238,10 @@ namespace XboxBoot
 
         if (!g_mainStart)
         {
+            OutputDebugStringW(
+                L"[XboxBoot] MainStart export missing.\n"
+            );
+
             FreeLibrary(g_mainModule);
             g_mainModule = nullptr;
             return false;
@@ -248,10 +297,13 @@ namespace XboxBoot
         switch (message)
         {
         case WM_CREATE:
-            g_window = window;
-
             if (!PlayStartupAnimation(window))
+            {
+                OutputDebugStringW(
+                    L"[XboxBoot] Could not open startup.avi.\n"
+                );
                 return -1;
+            }
 
             PlayStartupSound();
             return 0;
@@ -263,6 +315,7 @@ namespace XboxBoot
                 if (!g_startupFinished)
                 {
                     g_startupFinished = true;
+
                     PostMessageW(
                         window,
                         WM_START_RUNTIME,
@@ -278,7 +331,7 @@ namespace XboxBoot
             {
                 MessageBoxW(
                     window,
-                    L"Could not start System32\\main.dll.",
+                    L"Could not start main.dll from Windows System32.",
                     L"XboxRuntime",
                     MB_OK | MB_ICONERROR
                 );
@@ -327,7 +380,8 @@ int WINAPI wWinMain(
     if (!InitializeHost(instance))
         return 1;
 
-    const wchar_t CLASS_NAME[] = L"XboxRuntimeBootWindow";
+    const wchar_t CLASS_NAME[] =
+        L"XboxRuntimeBootWindow";
 
     WNDCLASSW windowClass{};
     windowClass.lpfnWndProc = WindowProcedure;
