@@ -1,0 +1,5 @@
+
+#include "resource.h"
+
+IDR_BOOT_ANIMATION AVI "assets\\startup.avi"
+IDR_BOOT_SOUND WAVE "assets\\startup.wav"
