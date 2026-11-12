@@ -59,6 +59,7 @@ using GetTextureInfoFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,TextureInfo*)
 using DecodeTextureStageFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
+using ValidateVertexProgramFn = int (__cdecl*)(const uint32_t*, uint32_t, void*);
 
 
 static FARPROC Need(HMODULE module, const char* name) {
@@ -121,7 +122,62 @@ int main() {
     auto decodeTextureStage = reinterpret_cast<DecodeTextureStageFn>(Need(module, "XboxNV2A_DecodeTextureStageRGBA8"));
     auto decodeSwizzledTexture = reinterpret_cast<DecodeSwizzledTextureFn>(Need(module, "XboxNV2A_DecodeSwizzledTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
+    auto validateVertexProgram = reinterpret_cast<ValidateVertexProgramFn>(Need(module, "XboxNV2A_ValidateVertexProgram"));
 
+
+    {
+        struct VertexProgramInfo {
+            uint32_t instruction_count;
+            uint16_t input_mask, output_mask;
+            uint64_t constant_mask[3];
+            uint32_t uses_relative_constants;
+        };
+        VertexProgramInfo info{};
+        uint32_t words[4]{};
+        words[3] = 1u; /* A single NOP instruction with FINAL set. */
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            info.instruction_count != 1) {
+            std::cerr << "FAIL: minimal NV2A vertex program validation\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* MAC MOV from c[17], with instruction-wide relative addressing enabled. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (1u << 21) | (17u << 13);
+        words[2] = (3u << 26);
+        words[3] = (1u << 1) | 1u;
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            info.uses_relative_constants != 1 ||
+            !(info.constant_mask[0] & (UINT64_C(1) << 17))) {
+            std::cerr << "FAIL: NV2A relative constant source metadata\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* ADD consumes both A and B; input register index is shared in word 1. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (3u << 21) | (5u << 9);
+        words[2] = (2u << 26) | (2u << 11);
+        words[3] = 1u;
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            !(info.input_mask & (1u << 5))) {
+            std::cerr << "FAIL: NV2A ADD source-B/input decoding\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* BFC0/BFC1 are valid outputs; slots 1 and 2 remain reserved. */
+        std::memset(words, 0, sizeof(words));
+        words[3] = (1u << 11) | (1u << 12) | (7u << 3) | 1u;
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            !(info.output_mask & (1u << 7))) {
+            std::cerr << "FAIL: NV2A BFC0 output register validation\\n";
+            FreeLibrary(module); return 1;
+        }
+        words[3] = (1u << 11) | (1u << 12) | (1u << 3) | 1u;
+        if (validateVertexProgram(words, 1, &info) != 8) {
+            std::cerr << "FAIL: reserved NV2A output register accepted\\n";
+            FreeLibrary(module); return 1;
+        }
+    }
 
     uint32_t mappedState = 0, mappedValue = 0;
     if (!mapRenderState(0x0300u, 1u, &mappedState, &mappedValue) ||
