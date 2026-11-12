@@ -21,7 +21,7 @@ jobs:
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
       - name: Build x64 host modules
-        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader
+        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx
 
       - name: Configure native x86 guest process
         run: cmake -S guest32 -B build-guest32 -A Win32
@@ -46,6 +46,7 @@ jobs:
             "build/out/nv2a.dll",
             "build/out/insignia_dns.dll",
             "build/out/xbe_loader.dll",
+            "build/out/fatx.dll",
             "build/out/xbe_guest32.exe"
           )
           foreach ($file in $files) {
@@ -63,5 +64,6 @@ jobs:
             build/out/nv2a.dll
             build/out/insignia_dns.dll
             build/out/xbe_loader.dll
+            build/out/fatx.dll
             build/out/xbe_guest32.exe
           if-no-files-found: error
