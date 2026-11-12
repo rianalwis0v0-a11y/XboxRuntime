@@ -279,7 +279,7 @@ extern "C" int __cdecl MainStart()
 
     running = true;
 
-    Log(L"XboxRuntime host initialized; guest entry execution awaits the Xbox kernel.");
+    Log(L"XboxRuntime host initialized; XBE guest entry thread started. Compatibility remains partial.");
 
     return 0;
 }
