@@ -415,7 +415,7 @@ int main() {
     uint32_t indexedStride = 0, indexedFvf = 0;
     if (buildIndexedVertexStream(channel, 0u, vertexIndices, 3u,
             indexedVertices, sizeof(indexedVertices), &indexedStride, &indexedFvf) != 0 ||
-        indexedStride != sizeof(HostVertex) || indexedFvf != hostFvf ||
+        indexedStride != sizeof(HostVertex) || indexedFvf != 0x2D2u ||
         indexedVertices[0].x != 4.0f || indexedVertices[1].x != 1.0f ||
         indexedVertices[2].x != 4.0f ||
         buildIndexedVertexStream(channel, 0u, nullptr, 3u,
