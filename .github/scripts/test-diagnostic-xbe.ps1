@@ -220,6 +220,8 @@ $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
 New-Item -ItemType Directory -Force -Path $testDir | Out-Null
 $xbe = Join-Path $testDir "xboxruntime-diagnostic.xbe"
 [IO.File]::WriteAllBytes($xbe,$b)
+$artifactXbe = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xboxruntime-diagnostic.xbe"))
+Copy-Item $xbe $artifactXbe -Force
 $eeprom = Join-Path $testDir "eeprom.bin"
 $eepromBytes = [byte[]]::new(256)
 for ($i=0; $i -lt $eepromBytes.Length; $i++) { $eepromBytes[$i] = 0xFF }
