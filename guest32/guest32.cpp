@@ -76,12 +76,20 @@ int wmain(int argc,wchar_t**argv){
    XboxKernelSetTitlePath(xbePath);
    XboxKernelState image{r.imageBase,r.imageSize,r.entry,r.sectionCount,*reinterpret_cast<uint32_t*>(uintptr_t(r.imageBase+0x12C))};
    if(!XboxKernelResolveImports(image))r.status=FORMAT;
-   else{xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);if(!xbeThread)r.status=MEMORY;}
   }
  }
  bool ok=WriteExact(pipe,&r,sizeof(r));
- uint8_t command=0;
- while(ok&&ReadExact(pipe,&command,1)){if(command==0)break;uint8_t rejected=1;if(!WriteExact(pipe,&rejected,1))break;}
+ uint8_t command=0;bool released=false;
+ while(ok&&ReadExact(pipe,&command,1)){
+  if(command==0){released=true;break;}
+  uint8_t rejected=1;if(!WriteExact(pipe,&rejected,1))break;
+ }
+ /* Do not execute guest code until the controller has received the launch
+  * reply and explicitly releases the XBE. */
+ if(ok&&released&&r.status==OK){
+  xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);
+  if(!xbeThread)ok=false;
+ }
  if(xbeThread){WaitForSingleObject(xbeThread,INFINITE);CloseHandle(xbeThread);}
  struct DiagnosticReport { uint32_t magic,passed,failed,skipped,firstFailedCheck; } report{};
  if(reportVa && g_image && reportVa>=r.imageBase && uint64_t(reportVa)+sizeof(report)<=uint64_t(r.imageBase)+r.imageSize){
