@@ -437,7 +437,7 @@ void XboxKernelSetTitlePath(const wchar_t* path){
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
     if(!g_image||!InImage(g_entry))return false;
-    const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
+    const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x154);
     uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
         // Some homebrew images have no kernel imports.
         if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return true;return false;
