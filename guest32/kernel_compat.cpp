@@ -320,6 +320,34 @@ extern "C" LONG __stdcall K_RtlAppendUnicodeStringToString(GuestUnicodeString*d,
 extern "C" LONG __stdcall K_RtlAppendUnicodeToString(GuestUnicodeString*d,const wchar_t*s){if(!d||!s||!d->Buffer)return LONG(0xC000000Du);size_t n=wcslen(s)*2;if(uint32_t(d->Length)+n>d->MaximumLength)return LONG(0xC0000023u);memcpy(reinterpret_cast<uint8_t*>(d->Buffer)+d->Length,s,n);d->Length+=USHORT(n);return 0;}
 extern "C" wchar_t __stdcall K_RtlUpcaseUnicodeChar(wchar_t c){return wchar_t(towupper(c));}
 extern "C" wchar_t __stdcall K_RtlDowncaseUnicodeChar(wchar_t c){return wchar_t(towlower(c));}
+static LONG RtlCaseUnicodeString(GuestUnicodeString* destination, const GuestUnicodeString* source, BOOL allocate, bool upper) {
+    if (!destination || !source || (!source->Buffer && source->Length) || (source->Length & 1))
+        return LONG(0xC000000Du);
+    const ULONG bytes = source->Length;
+    if (allocate) {
+        if (bytes > 0xFFFD) return LONG(0xC0000023u);
+        wchar_t* buffer = static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes + sizeof(wchar_t)));
+        if (!buffer) return LONG(0xC0000017u);
+        destination->Buffer = buffer;
+        destination->MaximumLength = USHORT(bytes + sizeof(wchar_t));
+    } else if (!destination->Buffer || destination->MaximumLength < bytes) {
+        return LONG(0xC0000023u);
+    }
+    const ULONG chars = bytes / sizeof(wchar_t);
+    for (ULONG i = 0; i < chars; ++i) {
+        const wchar_t c = source->Buffer[i];
+        destination->Buffer[i] = upper ? wchar_t(towupper(c)) : wchar_t(towlower(c));
+    }
+    if (destination->MaximumLength >= bytes + sizeof(wchar_t)) destination->Buffer[chars] = L'\\0';
+    destination->Length = USHORT(bytes);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlDowncaseUnicodeString(GuestUnicodeString* d, const GuestUnicodeString* s, BOOL allocate) {
+    return RtlCaseUnicodeString(d, s, allocate, false);
+}
+extern "C" LONG __stdcall K_RtlUpcaseUnicodeString(GuestUnicodeString* d, const GuestUnicodeString* s, BOOL allocate) {
+    return RtlCaseUnicodeString(d, s, allocate, true);
+}
 extern "C" char __stdcall K_RtlUpperChar(char c){return char(toupper((unsigned char)c));}
 extern "C" char __stdcall K_RtlLowerChar(char c){return char(tolower((unsigned char)c));}
 extern "C" void __stdcall K_RtlZeroMemory(void*d,uint32_t n){if(d)std::memset(d,0,n);}
@@ -536,6 +564,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_copy_a
         cmp eax, 273
         je rtl_copy_w
+        cmp eax, 276
+        je rtl_downcase_unicode_string
         cmp eax, 275
         je rtl_lower_w
         cmp eax, 277
@@ -556,6 +586,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_lower_a
         cmp eax, 306
         je rtl_try_cs
+        cmp eax, 314
+        je rtl_upcase_unicode_string
         cmp eax, 313
         je rtl_upper_w
         cmp eax, 316
@@ -671,6 +703,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_copy_a: jmp K_RtlCopyString
     rtl_copy_w: jmp K_RtlCopyUnicodeString
     rtl_lower_w: jmp K_RtlDowncaseUnicodeChar
+    rtl_downcase_unicode_string: jmp K_RtlDowncaseUnicodeString
+    rtl_upcase_unicode_string: jmp K_RtlUpcaseUnicodeString
     rtl_enter_cs: jmp K_RtlEnterCriticalSection
     rtl_equal_a: jmp K_RtlEqualString
     rtl_equal_w: jmp K_RtlEqualUnicodeString
