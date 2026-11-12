@@ -29,7 +29,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$ordinals = @(8,14,17,23,45,50,53,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -244,6 +244,21 @@ EmitCallImport 267
 EmitCheckEqual 0
 EmitLoadEax $numberValueVa
 EmitCheckEqual 1234
+
+# 64-bit RTL arithmetic: 7 * 6 = 42, and 100 / 7 = 14 remainder 2.
+EmitPush 6
+EmitPush 0
+EmitPush 7
+EmitCallImport 281
+EmitCheckEqual 42
+EmitPush $numberValueVa
+EmitPush 7
+EmitPush 0
+EmitPush 100
+EmitCallImport 282
+EmitCheckEqual 14
+EmitLoadEax $numberValueVa
+EmitCheckEqual 2
 
 # UnicodeString descriptor at report+0x150; its buffer is report+0x180.
 $unicodeDescriptorVa = [uint32]($reportVa + 0x150)
