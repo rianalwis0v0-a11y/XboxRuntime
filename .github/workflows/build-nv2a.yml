@@ -21,10 +21,10 @@ jobs:
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
       - name: Build x64 host modules
-        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke
+        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke
 
-      - name: Test FATX volume mount, directory listing, and file reads
-        run: ctest --test-dir build -C Release --output-on-failure -R fatx_smoke
+      - name: Test FATX and NV2A host subsystems
+        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke"
 
       - name: Configure native x86 guest process
         run: cmake -S guest32 -B build-guest32 -A Win32
