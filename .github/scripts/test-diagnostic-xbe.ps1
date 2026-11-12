@@ -171,7 +171,7 @@ EmitPush 0
 EmitPush 1
 EmitPush $ioStatusVa
 EmitPush $objectAttributesVa
-EmitPush 0x80000000
+EmitPush ([uint32]2147483648)
 EmitPush $fileHandleVa
 EmitCallImport 202
 EmitCheckEqual 0
@@ -235,7 +235,7 @@ Put32 0x10C 0x3000
 Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
-Put32 0x128 ([uint32]($entryVa -bxor [uint32]0xA8FC57AB))
+Put32 0x128 ([uint32]($entryVa -bxor [Convert]::ToUInt32('A8FC57AB',16)))
 Put32 0x154 ([uint32]($thunkVa -bxor [uint32]0x5B6D40B6))
 # Executable, writable section: code at VA 0x10001000, data at 0x10002200.
 Put32 0x178 5
