@@ -25,6 +25,7 @@ using StatsFn = int (__cdecl*)(Stats*);
 using ReadMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using WriteMemoryFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
 using BatchFn = int (__cdecl*)(uint32_t, const uint32_t*, uint32_t);
+using PushBufferFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 
 
 static FARPROC Need(HMODULE module, const char* name) {
@@ -68,6 +69,7 @@ int main() {
     auto readRamin = reinterpret_cast<ReadMemoryFn>(Need(module, "XboxNV2A_ReadRAMIN"));
     auto writeRamin = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteRAMIN"));
     auto submitBatch = reinterpret_cast<BatchFn>(Need(module, "XboxNV2A_SubmitMethods"));
+    auto submitPushBuffer = reinterpret_cast<PushBufferFn>(Need(module, "XboxNV2A_SubmitPushBuffer"));
 
 
     if (start() != 0) {
@@ -101,6 +103,28 @@ int main() {
     const uint32_t batch[] = {0x01D4, 0xFF223344, 0x17FC, 5, 0x17FC, 0};
     if (submitBatch(0, batch, 3) != 0 || submitBatch(8, batch, 3) == 0) {
         std::cerr << "FAIL: PGRAPH batch validation/dispatch\\n";
+        stop();
+        return 1;
+    }
+
+    /* Exercise real NV4-style pushbuffer packet decoding from VRAM. */
+    const uint32_t pushbuffer[] = {
+        0x40000000u | (2u << 18) | 0x17FCu, 5u, 0u, /* non-incrementing */
+        (1u << 18) | 0x01D4u, 0xFF223344u          /* incrementing */
+    };
+    uint32_t methodsSubmitted = 0;
+    if (writeVram(0x2000, pushbuffer, sizeof(pushbuffer)) != 0 ||
+        submitPushBuffer(0x2000, sizeof(pushbuffer), &methodsSubmitted) != 0 ||
+        methodsSubmitted != 3) {
+        std::cerr << "FAIL: NV2A pushbuffer packet decode/dispatch\n";
+        stop();
+        return 1;
+    }
+    const uint32_t malformedPushbuffer[] = { 0x00000001u };
+    if (writeVram(0x2100, malformedPushbuffer, sizeof(malformedPushbuffer)) != 0 ||
+        submitPushBuffer(0x2100, sizeof(malformedPushbuffer), &methodsSubmitted) == 0 ||
+        methodsSubmitted != 0) {
+        std::cerr << "FAIL: malformed NV2A pushbuffer was accepted\n";
         stop();
         return 1;
     }
