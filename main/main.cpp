@@ -28,7 +28,8 @@ namespace XboxRuntime
     {
         { L"nv2a.dll" },
         { L"insignia_dns.dll" },
-        { L"xbe_loader.dll" }
+        { L"xbe_loader.dll" },
+        { L"fatx.dll" }
     };
 
     static std::wstring systemDirectory;
