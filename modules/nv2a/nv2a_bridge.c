@@ -2139,17 +2139,30 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
  * dispatches anything, but software must still see hardware-style errors. */
 static void raise_dma_pusher_error(int result)
 {
+    /* submit_dma_pushbuffer_info wraps parser errors as 16+result during
+     * validation and 32+result during dispatch. Normalize both paths. */
+    int parser_result = result;
+    if (parser_result >= 16 && parser_result < 32)
+        parser_result -= 16;
+    else if (parser_result >= 32 && parser_result < 48)
+        parser_result -= 32;
+
     uint32_t error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_PROTECTION;
-    if (result == 5)
+    if (parser_result == 5)
         error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_CALL;
-    else if (result == 6)
+    else if (parser_result == 6)
         error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_RETURN;
-    else if (result == 8)
+    else if (parser_result == 8)
         error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_RESERVED_CMD;
-    else if (result >= 10 && result < 20)
+    /* Puller validation returns 10+reason. Invalid RAMHT/object handles
+     * are NON_CACHE faults; invalid engines/methods/instance addresses
+     * remain protection faults. */
+    else if (parser_result == 11 || parser_result == 14)
         error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_NON_CACHE;
 
-    nv2a_mmio_write(g_gpu, NV_PFIFO_CACHE1_DMA_STATE,
+    /* nv2a_mmio_write takes the global MMIO address, not the PFIFO-local
+     * register offset. */
+    nv2a_mmio_write(g_gpu, NV_PFIFO + NV_PFIFO_CACHE1_DMA_STATE,
                     error << 29, 4u);
     g_gpu->pfifo.pending_interrupts |= NV_PFIFO_INTR_0_DMA_PUSHER;
     nv2a_update_irq(g_gpu);
