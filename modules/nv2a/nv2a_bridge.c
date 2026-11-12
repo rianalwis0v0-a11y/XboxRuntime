@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "nv2a_bridge.h"
@@ -30,6 +31,17 @@ static uint32_t g_primitive_mode[32][8];
 static uint32_t g_element_indices[32][8][255];
 static uint32_t g_element_count[32][8];
 static int g_element_overflow[32][8];
+typedef struct NV2A_TEXTURE_CACHE {
+    IDirect3DTexture8* texture;
+    uint32_t format, offset, control0, control1, image_rect;
+    uint32_t dma_handle, dma_base, dma_length;
+    int dirty;
+} NV2A_TEXTURE_CACHE;
+static NV2A_TEXTURE_CACHE g_texture_cache[32][8][4];
+static void mark_all_textures_dirty(void);
+static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
+static void release_texture_cache(void);
+
 
 int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
     uint32_t subchannel, const uint32_t* indices, uint32_t index_count,
@@ -358,6 +370,8 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
 static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
+    if(method>=0x1B00u&&method<=0x1BDCu&&((method-0x1B00u)/0x40u)<4u)
+        g_texture_cache[channel][subchannel][(method-0x1B00u)/0x40u].dirty=1;
     if (apply_texture_stage_method(method, parameter)) {
         ++g_pgraph_custom_methods;
         g_gpu->pgraph.regs[method / 4u] = parameter;
@@ -469,6 +483,10 @@ int __cdecl ModuleStart(void)
     memset(g_ref_counter, 0, sizeof(g_ref_counter));
     memset(g_dma_contexts, 0, sizeof(g_dma_contexts));
     memset(g_primitive_mode, 0, sizeof(g_primitive_mode));
+    memset(g_element_indices, 0, sizeof(g_element_indices));
+    memset(g_element_count, 0, sizeof(g_element_count));
+    memset(g_element_overflow, 0, sizeof(g_element_overflow));
+    mark_all_textures_dirty();
     memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
     g_pgraph_custom_methods = 0;
@@ -491,6 +509,7 @@ void __cdecl ModuleStop(void)
 
     pgraph_d3d11_flush();
     sync_surface_to_vram();
+    release_texture_cache();
     pgraph_d3d11_shutdown();
     release_surface_targets();
 
@@ -933,6 +952,100 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
 }
 
 
+
+static void mark_all_textures_dirty(void)
+{
+    for (uint32_t c=0;c<32u;++c) for(uint32_t s=0;s<8u;++s)
+        for(uint32_t t=0;t<4u;++t) g_texture_cache[c][s][t].dirty=1;
+}
+static void mark_context_textures_dirty(uint32_t channel,uint32_t subchannel)
+{
+    if(channel>31u||subchannel>7u)return;
+    for(uint32_t t=0;t<4u;++t)g_texture_cache[channel][subchannel][t].dirty=1;
+}
+static void release_texture_cache(void)
+{
+    for(uint32_t c=0;c<32u;++c)for(uint32_t s=0;s<8u;++s)for(uint32_t t=0;t<4u;++t){
+        NV2A_TEXTURE_CACHE* e=&g_texture_cache[c][s][t];
+        if(e->texture&&e->texture->lpVtbl&&e->texture->lpVtbl->Release)e->texture->lpVtbl->Release(e->texture);
+        memset(e,0,sizeof(*e));
+    }
+}
+static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevice8* device)
+{
+    if(!device||!device->lpVtbl||!device->lpVtbl->SetTexture||!device->lpVtbl->CreateTexture)return 1;
+    for(uint32_t stage=0;stage<4u;++stage){
+        const uint32_t base=0x1B00u+stage*0x40u;
+        const uint32_t control0=g_gpu->pgraph.regs[(base+0x0Cu)/4u];
+        NV2A_TEXTURE_CACHE* e=&g_texture_cache[channel][subchannel][stage];
+        if(!(control0&(1u<<30))){
+            if(FAILED(device->lpVtbl->SetTexture(device,stage,NULL)))return 2;
+            continue;
+        }
+        XboxNV2A_TEXTURE_INFO info;
+        if(XboxNV2A_GetTextureInfo(channel,subchannel,stage,&info)!=0)return 3;
+        if(!info.level_count||info.level_count>16u)return 4;
+        const uint32_t slot=(info.context_method-0x0180u)/4u;
+        const XboxNV2A_DMA_INFO* dma=&g_dma_contexts[channel][subchannel][slot];
+        const uint32_t control1=g_gpu->pgraph.regs[(base+0x10u)/4u];
+        const uint32_t image_rect=g_gpu->pgraph.regs[(base+0x1Cu)/4u];
+        const int changed=e->dirty||!e->texture||e->format!=info.format||
+            e->offset!=info.texture_offset||e->control0!=control0||
+            e->control1!=control1||e->image_rect!=image_rect||
+            e->dma_handle!=dma->handle||e->dma_base!=dma->base_address||
+            e->dma_length!=dma->mapped_length;
+        if(changed){
+            uint32_t offsets[16]={0},sizes[16]={0},w=info.width,h=info.height;
+            uint64_t total=0;
+            for(uint32_t level=0;level<info.level_count;++level){
+                uint64_t n=(uint64_t)w*h*4u;
+                if(!w||!h||n>UINT32_MAX||total+n>64u*1024u*1024u)return 5;
+                offsets[level]=(uint32_t)total;sizes[level]=(uint32_t)n;total+=n;
+                w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
+            }
+            uint8_t* decoded=(uint8_t*)malloc((size_t)total);
+            if(!decoded)return 6;
+            int dr= XboxNV2A_DecodeTextureStageRGBA8(channel,subchannel,stage,
+                decoded,(uint32_t)total,offsets,sizes);
+            if(dr){free(decoded);return 7;}
+            IDirect3DTexture8* texture=NULL;
+            HRESULT hr=device->lpVtbl->CreateTexture(device,info.width,info.height,
+                info.level_count,0,D3DFMT_A8R8G8B8,D3DPOOL_MANAGED,&texture);
+            if(FAILED(hr)||!texture||!texture->lpVtbl||!texture->lpVtbl->LockRect||
+               !texture->lpVtbl->UnlockRect){
+                if(texture&&texture->lpVtbl&&texture->lpVtbl->Release)texture->lpVtbl->Release(texture);
+                free(decoded);return 8;
+            }
+            w=info.width;h=info.height;int ok=1;
+            for(uint32_t level=0;level<info.level_count;++level){
+                D3DLOCKED_RECT locked;memset(&locked,0,sizeof(locked));
+                hr=texture->lpVtbl->LockRect(texture,level,&locked,NULL,0);
+                uint32_t row_bytes=w*4u;
+                if(FAILED(hr)||!locked.pBits||locked.Pitch<(INT)row_bytes){ok=0;break;}
+                for(uint32_t y=0;y<h;++y){
+                    const uint8_t* src=decoded+offsets[level]+(size_t)y*row_bytes;
+                    uint8_t* dst=(uint8_t*)locked.pBits+(size_t)y*(uint32_t)locked.Pitch;
+                    for(uint32_t x=0;x<w;++x){
+                        dst[x*4u]=src[x*4u+2u];dst[x*4u+1u]=src[x*4u+1u];
+                        dst[x*4u+2u]=src[x*4u];dst[x*4u+3u]=src[x*4u+3u];
+                    }
+                }
+                if(FAILED(texture->lpVtbl->UnlockRect(texture,level))){ok=0;break;}
+                w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
+            }
+            free(decoded);
+            if(!ok){texture->lpVtbl->Release(texture);return 9;}
+            if(e->texture&&e->texture->lpVtbl&&e->texture->lpVtbl->Release)e->texture->lpVtbl->Release(e->texture);
+            e->texture=texture;e->format=info.format;e->offset=info.texture_offset;
+            e->control0=control0;e->control1=control1;e->image_rect=image_rect;
+            e->dma_handle=dma->handle;e->dma_base=dma->base_address;
+            e->dma_length=dma->mapped_length;e->dirty=0;
+        }
+        if(FAILED(device->lpVtbl->SetTexture(device,stage,(IDirect3DBaseTexture8*)e->texture)))return 10;
+    }
+    return 0;
+}
+
 static int nv2a_texture_format_is_linear(uint32_t color)
 {
     switch (color) {
@@ -1271,7 +1384,7 @@ int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t lengt
 int __cdecl XboxNV2A_WriteVRAM(uint32_t offset, const void* source, uint32_t length)
 {
     if (!g_started || (!source && length) || !memory_range_valid(offset, length, XBOX_VRAM_SIZE)) return 1;
-    if (length) memcpy(g_vram + offset, source, length);
+    if (length) { memcpy(g_vram + offset, source, length); mark_all_textures_dirty(); }
     return 0;
 }
 
@@ -1630,6 +1743,7 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     IDirect3DDevice8* d=xbox_GetD3DDevice();
     if(!d||!d->lpVtbl||!d->lpVtbl->SetVertexShader||!d->lpVtbl->DrawPrimitiveUP)return 5;
     if(FAILED(d->lpVtbl->SetVertexShader(d,fvf)))return 6;
+    if(bind_nv2a_textures(channel,subchannel,d)!=0)return 8;
     if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw,stride)))return 7;
     ++g_pgraph_custom_methods;++g_pgraph_custom_draws;g_pgraph_custom_vertices+=count;(void)draw_count;return 0;
 }
@@ -1671,6 +1785,7 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
         if (XboxNV2A_ResolveDMAHandle(channel, parameter, &dma) != 0)
             return 5;
         g_dma_contexts[channel][subchannel][(method - 0x0180u) / 4u] = dma;
+        mark_context_textures_dirty(channel,subchannel);
         parameter = dma.instance_offset;
         if (!memory_range_valid(parameter, 4u, XBOX_RAMIN_SIZE))
             return 6;
