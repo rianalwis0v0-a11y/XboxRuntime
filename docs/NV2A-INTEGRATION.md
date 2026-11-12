@@ -467,3 +467,9 @@ This follows the documented NV2A compressed-normal field widths and is
 restricted to the three-component normal attribute. The host smoke test checks
 positive and negative packed extrema. The field interpretation remains an
 implementation assumption pending comparison against hardware captures.
+
+
+CMP fetches use a four-byte packed record per vertex even though the NV097
+format's component field describes the three expanded output components. The
+DMA reader therefore treats CMP as a 4-byte element (and rejects it for
+non-normal arrays) before the normal unpacker expands it to three floats.

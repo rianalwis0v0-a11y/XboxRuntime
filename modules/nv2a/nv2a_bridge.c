@@ -1697,13 +1697,18 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S1:
     case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S32K:
         component_bytes = 2u; break;
+    case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP:
+        if (array_index != 2u || components != 3u) return 4;
+        component_bytes = 4u; break;
     case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F:
         component_bytes = 4u; break;
     default:
         return 4; /* Compressed and reserved vertex encodings need their own decoder. */
     }
 
-    const uint32_t element_bytes = components * component_bytes;
+    const uint32_t element_bytes =
+        type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP ? 4u :
+        components * component_bytes;
     uint32_t stride = (format & 0xFFFFFF00u) >> 8;
     if (!stride) stride = element_bytes;
     if (stride < element_bytes) return 5;
@@ -1754,7 +1759,10 @@ static int read_vertex_float_array(uint32_t channel,uint32_t subchannel,
     uint8_t raw[255u*4u*4u];uint32_t stride=0,element_bytes=0;
     int result=XboxNV2A_ReadVertexArray(channel,subchannel,array_index,
         first_vertex,vertex_count,raw,sizeof(raw),&stride,&element_bytes);
-    if(result!=0||element_bytes!=components*bytes_per_component)return 3;
+    const uint32_t expected_raw_bytes=
+        type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP?4u:
+        components*bytes_per_component;
+    if(result!=0||element_bytes!=expected_raw_bytes)return 3;
     if((uint64_t)vertex_count*components*sizeof(float)>destination_capacity)return 4;
     if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP){
         for(uint32_t v=0;v<vertex_count;++v){
