@@ -150,6 +150,25 @@ int main() {
         return 1;
     }
 
+    /* Invalid RAMHT handles are rejected before any earlier methods dispatch. */
+    const uint32_t badHandleStream[] = {
+        (1u << 18), dmaHandle,
+        (1u << 18) | 0x01D4u, 0xFFABCDEFu,
+        (1u << 18), dmaHandle + 1u
+    };
+    Stats beforeBadHandle{}, afterBadHandle{};
+    if (getStats(&beforeBadHandle) != 0 ||
+        writeVram(0x1000u, badHandleStream, sizeof(badHandleStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, sizeof(badHandleStream),
+                      &dmaGet, &dmaMethods) == 0 ||
+        dmaMethods != 0 ||
+        getStats(&afterBadHandle) != 0 ||
+        beforeBadHandle.methods_handled != afterBadHandle.methods_handled) {
+        std::cerr << "FAIL: DMA pusher partially dispatched before bad RAMHT handle\\n";
+        stop();
+        return 1;
+    }
+
     /* A jump may target a command beyond PUT and jump back to PUT. */
     const uint32_t dmaJumpStream[] = {
         0x00000011u,                         /* JUMP +16 */
