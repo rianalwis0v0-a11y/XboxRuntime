@@ -698,6 +698,19 @@ int main() {
         stop();return 1;
     }
 
+    /* Palette DMA_B selection and 32-entry index bounds are checked too. */
+    const uint8_t invalidPaletteIndices[4] = {0u,1u,2u,32u};
+    if(submit(0u,0x1B20u,0x601u)!=0||
+       decodeTextureStage(channel,0u,0u,palettedPixels,sizeof(palettedPixels),
+           palettedOffsets,palettedSizes)!=0||
+       writeVram(0x1700u,invalidPaletteIndices,sizeof(invalidPaletteIndices))!=0||
+       submit(0u,0x1B20u,0x60Du)!=0||
+       decodeTextureStage(channel,0u,0u,palettedPixels,sizeof(palettedPixels),
+           palettedOffsets,palettedSizes)==0){
+        std::cerr<<"FAIL: palette DMA selector/length validation\\n";
+        stop();return 1;
+    }
+
     /* Writing CACHE1_DMA_PUT in DMA mode must kick the pusher and advance GET. */
     if (writeVram(0x1000u, dmaJumpStream, sizeof(dmaJumpStream)) != 0 ||
         write(0x3204u, channel | 0x100u, 4u) != 0 ||
