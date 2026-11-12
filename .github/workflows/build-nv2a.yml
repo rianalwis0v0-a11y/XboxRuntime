@@ -32,7 +32,7 @@ jobs:
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
       - name: Build x64 host modules
-        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke input input_smoke xdvdfs xdvdfs_smoke
+        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke nv2a_vsh_smoke nv2a_hlsl_smoke input input_smoke xdvdfs xdvdfs_smoke
 
       - name: Test FATX, NV2A, controller input, and XDVDFS host subsystems
         run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|nv2a_vsh_smoke|nv2a_hlsl_smoke|input_smoke|xdvdfs_smoke"
