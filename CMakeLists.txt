@@ -33,3 +33,16 @@ target_include_directories(fatx_smoke PRIVATE
 target_compile_features(fatx_smoke PRIVATE cxx_std_17)
 target_compile_definitions(fatx_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME fatx_smoke COMMAND fatx_smoke)
+
+# Exercise the borrowed NV2A core through the exported XboxRuntime module ABI.
+add_executable(nv2a_smoke tests/nv2a_smoke.cpp)
+target_compile_features(nv2a_smoke PRIVATE cxx_std_17)
+target_compile_definitions(nv2a_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+set_target_properties(nv2a_smoke PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+)
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(nv2a_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
+endforeach()
+add_dependencies(nv2a_smoke nv2a)
+add_test(NAME nv2a_smoke COMMAND nv2a_smoke)
