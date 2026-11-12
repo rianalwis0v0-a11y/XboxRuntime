@@ -2191,33 +2191,29 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     uint32_t vertex_count, uint16_t input_mask, uint8_t* output,
     uint32_t output_capacity, uint32_t* stride_out)
 {
-    uint32_t stride = 0;
+    uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
     if (stride_out) *stride_out = 0;
     if (!vertices || !output || !vertex_count || !stride_out)
         return 0;
     for (uint32_t reg = 0; reg < 16u; ++reg) {
         if (!(input_mask & (uint16_t)(1u << reg)))
             continue;
+        offsets[reg] = stride;
         switch (reg) {
-        case 0u: case 2u: case 3u: case 4u:
-        case 5u: case 6u: case 7u:
-        case 8u: case 9u: case 10u: case 11u:
-        case 1u: case 12u: case 13u: case 14u: case 15u:
-            break;
-        default: return 0;
+        case 0u: case 2u: sizes[reg] = 12u; break;
+        case 3u: case 4u: case 5u: case 6u: case 7u: sizes[reg] = 4u; break;
+        case 8u: case 9u: case 10u: case 11u: sizes[reg] = 8u; break;
+        default: sizes[reg] = 16u; break;
         }
-        uint32_t element_size = 0;
-        switch (reg) {
-        case 0u: case 2u: element_size = 12u; break;
-        case 3u: case 4u: case 7u: element_size = 4u; break;
-        case 5u: case 6u: element_size = 4u; break;
-        case 8u: case 9u: case 10u: case 11u: element_size = 8u; break;
-        default: element_size = 16u; break;
-        }
-        if ((uint64_t)vertex_count * (stride + element_size) > output_capacity)
-            return 0;
-        for (uint32_t i = 0; i < vertex_count; ++i) {
-            uint8_t* dst = output + (size_t)i * (stride + element_size) + stride;
+        stride += sizes[reg];
+    }
+    if (!stride || (uint64_t)vertex_count * stride > output_capacity)
+        return 0;
+    for (uint32_t i = 0; i < vertex_count; ++i) {
+        for (uint32_t reg = 0; reg < 16u; ++reg) {
+            if (!(input_mask & (uint16_t)(1u << reg)))
+                continue;
+            uint8_t* dst = output + (size_t)i * stride + offsets[reg];
             const XboxNV2A_VERTEX* v = &vertices[i];
             switch (reg) {
             case 0u: memcpy(dst, &v->x, 12u); break;
@@ -2241,9 +2237,7 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
             }
             }
         }
-        stride += element_size;
     }
-    if (!stride) return 0;
     *stride_out = stride;
     return 1;
 }
