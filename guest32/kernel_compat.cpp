@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <atomic>
 #include "kernel_compat.h"
 
 extern "C" void KernelDispatch();
@@ -54,6 +55,31 @@ SRWLOCK* GetGuestRwLock(void* address, bool create) {
     return result;
 }
 thread_local ULONG g_guestIrql = 0;
+thread_local bool g_insideDpc = false;
+struct GuestDpcInfo {
+    using Routine = void (__stdcall*)(void*, void*, void*, void*);
+    Routine routine = nullptr;
+    void* context = nullptr;
+    std::atomic<bool> pending{false};
+};
+struct GuestDpcWork {
+    GuestDpcInfo* info;
+    void* dpc;
+    void* arg1;
+    void* arg2;
+};
+std::mutex g_dpcMutex;
+std::unordered_map<void*, std::unique_ptr<GuestDpcInfo>> g_dpcs;
+DWORD WINAPI GuestDpcWorker(void* raw) {
+    std::unique_ptr<GuestDpcWork> work(static_cast<GuestDpcWork*>(raw));
+    GuestDpcInfo* info = work->info;
+    if (info && info->pending.exchange(false)) {
+        g_insideDpc = true;
+        info->routine(work->dpc, info->context, work->arg1, work->arg2);
+        g_insideDpc = false;
+    }
+    return 0;
+}
 thread_local ULONG g_criticalRegionDepth = 0;
 HANDLE FindKernelObject(void* object) {
     std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
@@ -700,6 +726,37 @@ extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR level) {
 extern "C" void __fastcall K_KfLowerIrql(UCHAR level) { g_guestIrql = level; }
 extern "C" UCHAR __stdcall K_KeRaiseIrqlToDpcLevel() { return K_KfRaiseIrql(2); }
 extern "C" UCHAR __stdcall K_KeRaiseIrqlToSynchLevel() { return K_KfRaiseIrql(1); }
+
+extern "C" void __stdcall K_KeInitializeDpc(void* dpc, GuestDpcInfo::Routine routine, void* context) {
+    if (!dpc || !routine) return;
+    auto info = std::make_unique<GuestDpcInfo>();
+    info->routine = routine;
+    info->context = context;
+    std::lock_guard<std::mutex> lock(g_dpcMutex);
+    g_dpcs[dpc] = std::move(info);
+}
+extern "C" BOOL __stdcall K_KeInsertQueueDpc(void* dpc, void* arg1, void* arg2) {
+    GuestDpcInfo* info = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_dpcMutex);
+        auto it = g_dpcs.find(dpc);
+        if (it == g_dpcs.end()) return FALSE;
+        info = it->second.get();
+        if (info->pending.exchange(true)) return FALSE;
+    }
+    auto work = std::make_unique<GuestDpcWork>();
+    work->info = info; work->dpc = dpc; work->arg1 = arg1; work->arg2 = arg2;
+    HANDLE thread = CreateThread(nullptr, 0, GuestDpcWorker, work.get(), 0, nullptr);
+    if (!thread) { info->pending = false; return FALSE; }
+    work.release();
+    CloseHandle(thread);
+    return TRUE;
+}
+extern "C" BOOL __stdcall K_KeRemoveQueueDpc(void* dpc) {
+    std::lock_guard<std::mutex> lock(g_dpcMutex);
+    auto it = g_dpcs.find(dpc);
+    return it != g_dpcs.end() && it->second->pending.exchange(false);
+}
 extern "C" void __stdcall K_KeInitializeTimerEx(void* timer, ULONG type) {
     if (!timer) return;
     HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
@@ -791,7 +848,7 @@ extern "C" int __cdecl K_RtlVsprintf(char* output, const char* format, va_list a
     return vsprintf(output, format, args);
 }
 
-extern "C" BOOL __stdcall K_KeIsExecutingDpc() { return FALSE; }
+extern "C" BOOL __stdcall K_KeIsExecutingDpc() { return g_insideDpc ? TRUE : FALSE; }
 extern "C" BOOL __stdcall K_KeTestAlertThread(ULONG) { return FALSE; }
 extern "C" LONG __stdcall K_KeSetEventBoostPriority(void* event, LONG increment, BOOL wait) {
     return K_KeSetEvent(event, increment, wait);
@@ -928,7 +985,13 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_bugcheck
         cmp eax, 96
         je ke_bugcheck_ex
-        cmp eax, 121
+        cmp eax, 107
+        je ke_init_dpc
+        cmp eax, 119
+        je ke_insert_dpc
+        cmp eax, 137
+        je ke_remove_dpc
+                cmp eax, 121
         je ke_is_dpc
         cmp eax, 155
         je ke_test_alert
@@ -1224,6 +1287,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
     ex_release_rw: jmp K_ExReleaseReadWriteLock
+    ke_init_dpc: jmp K_KeInitializeDpc
+    ke_insert_dpc: jmp K_KeInsertQueueDpc
+    ke_remove_dpc: jmp K_KeRemoveQueueDpc
     ke_cancel_timer: jmp K_KeCancelTimer
     ke_enter_critical: jmp K_KeEnterCriticalRegion
     ke_init_timer: jmp K_KeInitializeTimerEx
