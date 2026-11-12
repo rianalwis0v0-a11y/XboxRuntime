@@ -172,9 +172,59 @@ static int apply_nv2a_render_state(uint32_t method, uint32_t parameter)
         device, (D3DRENDERSTATETYPE)state, value)) ? 1 : 0;
 }
 
+
+static int map_texture_address_mode(uint32_t mode, uint32_t* output)
+{
+    if (!output) return 0;
+    switch(mode) {
+    case 1u: *output=D3DTADDRESS_WRAP; return 1;
+    case 2u: *output=D3DTADDRESS_MIRROR; return 1;
+    case 3u: *output=D3DTADDRESS_CLAMP; return 1;
+    case 4u: *output=D3DTADDRESS_BORDER; return 1;
+    case 5u: *output=D3DTADDRESS_CLAMP; return 1;
+    case 6u: *output=D3DTADDRESS_MIRRORONCE; return 1;
+    default: return 0;
+    }
+}
+
+static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
+{
+    uint32_t stage=0, state_u=0, state_v=0;
+    IDirect3DDevice8* device=xbox_GetD3DDevice();
+    if(!device || !device->lpVtbl || !device->lpVtbl->SetTextureStageState)
+        return 0;
+    if(method>=0x1B08u && method<=0x1BC8u &&
+       ((method-0x1B08u)%0x40u)==0u) {
+        stage=(method-0x1B08u)/0x40u;
+        if(stage>=4u ||
+           !map_texture_address_mode(parameter&0xFu,&state_u) ||
+           !map_texture_address_mode((parameter>>4)&0xFu,&state_v))
+            return 0;
+        if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
+                D3DTSS_ADDRESSU,state_u))) return 0;
+        if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
+                D3DTSS_ADDRESSV,state_v))) return 0;
+        return 1;
+    }
+    if(method>=0x1B24u && method<=0x1BE4u &&
+       ((method-0x1B24u)%0x40u)==0u) {
+        stage=(method-0x1B24u)/0x40u;
+        if(stage>=4u) return 0;
+        return SUCCEEDED(device->lpVtbl->SetTextureStageState(device,stage,
+            D3DTSS_BORDERCOLOR,parameter)) ? 1 : 0;
+    }
+    return 0;
+}
+
 static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
+    if (apply_texture_stage_method(method, parameter)) {
+        ++g_pgraph_custom_methods;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
+    }
+
     if (method == NV097_SET_BEGIN_END)
         g_primitive_mode[channel][subchannel] = parameter;
 
