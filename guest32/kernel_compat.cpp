@@ -12,7 +12,7 @@
 #include <string>
 #include "kernel_compat.h"
 
-extern "C" __declspec(naked) void KernelDispatch();
+extern "C" void KernelDispatch();
 namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
