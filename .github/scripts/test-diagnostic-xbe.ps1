@@ -290,7 +290,7 @@ EmitMovMemoryImmediate ([uint32]($caseSourceDescriptorVa + 8)) $unicodeBufferVa
 EmitMovMemoryImmediate $caseOutputDescriptorVa 0
 EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 4)) 8
 EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 8)) $caseOutputBufferVa
-EmitPush 1
+EmitPush 0
 EmitPush $caseSourceDescriptorVa
 EmitPush $caseOutputDescriptorVa
 EmitCallImport 314
