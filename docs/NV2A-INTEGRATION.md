@@ -429,3 +429,13 @@ The host vertex builder now fetches TEX0 through TEX3 from NV097 array slots
 sets. Missing sets are zero-filled. The vertex record is now 64 bytes, and
 smoke tests verify the four independent DMA-backed coordinate arrays as well
 as indexed expansion using the expanded record.
+
+
+## Fog render-state routing
+
+Fog enable, fog color and fog mode are now intercepted at their real NV097
+method offsets and applied through D3D8 render states. Fog color is converted
+from the NV097 low-byte-red packing to D3DCOLOR's AARRGGBB packing. The same
+special-method path now routes the already mapped lighting-enable and point-
+size methods instead of allowing the pinned translator to mis-handle them.
+Smoke tests verify fog enable, mode and channel order.

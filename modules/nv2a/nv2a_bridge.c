@@ -214,7 +214,14 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
     case NV097_SET_FOG_ENABLE:
         state = D3DRS_FOGENABLE; value = parameter ? 1u : 0u; break;
     case NV097_SET_FOG_COLOR:
-        state = D3DRS_FOGCOLOR; break;
+        state = D3DRS_FOGCOLOR;
+        /* NV097 packs R,G,B,A from least to most significant byte;
+         * D3DCOLOR uses A,R,G,B. */
+        value = ((parameter & 0x000000FFu) << 16) |
+                (parameter & 0x0000FF00u) |
+                ((parameter & 0x00FF0000u) >> 16) |
+                (parameter & 0xFF000000u);
+        break;
     case NV097_SET_FOG_MODE:
         state = D3DRS_FOGTABLEMODE;
         switch (parameter) {
@@ -432,7 +439,12 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         method == NV097_SET_DEPTH_FUNC ||
         method == NV097_SET_CULL_FACE ||
         method == NV097_SET_SHADE_MODE ||
-        method == NV097_SET_STENCIL_FUNC_REF) {
+        method == NV097_SET_STENCIL_FUNC_REF ||
+        method == NV097_SET_FOG_ENABLE ||
+        method == NV097_SET_FOG_COLOR ||
+        method == NV097_SET_FOG_MODE ||
+        method == NV097_SET_LIGHTING_ENABLE ||
+        method == NV097_SET_POINT_SIZE) {
         if (apply_nv2a_render_state(method, parameter))
             ++g_pgraph_custom_methods;
         g_gpu->pgraph.regs[method / 4u] = parameter;

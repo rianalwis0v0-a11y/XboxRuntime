@@ -140,6 +140,10 @@ int main() {
         mappedState != 53u || mappedValue != 4u ||
         !mapRenderState(0x029Cu, 0x0801u, &mappedState, &mappedValue) ||
         mappedState != 35u || mappedValue != 2u ||
+        !mapRenderState(0x02A4u, 1u, &mappedState, &mappedValue) ||
+        mappedState != 28u || mappedValue != 1u ||
+        !mapRenderState(0x02A8u, 0xAA112233u, &mappedState, &mappedValue) ||
+        mappedState != 34u || mappedValue != 0xAA332211u ||
         !mapRenderState(0x039Cu, 0x0404u, &mappedState, &mappedValue) ||
         mappedState != 22u || mappedValue != 2u ||
         !mapRenderState(0x039Cu, 0x0405u, &mappedState, &mappedValue) ||
