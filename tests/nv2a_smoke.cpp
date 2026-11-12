@@ -652,6 +652,40 @@ int main() {
         return 1;
     }
 
+    /* I8_A8R8G8B8 palette uses DMA_A independently of texture DMA_B. */
+    uint8_t paletteBytes[1024]{};
+    const uint8_t paletteEntries[16] = {
+        0x30,0x20,0x10,0xFF, 0x60,0x50,0x40,0xFF,
+        0x90,0x80,0x70,0xFF, 0xC0,0xB0,0xA0,0xFF
+    };
+    memcpy(paletteBytes,paletteEntries,sizeof(paletteEntries));
+    const uint8_t paletteIndices[4] = {0u,1u,2u,3u};
+    const uint32_t palettedFormat = 1u | (2u<<4) | (0x0Bu<<8) |
+        (1u<<16) | (1u<<20) | (1u<<24);
+    uint8_t palettedPixels[16]{};
+    uint32_t palettedOffsets[1]{},palettedSizes[1]{};
+    if(writeVram(0x1600u,paletteBytes,sizeof(paletteBytes))!=0||
+       writeVram(0x1700u,paletteIndices,sizeof(paletteIndices))!=0||
+       submit(0u,0x1B00u,0x700u)!=0||
+       submit(0u,0x1B04u,palettedFormat)!=0||
+       submit(0u,0x1B0Cu,(1u<<30))!=0||
+       submit(0u,0x1B10u,0u)!=0||
+       submit(0u,0x1B20u,0x600u)!=0||
+       decodeTextureStage(channel,0u,0u,palettedPixels,sizeof(palettedPixels),
+           palettedOffsets,palettedSizes)!=0||
+       palettedSizes[0]!=16u||
+       palettedPixels[0]!=0x10u||palettedPixels[1]!=0x20u||
+       palettedPixels[2]!=0x30u||palettedPixels[3]!=0xFFu||
+       palettedPixels[4]!=0x40u||palettedPixels[5]!=0x50u||
+       palettedPixels[6]!=0x60u||palettedPixels[7]!=0xFFu||
+       palettedPixels[8]!=0x70u||palettedPixels[9]!=0x80u||
+       palettedPixels[10]!=0x90u||palettedPixels[11]!=0xFFu||
+       palettedPixels[12]!=0xA0u||palettedPixels[13]!=0xB0u||
+       palettedPixels[14]!=0xC0u||palettedPixels[15]!=0xFFu){
+        std::cerr<<"FAIL: paletted NV097 texture DMA decode\\n";
+        stop();return 1;
+    }
+
     /* Writing CACHE1_DMA_PUT in DMA mode must kick the pusher and advance GET. */
     if (writeVram(0x1000u, dmaJumpStream, sizeof(dmaJumpStream)) != 0 ||
         write(0x3204u, channel | 0x100u, 4u) != 0 ||

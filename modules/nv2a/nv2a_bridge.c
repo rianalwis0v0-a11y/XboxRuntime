@@ -36,6 +36,7 @@ typedef struct NV2A_TEXTURE_CACHE {
     IDirect3DDevice8* owner_device;
     uint32_t format, offset, control0, control1, image_rect;
     uint32_t dma_handle, dma_base, dma_length;
+    uint32_t palette, palette_dma_handle, palette_dma_base, palette_dma_length;
     int dirty;
 } NV2A_TEXTURE_CACHE;
 static NV2A_TEXTURE_CACHE g_texture_cache[32][8][4];
@@ -375,7 +376,7 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         const uint32_t stage = (method - 0x1B00u) / 0x40u;
         const uint32_t reg = (method - 0x1B00u) % 0x40u;
         if (stage < 4u && (reg == 0x00u || reg == 0x04u ||
-            reg == 0x0Cu || reg == 0x10u || reg == 0x1Cu))
+            reg == 0x0Cu || reg == 0x10u || reg == 0x1Cu || reg == 0x20u))
             g_texture_cache[channel][subchannel][stage].dirty = 1;
     }
     if (apply_texture_stage_method(method, parameter)) {
@@ -995,11 +996,18 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
         const XboxNV2A_DMA_INFO* dma=&g_dma_contexts[channel][subchannel][slot];
         const uint32_t control1=g_gpu->pgraph.regs[(base+0x10u)/4u];
         const uint32_t image_rect=g_gpu->pgraph.regs[(base+0x1Cu)/4u];
+        const uint32_t color=(info.format>>8)&0xFFu;
+        const uint32_t palette=(color==0x0Bu)?g_gpu->pgraph.regs[(base+0x20u)/4u]:0u;
+        const uint32_t palette_slot=palette&1u;
+        const XboxNV2A_DMA_INFO* palette_dma=&g_dma_contexts[channel][subchannel][palette_slot];
         const int changed=e->dirty||!e->texture||e->owner_device!=device||e->format!=info.format||
             e->offset!=info.texture_offset||e->control0!=control0||
             e->control1!=control1||e->image_rect!=image_rect||
             e->dma_handle!=dma->handle||e->dma_base!=dma->base_address||
-            e->dma_length!=dma->mapped_length;
+            e->dma_length!=dma->mapped_length||e->palette!=palette||
+            e->palette_dma_handle!=palette_dma->handle||
+            e->palette_dma_base!=palette_dma->base_address||
+            e->palette_dma_length!=palette_dma->mapped_length;
         if(changed){
             uint32_t offsets[16]={0},sizes[16]={0},w=info.width,h=info.height;
             uint64_t total=0;
@@ -1049,7 +1057,10 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
             e->texture=texture;e->owner_device=device;e->format=info.format;e->offset=info.texture_offset;
             e->control0=control0;e->control1=control1;e->image_rect=image_rect;
             e->dma_handle=dma->handle;e->dma_base=dma->base_address;
-            e->dma_length=dma->mapped_length;e->dirty=0;
+            e->dma_length=dma->mapped_length;e->palette=palette;
+            e->palette_dma_handle=palette_dma->handle;
+            e->palette_dma_base=palette_dma->base_address;
+            e->palette_dma_length=palette_dma->mapped_length;e->dirty=0;
         }
         if(FAILED(device->lpVtbl->SetTexture(device,stage,(IDirect3DBaseTexture8*)e->texture)))return 10;
     }
@@ -1060,7 +1071,7 @@ static int nv2a_texture_format_is_supported(uint32_t color)
 {
     switch (color) {
     case 0x00u: case 0x02u: case 0x03u: case 0x04u: case 0x05u:
-    case 0x06u: case 0x07u: case 0x0Cu: case 0x0Eu: case 0x0Fu:
+    case 0x06u: case 0x07u: case 0x0Bu: case 0x0Cu: case 0x0Eu: case 0x0Fu:
     case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x19u:
     case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
         return 1;
@@ -1099,6 +1110,8 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
     if (format & 0x0000000Cu) return 6;
     const uint32_t dimensionality = (format >> 4) & 0xFu;
     const uint32_t context_slot = format & 3u;
+    /* NV097 texture context selection is DMA_A (0) or DMA_B (1). */
+    if (context_slot > 1u) return 7;
     const uint32_t context_method = 0x0180u + context_slot * 4u;
     const uint32_t max_lod = (control0 >> 6) & 0xFFFu;
     const uint32_t encoded_levels = (format >> 16) & 0xFu;
@@ -1146,6 +1159,85 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+
+static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
+    uint32_t stage,const XboxNV2A_TEXTURE_INFO* info,void* destination,
+    uint32_t destination_capacity,uint32_t* level_offsets,uint32_t* level_sizes)
+{
+    if(!info||!destination||!level_offsets||!level_sizes||stage>3u||
+       !info->level_count||info->level_count>16u)return 1;
+    const uint32_t base=0x1B00u+stage*0x40u;
+    const uint32_t palette=g_gpu->pgraph.regs[(base+0x20u)/4u];
+    const uint32_t palette_slot=palette&1u;
+    const uint32_t palette_method=0x0180u+palette_slot*4u;
+    const uint32_t palette_length_code=(palette>>2)&3u;
+    const uint32_t palette_entries=256u>>palette_length_code;
+    const uint32_t palette_bytes=palette_entries*4u;
+    const uint32_t palette_offset=palette&0xFFFFFFC0u;
+    const XboxNV2A_DMA_INFO* palette_dma=&g_dma_contexts[channel][subchannel][palette_slot];
+    const uint32_t texture_slot=(info->context_method-0x0180u)/4u;
+    const XboxNV2A_DMA_INFO* texture_dma=&g_dma_contexts[channel][subchannel][texture_slot];
+    if(palette_method<0x0180u||!palette_dma->mapped_length||
+       palette_dma->dma_target!=0u||!texture_dma->mapped_length||
+       texture_dma->dma_target!=0u)return 2;
+    if(palette_offset>palette_dma->mapped_length||
+       palette_bytes>palette_dma->mapped_length-palette_offset||
+       info->texture_offset>texture_dma->mapped_length)return 3;
+    const uint64_t palette_address=(uint64_t)palette_dma->base_address+palette_offset;
+    const uint64_t texture_address=(uint64_t)texture_dma->base_address+info->texture_offset;
+    if(palette_address>XBOX_VRAM_SIZE||palette_bytes>(uint64_t)XBOX_VRAM_SIZE-palette_address||
+       texture_address>XBOX_VRAM_SIZE)return 4;
+
+    uint64_t source_total=0,destination_total=0;
+    uint32_t w=info->width,h=info->height;
+    for(uint32_t level=0;level<info->level_count;++level){
+        uint64_t input=(uint64_t)w*h,output=input*4u;
+        if(!w||!h||input>UINT32_MAX||output>UINT32_MAX||
+           source_total+input>texture_dma->mapped_length-info->texture_offset||
+           destination_total+output>destination_capacity||
+           source_total+input>64u*1024u*1024u||
+           destination_total+output>64u*1024u*1024u)return 5;
+        level_offsets[level]=(uint32_t)destination_total;
+        level_sizes[level]=(uint32_t)output;
+        source_total+=input;destination_total+=output;
+        w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
+    }
+    if(source_total>(uint64_t)XBOX_VRAM_SIZE-texture_address)return 6;
+    uint8_t* linear=(uint8_t*)HeapAlloc(GetProcessHeap(),0,(SIZE_T)source_total);
+    if(!linear)return 7;
+    const uint8_t* swizzled=g_vram+(size_t)texture_address;
+    const uint8_t* palette_data=g_vram+(size_t)palette_address;
+    w=info->width;h=info->height;
+    uint64_t source_offset=0;
+    for(uint32_t level=0;level<info->level_count;++level){
+        const size_t level_bytes=(size_t)w*h;
+        xbox_unswizzle_rect(linear+(size_t)source_offset,
+            swizzled+(size_t)source_offset,w,h,1u);
+        for(size_t i=0;i<level_bytes;++i){
+            if(linear[(size_t)source_offset+i]>=palette_entries){
+                HeapFree(GetProcessHeap(),0,linear);return 8;
+            }
+        }
+        source_offset+=level_bytes;
+        w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
+    }
+    uint8_t* out=(uint8_t*)destination;
+    w=info->width;h=info->height;source_offset=0;
+    for(uint32_t level=0;level<info->level_count;++level){
+        const size_t count=(size_t)w*h;
+        uint8_t* dst=out+level_offsets[level];
+        for(size_t i=0;i<count;++i){
+            const uint8_t* p=palette_data+(size_t)linear[(size_t)source_offset+i]*4u;
+            dst[i*4u+0u]=p[2];dst[i*4u+1u]=p[1];
+            dst[i*4u+2u]=p[0];dst[i*4u+3u]=p[3];
+        }
+        source_offset+=count;
+        w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
+    }
+    HeapFree(GetProcessHeap(),0,linear);
+    return 0;
+}
+
 int __cdecl XboxNV2A_DecodeTextureStageRGBA8(uint32_t channel,
     uint32_t subchannel, uint32_t stage, void* destination,
     uint32_t destination_capacity, uint32_t* level_offsets,
@@ -1158,6 +1250,9 @@ int __cdecl XboxNV2A_DecodeTextureStageRGBA8(uint32_t channel,
         channel, subchannel, stage, &info);
     if (info_result != 0) return 10 + info_result;
     if (!info.enabled) return 20;
+    if (((info.format >> 8) & 0xFFu) == 0x0Bu)
+        return decode_paletted_texture_stage(channel,subchannel,stage,&info,
+            destination,destination_capacity,level_offsets,level_sizes);
     if (info.linear) {
         const uint64_t decoded_size = (uint64_t)info.width * info.height * 4u;
         if (decoded_size > UINT32_MAX || decoded_size > destination_capacity)

@@ -410,3 +410,13 @@ The D3D8 cache key now includes the owning device pointer, so recreating the
 host D3D device cannot reuse a texture object from the previous device. The
 stage decoder explicitly rejects cubemap and border-layout flags until their
 layer/edge addressing is implemented.
+
+
+## I8 palette texture decoding
+
+The live stage decoder now supports NV097 I8_A8R8G8B8 textures. It resolves
+the texture's DMA_A/DMA_B context separately from the palette's DMA_A/DMA_B
+selector, validates both mapped VRAM spans, unswizzles each mip level, checks
+every palette index against the selected 32/64/128/256-entry palette, and
+converts palette BGRA entries to the RGBA8 staging format. The smoke test
+binds texture data through DMA_B and its palette through DMA_A.
