@@ -421,7 +421,7 @@ EmitCheckEqual 1
 EmitPush 0x61
 EmitCallImport 316
 EmitCheckEqual 0x41
-EmitPush ([uint32]0xC000000D)
+EmitPush ([uint32]3221225485)
 EmitCallImport 301
 EmitCheckEqual 87
 
