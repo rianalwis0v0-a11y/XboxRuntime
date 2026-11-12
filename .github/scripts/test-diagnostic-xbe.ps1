@@ -6,7 +6,7 @@ if (!(Test-Path $guest)) { throw "Guest helper missing: $guest" }
 # implemented by XboxRuntime and writes a machine-readable result block.
 $base = [uint32]0x10000000
 $entryVa = [uint32]0x10001000
-$reportVa = [uint32]0x10002200
+$reportVa = [uint32]0x10002600
 $passedVa = [uint32]($reportVa + 4)
 $failedVa = [uint32]($reportVa + 8)
 $failedCheckVa = [uint32]($reportVa + 0x10)
@@ -28,7 +28,7 @@ $numberValueVa = [uint32]($reportVa + 0x148)
 $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
-$thunkVa = [uint32]0x10002A00
+$thunkVa = [uint32]0x10002E00
 $ordinals = @(8,14,17,23,45,50,53,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
@@ -563,13 +563,13 @@ EmitIncrement $skippedVa
 EmitIncrement $skippedVa
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
-if ($script:code.Count -gt 0x1000) { throw "Diagnostic XBE code overlaps its data region." }
-$b = [byte[]]::new(0x3000)
+if ($script:code.Count -gt 0x1600) { throw "Diagnostic XBE code overlaps its data region." }
+$b = [byte[]]::new(0x4000)
 function Put32([int]$offset,[uint32]$value) { [BitConverter]::GetBytes($value).CopyTo($b,$offset) }
 [Text.Encoding]::ASCII.GetBytes("XBEH").CopyTo($b,0)
 Put32 0x104 $base
 Put32 0x108 0x1000
-Put32 0x10C 0x3000
+Put32 0x10C 0x4000
 Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
@@ -578,16 +578,16 @@ Put32 0x158 ([uint32]($thunkVa -bxor [uint32]0x5B6D40B6))
 # Executable, writable section: code at VA 0x10001000, data at 0x10002200.
 Put32 0x178 5
 Put32 0x17C $entryVa
-Put32 0x180 0x2000
+Put32 0x180 0x3000
 Put32 0x184 0x1000
-Put32 0x188 0x2000
+Put32 0x188 0x3000
 $script:code.ToArray().CopyTo($b,0x1000)
 # The guest import resolver replaces these encoded ordinal slots with thunks.
 for ($i=0; $i -lt $ordinals.Count; $i++) {
-    Put32 (0x2A00 + 4*$i) ([uint32](2147483648 + [int64]$ordinals[$i]))
+    Put32 (0x2E00 + 4*$i) ([uint32](2147483648 + [int64]$ordinals[$i]))
 }
-Put32 (0x2A00 + 4*$ordinals.Count) 0
-Put32 0x2200 0x54535258
+Put32 (0x2E00 + 4*$ordinals.Count) 0
+Put32 0x2600 0x54535258
 Put32 0x2228 4096
 # Guest-side OBJECT_ATTRIBUTES + UNICODE_STRING for \Device\Cdrom0\xbe-test.txt.
 $guestPath = "\Device\Cdrom0\xbe-test.txt"
