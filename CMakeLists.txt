@@ -20,3 +20,16 @@ add_subdirectory(modules/fatx)
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
 add_subdirectory(boot)
+
+# Native filesystem regression test uses a generated in-memory-style FATX image.
+enable_testing()
+add_executable(fatx_smoke
+    tests/fatx_smoke.cpp
+    modules/fatx/include/fatx.cpp
+)
+target_include_directories(fatx_smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/modules/fatx/include"
+)
+target_compile_features(fatx_smoke PRIVATE cxx_std_17)
+target_compile_definitions(fatx_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME fatx_smoke COMMAND fatx_smoke)
