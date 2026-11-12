@@ -39,6 +39,10 @@ __declspec(dllexport) int __cdecl XboxNV2A_WriteVRAM(uint32_t offset, const void
 __declspec(dllexport) int __cdecl XboxNV2A_ReadRAMIN(uint32_t offset, void* destination, uint32_t length);
 __declspec(dllexport) int __cdecl XboxNV2A_WriteRAMIN(uint32_t offset, const void* source, uint32_t length);
 
+/* Parse NV4-style incrementing/non-incrementing commands from VRAM.
+ * Unsupported control-flow/long commands are rejected without partial dispatch. */
+__declspec(dllexport) int __cdecl XboxNV2A_SubmitPushBuffer(uint32_t vram_offset, uint32_t byte_length, uint32_t* methods_submitted);
+
 /* Interleaved method/parameter dword pairs. */
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, uint32_t pair_count);
 
