@@ -30,6 +30,7 @@ namespace XboxRuntime
         { L"nv2a.dll" },
         { L"fatx.dll" },
         { L"input.dll" },
+        { L"xdvdfs.dll" },
         { L"xbe_loader.dll" }
     };
 
