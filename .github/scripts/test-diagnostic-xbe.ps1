@@ -383,19 +383,19 @@ EmitCheckEqual 0x41
 # ANSI/Unicode descriptor initialization, comparison, equality, and status mapping.
 $extraAnsiDescVa = [uint32]($reportVa + 0x2A0)
 $extraUnicodeDescVa = [uint32]($reportVa + 0x2B0)
-EmitPush $formattedVa
+EmitPush $letterVa
 EmitPush $extraAnsiDescVa
 EmitCallImport 289
 EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $extraAnsiDescVa
 EmitCheckEqual 2
 EmitPush 0
 EmitPush $extraAnsiDescVa
-EmitPush $ansiSourceVa
+EmitPush $extraAnsiDescVa
 EmitCallImport 270
 EmitCheckEqual 0
 EmitPush 1
 EmitPush $extraAnsiDescVa
-EmitPush $ansiSourceVa
+EmitPush $extraAnsiDescVa
 EmitCallImport 279
 EmitCheckEqual 1
 # Temporary isolation checkpoint: ANSI descriptor APIs.
