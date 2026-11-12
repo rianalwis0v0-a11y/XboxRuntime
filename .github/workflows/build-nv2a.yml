@@ -32,10 +32,10 @@ jobs:
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
       - name: Build x64 host modules
-        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke
+        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke input xdvdfs xdvdfs_smoke
 
-      - name: Test FATX and NV2A host subsystems
-        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke"
+      - name: Test FATX, NV2A, and XDVDFS host subsystems
+        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|xdvdfs_smoke"
 
       - name: Configure native x86 guest process
         run: cmake -S guest32 -B build-guest32 -A Win32
@@ -65,6 +65,8 @@ jobs:
             "build/out/insignia_dns.dll",
             "build/out/xbe_loader.dll",
             "build/out/fatx.dll",
+            "build/out/input.dll",
+            "build/out/xdvdfs.dll",
             "build/out/xbe_guest32.exe",
             "build/out/xboxruntime-diagnostic.xbe"
           )
@@ -84,6 +86,8 @@ jobs:
             build/out/insignia_dns.dll
             build/out/xbe_loader.dll
             build/out/fatx.dll
+            build/out/input.dll
+            build/out/xdvdfs.dll
             build/out/xbe_guest32.exe
             build/out/xboxruntime-diagnostic.xbe
           if-no-files-found: error
