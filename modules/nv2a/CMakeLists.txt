@@ -3,8 +3,8 @@ add_library(nv2a MODULE
 )
 
 target_include_directories(nv2a PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/nv2a",
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/d3d",
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/nv2a"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/d3d"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src"
 )
 
