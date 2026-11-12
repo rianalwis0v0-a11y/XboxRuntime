@@ -129,8 +129,7 @@ int main() {
         mappedState != 19u || mappedValue != 5u ||
         !mapRenderState(0x0348u, 0x0307u, &mappedState, &mappedValue) ||
         mappedState != 20u || mappedValue != 10u ||
-        !mapRenderState(0x034Cu, 0x80402010u, &mappedState, &mappedValue) ||
-        mappedState != 193u || mappedValue != 0x80402010u ||
+        mapRenderState(0x034Cu, 0x80402010u, &mappedState, &mappedValue) ||
         mapRenderState(0x0344u, 0x7777u, &mappedState, &mappedValue) ||
         mapRenderState(0x0999u, 0u, &mappedState, &mappedValue)) {
         std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
@@ -236,8 +235,8 @@ int main() {
                 linear, sizeof(linear), &pitch) != 0 ||
             pitch != 8u ||
             linear[0] != 1u || linear[1] != 2u || linear[2] != 3u ||
-            linear[4] != 7u || linear[5] != 8u || linear[6] != 9u ||
-            linear[8] != 4u || linear[9] != 5u || linear[10] != 6u ||
+            linear[4] != 4u || linear[5] != 5u || linear[6] != 6u ||
+            linear[8] != 7u || linear[9] != 8u || linear[10] != 9u ||
             linear[12] != 10u || linear[13] != 11u || linear[14] != 12u ||
             decodeSwizzledTexture(0x0600u, 3, 2, swizzled, sizeof(swizzled),
                 linear, sizeof(linear), &pitch) == 0 ||

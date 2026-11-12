@@ -290,3 +290,9 @@ the existing RGBA8 decoder. Linear-image and DXT block formats are explicitly
 rejected by this entry point; they use the linear or block decoder. This is
 the swizzle conversion stage, not yet DMA-driven texture creation, cache
 invalidation, mip-chain upload, or D3D8 texture-stage binding.
+
+
+The D3D8 backend does not expose the D3D9 constant-blend-factor render state.
+NV097 blend color is therefore left explicitly unsupported rather than passing a
+D3D9-only state ID into the D3D8 device. Source/destination blend factors and
+the blend equation remain mapped where the D3D8 API has a real equivalent.

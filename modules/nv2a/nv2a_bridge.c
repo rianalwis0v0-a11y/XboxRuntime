@@ -102,11 +102,6 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         state = D3DRS_DESTBLEND;
         if (!map_blend_factor(parameter, &value)) return 0;
         break;
-    case NV097_SET_BLEND_COLOR:
-        /* NV097 stores the constant blend color as packed ARGB. */
-        state = D3DRS_BLENDFACTOR;
-        value = parameter;
-        break;
     case NV097_SET_ALPHA_FUNC:
         state = D3DRS_ALPHAFUNC;
         if (!map_compare_function(parameter, &value)) return 0;
@@ -682,7 +677,7 @@ int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(uint32_t format,
     const uint64_t source_bytes = texels * bytes_per_pixel;
     const uint64_t output_pitch = (uint64_t)width * 4u;
     const uint64_t output_bytes = output_pitch * height;
-    if (source_bytes > source_length || source_bytes > SIZE_MAX ||
+    if (source_bytes > source_length || source_bytes > XBOX_VRAM_SIZE || source_bytes > SIZE_MAX ||
         output_pitch > UINT32_MAX || output_bytes > destination_capacity)
         return 3;
 
