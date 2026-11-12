@@ -147,6 +147,107 @@ int __cdecl XboxNV2A_WriteRAMIN(uint32_t offset, const void* source, uint32_t le
     return 0;
 }
 
+static uint32_t read_le32(const uint8_t* p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static int ramht_lookup(uint32_t channel, uint32_t handle,
+                        uint32_t* context_out)
+{
+    if (!g_started || !g_gpu || !context_out || channel > 31u)
+        return 1;
+
+    const uint32_t config = (uint32_t)nv2a_mmio_read(g_gpu, 0x2210u, 4);
+    const uint32_t size_code = (config >> 16) & 3u;
+    const uint32_t search_code = (config >> 24) & 3u;
+    const uint32_t table_bytes = 0x1000u << size_code;
+    const uint32_t entries = table_bytes / 8u;
+    const uint32_t hash_bits = 9u + size_code;
+    const uint32_t search_count = 16u << (search_code * 1u);
+    const uint32_t base = (config & 0x1F0u) << 8;
+
+    if (!memory_range_valid(base, table_bytes, XBOX_RAMIN_SIZE))
+        return 2;
+
+    uint32_t hash = 0;
+    uint32_t value = handle;
+    const uint32_t chunk_mask = (1u << hash_bits) - 1u;
+    while (value) {
+        hash ^= value & chunk_mask;
+        value >>= hash_bits;
+    }
+    hash ^= channel << (hash_bits - 4u);
+    hash &= entries - 1u;
+
+    const uint32_t probes = search_count < entries ? search_count : entries;
+    for (uint32_t probe = 0; probe < probes; ++probe) {
+        const uint32_t index = (hash + probe) & (entries - 1u);
+        const uint8_t* entry = g_ramin + base + index * 8u;
+        const uint32_t stored_handle = read_le32(entry);
+        const uint32_t context = read_le32(entry + 4u);
+        if (context & 0x80000000u) {
+            const uint32_t stored_channel = (context >> 24) & 0x1Fu;
+            if (stored_channel == channel && stored_handle == handle) {
+                *context_out = context;
+                return 0;
+            }
+        }
+    }
+    return 3;
+}
+
+int __cdecl XboxNV2A_LookupRAMHT(uint32_t channel, uint32_t handle,
+                                 uint32_t* context_out)
+{
+    if (context_out) *context_out = 0;
+    return ramht_lookup(channel, handle, context_out);
+}
+
+int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
+                                      XboxNV2A_DMA_INFO* output)
+{
+    uint32_t context = 0;
+    if (!output) return 1;
+    memset(output, 0, sizeof(*output));
+
+    const int lookup = ramht_lookup(channel, handle, &context);
+    if (lookup != 0) return lookup;
+
+    const uint32_t instance = (context & 0xFFFFu) << 4;
+    if (!memory_range_valid(instance, 12u, XBOX_RAMIN_SIZE))
+        return 4;
+
+    const uint8_t* object = g_ramin + instance;
+    const uint32_t flags = read_le32(object);
+    const uint32_t limit = read_le32(object + 4u);
+    const uint32_t frame = read_le32(object + 8u);
+    const uint32_t dma_class = flags & 0xFFFu;
+    const uint32_t target = flags & 0x00030000u;
+    const uint32_t address = (frame & 0xFFFFF000u) | (flags & 0xFFF00000u);
+    const uint32_t base = address & 0x07FFFFFFu;
+
+    if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
+        return 5;
+    /* This standalone backend currently maps only linear local VRAM. */
+    if (target != 0u)
+        return 6;
+    if (base >= XBOX_VRAM_SIZE || limit >= XBOX_VRAM_SIZE ||
+        limit + 1u > XBOX_VRAM_SIZE - base)
+        return 7;
+
+    output->handle = handle;
+    output->instance_offset = instance;
+    output->dma_class = dma_class;
+    output->dma_target = target;
+    output->engine = (context & 0x00030000u) >> 16;
+    output->base_address = base;
+    output->limit = limit;
+    output->mapped_length = limit + 1u;
+    return 0;
+}
+
 static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* submitted, int dispatch)
 {
     if ((offset & 3u) || (byte_length & 3u) ||
