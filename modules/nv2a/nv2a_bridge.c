@@ -66,10 +66,6 @@ static int map_blend_factor(uint32_t parameter, uint32_t* value)
     case 0x0306u: *value = D3DBLEND_DESTCOLOR; return 1;
     case 0x0307u: *value = D3DBLEND_INVDESTCOLOR; return 1;
     case 0x0308u: *value = D3DBLEND_SRCALPHASAT; return 1;
-    case 0x8001u: *value = D3DBLEND_BLENDFACTOR; return 1;
-    case 0x8002u: *value = D3DBLEND_INVBLENDFACTOR; return 1;
-    case 0x8003u: *value = D3DBLEND_BLENDFACTOR; return 1;
-    case 0x8004u: *value = D3DBLEND_INVBLENDFACTOR; return 1;
     default: return 0;
     }
 }
@@ -105,9 +101,6 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         state = D3DRS_DESTBLEND;
         if (!map_blend_factor(parameter, &value)) return 0;
         break;
-    case 0x034Cu:
-        state = D3DRS_BLENDFACTOR; break;
-
     case NV097_SET_ALPHA_FUNC:
         state = D3DRS_ALPHAFUNC;
         if (!map_compare_function(parameter, &value)) return 0;
