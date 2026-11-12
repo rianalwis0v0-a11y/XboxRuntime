@@ -9,7 +9,7 @@ $xbe = Join-Path $temp "native-ret-xbe.xbe"
 
 # Minimal XBEH: executable section imports DbgPrint (ordinal 8), calls it, then returns.
 # This verifies kernel thunk decoding and dispatch, not retail game compatibility.
-$b = [byte[]]::new(0x1001)
+$b = [byte[]]::new(0x2000)
 [Text.Encoding]::ASCII.GetBytes("XBEH").CopyTo($b, 0)
 function Put32([int]$offset, [uint32]$value) {
     [BitConverter]::GetBytes($value).CopyTo($b, $offset)
@@ -27,7 +27,7 @@ Put32 0x178 5
 Put32 0x17C 0x10001000
 Put32 0x180 0x1000
 Put32 0x184 0x1000
-Put32 0x188 1
+Put32 0x188 0x1000
 # x86: push message; mov eax,[thunk slot]; call eax; add esp,4; ret
 $code = [byte[]]@(0x68,0,0,0,0, 0xA1,0,0,0,0, 0xFF,0xD0, 0x83,0xC4,0x04, 0xC3)
 [BitConverter]::GetBytes([uint32]0x10001120).CopyTo($code,1)
