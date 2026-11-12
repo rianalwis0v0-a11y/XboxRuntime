@@ -19,6 +19,7 @@ static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
 static int g_started;
 static uint32_t g_pgraph_fallback_methods;
+static uint32_t g_pgraph_custom_methods;
 
 static int map_compare_function(uint32_t parameter, uint32_t* value)
 {
@@ -117,6 +118,12 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         else if (parameter == NV097_SET_SHADE_MODE_V_SMOOTH) value = 2u;
         else return 0;
         break;
+    case NV097_SET_CULL_FACE:
+        state = D3DRS_CULLMODE;
+        if (parameter == NV097_SET_CULL_FACE_V_FRONT) value = D3DCULL_CW;
+        else if (parameter == NV097_SET_CULL_FACE_V_BACK) value = D3DCULL_CCW;
+        else return 0; /* FRONT_AND_BACK has no equivalent D3D8 cull mode. */
+        break;
     case NV097_SET_POINT_SIZE:
         state = D3DRS_POINTSIZE; break;
     default:
@@ -128,22 +135,54 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
     return 1;
 }
 
+static int apply_nv2a_render_state(uint32_t method, uint32_t parameter)
+{
+    uint32_t state = 0, value = 0;
+    if (!XboxNV2A_MapRenderState(method, parameter, &state, &value))
+        return 0;
+
+    IDirect3DDevice8* device = xbox_GetD3DDevice();
+    if (!device || !device->lpVtbl || !device->lpVtbl->SetRenderState)
+        return 0;
+
+    return SUCCEEDED(device->lpVtbl->SetRenderState(
+        device, (D3DRENDERSTATETYPE)state, value)) ? 1 : 0;
+}
+
 static void submit_pgraph_method(uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
-    uint32_t state = 0, value = 0;
-    if (XboxNV2A_MapRenderState(method, parameter, &state, &value)) {
-        IDirect3DDevice8* device = xbox_GetD3DDevice();
-        if (device && device->lpVtbl && device->lpVtbl->SetRenderState &&
-            SUCCEEDED(device->lpVtbl->SetRenderState(
-                device, (D3DRENDERSTATETYPE)state, value))) {
-            if (method != NV097_SET_SHADE_MODE)
-                ++g_pgraph_fallback_methods;
-        }
+    /* These real NV097 offsets collide with incorrect aliases in the
+     * pinned translator. Apply them here and do not feed them to that switch. */
+    if (method == NV097_SET_DEPTH_FUNC ||
+        method == NV097_SET_CULL_FACE ||
+        method == NV097_SET_SHADE_MODE ||
+        method == NV097_SET_STENCIL_FUNC_REF) {
+        if (apply_nv2a_render_state(method, parameter))
+            ++g_pgraph_custom_methods;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
     }
-    pgraph_method(g_gpu, subchannel, method, parameter);
-}
 
+    uint32_t dispatch_method = method;
+    switch (method) {
+    case NV097_SET_COLOR_CLEAR_VALUE:       dispatch_method = 0x01D4u; break;
+    case NV097_CLEAR_SURFACE:               dispatch_method = 0x01D0u; break;
+    case NV097_SET_CLEAR_RECT_HORIZONTAL:   dispatch_method = 0x01D8u; break;
+    case NV097_SET_CLEAR_RECT_VERTICAL:     dispatch_method = 0x01DCu; break;
+    case NV097_SET_DEPTH_TEST_ENABLE:       dispatch_method = 0x0354u; break;
+    case NV097_SET_CULL_FACE_ENABLE:        dispatch_method = 0x039Cu; break;
+    default: break;
+    }
+
+    const int fallback_applied = apply_nv2a_render_state(method, parameter);
+    if (fallback_applied && dispatch_method == method)
+        ++g_pgraph_fallback_methods;
+
+    pgraph_method(g_gpu, subchannel, dispatch_method, parameter);
+    if (dispatch_method != method)
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+}
 
 
 int __cdecl ModuleStart(void)
@@ -651,7 +690,7 @@ int __cdecl XboxNV2A_GetStats(XboxNV2A_STATS* output)
     output->frames = stats.frames;
     output->draw_calls = stats.draw_calls;
     output->vertices_submitted = stats.vertices_submitted;
-    output->methods_handled = stats.methods_handled;
+    output->methods_handled = stats.methods_handled + g_pgraph_custom_methods;
     output->methods_ignored = stats.methods_ignored >= g_pgraph_fallback_methods
         ? stats.methods_ignored - g_pgraph_fallback_methods : 0;
     output->clears = stats.clears;
