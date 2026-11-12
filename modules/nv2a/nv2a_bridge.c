@@ -101,6 +101,11 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         state = D3DRS_DESTBLEND;
         if (!map_blend_factor(parameter, &value)) return 0;
         break;
+    case NV097_SET_BLEND_COLOR:
+        /* NV097 stores the constant blend color as packed ARGB. */
+        state = D3DRS_BLENDFACTOR;
+        value = parameter;
+        break;
     case NV097_SET_ALPHA_FUNC:
         state = D3DRS_ALPHAFUNC;
         if (!map_compare_function(parameter, &value)) return 0;
