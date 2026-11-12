@@ -635,18 +635,12 @@ int __cdecl XboxNV2A_LookupRAMHT(uint32_t channel, uint32_t handle,
     return ramht_lookup(channel, handle, context_out);
 }
 
-int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
-                                      XboxNV2A_DMA_INFO* output)
+static int resolve_dma_instance(uint32_t instance, uint32_t handle,
+                                uint32_t engine, XboxNV2A_DMA_INFO* output)
 {
-    uint32_t context = 0;
     if (!output) return 1;
     memset(output, 0, sizeof(*output));
-
-    const int lookup = ramht_lookup(channel, handle, &context);
-    if (lookup != 0) return lookup;
-
-    const uint32_t instance = (context & 0xFFFFu) << 4;
-    if (!memory_range_valid(instance, 12u, XBOX_RAMIN_SIZE))
+    if ((instance & 0xFu) || !memory_range_valid(instance, 12u, XBOX_RAMIN_SIZE))
         return 4;
 
     const uint8_t* object = g_ramin + instance;
@@ -660,10 +654,7 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
 
     if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
         return 5;
-    /* This standalone backend currently maps only linear local VRAM. */
-    if (target != 0u)
-        return 6;
-    /* Match the upstream DMA mapping contract: limit is the mapped span. */
+    if (target != 0u) return 6;
     if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
         return 7;
 
@@ -671,11 +662,25 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
     output->instance_offset = instance;
     output->dma_class = dma_class;
     output->dma_target = target;
-    output->engine = (context & 0x00030000u) >> 16;
+    output->engine = engine;
     output->base_address = base;
     output->limit = limit;
     output->mapped_length = limit;
     return 0;
+}
+
+int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
+                                      XboxNV2A_DMA_INFO* output)
+{
+    uint32_t context = 0;
+    if (!output) return 1;
+    memset(output, 0, sizeof(*output));
+    const int lookup = ramht_lookup(channel, handle, &context);
+    if (lookup != 0) return lookup;
+
+    const uint32_t instance = (context & 0xFFFFu) << 4;
+    const uint32_t engine = (context & 0x00030000u) >> 16;
+    return resolve_dma_instance(instance, handle, engine, output);
 }
 
 
