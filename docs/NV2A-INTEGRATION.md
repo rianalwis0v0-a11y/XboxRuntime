@@ -259,3 +259,14 @@ This initial path consumes float3 position plus optional UB_D3D diffuse and
 float2 TEX0 arrays. It does not yet translate normals, weights, specular,
 additional texture sets, indexed draws, compressed vertex data, or programmable
 vertex/pixel shader microcode.
+
+
+## Texture format decoding
+
+`XboxNV2A_DecodeTextureRGBA8` converts supported NV097 texture payloads to
+tightly packed RGBA8 with checked source pitch, source length, destination
+capacity, and integer-size bounds. Supported formats are Y8, A8, A1R5G5B5,
+X1R5G5B5, A4R4G4B4, R5G6B5, A8R8G8B8, X8R8G8B8, and DXT1 (including clipped
+edge blocks). This is the CPU format-conversion stage only: guest texture DMA
+address resolution, mip chains, palette formats, DXT3/DXT5, sampler state,
+texture object caching, and binding to D3D8 texture stages remain to be wired.
