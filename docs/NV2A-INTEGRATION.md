@@ -115,3 +115,22 @@ aperture. The reported mapped span follows the upstream NV2A DMA helper's
 This is the object lookup/mapping layer only. It does not yet implement PCI/AGP
 DMA, page tables, DMA pusher GET/PUT processing, jump/call/return flow, or
 channel switching and puller scheduling.
+
+
+## NV4-style DMA pusher
+
+`XboxNV2A_SubmitDMAPushBuffer(channel, handle, get, put, new_get, methods_submitted)`
+resolves a readable DMA object through RAMHT and processes its NV4-style command
+stream. GET/PUT are byte offsets within that object. The implementation handles
+incrementing and non-incrementing method packets, legacy and NV1A jump commands,
+single-level CALL/RETURN, NOP, and the reference-counter method. It validates
+all reads and control-flow targets against the mapped DMA span, bounds execution
+to one million command/data words, and performs a validation pass before GPU
+dispatch so malformed streams do not partially execute.
+
+The puller currently binds only the graphics engine. Object-bind method 0 and
+the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
+unimplemented puller special methods, nested calls, PCI/AGP DMA, DMA page
+translation, interrupts, scheduling/channel switching, and IB mode remain
+unsupported. This is a functional NV4-style software pusher path, not a full
+hardware PFIFO implementation.
