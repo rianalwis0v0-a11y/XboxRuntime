@@ -514,14 +514,14 @@ static int update_surface_target(void)
         }
     }
 
-    if (!copy_vram_to_surface(new_color, &info)) {
+    if (g_surface_bound && g_color_surface &&
+        !copy_surface_to_vram(g_color_surface, &g_bound_surface_info)) {
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 19;
     }
 
-    if (g_surface_bound && g_color_surface &&
-        !copy_surface_to_vram(g_color_surface, &g_bound_surface_info)) {
+    if (!copy_vram_to_surface(new_color, &info)) {
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 20;
