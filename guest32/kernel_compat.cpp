@@ -193,6 +193,49 @@ extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
+extern "C" LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR, SIZE_T* size, ULONG type, ULONG protect) {
+    if (!base || !size || !*size) return LONG(0xC000000Du);
+    void* p = VirtualAlloc(*base, *size, type, protect);
+    if (!p) return LONG(0xC0000017u);
+    *base = p;
+    MEMORY_BASIC_INFORMATION info{};
+    if (VirtualQuery(p, &info, sizeof(info))) *size = info.RegionSize;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG type) {
+    if (!base || !*base) return LONG(0xC000000Du);
+    SIZE_T n = size ? *size : 0;
+    if (!VirtualFree(*base, n, type)) return LONG(0xC000000Du);
+    if (type & MEM_RELEASE) { *base = nullptr; if (size) *size = 0; }
+    return 0;
+}
+extern "C" uint64_t __stdcall K_KeQueryInterruptTime() {
+    return GetTickCount64() * 10000ull;
+}
+extern "C" void __stdcall K_KeStallExecutionProcessor(uint32_t microseconds) {
+    LARGE_INTEGER start{}, now{}, frequency{};
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+    const uint64_t target = (uint64_t(frequency.QuadPart) * microseconds) / 1000000ull;
+    do { QueryPerformanceCounter(&now); YieldProcessor(); }
+    while (uint64_t(now.QuadPart - start.QuadPart) < target);
+}
+extern "C" LONG __stdcall K_NtYieldExecution() {
+    SwitchToThread();
+    return 0;
+}
+extern "C" uint32_t __stdcall K_MmQueryAddressProtect(void* address) {
+    MEMORY_BASIC_INFORMATION info{};
+    return address && VirtualQuery(address, &info, sizeof(info)) ? info.Protect : 0;
+}
+extern "C" uint32_t __stdcall K_MmQueryAllocationSize(void* address) {
+    MEMORY_BASIC_INFORMATION info{};
+    return address && VirtualQuery(address, &info, sizeof(info)) ? uint32_t(info.RegionSize) : 0;
+}
+extern "C" void __stdcall K_MmSetAddressProtect(void* address, uint32_t size, uint32_t protect) {
+    DWORD oldProtect = 0;
+    if (address && size) VirtualProtect(address, size, protect, &oldProtect);
+}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -243,6 +286,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je qpf
         cmp eax, 128
         je qst
+        cmp eax, 125
+        je query_interrupt
+        cmp eax, 151
+        je stall_processor
         cmp eax, 165
         je mm_alloc
         cmp eax, 166
@@ -253,6 +300,18 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je mm_phys
         cmp eax, 174
         je mm_valid
+        cmp eax, 179
+        je mm_query_protect
+        cmp eax, 180
+        je mm_query_size
+        cmp eax, 182
+        je mm_set_protect
+        cmp eax, 184
+        je nt_alloc_vm
+        cmp eax, 199
+        je nt_free_vm
+        cmp eax, 238
+        je nt_yield
         cmp eax, 190
         je nt_create_file
         cmp eax, 202
@@ -352,6 +411,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
     mm_free: jmp K_MmFreeContiguousMemory
     mm_phys: jmp K_MmGetPhysicalAddress
     mm_valid: jmp K_MmIsAddressValid
+    query_interrupt: jmp K_KeQueryInterruptTime
+    stall_processor: jmp K_KeStallExecutionProcessor
+    mm_query_protect: jmp K_MmQueryAddressProtect
+    mm_query_size: jmp K_MmQueryAllocationSize
+    mm_set_protect: jmp K_MmSetAddressProtect
+    nt_alloc_vm: jmp K_NtAllocateVirtualMemory
+    nt_free_vm: jmp K_NtFreeVirtualMemory
+    nt_yield: jmp K_NtYieldExecution
     nt_create_file: jmp K_NtCreateFile
     nt_open_file: jmp K_NtOpenFile
     nt_read_file: jmp K_NtReadFile
