@@ -7,10 +7,9 @@
 extern "C" {
 #endif
 
-/* Standalone NV2A microcode-to-HLSL front-end. */
-__declspec(dllexport) int __cdecl XboxNV2A_TranslateVertexProgram(
-    const uint32_t* words, uint32_t instruction_count, char* hlsl,
-    uint32_t hlsl_capacity, uint32_t* bytes_written);
+#include "nv2a_vertex_shader.h"
+
+
 
 
 // Standard XboxRuntime module lifecycle.
