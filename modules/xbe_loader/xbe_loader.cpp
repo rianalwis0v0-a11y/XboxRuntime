@@ -17,13 +17,19 @@ struct Guest {
  uint32_t base=0,size=0,entry=0,sections=0;
 } g;
 bool started=false;
+bool releaseSent=false;
 std::wstring Quote(const std::wstring&s){std::wstring q=L"\"";for(wchar_t c:s){if(c==L'\"')q+=L'\\';q+=c;}q+=L'\"';return q;}
 bool ExactRead(HANDLE h,void*p,DWORD n){DWORD d=0;while(d<n){DWORD got=0;if(!ReadFile(h,static_cast<char*>(p)+d,n-d,&got,nullptr)||!got)return false;d+=got;}return true;}
 bool ExactWrite(HANDLE h,const void*p,DWORD n){DWORD d=0;while(d<n){DWORD sent=0;if(!WriteFile(h,static_cast<const char*>(p)+d,n-d,&sent,nullptr)||!sent)return false;d+=sent;}return true;}
 void StopGuest(){
- if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){uint8_t quit=0;ExactWrite(g.pipe,&quit,1);FlushFileBuffers(g.pipe);CloseHandle(g.pipe);}
+ /* Zero is the explicit XBE launch-release command. Never send it while
+  * unloading a guest that has not been approved for execution. */
+ if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
+  if(!releaseSent){uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);}
+  CloseHandle(g.pipe);
+ }
  if(g.process){if(WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT)TerminateProcess(g.process,0);WaitForSingleObject(g.process,1000);}
- if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};
+ if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};releaseSent=false;
 }
 std::wstring EepromPath() {
  wchar_t windowsPath[32768]{};
@@ -71,7 +77,12 @@ int StartGuest(const wchar_t*xbe){
  Reply r{};if(!ExactRead(pipe,&r,sizeof(r))||r.magic!=kReplyMagic||r.version!=1){StopGuest();return XBE_E_PIPE;}
  if(r.status!=0){StopGuest();return XBE_E_GUEST;}
  g.base=r.imageBase;g.size=r.imageSize;g.entry=r.entry;g.sections=r.sectionCount;
- OutputDebugStringW(L"[XbeLoader] XBE mapped in dedicated native x86 guest process. XBE entry thread started.\n");
+ /* The guest waits after sending its validated launch reply. Release only
+  * after the host accepts it, so failed launches never execute guest code. */
+ const uint8_t releaseCommand=0;
+ if(!ExactWrite(pipe,&releaseCommand,1)){StopGuest();return XBE_E_PIPE;}
+ releaseSent=true;
+ OutputDebugStringW(L"[XbeLoader] XBE mapped and explicitly released in dedicated native x86 guest process.\\n");
  return XBE_E_GUEST_STARTED;
 }
 }
