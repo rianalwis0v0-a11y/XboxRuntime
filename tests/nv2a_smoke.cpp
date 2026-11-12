@@ -93,6 +93,10 @@ int main() {
         mappedState != 53u || mappedValue != 4u ||
         !mapRenderState(0x029Cu, 0x0801u, &mappedState, &mappedValue) ||
         mappedState != 35u || mappedValue != 2u ||
+        !mapRenderState(0x039Cu, 0x0404u, &mappedState, &mappedValue) ||
+        mappedState != 22u || mappedValue != 2u ||
+        !mapRenderState(0x039Cu, 0x0405u, &mappedState, &mappedValue) ||
+        mappedState != 22u || mappedValue != 3u ||
         mapRenderState(0x0999u, 0u, &mappedState, &mappedValue)) {
         std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
         FreeLibrary(module);
