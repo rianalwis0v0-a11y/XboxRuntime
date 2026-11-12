@@ -28,7 +28,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,307,309,310,311,314,315,317,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,307,309,310,311,314,315,317,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -450,6 +450,36 @@ EmitCheckEqual 0
 EmitPush $criticalSectionVa
 EmitCallImport 295
 EmitIncrement $passedVa
+
+
+# System-memory allocation and release.
+$systemMemoryVa = [uint32]($reportVa + 0x270)
+EmitPush 4
+EmitPush 256
+EmitCallImport 167
+EmitStoreEax $systemMemoryVa
+EmitCheckNonZero
+EmitPush 256
+EmitPushMemory $systemMemoryVa
+EmitCallImport 172
+EmitCheckNonZero
+
+# Interlocked singly-linked list push, pop, and flush.
+$slistHeaderVa = [uint32]($reportVa + 0x280)
+$slistEntryVa = [uint32]($reportVa + 0x290)
+EmitMovMemoryImmediate $slistHeaderVa 0
+EmitMovMemoryImmediate ([uint32]($slistHeaderVa + 4)) 0
+EmitMovMemoryImmediate $slistEntryVa 0
+EmitByte 0xB9; Emit32 $slistHeaderVa
+EmitByte 0xBA; Emit32 $slistEntryVa
+EmitCallImport 58
+EmitCheckEqual 0
+EmitByte 0xB9; Emit32 $slistHeaderVa
+EmitCallImport 57
+EmitCheckEqual $slistEntryVa
+EmitByte 0xB9; Emit32 $slistHeaderVa
+EmitCallImport 56
+EmitCheckEqual 0
 
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
