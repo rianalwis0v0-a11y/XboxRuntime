@@ -16,7 +16,7 @@ int main() {
     const char magic[] = "MICROSOFT*XBOX*MEDIA";
     std::memcpy(image.data()+32*sector, magic, 20);
     Put32(image, 32*sector+0x14, 40);
-    Put32(image, 32*sector+0x18, 20);
+    Put32(image, 32*sector+0x18, 24);
     std::memcpy(image.data()+32*sector+0x7EC, magic, 20);
 
     const size_t entry = 40*sector;
@@ -34,7 +34,7 @@ int main() {
     if (ModuleStart() != 0) return 1;
     XDVDFS_VOLUME_INFO volume{};
     if (XDVDFS_OpenImage(path, &volume) != 0) return 2;
-    if (volume.rootDirectorySector != 40 || volume.rootDirectorySize != 20) return 3;
+    if (volume.rootDirectorySector != 40 || volume.rootDirectorySize != 24) return 3;
     XDVDFS_FILE_INFO file{};
     if (XDVDFS_GetFileInfo("test.txt", &file) != 0) return 4;
     if (file.size != 5 || file.startSector != 50 || file.nameLength != 8) return 5;
