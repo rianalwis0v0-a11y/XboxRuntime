@@ -409,7 +409,7 @@ EmitCallImport 129
 EmitCheckEqual 0
 EmitCallImport 103
 EmitCheckEqual 2
-EmitPush 0
+EmitByte 0xB9; Emit32 0
 EmitCallImport 161
 EmitCallImport 103
 EmitCheckEqual 0
