@@ -210,3 +210,13 @@ validation and dispatch. PIO mode and disabled DMA push access are left alone.
 This connects the software pusher to the guest-visible PFIFO MMIO path. Ring
 wraparound, DMA fetch caching, push-buffer interrupts/error recovery, channel
 scheduling, and full PFIFO timing/flow semantics are still not implemented.
+
+
+## Per-subchannel context-DMA bindings
+
+NV097 object methods in the 0x180..0x1fc range are now retained as resolved
+per-channel/per-subchannel DMA contexts after RAMHT lookup. The bridge exposes
+`XboxNV2A_GetDMAContext` so vertex, texture, surface, semaphore, and report
+translation paths can retrieve the actual mapped object base and limit rather
+than only seeing the raw guest handle. The first context slot is covered by the
+smoke test; the remaining slots share the same validated storage path.
