@@ -2162,7 +2162,7 @@ static void raise_dma_pusher_error(int result)
 
     /* nv2a_mmio_write takes the global MMIO address, not the PFIFO-local
      * register offset. */
-    nv2a_mmio_write(g_gpu, NV_PFIFO + NV_PFIFO_CACHE1_DMA_STATE,
+    nv2a_mmio_write(g_gpu, 0x002000u + NV_PFIFO_CACHE1_DMA_STATE,
                     error << 29, 4u);
     g_gpu->pfifo.pending_interrupts |= NV_PFIFO_INTR_0_DMA_PUSHER;
     nv2a_update_irq(g_gpu);
