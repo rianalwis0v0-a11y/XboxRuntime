@@ -36,6 +36,8 @@ using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, u
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
+using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
+    uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
 struct SurfaceInfo {
     uint32_t width, height, color_format, zeta_format;
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
@@ -92,6 +94,7 @@ int main() {
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
     auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
     auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
+    auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -214,6 +217,29 @@ int main() {
         boundVertexContext.instance_offset != 0x100u ||
         boundVertexContext.base_address != 0x1000u) {
         std::cerr << "FAIL: NV097 context-DMA binding was not retained\\n";
+        stop();
+        return 1;
+    }
+
+    /* Bind VERTEX_A and fetch two float3 elements through its DMA object. */
+    const uint32_t vertexContextStream[] = { (1u << 18) | 0x019Cu, dmaHandle };
+    const float vertexData[6] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f };
+    float fetchedVertices[6]{};
+    uint32_t vertexStride = 0, vertexElementBytes = 0;
+    if (writeVram(0x1000u, vertexContextStream, sizeof(vertexContextStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, sizeof(vertexContextStream),
+                      &dmaGet, &dmaMethods) != 0 ||
+        writeVram(0x1300u, vertexData, sizeof(vertexData)) != 0 ||
+        submit(0u, 0x1720u, 0x300u) != 0 ||
+        submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) != 0 ||
+        readVertexArray(channel, 0u, 0u, 0u, 2u, fetchedVertices,
+                        sizeof(fetchedVertices), &vertexStride,
+                        &vertexElementBytes) != 0 ||
+        vertexStride != 12u || vertexElementBytes != 12u ||
+        memcmp(vertexData, fetchedVertices, sizeof(vertexData)) != 0 ||
+        readVertexArray(channel, 0u, 0u, 0u, 2u, fetchedVertices,
+                        12u, &vertexStride, &vertexElementBytes) == 0) {
+        std::cerr << "FAIL: NV097 VERTEX_A float3 DMA fetch\\n";
         stop();
         return 1;
     }
