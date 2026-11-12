@@ -267,7 +267,6 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
         return 0;
     }
 
-    if (method == 0x0008u) return 0; /* NV4+ NOP */
     if (method == 0x0050u) {
         g_ref_counter[channel] = parameter;
         return 0;
@@ -304,7 +303,7 @@ static int validate_puller_method(uint32_t channel, uint32_t subchannel,
         bound_engines[subchannel] = engine;
         return 0;
     }
-    if (method == 0x0008u || method == 0x0050u) return 0;
+    if (method == 0x0050u) return 0;
     if (method < 0x0100u || bound_engines[subchannel] != 1u) return 3;
     if (method >= 0x0180u && method < 0x0200u) {
         uint32_t context = 0;
