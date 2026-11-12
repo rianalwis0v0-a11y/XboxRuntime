@@ -9,6 +9,7 @@ $entryVa = [uint32]0x10001000
 $reportVa = [uint32]0x10002200
 $passedVa = [uint32]($reportVa + 4)
 $failedVa = [uint32]($reportVa + 8)
+$failedCheckVa = [uint32]($reportVa + 0x14)
 $skippedVa = [uint32]($reportVa + 12)
 $poolVa = [uint32]($reportVa + 0x20)
 $vmBaseVa = [uint32]($reportVa + 0x24)
@@ -35,6 +36,8 @@ for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 $script:code = [System.Collections.Generic.List[byte]]::new()
 $script:passedAddress = $passedVa
 $script:failedAddress = $failedVa
+$script:failedCheckAddress = $failedCheckVa
+$script:checkIndex = 0
 $script:thunkAddress = $thunkVa
 $script:ordinalSlots = $ordIndex
 function EmitByte([int]$v) { [void]$script:code.Add([byte]($v -band 255)) }
@@ -51,24 +54,30 @@ function EmitCallImport([int]$ordinal) {
     EmitByte 0xFF; EmitByte 0xD0
 }
 function EmitCheckEqual([uint32]$expected) {
+    $script:checkIndex++
     EmitByte 0x3D; Emit32 $expected
     EmitByte 0x75; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 6
+    EmitByte 0xEB; EmitByte 16
+    EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
 function EmitCheckNonZero {
+    $script:checkIndex++
     EmitByte 0x85; EmitByte 0xC0
     EmitByte 0x74; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 6
+    EmitByte 0xEB; EmitByte 16
+    EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
 function EmitCheckAtLeast([uint32]$minimum) {
+    $script:checkIndex++
     EmitByte 0x3D; Emit32 $minimum
     EmitByte 0x72; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 6
+    EmitByte 0xEB; EmitByte 16
+    EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
 function EmitCheckPoolSize {
@@ -571,7 +580,7 @@ try {
     }
     $pipe.WriteByte(0)
     $pipe.Flush()
-    $report = [byte[]]::new(16)
+    $report = [byte[]]::new(20)
     $read = 0
     while ($read -lt $report.Length) {
         $n = $pipe.Read($report,$read,$report.Length-$read)
@@ -582,8 +591,9 @@ try {
     $passed = [BitConverter]::ToUInt32($report,4)
     $failed = [BitConverter]::ToUInt32($report,8)
     $skipped = [BitConverter]::ToUInt32($report,12)
+    $failedCheck = [BitConverter]::ToUInt32($report,16)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
-    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED"
+    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck"
     if ($failed -ne 0 -or $passed -lt 20 -or $skipped -ne 3) {
         throw "Diagnostic XBE reported an unexpected result."
     }
