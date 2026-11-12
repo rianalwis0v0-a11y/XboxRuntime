@@ -19,6 +19,7 @@ static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
 static uint32_t g_bound_engine[32][8];
 static uint32_t g_ref_counter[32];
+static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
@@ -244,6 +245,7 @@ int __cdecl ModuleStart(void)
     /* PFIFO channel bindings belong to the bridge lifecycle. */
     memset(g_bound_engine, 0, sizeof(g_bound_engine));
     memset(g_ref_counter, 0, sizeof(g_ref_counter));
+    memset(g_dma_contexts, 0, sizeof(g_dma_contexts));
     memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
     g_pgraph_custom_methods = 0;
@@ -707,6 +709,24 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
 }
 
 
+int __cdecl XboxNV2A_GetDMAContext(uint32_t channel, uint32_t subchannel,
+                                         uint32_t context_method,
+                                         XboxNV2A_DMA_INFO* output)
+{
+    if (!output) return 1;
+    memset(output, 0, sizeof(*output));
+    if (!g_started || channel > 31u || subchannel > 7u ||
+        context_method < 0x0180u || context_method > 0x01FCu ||
+        (context_method & 3u))
+        return 2;
+
+    const XboxNV2A_DMA_INFO* info =
+        &g_dma_contexts[channel][subchannel][(context_method - 0x0180u) / 4u];
+    if (!info->mapped_length) return 3;
+    *output = *info;
+    return 0;
+}
+
 static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
                                   uint32_t method, uint32_t parameter)
 {
@@ -733,10 +753,11 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
 
     /* 0x180..0x1fc methods carry a RAMHT handle, not an immediate value. */
     if (method >= 0x0180u && method < 0x0200u) {
-        uint32_t context = 0;
-        if (ramht_lookup(channel, parameter, &context) != 0)
+        XboxNV2A_DMA_INFO dma;
+        if (XboxNV2A_ResolveDMAHandle(channel, parameter, &dma) != 0)
             return 5;
-        parameter = (context & 0xFFFFu) << 4;
+        g_dma_contexts[channel][subchannel][(method - 0x0180u) / 4u] = dma;
+        parameter = dma.instance_offset;
         if (!memory_range_valid(parameter, 4u, XBOX_RAMIN_SIZE))
             return 6;
     }
