@@ -47,6 +47,24 @@ __declspec(dllexport) int __cdecl XboxNV2A_SubmitPushBuffer(uint32_t vram_offset
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, uint32_t pair_count);
 
 
+typedef struct XboxNV2A_DMA_INFO {
+    uint32_t handle;
+    uint32_t instance_offset;
+    uint32_t dma_class;
+    uint32_t dma_target;
+    uint32_t engine;
+    uint32_t base_address;
+    uint32_t limit;
+    uint32_t mapped_length;
+} XboxNV2A_DMA_INFO;
+
+/* NV2A RAMHT lookup and validated local-VRAM DMA object resolution.
+ * channel is the PFIFO channel ID (0..31); returned instance is a RAMIN byte offset. */
+__declspec(dllexport) int __cdecl XboxNV2A_LookupRAMHT(
+    uint32_t channel, uint32_t handle, uint32_t* context_out);
+__declspec(dllexport) int __cdecl XboxNV2A_ResolveDMAHandle(
+    uint32_t channel, uint32_t handle, XboxNV2A_DMA_INFO* output);
+
 typedef struct XboxNV2A_STATS {
     uint32_t frames;
     uint32_t draw_calls;
