@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
+#include <cerrno>
+#include <algorithm>
 #include <cstdarg>
 #include <intrin.h>
 #include <cstring>
@@ -162,6 +165,101 @@ extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h,BOOL alertable,const 
     DWORD r=WaitForSingleObject(h,ms);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
 }
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+
+static bool ParseUnsigned(const char* text, ULONG base, ULONG* value) {
+    if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
+    while (*text && std::isspace(static_cast<unsigned char>(*text))) ++text;
+    if (!*text || *text == '-') return false;
+    errno = 0;
+    char* end = nullptr;
+    unsigned long parsed = std::strtoul(text, &end, static_cast<int>(base));
+    if (errno == ERANGE || end == text || parsed > 0xFFFFFFFFul) return false;
+    while (*end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+    if (*end) return false;
+    *value = static_cast<ULONG>(parsed);
+    return true;
+}
+static bool ParseUnsigned(const wchar_t* text, ULONG chars, ULONG base, ULONG* value) {
+    if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
+    std::wstring input(text, chars);
+    size_t first = input.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos || input[first] == L'-') return false;
+    errno = 0;
+    wchar_t* end = nullptr;
+    unsigned long parsed = std::wcstoul(input.c_str(), &end, static_cast<int>(base));
+    if (errno == ERANGE || end == input.c_str() || parsed > 0xFFFFFFFFul) return false;
+    while (*end && iswspace(*end)) ++end;
+    if (*end) return false;
+    *value = static_cast<ULONG>(parsed);
+    return true;
+}
+static std::string FormatUnsigned(ULONG value, ULONG base) {
+    static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    std::string out;
+    do { out.push_back(digits[value % base]); value /= base; } while (value);
+    std::reverse(out.begin(), out.end());
+    return out;
+}
+extern "C" LONG __stdcall K_RtlCharToInteger(const char* text, ULONG base, ULONG* value) {
+    if (!text || !value) return LONG(0xC000000Du);
+    return ParseUnsigned(text, base, value) ? 0 : LONG(0xC000000Du);
+}
+extern "C" LONG __stdcall K_RtlUnicodeStringToInteger(const GuestUnicodeString* text, ULONG base, ULONG* value) {
+    if (!text || !value || (!text->Buffer && text->Length) || (text->Length & 1))
+        return LONG(0xC000000Du);
+    return ParseUnsigned(text->Buffer, text->Length / sizeof(wchar_t), base, value)
+        ? 0 : LONG(0xC000000Du);
+}
+extern "C" LONG __stdcall K_RtlIntegerToChar(ULONG value, ULONG base, LONG length, char* output) {
+    if (!output || length <= 0 || base < 2 || base > 36) return LONG(0xC000000Du);
+    const std::string formatted = FormatUnsigned(value, base);
+    if (formatted.size() + 1 > static_cast<size_t>(length)) return LONG(0xC0000023u);
+    std::memcpy(output, formatted.c_str(), formatted.size() + 1);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlIntegerToUnicodeString(ULONG value, ULONG base, GuestUnicodeString* output) {
+    if (!output || !output->Buffer || (base != 0 && (base < 2 || base > 36)))
+        return LONG(0xC000000Du);
+    const std::string formatted = FormatUnsigned(value, base ? base : 10);
+    const size_t bytes = (formatted.size() + 1) * sizeof(wchar_t);
+    if (bytes > output->MaximumLength || formatted.size() * sizeof(wchar_t) > 0xFFFF)
+        return LONG(0xC0000023u);
+    for (size_t i = 0; i < formatted.size(); ++i) output->Buffer[i] = wchar_t(formatted[i]);
+    output->Buffer[formatted.size()] = L'\0';
+    output->Length = USHORT(formatted.size() * sizeof(wchar_t));
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlMultiByteToUnicodeN(wchar_t* output, ULONG maxBytes, ULONG* bytesWritten,
+                                                    const char* input, ULONG inputBytes) {
+    if (bytesWritten) *bytesWritten = 0;
+    if ((!output && maxBytes) || (!input && inputBytes) || (maxBytes % sizeof(wchar_t)))
+        return LONG(0xC000000Du);
+    if (!inputBytes) return 0;
+    int chars = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes), nullptr, 0);
+    if (chars <= 0) return LONG(0xC000000Du);
+    ULONG capacity = maxBytes / sizeof(wchar_t);
+    int count = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes),
+                                    output, static_cast<int>(capacity));
+    if (count <= 0) return LONG(0xC0000023u);
+    if (bytesWritten) *bytesWritten = ULONG(count) * sizeof(wchar_t);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlUnicodeToMultiByteN(char* output, ULONG maxBytes, ULONG* bytesWritten,
+                                                    const wchar_t* input, ULONG inputBytes) {
+    if (bytesWritten) *bytesWritten = 0;
+    if ((!output && maxBytes) || (!input && inputBytes) || (inputBytes % sizeof(wchar_t)))
+        return LONG(0xC000000Du);
+    if (!inputBytes) return 0;
+    int chars = WideCharToMultiByte(CP_ACP, 0, input, static_cast<int>(inputBytes / sizeof(wchar_t)),
+                                    nullptr, 0, nullptr, nullptr);
+    if (chars <= 0) return LONG(0xC000000Du);
+    int count = WideCharToMultiByte(CP_ACP, 0, input, static_cast<int>(inputBytes / sizeof(wchar_t)),
+                                    output, static_cast<int>(maxBytes), nullptr, nullptr);
+    if (count <= 0) return LONG(0xC0000023u);
+    if (bytesWritten) *bytesWritten = ULONG(count);
+    return 0;
+}
+
 extern "C" LONG __stdcall K_RtlAnsiStringToUnicodeString(GuestUnicodeString* d,const GuestAnsiString* s,BOOL allocate){
     if(!d||!s||(!s->Buffer&&s->Length))return LONG(0xC000000Du);
     int chars=s->Length?MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,nullptr,0):0;
@@ -472,6 +570,18 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_bswap16
         cmp eax, 320
         je rtl_zero
+        cmp eax, 267
+        je rtl_char_to_integer
+        cmp eax, 292
+        je rtl_integer_to_char
+        cmp eax, 293
+        je rtl_integer_to_unicode
+        cmp eax, 299
+        je rtl_mb_to_unicode
+        cmp eax, 309
+        je rtl_unicode_to_integer
+        cmp eax, 310
+        je rtl_unicode_to_mb
         cmp eax, 260
         je rtl_ansi_to_unicode
         cmp eax, 269
@@ -577,6 +687,13 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_bswap32: jmp K_RtlUlongByteSwap
     rtl_bswap16: jmp K_RtlUshortByteSwap
     rtl_zero: jmp K_RtlZeroMemory
+
+    rtl_char_to_integer: jmp K_RtlCharToInteger
+    rtl_integer_to_char: jmp K_RtlIntegerToChar
+    rtl_integer_to_unicode: jmp K_RtlIntegerToUnicodeString
+    rtl_mb_to_unicode: jmp K_RtlMultiByteToUnicodeN
+    rtl_unicode_to_integer: jmp K_RtlUnicodeStringToInteger
+    rtl_unicode_to_mb: jmp K_RtlUnicodeToMultiByteN
     rtl_ansi_to_unicode: jmp K_RtlAnsiStringToUnicodeString
     rtl_cmp_mem_ulong: jmp K_RtlCompareMemoryUlong
     rtl_fill_ulong: jmp K_RtlFillMemoryUlong
