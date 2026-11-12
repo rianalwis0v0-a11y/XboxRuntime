@@ -243,3 +243,19 @@ colors/texture coordinates, the 24-byte host stride, and destination-capacity
 rejection. This prepares a bounded input stream for a subsequent DRAW_ARRAYS
 submission path; it does not yet cover normals, weights, specular, additional
 texture sets, compressed formats, or shader-driven vertex layouts.
+
+
+## DRAW_ARRAYS submission
+
+The bridge tracks the current per-channel/subchannel BEGIN_END primitive mode
+and routes NV097 DRAW_ARRAYS through the bounded FVF builder into the D3D8
+compatibility device's `SetVertexShader(FVF)` and `DrawPrimitiveUP` methods.
+Points, lines, line strips/loops, triangles, triangle strips/fans, polygons,
+quads, and quad strips are mapped; line loops and quad topologies are expanded
+into supported D3D primitive lists. Successful custom draws are included in
+the bridge's draw-call and submitted-vertex statistics.
+
+This initial path consumes float3 position plus optional UB_D3D diffuse and
+float2 TEX0 arrays. It does not yet translate normals, weights, specular,
+additional texture sets, indexed draws, compressed vertex data, or programmable
+vertex/pixel shader microcode.
