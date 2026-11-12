@@ -22,19 +22,21 @@ the host unloads the image or shuts down.
 
 ## Current state
 
-- The x64 loader starts the adjacent x86 helper and performs a bounded
-  handshake.
+- The x64 loader starts the adjacent x86 helper and performs a bounded handshake.
 - The x86 helper validates the XBEH header, section table and file ranges.
-- The helper maps the image at its declared guest virtual base and reports
-  image base, size, decoded entry point and section count.
-- The helper is kept alive, ready for the Xbox kernel/guest-thread layer.
-- The host never casts the 32-bit guest entry point to a native x64 function
-  pointer.
+- The helper maps the image at its declared guest virtual base, copies headers
+  and sections, zero-fills virtual tails, and applies section page protections.
+- The guest resolves the currently implemented kernel import thunks, prepares
+  the supported TLS state, creates a native x86 thread, and calls the XBE entry.
+- The guest remains alive until the host unloads the image or shuts down.
+- CI builds both architectures and runs a minimal synthetic XBE whose entry
+  point is a single `RET`. The test verifies that the guest accepts the image,
+  starts the entry thread, and shuts down cleanly.
 
-A successful `LoadXbe(path)` currently means **the image was staged in the
-native x86 guest process**. It does not mean the XBE entry point has executed.
-The entry point remains deliberately uncalled until kernel imports, TLS,
-thread startup, exception handling, and the Xbox process environment exist.
+The smoke test proves only basic native x86 entry dispatch. It does **not**
+prove that a retail dashboard or commercial game can boot. The kernel API
+surface is partial, and hardware, graphics, audio, input, storage integration,
+and networking still need substantial implementation and testing.
 
 ## Exports
 
@@ -50,7 +52,7 @@ thread startup, exception handling, and the Xbox process environment exist.
 
 The main workflow builds:
 - x64: `boot.exe`, `main.dll`, `nv2a.dll`, `insignia_dns.dll`,
-  `xbe_loader.dll`
+  `fatx.dll`, `xbe_loader.dll`
 - x86: `xbe_guest32.exe`
 
 Keep `xbe_guest32.exe` in the same directory as `xbe_loader.dll`. The CI
@@ -58,8 +60,9 @@ workflow stages both under `build/out` and verifies both files.
 
 ## Remaining work
 
-Retail executable decryption, kernel import/thunk resolution, TLS setup,
-Xbox process/thread state, hardware aliases, guest exception handling, and
-the Xbox kernel ABI are not implemented. The guest process currently maps
+Retail executable decryption, complete kernel import coverage, accurate Xbox
+process/thread semantics, hardware aliases, guest exception handling, and the
+full Xbox kernel ABI are not implemented. The current import stubs cover only
+a limited set of APIs and deliberately stop on unsupported imports. The guest process currently maps
 the XBE and waits; it does not jump to the entry point. The NV2A and other
 hardware services still need guest-facing interfaces.
