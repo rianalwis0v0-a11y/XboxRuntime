@@ -334,6 +334,12 @@ EmitCheckEqual 0
 EmitLoadEax $numberValueVa
 EmitCheckEqual 1
 
+# Temporary isolation stop: validate through conversion-size APIs.
+EmitIncrement $skippedVa
+EmitIncrement $skippedVa
+EmitIncrement $skippedVa
+EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
+
 
 # Additional RTL APIs: compare memory, allocate/free Unicode strings, uppercase.
 EmitPush 1
