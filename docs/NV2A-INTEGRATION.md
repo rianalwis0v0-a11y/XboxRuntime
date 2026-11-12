@@ -420,3 +420,12 @@ selector, validates both mapped VRAM spans, unswizzles each mip level, checks
 every palette index against the selected 32/64/128/256-entry palette, and
 converts palette BGRA entries to the RGBA8 staging format. The smoke test
 binds texture data through DMA_B and its palette through DMA_A.
+
+
+## Four texture-coordinate vertex sets
+
+The host vertex builder now fetches TEX0 through TEX3 from NV097 array slots
+7 through 10 and emits a D3D8 FVF with four two-component texture-coordinate
+sets. Missing sets are zero-filled. The vertex record is now 64 bytes, and
+smoke tests verify the four independent DMA-backed coordinate arrays as well
+as indexed expansion using the expanded record.

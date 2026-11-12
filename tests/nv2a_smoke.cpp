@@ -40,7 +40,7 @@ using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
-struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1; };
+struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1, u2, v2, u3, v3; };
 using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
@@ -422,7 +422,7 @@ int main() {
     uint32_t indexedStride = 0, indexedFvf = 0;
     if (buildIndexedVertexStream(channel, 0u, vertexIndices, 3u,
             indexedVertices, sizeof(indexedVertices), &indexedStride, &indexedFvf) != 0 ||
-        indexedStride != sizeof(HostVertex) || indexedFvf != 0x2D2u ||
+        indexedStride != sizeof(HostVertex) || indexedFvf != 0x4D2u ||
         indexedVertices[0].x != 4.0f || indexedVertices[1].x != 1.0f ||
         indexedVertices[2].x != 4.0f ||
         buildIndexedVertexStream(channel, 0u, nullptr, 3u,
@@ -439,6 +439,8 @@ int main() {
     const float vertexNormals[6] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
     const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
     const float vertexTexcoords1[4] = { 0.125f, 0.25f, 0.625f, 0.875f };
+    const float vertexTexcoords2[4] = { 0.2f, 0.3f, 0.4f, 0.5f };
+    const float vertexTexcoords3[4] = { 0.6f, 0.7f, 0.8f, 0.9f };
     const uint32_t vertexContextBStream[] = { (1u << 18) | 0x01A0u, dmaHandle };
     HostVertex hostVertices[2]{};
     uint32_t hostVertexStride = 0, hostFvf = 0;
@@ -447,6 +449,8 @@ int main() {
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
         writeVram(0x1800u, vertexTexcoords1, sizeof(vertexTexcoords1)) != 0 ||
+        writeVram(0x1900u, vertexTexcoords2, sizeof(vertexTexcoords2)) != 0 ||
+        writeVram(0x1A00u, vertexTexcoords3, sizeof(vertexTexcoords3)) != 0 ||
         writeVram(0x1000u, vertexContextBStream, sizeof(vertexContextBStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, sizeof(vertexContextBStream),
                       &dmaGet, &dmaMethods) != 0 ||
@@ -460,9 +464,13 @@ int main() {
         submit(0u, 0x177Cu, (8u << 8) | (2u << 4) | 2u) != 0 ||
         submit(0u, 0x1740u, 0x800u) != 0 ||
         submit(0u, 0x1780u, (8u << 8) | (2u << 4) | 2u) != 0 ||
+        submit(0u, 0x1744u, 0x900u) != 0 ||
+        submit(0u, 0x1784u, (8u << 8) | (2u << 4) | 2u) != 0 ||
+        submit(0u, 0x1748u, 0xA00u) != 0 ||
+        submit(0u, 0x1788u, (8u << 8) | (2u << 4) | 2u) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
-        hostVertexStride != 48u || hostFvf != 0x2D2u ||
+        hostVertexStride != 64u || hostFvf != 0x4D2u ||
         hostVertices[0].nx != 0.0f || hostVertices[0].ny != 0.0f || hostVertices[0].nz != 1.0f ||
         hostVertices[1].nx != 0.0f || hostVertices[1].ny != 1.0f || hostVertices[1].nz != 0.0f ||
         hostVertices[0].diffuse != vertexColors[0] ||
@@ -473,9 +481,13 @@ int main() {
         hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
         hostVertices[0].u1 != 0.125f || hostVertices[0].v1 != 0.25f ||
         hostVertices[1].u1 != 0.625f || hostVertices[1].v1 != 0.875f ||
+        hostVertices[0].u2 != 0.2f || hostVertices[0].v2 != 0.3f ||
+        hostVertices[1].u2 != 0.4f || hostVertices[1].v2 != 0.5f ||
+        hostVertices[0].u3 != 0.6f || hostVertices[0].v3 != 0.7f ||
+        hostVertices[1].u3 != 0.8f || hostVertices[1].v3 != 0.9f ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(HostVertex), &hostVertexStride, &hostFvf) == 0) {
-        std::cerr << "FAIL: NV2A position/color/TEX0 host vertex stream build\\n";
+        std::cerr << "FAIL: NV2A position/color/TEX0-TEX3 host vertex stream build\\n";
         stop();
         return 1;
     }

@@ -169,9 +169,11 @@ typedef struct XboxNV2A_VERTEX {
     uint32_t specular;
     float u, v;
     float u1, v1;
+    float u2, v2;
+    float u3, v3;
 } XboxNV2A_VERTEX;
 
-/* Build a host FVF stream from position, diffuse-color and TEX0 guest arrays. */
+/* Build a host FVF stream from position/normal/color and TEX0..TEX3 guest arrays. */
 __declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
     uint32_t channel, uint32_t subchannel, uint32_t first_vertex,
     uint32_t vertex_count, XboxNV2A_VERTEX* destination,
