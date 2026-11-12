@@ -248,6 +248,165 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
     return 0;
 }
 
+static uint32_t g_bound_engine[32][8];
+static uint32_t g_ref_counter[32];
+
+static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
+                                  uint32_t method, uint32_t parameter)
+{
+    if (method == 0x0000u) {
+        uint32_t context = 0;
+        if (ramht_lookup(channel, parameter, &context) != 0)
+            return 1;
+        const uint32_t engine = (context & 0x00030000u) >> 16;
+        const uint32_t instance = (context & 0xFFFFu) << 4;
+        if (engine != 1u) return 2; /* This bridge currently drives PGRAPH only. */
+        if (!memory_range_valid(instance, 4u, XBOX_RAMIN_SIZE)) return 3;
+        pgraph_method(g_gpu, subchannel, 0u, instance);
+        g_bound_engine[channel][subchannel] = engine;
+        return 0;
+    }
+
+    if (method == 0x0008u) return 0; /* NV4+ NOP */
+    if (method == 0x0050u) {
+        g_ref_counter[channel] = parameter;
+        return 0;
+    }
+
+    if (method < 0x0100u || g_bound_engine[channel][subchannel] != 1u)
+        return 4;
+
+    /* 0x180..0x1fc methods carry a RAMHT handle, not an immediate value. */
+    if (method >= 0x0180u && method < 0x0200u) {
+        uint32_t context = 0;
+        if (ramht_lookup(channel, parameter, &context) != 0)
+            return 5;
+        parameter = (context & 0xFFFFu) << 4;
+        if (!memory_range_valid(parameter, 4u, XBOX_RAMIN_SIZE))
+            return 6;
+    }
+
+    pgraph_method(g_gpu, subchannel, method, parameter);
+    return 0;
+}
+
+static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
+                               uint32_t mapped_length, uint32_t initial_get,
+                               uint32_t put, uint32_t* final_get,
+                               uint32_t* methods_submitted, int dispatch)
+{
+    uint32_t get = initial_get;
+    uint32_t methods = 0;
+    uint32_t steps = 0;
+    uint32_t method = 0, subchannel = 0, remaining = 0;
+    int non_incrementing = 0;
+    int subroutine_active = 0;
+    uint32_t subroutine_return = 0;
+
+    if ((get & 3u) || (put & 3u) || get > put || put > mapped_length)
+        return 1;
+
+    while (get != put) {
+        if (++steps > 1048576u || get > put || put - get < 4u)
+            return 2;
+
+        const uint32_t word = read_le32(g_vram + base + get);
+        get += 4u;
+
+        if (remaining) {
+            if (++methods > 1048576u) return 3;
+            if (dispatch) {
+                const int result = dispatch_puller_method(channel, subchannel,
+                                                          method, word);
+                if (result != 0) return 10 + result;
+            }
+            if (!non_incrementing) method += 4u;
+            --remaining;
+            continue;
+        }
+
+        if ((word & 0xE0000003u) == 0x20000000u) {
+            /* Legacy 29-bit jump command. */
+            const uint32_t target = word & 0x1FFFFFFCu;
+            if ((target & 3u) || target >= mapped_length || target >= put)
+                return 4;
+            get = target;
+        } else if ((word & 3u) == 1u) {
+            const uint32_t target = word & 0xFFFFFFFCu;
+            if (target >= mapped_length || target >= put)
+                return 4;
+            get = target;
+        } else if ((word & 3u) == 2u) {
+            const uint32_t target = word & 0xFFFFFFFCu;
+            if (subroutine_active || target >= mapped_length || target >= put)
+                return 5;
+            subroutine_return = get;
+            subroutine_active = 1;
+            get = target;
+        } else if (word == 0x00020000u) {
+            if (!subroutine_active) return 6;
+            get = subroutine_return;
+            subroutine_active = 0;
+        } else if ((word & 0xE0030003u) == 0u) {
+            method = ((word >> 2) & 0x7FFu) * 4u;
+            subchannel = (word >> 13) & 7u;
+            remaining = (word >> 18) & 0x7FFu;
+            non_incrementing = 0;
+            if (!remaining || remaining > (put - get) / 4u ||
+                remaining > 0x800u || method > 0x1FFCu ||
+                remaining - 1u > (0x1FFCu - method) / 4u)
+                return 7;
+        } else if ((word & 0xE0030003u) == 0x40000000u) {
+            method = ((word >> 2) & 0x7FFu) * 4u;
+            subchannel = (word >> 13) & 7u;
+            remaining = (word >> 18) & 0x7FFu;
+            non_incrementing = 1;
+            if (!remaining || remaining > (put - get) / 4u ||
+                method > 0x1FFCu)
+                return 7;
+        } else {
+            return 8; /* Includes IB-only and reserved command encodings. */
+        }
+    }
+
+    if (remaining || subroutine_active) return 9;
+    if (final_get) *final_get = get;
+    if (methods_submitted) *methods_submitted = methods;
+    return 0;
+}
+
+int __cdecl XboxNV2A_SubmitDMAPushBuffer(uint32_t channel, uint32_t handle,
+                                         uint32_t get, uint32_t put,
+                                         uint32_t* new_get,
+                                         uint32_t* methods_submitted)
+{
+    XboxNV2A_DMA_INFO dma;
+    if (new_get) *new_get = get;
+    if (methods_submitted) *methods_submitted = 0;
+    if (!g_started || !g_gpu || channel > 31u) return 1;
+
+    int result = XboxNV2A_ResolveDMAHandle(channel, handle, &dma);
+    if (result != 0) return 2 + result;
+    if (dma.dma_class != 0x02u && dma.dma_class != 0x3Du)
+        return 8; /* Pushbuffer must be readable. */
+    if (get > put || put > dma.mapped_length || (get & 3u) || (put & 3u))
+        return 9;
+
+    uint32_t checked_get = get, checked_methods = 0;
+    result = walk_dma_pushbuffer(channel, dma.base_address, dma.mapped_length,
+                                 get, put, &checked_get, &checked_methods, 0);
+    if (result != 0) return 16 + result;
+
+    /* Only dispatch after the entire stream, including control flow, validates. */
+    uint32_t executed_get = get, executed_methods = 0;
+    result = walk_dma_pushbuffer(channel, dma.base_address, dma.mapped_length,
+                                 get, put, &executed_get, &executed_methods, 1);
+    if (result != 0) return 32 + result;
+    if (new_get) *new_get = executed_get;
+    if (methods_submitted) *methods_submitted = executed_methods;
+    return 0;
+}
+
 static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* submitted, int dispatch)
 {
     if ((offset & 3u) || (byte_length & 3u) ||
