@@ -159,6 +159,20 @@ int main() {
             pitch!=16 || block[0]!=255 || block[1]!=0 || block[2]!=0 || block[3]!=255) {
             std::cerr << "FAIL: DXT1 texture decode\n"; return 1;
         }
+        const uint8_t dxt3[16] = {
+            0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+            0x00,0xF8,0x00,0xF8,0,0,0,0
+        };
+        const uint8_t dxt5[16] = {
+            0xFF,0x00,0,0,0,0,0,0,
+            0xE0,0x07,0xE0,0x07,0,0,0,0
+        };
+        if (decodeTexture(0x0E00u,4,4,0,dxt3,sizeof(dxt3),block,sizeof(block),&pitch)!=0 ||
+            block[0]!=255 || block[1]!=0 || block[2]!=0 || block[3]!=255 ||
+            decodeTexture(0x0F00u,4,4,0,dxt5,sizeof(dxt5),block,sizeof(block),&pitch)!=0 ||
+            block[0]!=0 || block[1]!=255 || block[2]!=0 || block[3]!=255) {
+            std::cerr << "FAIL: DXT3/DXT5 texture decode\\n"; return 1;
+        }
         if (decodeTexture(0x0600u,2,1,0,argb,sizeof(argb),rgba,4,&pitch)==0 ||
             decodeTexture(0x0600u,2,1,0,argb,4,rgba,sizeof(rgba),&pitch)==0 ||
             decodeTexture(0x9900u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)==0) {
