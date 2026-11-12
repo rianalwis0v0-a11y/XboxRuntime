@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -20,6 +21,11 @@ struct Stats {
     uint32_t clears;
 };
 using StatsFn = int (__cdecl*)(Stats*);
+
+using ReadMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
+using WriteMemoryFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
+using BatchFn = int (__cdecl*)(uint32_t, const uint32_t*, uint32_t);
+
 
 static FARPROC Need(HMODULE module, const char* name) {
     FARPROC p = GetProcAddress(module, name);
@@ -57,8 +63,45 @@ int main() {
     auto flush = reinterpret_cast<FlushFn>(Need(module, "XboxNV2A_Flush"));
     auto getStats = reinterpret_cast<StatsFn>(Need(module, "XboxNV2A_GetStats"));
 
+    auto readVram = reinterpret_cast<ReadMemoryFn>(Need(module, "XboxNV2A_ReadVRAM"));
+    auto writeVram = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteVRAM"));
+    auto readRamin = reinterpret_cast<ReadMemoryFn>(Need(module, "XboxNV2A_ReadRAMIN"));
+    auto writeRamin = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteRAMIN"));
+    auto submitBatch = reinterpret_cast<BatchFn>(Need(module, "XboxNV2A_SubmitMethods"));
+
+
     if (start() != 0) {
         std::cerr << "FAIL: NV2A module initialization\n";
+        return 1;
+    }
+
+
+    const uint32_t pattern[4] = {0x11223344u, 0x55667788u, 0xAABBCCDDu, 0x01020304u};
+    uint32_t copy[4]{};
+    if (writeVram(0x1000, pattern, sizeof(pattern)) != 0 ||
+        readVram(0x1000, copy, sizeof(copy)) != 0 ||
+        memcmp(pattern, copy, sizeof(pattern)) != 0) {
+        std::cerr << "FAIL: VRAM read/write round trip\\n";
+        stop();
+        return 1;
+    }
+    if (writeRamin(0x80, pattern, sizeof(pattern)) != 0 ||
+        readRamin(0x80, copy, sizeof(copy)) != 0 ||
+        memcmp(pattern, copy, sizeof(pattern)) != 0) {
+        std::cerr << "FAIL: RAMIN read/write round trip\\n";
+        stop();
+        return 1;
+    }
+    if (writeVram(64u * 1024u * 1024u - 2u, pattern, sizeof(pattern)) == 0 ||
+        readRamin(1024u * 1024u, copy, 1) == 0) {
+        std::cerr << "FAIL: GPU memory bounds were not enforced\\n";
+        stop();
+        return 1;
+    }
+    const uint32_t batch[] = {0x01D4, 0xFF223344, 0x17FC, 5, 0x17FC, 0};
+    if (submitBatch(0, batch, 3) != 0 || submitBatch(8, batch, 3) == 0) {
+        std::cerr << "FAIL: PGRAPH batch validation/dispatch\\n";
+        stop();
         return 1;
     }
 
