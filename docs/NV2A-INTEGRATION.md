@@ -168,3 +168,13 @@ cull-face writes from being mistaken for cull enable, and stencil-reference
 writes from being mistaken for shade mode. Front/back cull mode, depth compare,
 shade mode, and stencil reference use the D3D8/D3D11 compatibility device when
 available.
+
+
+## Linear render-surface decoding
+
+`XboxNV2A_DecodeSurface` decodes the current NV097 surface-format, pitch,
+color/depth offsets, and clip dimensions. It maps the common 16-bit and 32-bit
+color formats plus Z16/Z24S8 to the D3D8 compatibility formats, checks row
+pitches, and proves the final color/depth byte spans stay inside the 64 MiB
+VRAM aperture. The first implementation intentionally rejects swizzled and
+multisampled render surfaces instead of treating them as linear memory.
