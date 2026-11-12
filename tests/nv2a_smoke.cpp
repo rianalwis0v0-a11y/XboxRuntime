@@ -144,10 +144,13 @@ int main() {
         0x00020000u                          /* RETURN */
     };
     uint32_t dmaGet = 0, dmaMethods = 0;
-    if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
-        dmaGet != 20u || dmaMethods != 3u || read(0x400060u, 4u) != 0x100u) {
-        std::cerr << "FAIL: NV2A DMA pusher CALL/RETURN execution\\n";
+    const int dmaCallResult = writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) == 0
+        ? submitDmaPush(channel, dmaHandle, 0u, 20u, &dmaGet, &dmaMethods) : -1;
+    const uint64_t resolvedMethod = read(0x400060u, 4u);
+    if (dmaCallResult != 0 || dmaGet != 20u || dmaMethods != 3u || resolvedMethod != 0x100u) {
+        std::cerr << "FAIL: NV2A DMA CALL/RETURN result=" << dmaCallResult
+                  << " get=" << dmaGet << " methods=" << dmaMethods
+                  << " resolved=0x" << std::hex << resolvedMethod << "\\n";
         stop();
         return 1;
     }
