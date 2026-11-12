@@ -838,13 +838,29 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         return 3; /* This first FVF path requires float3 position. */
 
     float positions[255u * 3u];
+    float normals[255u * 3u];
+    uint32_t colors[255u];
+    uint32_t specular[255u];
+    float texcoords[255u * 2u];
     uint32_t stride = 0, element_bytes = 0;
     int result = XboxNV2A_ReadVertexArray(channel, subchannel, 0u,
         first_vertex, vertex_count, positions, sizeof(positions),
         &stride, &element_bytes);
     if (result != 0 || element_bytes != 12u) return 4;
 
-    uint32_t colors[255u];
+    int has_normal = 0;
+    const uint32_t normal_format = g_gpu->pgraph.regs[0x1768u / 4u];
+    if (normal_format != 0u) {
+        if ((normal_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
+            ((normal_format >> 4) & 0xFu) != 3u)
+            return 5;
+        result = XboxNV2A_ReadVertexArray(channel, subchannel, 2u,
+            first_vertex, vertex_count, normals, sizeof(normals),
+            &stride, &element_bytes);
+        if (result != 0 || element_bytes != 12u) return 6;
+        has_normal = 1;
+    }
+
     int has_color = 0;
     const uint32_t color_format = g_gpu->pgraph.regs[0x176Cu / 4u];
     if (color_format != 0u) {
@@ -854,11 +870,22 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         result = XboxNV2A_ReadVertexArray(channel, subchannel, 3u,
             first_vertex, vertex_count, colors, sizeof(colors),
             &stride, &element_bytes);
-        if (result != 0 || element_bytes != 4u) return 6;
+        if (result != 0 || element_bytes != 4u) return 7;
         has_color = 1;
     }
 
-    float texcoords[255u * 2u];
+    int has_specular = 0;
+    const uint32_t specular_format = g_gpu->pgraph.regs[0x1770u / 4u];
+    if (specular_format != 0u) {
+        if ((specular_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+            ((specular_format >> 4) & 0xFu) != 4u)
+            return 8;
+        result = XboxNV2A_ReadVertexArray(channel, subchannel, 4u,
+            first_vertex, vertex_count, specular, sizeof(specular),
+            &stride, &element_bytes);
+        if (result != 0 || element_bytes != 4u) return 9;
+        has_specular = 1;
+    }
     int has_texcoord = 0;
     const uint32_t tex_format = g_gpu->pgraph.regs[0x177Cu / 4u];
     if (tex_format != 0u) {
@@ -868,7 +895,7 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         result = XboxNV2A_ReadVertexArray(channel, subchannel, 7u,
             first_vertex, vertex_count, texcoords, sizeof(texcoords),
             &stride, &element_bytes);
-        if (result != 0 || element_bytes != 8u) return 8;
+        if (result != 0 || element_bytes != 8u) return 10;
         has_texcoord = 1;
     }
 
@@ -877,13 +904,17 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         vertex->x = positions[i * 3u + 0u];
         vertex->y = positions[i * 3u + 1u];
         vertex->z = positions[i * 3u + 2u];
+        vertex->nx = has_normal ? normals[i * 3u + 0u] : 0.0f;
+        vertex->ny = has_normal ? normals[i * 3u + 1u] : 0.0f;
+        vertex->nz = has_normal ? normals[i * 3u + 2u] : 1.0f;
         vertex->diffuse = has_color ? colors[i] : 0xFFFFFFFFu;
+        vertex->specular = has_specular ? specular[i] : 0u;
         vertex->u = has_texcoord ? texcoords[i * 2u + 0u] : 0.0f;
         vertex->v = has_texcoord ? texcoords[i * 2u + 1u] : 0.0f;
     }
 
     if (stride_out) *stride_out = (uint32_t)sizeof(XboxNV2A_VERTEX);
-    if (fvf_out) *fvf_out = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1;
+    if (fvf_out) *fvf_out = D3DFVF_XYZ | D3DFVF_NORMAL | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
     return 0;
 }
 
