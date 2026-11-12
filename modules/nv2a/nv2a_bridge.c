@@ -692,6 +692,92 @@ int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(uint32_t format,
     return result;
 }
 
+
+int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(uint32_t format,
+    uint32_t width, uint32_t height, uint32_t level_count,
+    const void* source, uint32_t source_length, void* destination,
+    uint32_t destination_capacity, uint32_t* level_offsets,
+    uint32_t* level_sizes)
+{
+    if (!source || !destination || !level_offsets || !level_sizes ||
+        !width || !height || width > 16384u || height > 16384u ||
+        !level_count || level_count > 16u)
+        return 1;
+
+    const uint32_t color = (format >> 8) & 0xFFu;
+    const int dxt1 = color == 0x0Cu;
+    const int dxt_other = color == 0x0Eu || color == 0x0Fu;
+    uint32_t bytes_per_pixel = 0;
+    if (!dxt1 && !dxt_other) {
+        switch (color) {
+        case 0x00u: case 0x19u: bytes_per_pixel = 1u; break;
+        case 0x02u: case 0x03u: case 0x04u: case 0x05u:
+            bytes_per_pixel = 2u; break;
+        case 0x06u: case 0x07u: bytes_per_pixel = 4u; break;
+        default: return 2;
+        }
+        if ((width & (width - 1u)) || (height & (height - 1u)))
+            return 2;
+    }
+
+    /* Validate the entire chain before writing any decoded level. */
+    uint64_t source_total = 0, destination_total = 0;
+    uint32_t w = width, h = height;
+    for (uint32_t level = 0; level < level_count; ++level) {
+        uint64_t input_size;
+        if (dxt1 || dxt_other) {
+            const uint64_t blocks_x = ((uint64_t)w + 3u) / 4u;
+            const uint64_t blocks_y = ((uint64_t)h + 3u) / 4u;
+            input_size = blocks_x * blocks_y * (dxt1 ? 8u : 16u);
+        } else {
+            input_size = (uint64_t)w * h * bytes_per_pixel;
+        }
+        const uint64_t output_size = (uint64_t)w * h * 4u;
+        if (input_size > UINT32_MAX || output_size > UINT32_MAX ||
+            source_total > source_length || input_size > source_length - source_total ||
+            destination_total > destination_capacity ||
+            output_size > destination_capacity - destination_total ||
+            source_total > UINT32_MAX || destination_total > UINT32_MAX)
+            return 3;
+        level_offsets[level] = (uint32_t)destination_total;
+        level_sizes[level] = (uint32_t)output_size;
+        source_total += input_size;
+        destination_total += output_size;
+        w = w > 1u ? w / 2u : 1u;
+        h = h > 1u ? h / 2u : 1u;
+    }
+
+    const uint8_t* src = (const uint8_t*)source;
+    uint8_t* dst = (uint8_t*)destination;
+    uint64_t source_offset = 0;
+    uint32_t destination_offset = 0;
+    w = width; h = height;
+    for (uint32_t level = 0; level < level_count; ++level) {
+        uint64_t input_size;
+        if (dxt1 || dxt_other) {
+            const uint64_t blocks_x = ((uint64_t)w + 3u) / 4u;
+            const uint64_t blocks_y = ((uint64_t)h + 3u) / 4u;
+            input_size = blocks_x * blocks_y * (dxt1 ? 8u : 16u);
+        } else {
+            input_size = (uint64_t)w * h * bytes_per_pixel;
+        }
+        uint32_t pitch = 0;
+        const int result = (dxt1 || dxt_other)
+            ? XboxNV2A_DecodeTextureRGBA8(format, w, h, 0u,
+                src + (size_t)source_offset, (uint32_t)input_size,
+                dst + destination_offset, destination_capacity - destination_offset, &pitch)
+            : XboxNV2A_DecodeSwizzledTextureRGBA8(format, w, h,
+                src + (size_t)source_offset, (uint32_t)input_size,
+                dst + destination_offset, destination_capacity - destination_offset, &pitch);
+        if (result != 0) return 4 + result;
+        source_offset += input_size;
+        destination_offset += level_sizes[level];
+        w = w > 1u ? w / 2u : 1u;
+        h = h > 1u ? h / 2u : 1u;
+    }
+    return 0;
+}
+
 int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,
     uint32_t surface_pitch, uint32_t color_offset, uint32_t zeta_offset,
     uint32_t clip_horizontal, uint32_t clip_vertical,

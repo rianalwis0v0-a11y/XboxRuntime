@@ -50,6 +50,7 @@ struct SurfaceInfo {
 using DecodeTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,
     const void*,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeSwizzledTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*);
+using DecodeMipChainFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
 
@@ -106,6 +107,7 @@ int main() {
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
+    auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
     auto decodeSwizzledTexture = reinterpret_cast<DecodeSwizzledTextureFn>(Need(module, "XboxNV2A_DecodeSwizzledTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -243,6 +245,32 @@ int main() {
             decodeSwizzledTexture(0x0C00u, 2, 2, swizzled, sizeof(swizzled),
                 linear, sizeof(linear), &pitch) == 0) {
             std::cerr << "FAIL: swizzled texture decode / validation\\n";
+            return 1;
+        }
+    }
+
+
+    {
+        const uint8_t mipSource[20] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF,
+            0x0F,0x0E,0x0D,0xFF
+        };
+        uint8_t mipOutput[20]{};
+        uint32_t offsets[2]{}, sizes[2]{};
+        if (decodeMipChain(0x0600u, 2, 2, 2, mipSource, sizeof(mipSource),
+                mipOutput, sizeof(mipOutput), offsets, sizes) != 0 ||
+            offsets[0] != 0u || sizes[0] != 16u ||
+            offsets[1] != 16u || sizes[1] != 4u ||
+            mipOutput[0] != 1u || mipOutput[4] != 4u ||
+            mipOutput[8] != 7u || mipOutput[16] != 13u ||
+            decodeMipChain(0x0600u, 2, 2, 2, mipSource, 19u,
+                mipOutput, sizeof(mipOutput), offsets, sizes) == 0 ||
+            decodeMipChain(0x0600u, 2, 2, 2, mipSource, sizeof(mipSource),
+                mipOutput, 19u, offsets, sizes) == 0 ||
+            decodeMipChain(0x0600u, 2, 2, 0, mipSource, sizeof(mipSource),
+                mipOutput, sizeof(mipOutput), offsets, sizes) == 0) {
+            std::cerr << "FAIL: texture mip-chain decode / bounds\\n";
             return 1;
         }
     }

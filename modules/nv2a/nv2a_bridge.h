@@ -82,6 +82,14 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(
     void* destination, uint32_t destination_capacity,
     uint32_t* destination_pitch);
 
+/* Decode a bounded NV097 mip chain into consecutive RGBA8 levels.
+ * level_offsets and level_sizes each contain level_count uint32_t entries. */
+__declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(
+    uint32_t format, uint32_t width, uint32_t height, uint32_t level_count,
+    const void* source, uint32_t source_length,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* level_offsets, uint32_t* level_sizes);
+
 /* Map NV097 texture-filter fields to D3D8 minification, magnification and mip filters. */
 __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,

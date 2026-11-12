@@ -296,3 +296,14 @@ The D3D8 backend does not expose the D3D9 constant-blend-factor render state.
 NV097 blend color is therefore left explicitly unsupported rather than passing a
 D3D9-only state ID into the D3D8 device. Source/destination blend factors and
 the blend equation remain mapped where the D3D8 API has a real equivalent.
+
+
+## Mip-chain decoding
+
+`XboxNV2A_DecodeTextureMipChainRGBA8` validates and decodes up to 16
+consecutive mip levels for the supported swizzled uncompressed formats and
+DXT1/3/5. It computes each level's source and RGBA8 output span with 64-bit
+bounds checks, validates the complete chain before decoding, and returns
+per-level output offsets and byte sizes. The test covers a 2x2-to-1x1 swizzled
+chain and truncated-source / undersized-destination rejection. This still
+does not upload mip levels into a D3D8 texture object or bind them to stages.
