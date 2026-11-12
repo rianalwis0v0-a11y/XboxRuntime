@@ -70,7 +70,7 @@ function EmitCheckAtLeast([uint32]$minimum) {
     EmitIncrement $script:failedAddress
 }
 function EmitCheckPoolSize {
-    EmitByte 0x3D; Emit32 ([uint32]0xFFFFFFFF)
+    EmitByte 0x3D; Emit32 ([uint32]4294967295)
     EmitByte 0x74; EmitByte 15
     EmitByte 0x3D; Emit32 ([uint32]64)
     EmitByte 0x72; EmitByte 8
@@ -235,7 +235,7 @@ Put32 0x10C 0x3000
 Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
-Put32 0x128 ([uint32]($entryVa -bxor [Convert]::ToUInt32('A8FC57AB',16)))
+Put32 0x128 ($entryVa -bxor [Convert]::ToUInt32('A8FC57AB',16))
 Put32 0x154 ([uint32]($thunkVa -bxor [uint32]0x5B6D40B6))
 # Executable, writable section: code at VA 0x10001000, data at 0x10002200.
 Put32 0x178 5
