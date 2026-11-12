@@ -121,10 +121,16 @@ int main() {
         return 1;
     }
     const uint32_t malformedPushbuffer[] = { 0x00000001u };
+    const uint32_t unsupportedPushbuffer[] = {
+        (4u << 29) | (1u << 18) | 0x01D4u, 0xFF000000u
+    };
     if (writeVram(0x2100, malformedPushbuffer, sizeof(malformedPushbuffer)) != 0 ||
         submitPushBuffer(0x2100, sizeof(malformedPushbuffer), &methodsSubmitted) == 0 ||
+        methodsSubmitted != 0 ||
+        writeVram(0x2200, unsupportedPushbuffer, sizeof(unsupportedPushbuffer)) != 0 ||
+        submitPushBuffer(0x2200, sizeof(unsupportedPushbuffer), &methodsSubmitted) == 0 ||
         methodsSubmitted != 0) {
-        std::cerr << "FAIL: malformed NV2A pushbuffer was accepted\n";
+        std::cerr << "FAIL: malformed/unsupported NV2A pushbuffer was accepted\\n";
         stop();
         return 1;
     }
