@@ -26,6 +26,12 @@ using ReadMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using WriteMemoryFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
 using BatchFn = int (__cdecl*)(uint32_t, const uint32_t*, uint32_t);
 using PushBufferFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
+struct DmaInfo {
+    uint32_t handle, instance_offset, dma_class, dma_target;
+    uint32_t engine, base_address, limit, mapped_length;
+};
+using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
+using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 
 
 static FARPROC Need(HMODULE module, const char* name) {
@@ -70,6 +76,8 @@ int main() {
     auto writeRamin = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteRAMIN"));
     auto submitBatch = reinterpret_cast<BatchFn>(Need(module, "XboxNV2A_SubmitMethods"));
     auto submitPushBuffer = reinterpret_cast<PushBufferFn>(Need(module, "XboxNV2A_SubmitPushBuffer"));
+    auto lookupRamht = reinterpret_cast<LookupRamhtFn>(Need(module, "XboxNV2A_LookupRAMHT"));
+    auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
 
 
     if (start() != 0) {
@@ -94,6 +102,34 @@ int main() {
         stop();
         return 1;
     }
+    /* Configure a 4 KiB RAMHT and install one NV2A DMA object. */
+    const uint32_t dmaHandle = 0x12345678u;
+    const uint32_t channel = 2u;
+    uint32_t ramhtHash = 0;
+    for (uint32_t value = dmaHandle; value; value >>= 9) ramhtHash ^= value & 0x1FFu;
+    ramhtHash ^= channel << 5;
+    ramhtHash &= 0x1FFu;
+    const uint32_t ramhtEntry[2] = {
+        dmaHandle, 0x80000000u | (channel << 24) | (1u << 16) | 0x10u
+    };
+    const uint32_t dmaObject[3] = { 0x00000002u, 0x00000FFFu, 0x00001000u };
+    uint32_t ramhtContext = 0;
+    DmaInfo dmaInfo{};
+    if (write(0x2210u, 0u, 4u) != 0 ||
+        writeRamin(ramhtHash * 8u, ramhtEntry, sizeof(ramhtEntry)) != 0 ||
+        writeRamin(0x100u, dmaObject, sizeof(dmaObject)) != 0 ||
+        lookupRamht(channel, dmaHandle, &ramhtContext) != 0 ||
+        ramhtContext != ramhtEntry[1] ||
+        resolveDma(channel, dmaHandle, &dmaInfo) != 0 ||
+        dmaInfo.instance_offset != 0x100u || dmaInfo.dma_class != 2u ||
+        dmaInfo.engine != 1u || dmaInfo.base_address != 0x1000u ||
+        dmaInfo.mapped_length != 0x1000u ||
+        lookupRamht(channel, dmaHandle + 1u, &ramhtContext) == 0) {
+        std::cerr << "FAIL: RAMHT lookup / DMA object resolution\\n";
+        stop();
+        return 1;
+    }
+
     if (writeVram(64u * 1024u * 1024u - 2u, pattern, sizeof(pattern)) == 0 ||
         readRamin(1024u * 1024u, copy, 1) == 0) {
         std::cerr << "FAIL: GPU memory bounds were not enforced\\n";
