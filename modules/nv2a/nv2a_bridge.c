@@ -369,7 +369,7 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
             get = target;
         } else if ((word & 3u) == 2u) {
             const uint32_t target = word & 0xFFFFFFFCu;
-            if (subroutine_active || target >= mapped_length || target >= put)
+            if (subroutine_active || target >= mapped_length)
                 return 5;
             subroutine_return = get;
             subroutine_active = 1;
@@ -392,7 +392,7 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
             subchannel = (word >> 13) & 7u;
             remaining = (word >> 18) & 0x7FFu;
             non_incrementing = 1;
-            if (!remaining || remaining > (put - get) / 4u ||
+            if (!remaining || remaining > (mapped_length - get) / 4u ||
                 method > 0x1FFCu)
                 return 7;
         } else {
