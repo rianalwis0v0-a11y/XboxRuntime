@@ -72,9 +72,10 @@ void* StubFor(uint32_t ordinal){
 }
 void* DataFor(uint32_t ordinal){
     switch(ordinal){
-    case 16: case 22: case 30: case 31: case 88: case 89:
-    case 102: case 120: case 154: case 156: case 157: case 162:
-    case 164: case 321: case 322: case 323: case 324: case 325:
+    case 16: case 22: case 30: case 31: case 40: case 41: case 42:
+    case 64: case 70: case 71: case 88: case 89: case 102: case 120:
+    case 154: case 156: case 157: case 162: case 164: case 240: case 245:
+    case 249: case 259: case 321: case 322: case 323: case 324: case 325:
     case 326: case 353: case 354: case 355: case 356: case 357:
         return g_data[ordinal].data();
     default:return nullptr;
@@ -161,6 +162,45 @@ extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h,BOOL alertable,const 
     DWORD r=WaitForSingleObject(h,ms);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
 }
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+extern "C" LONG __stdcall K_RtlAnsiStringToUnicodeString(GuestUnicodeString* d,const GuestAnsiString* s,BOOL allocate){
+    if(!d||!s||(!s->Buffer&&s->Length))return LONG(0xC000000Du);
+    int chars=s->Length?MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,nullptr,0):0;
+    if(s->Length&&chars<=0)return LONG(0xC000000Du);
+    uint32_t bytes=uint32_t(chars)*sizeof(wchar_t), required=bytes+sizeof(wchar_t);
+    if(allocate){d->Buffer=static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
+    else if(!d->Buffer||d->MaximumLength<bytes)return LONG(0xC0000023u);
+    if(chars&&MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,d->Buffer,chars)!=chars)return LONG(0xC000000Du);
+    d->Length=USHORT(bytes);if(d->MaximumLength>d->Length)d->Buffer[chars]=0;return 0;
+}
+extern "C" LONG __stdcall K_RtlUnicodeStringToAnsiString(GuestAnsiString* d,const GuestUnicodeString* s,BOOL allocate){
+    if(!d||!s||(!s->Buffer&&s->Length))return LONG(0xC000000Du);
+    int bytes=s->Length?WideCharToMultiByte(CP_ACP,0,s->Buffer,s->Length/sizeof(wchar_t),nullptr,0,nullptr,nullptr):0;
+    if(s->Length&&bytes<=0)return LONG(0xC000000Du);
+    uint32_t required=uint32_t(bytes)+1;
+    if(allocate){d->Buffer=static_cast<char*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
+    else if(!d->Buffer||d->MaximumLength<uint32_t(bytes))return LONG(0xC0000023u);
+    if(bytes&&WideCharToMultiByte(CP_ACP,0,s->Buffer,s->Length/sizeof(wchar_t),d->Buffer,bytes,nullptr,nullptr)!=bytes)return LONG(0xC000000Du);
+    d->Length=USHORT(bytes);if(d->MaximumLength>d->Length)d->Buffer[bytes]=0;return 0;
+}
+extern "C" void __stdcall K_RtlFreeAnsiString(GuestAnsiString* s){if(s&&s->Buffer){HeapFree(GetProcessHeap(),0,s->Buffer);s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+extern "C" void __stdcall K_RtlFreeUnicodeString(GuestUnicodeString* s){if(s&&s->Buffer){HeapFree(GetProcessHeap(),0,s->Buffer);s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+extern "C" uint32_t __stdcall K_RtlCompareMemoryUlong(const void* p,uint32_t length,uint32_t pattern){
+    if(!p)return 0;const uint8_t* b=static_cast<const uint8_t*>(p);uint32_t matched=0;
+    while(matched+4<=length){uint32_t v;std::memcpy(&v,b+matched,4);if(v!=pattern)break;matched+=4;}return matched;
+}
+extern "C" void __stdcall K_RtlFillMemoryUlong(void* p,uint32_t length,uint32_t pattern){
+    if(!p)return;uint8_t* b=static_cast<uint8_t*>(p);for(uint32_t i=0;i+4<=length;i+=4)std::memcpy(b+i,&pattern,4);
+}
+extern "C" void __stdcall K_RtlMapGenericMask(ACCESS_MASK* access,const GENERIC_MAPPING* mapping){
+    if(!access||!mapping)return;ACCESS_MASK v=*access;v&=~(GENERIC_READ|GENERIC_WRITE|GENERIC_EXECUTE|GENERIC_ALL);
+    if(*access&GENERIC_READ)v|=mapping->GenericRead;if(*access&GENERIC_WRITE)v|=mapping->GenericWrite;
+    if(*access&GENERIC_EXECUTE)v|=mapping->GenericExecute;if(*access&GENERIC_ALL)v|=mapping->GenericAll;*access=v;
+}
+extern "C" uint32_t __stdcall K_RtlNtStatusToDosError(LONG status){
+    using Fn=ULONG (WINAPI*)(LONG);static Fn fn=[](){HMODULE n=GetModuleHandleW(L"ntdll.dll");return n?reinterpret_cast<Fn>(GetProcAddress(n,"RtlNtStatusToDosError")):nullptr;}();
+    if(fn)return fn(status);
+    switch(uint32_t(status)){case 0:return ERROR_SUCCESS;case 0xC000000Du:return ERROR_INVALID_PARAMETER;case 0xC0000008u:return ERROR_INVALID_HANDLE;case 0xC000000Fu:case 0xC0000034u:return ERROR_FILE_NOT_FOUND;case 0xC0000022u:return ERROR_ACCESS_DENIED;case 0xC0000017u:return ERROR_NOT_ENOUGH_MEMORY;case 0xC000003Au:return ERROR_PATH_NOT_FOUND;default:return ERROR_MR_MID_NOT_FOUND;}
+}
 extern "C" void __stdcall K_RtlInitAnsiString(GuestAnsiString*d,const char*s){if(!d)return;size_t n=s?strlen(s):0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?1:0));d->Buffer=const_cast<char*>(s);}
 extern "C" void __stdcall K_RtlInitUnicodeString(GuestUnicodeString*d,const wchar_t*s){if(!d)return;size_t n=s?wcslen(s)*2:0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?2:0));d->Buffer=const_cast<wchar_t*>(s);}
 extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){if(!c)return LONG(0xC000000Du);EnterCriticalSection(c);return 0;}
@@ -201,6 +241,35 @@ extern "C" LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR, SIZE
     MEMORY_BASIC_INFORMATION info{};
     if (VirtualQuery(p, &info, sizeof(info))) *size = info.RegionSize;
     return 0;
+}
+extern "C" LONG __stdcall K_NtProtectVirtualMemory(void** base,SIZE_T* size,ULONG protect,ULONG* oldProtect){
+    if(!base||!*base||!size||!*size)return LONG(0xC000000Du);DWORD old=0;
+    if(!VirtualProtect(*base,*size,protect,&old))return LONG(0xC000000Du);
+    if(oldProtect)*oldProtect=old;return 0;
+}
+extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* base,ULONG infoClass,void* out,ULONG length,ULONG* returned){
+    if(infoClass!=0||!base||!out)return LONG(0xC0000003u);
+    MEMORY_BASIC_INFORMATION info{};SIZE_T n=VirtualQuery(base,&info,sizeof(info));if(!n)return LONG(0xC000000Du);
+    if(returned)*returned=ULONG(n);if(length<sizeof(info))return LONG(0xC0000023u);
+    std::memcpy(out,&info,sizeof(info));return 0;
+}
+extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out,void*,LONG initial,LONG maximum){
+    if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
+    HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
+}
+extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
+    if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count,const HANDLE* handles,ULONG waitType,BOOL alertable,const LARGE_INTEGER* timeout,void*){
+    if(!handles||!count||count>MAXIMUM_WAIT_OBJECTS||waitType>1)return LONG(0xC000000Du);
+    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
+    DWORD r=WaitForMultipleObjects(count,handles,waitType==0,ms);if(r>=WAIT_OBJECT_0&&r<WAIT_OBJECT_0+count)return 0;
+    if(r>=WAIT_ABANDONED_0&&r<WAIT_ABANDONED_0+count)return LONG(0x80);
+    return r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal,HANDLE wait,BOOL alertable,const LARGE_INTEGER* timeout){
+    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
+    DWORD r=SignalObjectAndWait(signal,wait,ms,FALSE);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
 }
 extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG type) {
     if (!base || !*base) return LONG(0xC000000Du);
@@ -380,6 +449,34 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_bswap16
         cmp eax, 320
         je rtl_zero
+        cmp eax, 260
+        je rtl_ansi_to_unicode
+        cmp eax, 269
+        je rtl_cmp_mem_ulong
+        cmp eax, 285
+        je rtl_fill_ulong
+        cmp eax, 286
+        je rtl_free_ansi
+        cmp eax, 287
+        je rtl_free_unicode
+        cmp eax, 297
+        je rtl_map_generic
+        cmp eax, 301
+        je rtl_status_dos
+        cmp eax, 308
+        je rtl_unicode_to_ansi
+        cmp eax, 204
+        je nt_protect_vm
+        cmp eax, 217
+        je nt_query_vm
+        cmp eax, 193
+        je nt_create_semaphore
+        cmp eax, 222
+        je nt_release_semaphore
+        cmp eax, 235
+        je nt_wait_multiple
+        cmp eax, 230
+        je nt_signal_wait
         push eax
         call K_Unsupported
         add esp, 4
@@ -453,6 +550,20 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_bswap32: jmp K_RtlUlongByteSwap
     rtl_bswap16: jmp K_RtlUshortByteSwap
     rtl_zero: jmp K_RtlZeroMemory
+    rtl_ansi_to_unicode: jmp K_RtlAnsiStringToUnicodeString
+    rtl_cmp_mem_ulong: jmp K_RtlCompareMemoryUlong
+    rtl_fill_ulong: jmp K_RtlFillMemoryUlong
+    rtl_free_ansi: jmp K_RtlFreeAnsiString
+    rtl_free_unicode: jmp K_RtlFreeUnicodeString
+    rtl_map_generic: jmp K_RtlMapGenericMask
+    rtl_status_dos: jmp K_RtlNtStatusToDosError
+    rtl_unicode_to_ansi: jmp K_RtlUnicodeStringToAnsiString
+    nt_protect_vm: jmp K_NtProtectVirtualMemory
+    nt_query_vm: jmp K_NtQueryVirtualMemory
+    nt_create_semaphore: jmp K_NtCreateSemaphore
+    nt_release_semaphore: jmp K_NtReleaseSemaphore
+    nt_wait_multiple: jmp K_NtWaitForMultipleObjects
+    nt_signal_wait: jmp K_NtSignalAndWaitForSingleObject
     }
 }
 namespace {
