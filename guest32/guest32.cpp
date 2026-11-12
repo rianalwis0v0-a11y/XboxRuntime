@@ -83,7 +83,7 @@ int wmain(int argc,wchar_t**argv){
  uint8_t command=0;
  while(ok&&ReadExact(pipe,&command,1)){if(command==0)break;uint8_t rejected=1;if(!WriteExact(pipe,&rejected,1))break;}
  if(xbeThread){WaitForSingleObject(xbeThread,INFINITE);CloseHandle(xbeThread);}
- struct DiagnosticReport { uint32_t magic,passed,failed,skipped; } report{};
+ struct DiagnosticReport { uint32_t magic,passed,failed,skipped,firstFailedCheck; } report{};
  if(reportVa && g_image && reportVa>=r.imageBase && uint64_t(reportVa)+sizeof(report)<=uint64_t(r.imageBase)+r.imageSize){
   std::memcpy(&report,reinterpret_cast<const void*>(uintptr_t(reportVa)),sizeof(report));
   if(report.magic==0x54535258u)WriteExact(pipe,&report,sizeof(report));
