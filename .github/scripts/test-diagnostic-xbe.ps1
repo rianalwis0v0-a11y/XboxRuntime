@@ -575,8 +575,13 @@ try {
     if ($magic -ne 0x47584258 -or $status -ne 0) {
         throw "Diagnostic XBE launch failed: magic=$('{0:X8}' -f $magic), status=$status"
     }
-    $pipe.WriteByte(0)
-    $pipe.Flush()
+    try {
+        $pipe.WriteByte(0)
+        $pipe.Flush()
+    } catch {
+        $exit = if ($proc.HasExited) { $proc.ExitCode } else { "still running" }
+        throw "Guest pipe closed before diagnostic release; process exit=$exit. $($_.Exception.Message)"
+    }
     $report = [byte[]]::new(20)
     $read = 0
     while ($read -lt $report.Length) {
