@@ -798,6 +798,76 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
+    uint32_t first_vertex, uint32_t vertex_count,
+    XboxNV2A_VERTEX* destination, uint32_t destination_capacity,
+    uint32_t* stride_out, uint32_t* fvf_out)
+{
+    if (stride_out) *stride_out = 0;
+    if (fvf_out) *fvf_out = 0;
+    if (!g_started || !g_gpu || channel > 31u || subchannel > 7u ||
+        vertex_count > 255u || (!destination && vertex_count != 0u))
+        return 1;
+
+    const uint64_t required = (uint64_t)vertex_count * sizeof(XboxNV2A_VERTEX);
+    if (required > destination_capacity) return 2;
+    if (!vertex_count) return 0;
+
+    const uint32_t position_format = g_gpu->pgraph.regs[0x1760u / 4u];
+    if ((position_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
+        ((position_format >> 4) & 0xFu) != 3u)
+        return 3; /* This first FVF path requires float3 position. */
+
+    float positions[255u * 3u];
+    uint32_t stride = 0, element_bytes = 0;
+    int result = XboxNV2A_ReadVertexArray(channel, subchannel, 0u,
+        first_vertex, vertex_count, positions, sizeof(positions),
+        &stride, &element_bytes);
+    if (result != 0 || element_bytes != 12u) return 4;
+
+    uint32_t colors[255u];
+    int has_color = 0;
+    const uint32_t color_format = g_gpu->pgraph.regs[0x176Cu / 4u];
+    if (color_format != 0u) {
+        if ((color_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+            ((color_format >> 4) & 0xFu) != 4u)
+            return 5;
+        result = XboxNV2A_ReadVertexArray(channel, subchannel, 3u,
+            first_vertex, vertex_count, colors, sizeof(colors),
+            &stride, &element_bytes);
+        if (result != 0 || element_bytes != 4u) return 6;
+        has_color = 1;
+    }
+
+    float texcoords[255u * 2u];
+    int has_texcoord = 0;
+    const uint32_t tex_format = g_gpu->pgraph.regs[0x177Cu / 4u];
+    if (tex_format != 0u) {
+        if ((tex_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
+            ((tex_format >> 4) & 0xFu) != 2u)
+            return 7;
+        result = XboxNV2A_ReadVertexArray(channel, subchannel, 7u,
+            first_vertex, vertex_count, texcoords, sizeof(texcoords),
+            &stride, &element_bytes);
+        if (result != 0 || element_bytes != 8u) return 8;
+        has_texcoord = 1;
+    }
+
+    for (uint32_t i = 0; i < vertex_count; ++i) {
+        XboxNV2A_VERTEX* vertex = &destination[i];
+        vertex->x = positions[i * 3u + 0u];
+        vertex->y = positions[i * 3u + 1u];
+        vertex->z = positions[i * 3u + 2u];
+        vertex->diffuse = has_color ? colors[i] : 0xFFFFFFFFu;
+        vertex->u = has_texcoord ? texcoords[i * 2u + 0u] : 0.0f;
+        vertex->v = has_texcoord ? texcoords[i * 2u + 1u] : 0.0f;
+    }
+
+    if (stride_out) *stride_out = (uint32_t)sizeof(XboxNV2A_VERTEX);
+    if (fvf_out) *fvf_out = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1;
+    return 0;
+}
+
 static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
                                   uint32_t method, uint32_t parameter)
 {
