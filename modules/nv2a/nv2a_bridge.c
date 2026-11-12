@@ -306,7 +306,7 @@ int __cdecl XboxNV2A_WriteRegister(
     if (register_offset == 0x3240u && access_size == 4u) {
         const uint32_t push1 = (uint32_t)nv2a_mmio_read(g_gpu, 0x3204u, 4u);
         const uint32_t dma_push = (uint32_t)nv2a_mmio_read(g_gpu, 0x3220u, 4u);
-        if ((push1 & NV_PFIFO_CACHE1_PUSH1_MODE) ==
+        if (((push1 & NV_PFIFO_CACHE1_PUSH1_MODE) >> 8) ==
                 NV_PFIFO_CACHE1_PUSH1_MODE_DMA &&
             (dma_push & NV_PFIFO_CACHE1_DMA_PUSH_ACCESS) != 0u) {
             const uint32_t channel = push1 & NV_PFIFO_CACHE1_PUSH1_CHID;
