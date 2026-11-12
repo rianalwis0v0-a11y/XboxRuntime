@@ -48,18 +48,16 @@ extern "C" uint32_t __stdcall K_HalWriteSMBusValue(uint8_t address, uint8_t comm
     if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
     const uint32_t count = word ? 2u : 1u;
     if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
-    {
-        std::lock_guard<std::mutex> lock(g_eepromMutex);
-        g_eeprom[command] = uint8_t(value & 0xFFu);
-        if (word) g_eeprom[uint32_t(command) + 1] = uint8_t((value >> 8) & 0xFFu);
-    }
+    std::lock_guard<std::mutex> lock(g_eepromMutex);
+    g_eeprom[command] = uint8_t(value & 0xFFu);
+    if (word) g_eeprom[uint32_t(command) + 1] = uint8_t((value >> 8) & 0xFFu);
     // Persist each SMBus write so a guest crash does not discard EEPROM changes.
     HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return kStatusDeviceNotConnected;
     DWORD written = 0;
     BOOL ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
-    if (ok) ok = (written == g_eeprom.size()) && FlushFileBuffers(f);
+    if (ok) ok = (written == DWORD(g_eeprom.size())) && FlushFileBuffers(f);
     CloseHandle(f);
     return ok ? 0u : kStatusDeviceNotConnected;
 }
