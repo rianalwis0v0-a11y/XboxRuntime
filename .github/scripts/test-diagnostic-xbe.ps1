@@ -28,7 +28,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,267,268,274,276,284,287,292,293,296,299,300,307,309,310,311,314,315,317,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,307,309,310,311,314,315,317,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -423,6 +423,33 @@ EmitPush 0
 EmitCallImport 161
 EmitCallImport 103
 EmitCheckEqual 0
+
+
+# Executive read-write lock: exclusive and shared acquisition/release.
+$rwLockVa = [uint32]($reportVa + 0x250)
+EmitPush $rwLockVa
+EmitCallImport 18
+EmitPush $rwLockVa
+EmitCallImport 12
+EmitPush $rwLockVa
+EmitCallImport 28
+EmitIncrement $passedVa
+EmitPush $rwLockVa
+EmitCallImport 13
+EmitPush $rwLockVa
+EmitCallImport 28
+EmitIncrement $passedVa
+
+# RTL critical-section APC-region wrappers.
+$criticalSectionVa = [uint32]($reportVa + 0x260)
+EmitPush $criticalSectionVa
+EmitCallImport 291
+EmitPush $criticalSectionVa
+EmitCallImport 278
+EmitCheckEqual 0
+EmitPush $criticalSectionVa
+EmitCallImport 295
+EmitIncrement $passedVa
 
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
