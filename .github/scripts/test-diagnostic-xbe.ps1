@@ -246,7 +246,7 @@ Put32 0x188 0x2000
 $script:code.ToArray().CopyTo($b,0x1000)
 # The guest import resolver replaces these encoded ordinal slots with thunks.
 for ($i=0; $i -lt $ordinals.Count; $i++) {
-    Put32 (0x2A00 + 4*$i) ([uint32](0x80000000 -bor [uint32]$ordinals[$i]))
+    Put32 (0x2A00 + 4*$i) ([uint32](2147483648 + [int64]$ordinals[$i]))
 }
 Put32 (0x2A00 + 4*$ordinals.Count) 0
 Put32 0x2200 0x54535258
