@@ -147,6 +147,60 @@ int __cdecl XboxNV2A_WriteRAMIN(uint32_t offset, const void* source, uint32_t le
     return 0;
 }
 
+static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* submitted, int dispatch)
+{
+    if ((offset & 3u) || (byte_length & 3u) ||
+        !memory_range_valid(offset, byte_length, XBOX_VRAM_SIZE))
+        return 1;
+
+    uint32_t words = byte_length / 4u;
+    uint32_t cursor = 0;
+    uint32_t total = 0;
+    while (cursor < words) {
+        uint32_t header;
+        memcpy(&header, g_vram + offset + cursor * 4u, sizeof(header));
+        ++cursor;
+
+        /* NV4-style method packets: 000 = incrementing, 010 = non-incrementing.
+         * The packet carries an 11-bit word count, subchannel, and byte method. */
+        uint32_t command_type = header & 0x60000000u;
+        if (command_type != 0u && command_type != 0x40000000u)
+            return 2; /* Reject jump/call/return/long/unknown commands. */
+
+        uint32_t count = (header >> 18) & 0x7FFu;
+        uint32_t subchannel = (header >> 13) & 7u;
+        uint32_t method = header & 0x1FFCu;
+        if (!count || method >= 0x2000u * 4u ||
+            count > words - cursor || count > 1048576u - total)
+            return 3;
+
+        for (uint32_t i = 0; i < count; ++i) {
+            uint32_t parameter;
+            memcpy(&parameter, g_vram + offset + (cursor + i) * 4u, sizeof(parameter));
+            if (dispatch)
+                pgraph_method(g_gpu, subchannel,
+                    command_type == 0x40000000u ? method : method + i * 4u,
+                    parameter);
+        }
+        cursor += count;
+        total += count;
+    }
+
+    if (submitted) *submitted = total;
+    return 0;
+}
+
+int __cdecl XboxNV2A_SubmitPushBuffer(uint32_t vram_offset, uint32_t byte_length, uint32_t* methods_submitted)
+{
+    if (methods_submitted) *methods_submitted = 0;
+    if (!g_started || !g_gpu) return 4;
+
+    /* Validate the complete stream before causing any GPU state changes. */
+    int result = walk_pushbuffer(vram_offset, byte_length, NULL, 0);
+    if (result != 0) return result;
+    return walk_pushbuffer(vram_offset, byte_length, methods_submitted, 1);
+}
+
 int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, uint32_t pair_count)
 {
     if (!g_started || !g_gpu || subchannel > 7 || (!pairs && pair_count)) return 1;
