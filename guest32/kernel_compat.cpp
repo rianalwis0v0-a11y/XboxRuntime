@@ -260,6 +260,28 @@ extern "C" LONG __stdcall K_RtlUnicodeToMultiByteN(char* output, ULONG maxBytes,
     return 0;
 }
 
+extern "C" LONG __stdcall K_RtlMultiByteToUnicodeSize(ULONG* bytes, const char* input, ULONG inputBytes) {
+    if (!bytes || (!input && inputBytes)) return LONG(0xC000000Du);
+    *bytes = 0;
+    if (!inputBytes) return 0;
+    if (inputBytes > ULONG(INT_MAX)) return LONG(0xC000000Du);
+    const int chars = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes), nullptr, 0);
+    if (chars <= 0 || uint64_t(chars) * sizeof(wchar_t) > MAXULONG) return LONG(0xC000000Du);
+    *bytes = ULONG(chars) * sizeof(wchar_t);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlUnicodeToMultiByteSize(ULONG* bytes, const wchar_t* input, ULONG inputBytes) {
+    if (!bytes || (!input && inputBytes) || (inputBytes & 1)) return LONG(0xC000000Du);
+    *bytes = 0;
+    if (!inputBytes) return 0;
+    if (inputBytes / sizeof(wchar_t) > ULONG(INT_MAX)) return LONG(0xC000000Du);
+    const int count = WideCharToMultiByte(CP_ACP, 0, input, static_cast<int>(inputBytes / sizeof(wchar_t)),
+                                          nullptr, 0, nullptr, nullptr);
+    if (count <= 0) return LONG(0xC000000Du);
+    *bytes = ULONG(count);
+    return 0;
+}
+
 extern "C" LONG __stdcall K_RtlAnsiStringToUnicodeString(GuestUnicodeString* d,const GuestAnsiString* s,BOOL allocate){
     if(!d||!s||(!s->Buffer&&s->Length))return LONG(0xC000000Du);
     int chars=s->Length?MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,nullptr,0):0;
@@ -608,10 +630,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_integer_to_char
         cmp eax, 293
         je rtl_integer_to_unicode
+        cmp eax, 300
+        je rtl_mb_to_unicode_size
         cmp eax, 299
         je rtl_mb_to_unicode
         cmp eax, 309
         je rtl_unicode_to_integer
+        cmp eax, 311
+        je rtl_unicode_to_mb_size
         cmp eax, 310
         je rtl_unicode_to_mb
         cmp eax, 260
@@ -728,6 +754,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_mb_to_unicode: jmp K_RtlMultiByteToUnicodeN
     rtl_unicode_to_integer: jmp K_RtlUnicodeStringToInteger
     rtl_unicode_to_mb: jmp K_RtlUnicodeToMultiByteN
+    rtl_mb_to_unicode_size: jmp K_RtlMultiByteToUnicodeSize
+    rtl_unicode_to_mb_size: jmp K_RtlUnicodeToMultiByteSize
     rtl_ansi_to_unicode: jmp K_RtlAnsiStringToUnicodeString
     rtl_cmp_mem_ulong: jmp K_RtlCompareMemoryUlong
     rtl_fill_ulong: jmp K_RtlFillMemoryUlong
