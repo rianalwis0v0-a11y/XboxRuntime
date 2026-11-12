@@ -259,6 +259,14 @@ EmitCallImport 282
 EmitCheckEqual 14
 EmitLoadEax $numberValueVa
 EmitCheckEqual 2
+# Magic reciprocal: floor(12 * 0x5555555555555556 / 2^64) = 4.
+EmitPush 0
+EmitPush 0x55555555
+EmitPush 0x55555556
+EmitPush 0
+EmitPush 12
+EmitCallImport 283
+EmitCheckEqual 4
 
 # UnicodeString descriptor at report+0x150; its buffer is report+0x180.
 $unicodeDescriptorVa = [uint32]($reportVa + 0x150)
