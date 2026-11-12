@@ -16,6 +16,7 @@
 #include <mutex>
 #include <array>
 #include <unordered_set>
+#include <unordered_map>
 #include "kernel_compat.h"
 
 extern "C" void KernelDispatch();
@@ -34,6 +35,27 @@ std::wstring g_eepromPath;
 std::mutex g_eepromMutex;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
+std::mutex g_kernelObjectMutex;
+std::unordered_map<void*, HANDLE> g_kernelObjects;
+HANDLE FindKernelObject(void* object) {
+    std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
+    auto it = g_kernelObjects.find(object);
+    return it == g_kernelObjects.end() ? nullptr : it->second;
+}
+void StoreKernelObject(void* object, HANDLE handle) {
+    if (!object || !handle) return;
+    std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
+    auto it = g_kernelObjects.find(object);
+    if (it != g_kernelObjects.end()) CloseHandle(it->second);
+    g_kernelObjects[object] = handle;
+}
+DWORD KernelTimeout(const LARGE_INTEGER* timeout) {
+    if (!timeout) return INFINITE;
+    const LONGLONG ticks = timeout->QuadPart;
+    if (ticks >= 0) return 0;
+    const ULONGLONG ms = (ULONGLONG(-(ticks + 1)) + 1) / 10000ull;
+    return DWORD(ms > MAXDWORD ? MAXDWORD : ms);
+}
 void TrackStringAllocation(void* p) {
     if (!p) return;
     std::lock_guard<std::mutex> lock(g_stringAllocationMutex);
@@ -484,6 +506,71 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG
     if (type & MEM_RELEASE) { *base = nullptr; if (size) *size = 0; }
     return 0;
 }
+
+extern "C" void __stdcall K_KeInitializeEvent(void* event, ULONG type, BOOL initialState) {
+    if (!event) return;
+    HANDLE h = CreateEventW(nullptr, type == 0, initialState, nullptr);
+    if (h) StoreKernelObject(event, h);
+}
+extern "C" LONG __stdcall K_KeSetEvent(void* event, LONG, BOOL) {
+    HANDLE h = FindKernelObject(event);
+    if (!h) return LONG(0xC0000008u);
+    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
+    return SetEvent(h) ? previous : LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_KeResetEvent(void* event) {
+    HANDLE h = FindKernelObject(event);
+    if (!h) return LONG(0xC0000008u);
+    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
+    return ResetEvent(h) ? previous : LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_KePulseEvent(void* event, LONG, BOOL) {
+    HANDLE h = FindKernelObject(event);
+    if (!h) return LONG(0xC0000008u);
+    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
+    if (!PulseEvent(h)) return LONG(0xC0000008u);
+    return previous;
+}
+extern "C" LONG __stdcall K_KeWaitForSingleObject(void* object, ULONG, ULONG, BOOL, const LARGE_INTEGER* timeout) {
+    HANDLE h = FindKernelObject(object);
+    if (!h) return LONG(0xC0000008u);
+    const DWORD result = WaitForSingleObject(h, KernelTimeout(timeout));
+    return result == WAIT_OBJECT_0 ? 0 : result == WAIT_TIMEOUT ? LONG(0x102) : LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_KeWaitForMultipleObjects(ULONG count, void** objects, ULONG waitType, ULONG, ULONG,
+                                                       BOOL, const LARGE_INTEGER* timeout, void*) {
+    if (!objects || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
+    HANDLE handles[MAXIMUM_WAIT_OBJECTS]{};
+    for (ULONG i = 0; i < count; ++i) {
+        handles[i] = FindKernelObject(objects[i]);
+        if (!handles[i]) return LONG(0xC0000008u);
+    }
+    const DWORD result = WaitForMultipleObjects(count, handles, waitType == 0, KernelTimeout(timeout));
+    if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count) return LONG(result - WAIT_OBJECT_0);
+    if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + count) return LONG(0x80);
+    return result == WAIT_TIMEOUT ? LONG(0x102) : LONG(0xC0000008u);
+}
+extern "C" void __stdcall K_KeInitializeSemaphore(void* semaphore, LONG count, LONG limit) {
+    if (!semaphore || limit <= 0 || count < 0 || count > limit) return;
+    HANDLE h = CreateSemaphoreW(nullptr, count, limit, nullptr);
+    if (h) StoreKernelObject(semaphore, h);
+}
+extern "C" LONG __stdcall K_KeReleaseSemaphore(void* semaphore, LONG, LONG adjustment, BOOL) {
+    HANDLE h = FindKernelObject(semaphore);
+    if (!h || adjustment <= 0) return LONG(0xC000000Du);
+    LONG previous = 0;
+    return ReleaseSemaphore(h, adjustment, &previous) ? previous : LONG(0xC0000008u);
+}
+extern "C" void __stdcall K_KeInitializeMutant(void* mutant, BOOL initialOwner) {
+    if (!mutant) return;
+    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
+    if (h) StoreKernelObject(mutant, h);
+}
+extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, BOOL, BOOL) {
+    HANDLE h = FindKernelObject(mutant);
+    if (!h) return LONG(0xC0000008u);
+    return ReleaseMutex(h) ? 0 : LONG(0xC0000008u);
+}
 extern "C" uint64_t __stdcall K_KeQueryInterruptTime() {
     return GetTickCount64() * 10000ull;
 }
@@ -572,7 +659,27 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
-        cmp eax, 99
+        cmp eax, 108
+        je ke_init_event
+        cmp eax, 110
+        je ke_init_mutant
+        cmp eax, 112
+        je ke_init_semaphore
+        cmp eax, 123
+        je ke_pulse_event
+        cmp eax, 132
+        je ke_release_semaphore
+        cmp eax, 131
+        je ke_release_mutant
+        cmp eax, 138
+        je ke_reset_event
+        cmp eax, 145
+        je ke_set_event
+        cmp eax, 158
+        je ke_wait_multiple
+        cmp eax, 159
+        je ke_wait_single
+                cmp eax, 99
         je delay_thread
         cmp eax, 103
         je current_irql
@@ -758,6 +865,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
     iinc: jmp K_InterlockedIncrement
     iex: jmp K_InterlockedExchange
     iexa: jmp K_InterlockedExchangeAdd
+    ke_init_event: jmp K_KeInitializeEvent
+    ke_init_mutant: jmp K_KeInitializeMutant
+    ke_init_semaphore: jmp K_KeInitializeSemaphore
+    ke_pulse_event: jmp K_KePulseEvent
+    ke_release_semaphore: jmp K_KeReleaseSemaphore
+    ke_release_mutant: jmp K_KeReleaseMutant
+    ke_reset_event: jmp K_KeResetEvent
+    ke_set_event: jmp K_KeSetEvent
+    ke_wait_multiple: jmp K_KeWaitForMultipleObjects
+    ke_wait_single: jmp K_KeWaitForSingleObject
     delay_thread: jmp K_KeDelayExecutionThread
     current_irql: jmp K_KeGetCurrentIrql
     current_thread: jmp K_KeGetCurrentThread
