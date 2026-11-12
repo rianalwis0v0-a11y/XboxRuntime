@@ -25,6 +25,19 @@ void StopGuest(){
  if(g.process){if(WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT)TerminateProcess(g.process,0);WaitForSingleObject(g.process,1000);}
  if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};
 }
+std::wstring EepromPath() {
+ wchar_t windowsPath[32768]{};
+ UINT n=GetWindowsDirectoryW(windowsPath,UINT(_countof(windowsPath)));
+ if(!n||n>=_countof(windowsPath))return {};
+ std::wstring win(windowsPath,n);size_t slash=win.find_last_of(L"\\\\");
+ if(slash==std::wstring::npos)return {};
+ std::wstring root=win.substr(0,slash);
+ std::wstring runtime=root+L"\\\\XboxRuntime";
+ std::wstring system=runtime+L"\\\\system";
+ if(!CreateDirectoryW(runtime.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)return {};
+ if(!CreateDirectoryW(system.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)return {};
+ return system+L"\\\\eeprom.bin";
+}
 std::wstring ModuleDirectory(){
  HMODULE self=nullptr;
  if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -40,7 +53,8 @@ int StartGuest(const wchar_t*xbe){
  wchar_t pipeName[128]{};swprintf_s(pipeName,L"\\\\.\\pipe\\XboxRuntimeGuest-%lu-%llu",GetCurrentProcessId(),GetTickCount64());
  HANDLE pipe=CreateNamedPipeW(pipeName,PIPE_ACCESS_DUPLEX,PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_NOWAIT,1,256,256,0,nullptr);
  if(pipe==INVALID_HANDLE_VALUE)return XBE_E_PIPE;
- std::wstring cmd=Quote(exe)+L" --pipe "+Quote(pipeName)+L" --xbe "+Quote(xbe);
+ std::wstring eeprom=EepromPath();if(eeprom.empty()){CloseHandle(pipe);return XBE_E_START;}
+ std::wstring cmd=Quote(exe)+L" --pipe "+Quote(pipeName)+L" --xbe "+Quote(xbe)+L" --eeprom "+Quote(eeprom);
  STARTUPINFOW si{};si.cb=sizeof(si);PROCESS_INFORMATION pi{};
  if(!CreateProcessW(exe.c_str(),cmd.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,dir.c_str(),&si,&pi)){CloseHandle(pipe);return XBE_E_START;}
  g.process=pi.hProcess;g.thread=pi.hThread;g.pipe=pipe;
