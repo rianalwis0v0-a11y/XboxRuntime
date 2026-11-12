@@ -620,6 +620,30 @@ int main() {
         return 1;
     }
 
+    /* Linear stage dimensions and row pitch come from IMAGE_RECT/CONTROL1. */
+    const uint32_t linearStageFormat = 1u | (2u << 4) | (0x12u << 8) | (1u << 16);
+    TextureInfo linearStageInfo{};
+    uint8_t linearStagePixels[16]{};
+    uint32_t linearStageOffsets[1]{}, linearStageSizes[1]{};
+    if (submit(0u, 0x1B00u, 0x500u) != 0 ||
+        submit(0u, 0x1B04u, linearStageFormat) != 0 ||
+        submit(0u, 0x1B0Cu, (1u << 30)) != 0 ||
+        submit(0u, 0x1B10u, (12u << 16)) != 0 ||
+        submit(0u, 0x1B1Cu, (2u << 16) | 2u) != 0 ||
+        getTextureInfo(channel, 0u, 0u, &linearStageInfo) != 0 ||
+        !linearStageInfo.linear || linearStageInfo.width != 2u ||
+        linearStageInfo.height != 2u || linearStageInfo.level_count != 1u ||
+        linearStageInfo.source_pitch != 12u ||
+        decodeTextureStage(channel, 0u, 0u, linearStagePixels,
+            sizeof(linearStagePixels), linearStageOffsets,
+            linearStageSizes) != 0 ||
+        linearStageOffsets[0] != 0u || linearStageSizes[0] != 16u ||
+        linearStagePixels[0] != 1u || linearStagePixels[8] != 7u) {
+        std::cerr << "FAIL: live linear NV097 texture stage decode\\n";
+        stop();
+        return 1;
+    }
+
     /* Writing CACHE1_DMA_PUT in DMA mode must kick the pusher and advance GET. */
     if (writeVram(0x1000u, dmaJumpStream, sizeof(dmaJumpStream)) != 0 ||
         write(0x3204u, channel | 0x100u, 4u) != 0 ||
