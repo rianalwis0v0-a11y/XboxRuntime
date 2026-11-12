@@ -34,6 +34,7 @@ using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
+using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 struct SurfaceInfo {
     uint32_t width, height, color_format, zeta_format;
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
@@ -88,6 +89,7 @@ int main() {
     auto lookupRamht = reinterpret_cast<LookupRamhtFn>(Need(module, "XboxNV2A_LookupRAMHT"));
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
+    auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -234,6 +236,28 @@ int main() {
         submitDmaPush(channel, dmaHandle, 0u, 4u, &dmaGet, &dmaMethods) != 0 ||
         dmaGet != 4u || dmaMethods != 1u) {
         std::cerr << "FAIL: NV2A DMA pusher JUMP execution\\n";
+        stop();
+        return 1;
+    }
+
+    /* PFIFO can resolve CACHE1_DMA_INSTANCE directly, without a RAMHT handle. */
+    if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
+        submitDmaInstance(channel, 0x100u, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 20u || dmaMethods != 3u) {
+        std::cerr << "FAIL: NV2A DMA pusher instance-address path\\n";
+        stop();
+        return 1;
+    }
+
+    /* Writing CACHE1_DMA_PUT in DMA mode must kick the pusher and advance GET. */
+    if (writeVram(0x1000u, dmaJumpStream, sizeof(dmaJumpStream)) != 0 ||
+        write(0x3204u, channel | 0x100u, 4u) != 0 ||
+        write(0x3220u, 1u, 4u) != 0 ||
+        write(0x322Cu, 0x10u, 4u) != 0 ||
+        write(0x3244u, 0u, 4u) != 0 ||
+        write(0x3240u, 4u, 4u) != 0 ||
+        read(0x3244u, 4u) != 4u) {
+        std::cerr << "FAIL: PFIFO CACHE1 DMA_PUT did not execute/update GET\\n";
         stop();
         return 1;
     }
