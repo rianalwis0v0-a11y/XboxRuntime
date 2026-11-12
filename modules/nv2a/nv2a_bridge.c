@@ -171,7 +171,8 @@ static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* subm
         uint32_t subchannel = (header >> 13) & 7u;
         uint32_t method = header & 0x1FFCu;
         if (!count || method >= 0x2000u * 4u ||
-            count > words - cursor || count > 1048576u - total)
+            count > words - cursor || count > 1048576u - total ||
+            (command_type == 0u && count - 1u > (0x1FFCu - method) / 4u))
             return 3;
 
         for (uint32_t i = 0; i < count; ++i) {
