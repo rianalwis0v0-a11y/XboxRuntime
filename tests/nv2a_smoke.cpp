@@ -525,7 +525,12 @@ int main() {
 
 
     /* Bind DMA_A as a texture source and decode its mip chain from VRAM. */
-    const uint32_t textureContextStream[] = { (1u << 18) | 0x0184u, dmaHandle };
+    const uint32_t textureContextStream[] = {
+        (1u << 18) | 0x0180u, dmaHandle,
+        (1u << 18) | 0x0184u, dmaHandle,
+        (1u << 18) | 0x0188u, dmaHandle,
+        (1u << 18) | 0x018Cu, dmaHandle
+    };
     const uint8_t textureMipSource[20] = {
         0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
         0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF,
@@ -545,9 +550,6 @@ int main() {
             textureMipOffsets, textureMipSizes) != 0 ||
         textureMipOffsets[1] != 16u || textureMipSizes[1] != 4u ||
         textureMipOutput[0] != 1u || textureMipOutput[16] != 13u ||
-        submit(0u, 0x0180u, dmaHandle) != 0 ||
-        submit(0u, 0x0188u, dmaHandle) != 0 ||
-        submit(0u, 0x018Cu, dmaHandle) != 0 ||
         decodeMipChainFromDma(channel, 0u, 0x0180u, 0x400u, 0x0600u,
             2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
             textureMipOffsets, textureMipSizes) != 0 ||
