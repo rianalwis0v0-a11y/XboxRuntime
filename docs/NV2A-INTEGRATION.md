@@ -40,6 +40,19 @@ manager, plus:
 - `XboxNV2A_Flush()`
 - `XboxNV2A_GetStats(output)`
 
+- `XboxNV2A_ReadVRAM(offset, destination, length)` / `WriteVRAM(offset, source, length)`
+- `XboxNV2A_ReadRAMIN(offset, destination, length)` / `WriteRAMIN(offset, source, length)`
+- `XboxNV2A_SubmitMethods(subchannel, pairs, pair_count)` for validated
+  interleaved method/parameter dword pairs. The full batch is validated before
+  any method is dispatched.
+
+
+GPU-memory functions use byte offsets into the 64 MiB VRAM and 1 MiB
+RAMIN allocations. They reject out-of-range spans and never accept guest or
+host pointers as offsets. The batch API accepts at most 1,048,576 method pairs
+per call and rejects invalid subchannels, unaligned methods, and out-of-range
+method offsets before dispatch.
+
 Register offsets are relative to the NV2A MMIO aperture at guest address
 `0xFD000000`; pass the register-block-relative offset, not the full guest VA.
 
