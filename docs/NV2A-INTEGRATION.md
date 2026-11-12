@@ -78,3 +78,19 @@ of integration). Keep the submodule and its own `LICENSE`, `NOTICE`, and
 `LICENSES/` files intact. In particular, the upstream NOTICE identifies
 xemu-derived NV2A files under LGPL-2.1-or-later. Do not strip those notices
 when distributing modified builds.
+
+
+## NV4-style pushbuffer submission
+
+`XboxNV2A_SubmitPushBuffer(vram_offset, byte_length, methods_submitted)` parses a bounded
+little-endian command stream already stored in the module's 64 MiB VRAM aperture.
+It currently supports the NV4-style incrementing-method (`000`) and
+non-incrementing-method (`010`) packet forms. Packet counts, subchannels, method
+alignment/ranges, stream bounds, and the total method budget are checked. The
+complete stream is validated before any PGRAPH method is dispatched, preventing
+a malformed trailing packet from leaving a partially submitted buffer.
+
+Jump, call, return, long non-incrementing, and other command forms are rejected
+rather than guessed. This export is a bounded packet decoder, not yet a complete
+PFIFO DMA pusher: it does not resolve DMA objects, follow ring-buffer GET/PUT,
+execute subroutine flow, or implement PFIFO interrupts.
