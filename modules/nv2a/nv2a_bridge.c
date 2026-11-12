@@ -2097,8 +2097,10 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
             get = target;
         } else if ((word & 3u) == 2u) {
             const uint32_t target = word & 0xFFFFFFFCu;
-            if (subroutine_active || target >= mapped_length)
+            if (subroutine_active)
                 return 5;
+            if (target >= mapped_length)
+                return 4; /* Invalid target is a protection fault, not CALL_ACTIVE. */
             subroutine_return = get;
             subroutine_active = 1;
             get = target;
