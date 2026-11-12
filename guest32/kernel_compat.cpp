@@ -32,6 +32,7 @@ static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
+ULONG g_fileCacheSize = 1024 * 1024;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
 std::mutex g_eepromMutex;
@@ -893,6 +894,58 @@ extern "C" ULONG __stdcall K_DbgPrompt(const char* prompt, char* response, ULONG
 }
 extern "C" void __stdcall K_DbgLoadImageSymbols(const char*, void*, ULONG) {}
 extern "C" void __stdcall K_DbgUnLoadImageSymbols(const char*, void*, ULONG) {}
+
+extern "C" ULONG __stdcall K_FscGetCacheSize() { return g_fileCacheSize; }
+extern "C" void __stdcall K_FscSetCacheSize(ULONG bytes) { g_fileCacheSize = bytes; }
+extern "C" void __stdcall K_FscInvalidateIdleBlocks() { /* Host filesystem owns its cache. */ }
+extern "C" ULONG __stdcall K_HalReadSMCTrayState() { return 0; }
+extern "C" void __stdcall K_ExRaiseStatus(LONG status) { RaiseException(DWORD(status), 0, 0, nullptr); }
+extern "C" void __stdcall K_RtlRaiseStatus(LONG status) { RaiseException(DWORD(status), 0, 0, nullptr); }
+extern "C" void __stdcall K_ExRaiseException(EXCEPTION_RECORD* record) {
+    if (record) RaiseException(record->ExceptionCode, record->ExceptionFlags, record->NumberParameters,
+                               reinterpret_cast<const ULONG_PTR*>(record->ExceptionInformation));
+}
+extern "C" void __stdcall K_RtlRaiseException(EXCEPTION_RECORD* record) {
+    K_ExRaiseException(record);
+}
+extern "C" LONG __stdcall K_NtPulseEvent(HANDLE event, LONG* previous) {
+    if (previous) *previous = WaitForSingleObject(event, 0) == WAIT_OBJECT_0 ? 1 : 0;
+    return PulseEvent(event) ? 0 : LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_NtCancelTimer(HANDLE timer, BOOL* previous) {
+    if (previous) *previous = FALSE;
+    if (!timer) return LONG(0xC0000008u);
+    const BOOL ok = CancelWaitableTimer(timer);
+    if (previous) *previous = ok;
+    return ok ? 0 : LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK, void*, ULONG type) {
+    if (!out) return LONG(0xC000000Du);
+    HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
+    if (!h) return LONG(0xC0000017u);
+    *out = h; return 0;
+}
+extern "C" LONG __stdcall K_NtSuspendThread(HANDLE thread, ULONG* previous) {
+    DWORD n = SuspendThread(thread);
+    if (n == DWORD(-1)) return LONG(0xC0000008u);
+    if (previous) *previous = n;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtResumeThread(HANDLE thread, ULONG* previous) {
+    DWORD n = ResumeThread(thread);
+    if (n == DWORD(-1)) return LONG(0xC0000008u);
+    if (previous) *previous = n;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE sourceProcess, HANDLE source, HANDLE targetProcess,
+                                                HANDLE* target, ACCESS_MASK access, ULONG attributes, ULONG options) {
+    if (!target) return LONG(0xC000000Du);
+    HANDLE process = targetProcess ? targetProcess : GetCurrentProcess();
+    if (!DuplicateHandle(sourceProcess ? sourceProcess : GetCurrentProcess(), source, process, target,
+                         access, (attributes & 2u) != 0, options))
+        return LONG(0xC0000008u);
+    return 0;
+}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -973,6 +1026,42 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je hal_return_firmware
         cmp eax, 264
         je rtl_assert
+                cmp eax, 9
+        je hal_read_tray
+        cmp eax, 19
+        je ex_raise_status
+        cmp eax, 24
+        je fsc_get_cache
+        cmp eax, 25
+        je fsc_invalidate
+        cmp eax, 26
+        je ex_raise_exception
+        cmp eax, 27
+        je ex_raise_status
+        cmp eax, 35
+        je fsc_get_cache
+        cmp eax, 36
+        je fsc_invalidate
+        cmp eax, 37
+        je fsc_set_cache
+        cmp eax, 185
+        je nt_cancel_timer
+        cmp eax, 192
+        je nt_create_mutant
+        cmp eax, 194
+        je nt_create_timer
+        cmp eax, 197
+        je nt_duplicate_object
+        cmp eax, 205
+        je nt_pulse_event
+        cmp eax, 224
+        je nt_resume_thread
+        cmp eax, 231
+        je nt_suspend_thread
+        cmp eax, 302
+        je rtl_raise_exception
+        cmp eax, 303
+        je rtl_raise_status
                 cmp eax, 7
         je dbg_load_symbols
         cmp eax, 10
@@ -1269,6 +1358,20 @@ extern "C" __declspec(naked) void KernelDispatch(){
     interlocked_push_slist: jmp K_InterlockedPushEntrySList
     hal_return_firmware: jmp K_HalReturnToFirmware
     rtl_assert: jmp K_RtlAssert
+    hal_read_tray: jmp K_HalReadSMCTrayState
+    ex_raise_status: jmp K_ExRaiseStatus
+    fsc_get_cache: jmp K_FscGetCacheSize
+    fsc_invalidate: jmp K_FscInvalidateIdleBlocks
+    fsc_set_cache: jmp K_FscSetCacheSize
+    ex_raise_exception: jmp K_ExRaiseException
+    nt_cancel_timer: jmp K_NtCancelTimer
+    nt_create_timer: jmp K_NtCreateTimer
+    nt_duplicate_object: jmp K_NtDuplicateObject
+    nt_pulse_event: jmp K_NtPulseEvent
+    nt_resume_thread: jmp K_NtResumeThread
+    nt_suspend_thread: jmp K_NtSuspendThread
+    rtl_raise_exception: jmp K_RtlRaiseException
+    rtl_raise_status: jmp K_RtlRaiseStatus
     dbg_load_symbols: jmp K_DbgLoadImageSymbols
     dbg_prompt: jmp K_DbgPrompt
     dbg_unload_symbols: jmp K_DbgUnLoadImageSymbols
