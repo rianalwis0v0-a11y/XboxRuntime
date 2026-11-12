@@ -331,7 +331,7 @@ int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,
 
     const uint64_t color_row = (uint64_t)width * color_bpp;
     const uint64_t color_span = (uint64_t)color_pitch * (height - 1u) + color_row;
-    if (!color_pitch || color_pitch < color_row ||
+    if (color_offset > XBOX_VRAM_SIZE || !color_pitch || color_pitch < color_row ||
         color_span > (uint64_t)XBOX_VRAM_SIZE - color_offset)
         return 6;
 
