@@ -95,3 +95,23 @@ Jump, call, return, long non-incrementing, and other command forms are rejected
 rather than guessed. This export is a bounded packet decoder, not yet a complete
 PFIFO DMA pusher: it does not resolve DMA objects, follow ring-buffer GET/PUT,
 execute subroutine flow, or implement PFIFO interrupts.
+
+
+## RAMHT lookup and DMA objects
+
+`XboxNV2A_LookupRAMHT(channel, handle, context_out)` implements the NV2A RAMHT
+hash/probe lookup using the PFIFO RAMHT base, table-size and search-count fields.
+It validates the configured table against the 1 MiB RAMIN aperture, checks the
+valid bit and channel ID, and returns the matching context word.
+
+`XboxNV2A_ResolveDMAHandle(channel, handle, output)` resolves the RAMHT context
+to a 16-byte-aligned RAMIN DMA object and decodes its class, target, engine,
+base and limit. The current mapper accepts the common DMA classes (read, write,
+read/write) and linear local-VRAM target only. It rejects unsupported targets,
+invalid classes, truncated RAMIN objects and VRAM ranges that exceed the 64 MiB
+aperture. The reported mapped span follows the upstream NV2A DMA helper's
+`limit` contract.
+
+This is the object lookup/mapping layer only. It does not yet implement PCI/AGP
+DMA, page tables, DMA pusher GET/PUT processing, jump/call/return flow, or
+channel switching and puller scheduling.
