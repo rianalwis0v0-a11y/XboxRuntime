@@ -210,6 +210,12 @@ int __cdecl ModuleStart(void)
         }
     }
 
+    /* PFIFO channel bindings belong to the bridge lifecycle. */
+    memset(g_bound_engine, 0, sizeof(g_bound_engine));
+    memset(g_ref_counter, 0, sizeof(g_ref_counter));
+    g_pgraph_fallback_methods = 0;
+    g_pgraph_custom_methods = 0;
+
     // Initializes the PGRAPH method translator. Its D3D8 device is supplied
     // by xbox_d3d8 when the game/runtime creates the Xbox D3D device.
     pgraph_d3d11_init();
