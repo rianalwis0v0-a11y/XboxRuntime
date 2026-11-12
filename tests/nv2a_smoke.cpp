@@ -51,6 +51,7 @@ using DecodeTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,
     const void*,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeSwizzledTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeMipChainFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
+using DecodeMipChainDmaFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
 
@@ -108,6 +109,7 @@ int main() {
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
+    auto decodeMipChainFromDma = reinterpret_cast<DecodeMipChainDmaFn>(Need(module, "XboxNV2A_DecodeTextureMipChainFromDMA"));
     auto decodeSwizzledTexture = reinterpret_cast<DecodeSwizzledTextureFn>(Need(module, "XboxNV2A_DecodeSwizzledTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -466,6 +468,39 @@ int main() {
         submitDmaInstance(channel, 0x100u, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
         dmaGet != 20u || dmaMethods != 3u) {
         std::cerr << "FAIL: NV2A DMA pusher instance-address path\\n";
+        stop();
+        return 1;
+    }
+
+
+    /* Bind DMA_A as a texture source and decode its mip chain from VRAM. */
+    const uint32_t textureContextStream[] = { (1u << 18) | 0x0184u, dmaHandle };
+    const uint8_t textureMipSource[20] = {
+        0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+        0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF,
+        0x0F,0x0E,0x0D,0xFF
+    };
+    uint8_t textureMipOutput[20]{};
+    uint32_t textureMipOffsets[2]{}, textureMipSizes[2]{};
+    DmaInfo textureDmaContext{};
+    if (writeVram(0x1000u, textureContextStream, sizeof(textureContextStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, sizeof(textureContextStream),
+                      &dmaGet, &dmaMethods) != 0 ||
+        getDmaContext(channel, 0u, 0x0184u, &textureDmaContext) != 0 ||
+        textureDmaContext.handle != dmaHandle ||
+        writeVram(0x1400u, textureMipSource, sizeof(textureMipSource)) != 0 ||
+        decodeMipChainFromDma(channel, 0u, 0x0184u, 0x400u, 0x0600u,
+            2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
+            textureMipOffsets, textureMipSizes) != 0 ||
+        textureMipOffsets[1] != 16u || textureMipSizes[1] != 4u ||
+        textureMipOutput[0] != 1u || textureMipOutput[16] != 13u ||
+        decodeMipChainFromDma(channel, 0u, 0x0188u, 0x400u, 0x0600u,
+            2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
+            textureMipOffsets, textureMipSizes) == 0 ||
+        decodeMipChainFromDma(channel, 0u, 0x0184u, 0x0FF0u, 0x0600u,
+            2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
+            textureMipOffsets, textureMipSizes) == 0) {
+        std::cerr << "FAIL: DMA-bound texture mip-chain fetch/decode\\n";
         stop();
         return 1;
     }

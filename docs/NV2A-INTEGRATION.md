@@ -307,3 +307,15 @@ bounds checks, validates the complete chain before decoding, and returns
 per-level output offsets and byte sizes. The test covers a 2x2-to-1x1 swizzled
 chain and truncated-source / undersized-destination rejection. This still
 does not upload mip levels into a D3D8 texture object or bind them to stages.
+
+
+## DMA-bound texture mip-chain decoding
+
+`XboxNV2A_DecodeTextureMipChainFromDMA` now joins the context-DMA binding
+path to the texture decoder. It reads the selected DMA_A or DMA_B object bound
+to the current channel/subchannel, validates the texture offset against that
+object's mapped local-VRAM span, and decodes the mip chain without accepting
+guest pointers. The smoke test binds a real RAMHT-resolved DMA_A object through
+the NV4 pusher, decodes a 2x2-to-1x1 swizzled chain from its VRAM span, and
+checks unbound-context and out-of-range failures. D3D8 texture allocation,
+upload, cache invalidation, and stage binding remain outstanding.
