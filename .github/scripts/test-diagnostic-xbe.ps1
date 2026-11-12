@@ -250,6 +250,7 @@ EmitPush 255
 EmitCallImport 292
 EmitCheckEqual 0
 EmitLoadEax $formattedVa
+EmitByte 0x25; Emit32 0xFF
 EmitCheckEqual 0x66
 EmitPush $numberValueVa
 EmitPush 10
@@ -274,6 +275,9 @@ EmitPush 4
 EmitPush $formattedVa
 EmitCallImport 310
 EmitCheckEqual 0
+EmitLoadEax $formattedVa
+EmitByte 0x25; Emit32 0xFF
+EmitCheckEqual 0x41
 
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
