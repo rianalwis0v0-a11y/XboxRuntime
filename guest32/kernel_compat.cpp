@@ -178,6 +178,15 @@ extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){LARGE_INTEGER f{};
 extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){if(out){FILETIME ft{};GetSystemTimeAsFileTime(&ft);out->LowPart=ft.dwLowDateTime;out->HighPart=LONG(ft.dwHighDateTime);}}
 extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
 extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
+
+extern "C" void* __stdcall K_MmAllocateSystemMemory(ULONG bytes, ULONG protect) {
+    if (!bytes) return nullptr;
+    DWORD page = protect ? protect : PAGE_READWRITE;
+    return VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT, page);
+}
+extern "C" BOOL __stdcall K_MmFreeSystemMemory(void* base, ULONG) {
+    return base ? VirtualFree(base, 0, MEM_RELEASE) : FALSE;
+}
 extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,MEM_RELEASE);}
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
@@ -853,6 +862,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je interlocked_pop_slist
         cmp eax, 58
         je interlocked_push_slist
+                cmp eax, 167
+        je mm_alloc_system
+        cmp eax, 172
+        je mm_free_system
                 cmp eax, 124
         je ke_query_base_priority
                 cmp eax, 12
@@ -1141,6 +1154,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     qpc: jmp K_KeQueryPerformanceCounter
     qpf: jmp K_KeQueryPerformanceFrequency
     qst: jmp K_KeQuerySystemTime
+    mm_alloc_system: jmp K_MmAllocateSystemMemory
+    mm_free_system: jmp K_MmFreeSystemMemory
     mm_alloc: jmp K_MmAllocateContiguousMemory
     mm_alloc_ex: jmp K_MmAllocateContiguousMemoryEx
     mm_free: jmp K_MmFreeContiguousMemory
