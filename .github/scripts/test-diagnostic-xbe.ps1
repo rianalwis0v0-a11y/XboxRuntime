@@ -627,7 +627,7 @@ $pipe = [IO.Pipes.NamedPipeServerStream]::new(
 $pipePath = "\\.\pipe\$name"
 $proc = Start-Process -FilePath $guest -ArgumentList @(
     "--pipe",$pipePath,"--xbe",$xbe,"--eeprom",$eeprom,
-    "--report-va","0x10002200"
+    "--report-va","0x10002600"
 ) -PassThru -NoNewWindow
 try {
     $task = $pipe.WaitForConnectionAsync()
