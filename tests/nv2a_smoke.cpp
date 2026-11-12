@@ -146,7 +146,7 @@ int main() {
     uint32_t dmaGet = 0, dmaMethods = 0;
     if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
-        dmaGet != 20u || dmaMethods != 3u || read(0x400180u, 4u) != 0x100u) {
+        dmaGet != 20u || dmaMethods != 3u || read(0x400060u, 4u) != 0x100u) {
         std::cerr << "FAIL: NV2A DMA pusher CALL/RETURN execution\\n";
         stop();
         return 1;
