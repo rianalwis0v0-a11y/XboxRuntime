@@ -17,6 +17,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up Python for kernel export audit
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Audit all Xbox kernel export ordinals
+        run: python tools/audit_kernel_exports.py --check
+
       - name: Configure x64 host
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
