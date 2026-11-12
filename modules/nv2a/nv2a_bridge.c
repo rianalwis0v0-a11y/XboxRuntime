@@ -2134,6 +2134,27 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     return 0;
 }
 
+/* Report DMA pusher faults through the real PFIFO state/interrupt
+ * registers. The standalone pusher validates a complete stream before it
+ * dispatches anything, but software must still see hardware-style errors. */
+static void raise_dma_pusher_error(int result)
+{
+    uint32_t error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_PROTECTION;
+    if (result == 5)
+        error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_CALL;
+    else if (result == 6)
+        error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_RETURN;
+    else if (result == 8)
+        error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_RESERVED_CMD;
+    else if (result >= 10 && result < 20)
+        error = NV_PFIFO_CACHE1_DMA_STATE_ERROR_NON_CACHE;
+
+    nv2a_mmio_write(g_gpu, NV_PFIFO_CACHE1_DMA_STATE,
+                    error << 29, 4u);
+    g_gpu->pfifo.pending_interrupts |= NV_PFIFO_INTR_0_DMA_PUSHER;
+    nv2a_update_irq(g_gpu);
+}
+
 static int submit_dma_pushbuffer_info(uint32_t channel,
                                        const XboxNV2A_DMA_INFO* dma,
                                        uint32_t get, uint32_t put,
@@ -2149,13 +2170,19 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     uint32_t checked_get = get, checked_methods = 0;
     int result = walk_dma_pushbuffer(channel, dma->base_address,
         dma->mapped_length, get, put, &checked_get, &checked_methods, 0);
-    if (result != 0) return 16 + result;
+    if (result != 0) {
+        raise_dma_pusher_error(result);
+        return 16 + result;
+    }
 
     /* Only dispatch after the complete packet/control-flow stream validates. */
     uint32_t executed_get = get, executed_methods = 0;
     result = walk_dma_pushbuffer(channel, dma->base_address,
         dma->mapped_length, get, put, &executed_get, &executed_methods, 1);
-    if (result != 0) return 32 + result;
+    if (result != 0) {
+        raise_dma_pusher_error(result);
+        return 32 + result;
+    }
     if (new_get) *new_get = executed_get;
     if (methods_submitted) *methods_submitted = executed_methods;
     return 0;
