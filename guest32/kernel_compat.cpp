@@ -147,6 +147,16 @@ extern "C" void __stdcall K_ExFreePool(void*p){if(p)HeapFree(GetProcessHeap(),0,
 extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
 extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
 extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
+
+extern "C" PSLIST_ENTRY __fastcall K_InterlockedFlushSList(PSLIST_HEADER list) {
+    return list ? InterlockedFlushSList(list) : nullptr;
+}
+extern "C" PSLIST_ENTRY __fastcall K_InterlockedPopEntrySList(PSLIST_HEADER list) {
+    return list ? InterlockedPopEntrySList(list) : nullptr;
+}
+extern "C" PSLIST_ENTRY __fastcall K_InterlockedPushEntrySList(PSLIST_HEADER list, PSLIST_ENTRY entry) {
+    return list && entry ? InterlockedPushEntrySList(list, entry) : nullptr;
+}
 extern "C" LONG __fastcall K_InterlockedCompareExchange(volatile LONG*p,LONG e,LONG c){return InterlockedCompareExchange(p,e,c);}
 extern "C" LONG __fastcall K_InterlockedDecrement(volatile LONG*p){return InterlockedDecrement(p);}
 extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return InterlockedIncrement(p);}
@@ -837,7 +847,13 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ps_create_thread
         cmp eax, 258
         je ps_terminate_thread
-        cmp eax, 124
+        cmp eax, 56
+        je interlocked_flush_slist
+        cmp eax, 57
+        je interlocked_pop_slist
+        cmp eax, 58
+        je interlocked_push_slist
+                cmp eax, 124
         je ke_query_base_priority
                 cmp eax, 12
         je ex_acquire_rw_exclusive
@@ -1092,6 +1108,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ps_create_thread: jmp K_PsCreateSystemThread
     ps_terminate_thread: jmp K_PsTerminateSystemThread
     ke_query_base_priority: jmp K_KeQueryBasePriorityThread
+    interlocked_flush_slist: jmp K_InterlockedFlushSList
+    interlocked_pop_slist: jmp K_InterlockedPopEntrySList
+    interlocked_push_slist: jmp K_InterlockedPushEntrySList
     ex_acquire_rw_exclusive: jmp K_ExAcquireReadWriteLockExclusive
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
