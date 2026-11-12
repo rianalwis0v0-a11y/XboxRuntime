@@ -31,13 +31,18 @@ Put32 0x188 1
 $b[0x1000] = 0xC3
 [IO.File]::WriteAllBytes($xbe, $b)
 
+# The guest requires a 256-byte EEPROM file before it starts the XBE.
+# Use an isolated disposable image; never use a real console EEPROM in CI.
+$eeprom = Join-Path $temp "eeprom.bin"
+[IO.File]::WriteAllBytes($eeprom, [byte[]]::new(256))
+
 $name = "XboxRuntimeSmoke-$PID"
 $pipe = [IO.Pipes.NamedPipeServerStream]::new(
     $name, [IO.Pipes.PipeDirection]::InOut, 1,
     [IO.Pipes.PipeTransmissionMode]::Byte, [IO.Pipes.PipeOptions]::None
 )
 $pipePath = "\\.\pipe\$name"
-$proc = Start-Process -FilePath $guest -ArgumentList @("--pipe", $pipePath, "--xbe", $xbe) -PassThru -NoNewWindow
+$proc = Start-Process -FilePath $guest -ArgumentList @("--pipe", $pipePath, "--xbe", $xbe, "--eeprom", $eeprom) -PassThru -NoNewWindow
 try {
     $task = $pipe.WaitForConnectionAsync()
     if (!$task.Wait(15000)) { throw "x86 guest did not connect to its host pipe." }
