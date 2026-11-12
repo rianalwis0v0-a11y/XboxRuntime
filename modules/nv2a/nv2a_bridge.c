@@ -902,6 +902,32 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
         destination, destination_capacity, level_offsets, level_sizes);
 }
 
+
+int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
+    uint32_t subchannel, uint32_t context_method, uint32_t texture_offset,
+    uint32_t format, uint32_t width, uint32_t height, uint32_t source_pitch,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* destination_pitch)
+{
+    if (!g_started || !g_gpu || channel > 31u || subchannel > 7u ||
+        context_method < 0x0180u || context_method > 0x018Cu ||
+        ((context_method - 0x0180u) & 3u) != 0u)
+        return 1;
+    const uint32_t slot = (context_method - 0x0180u) / 4u;
+    const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
+    if (!dma->mapped_length || dma->dma_target != 0u)
+        return 2;
+    if (texture_offset > dma->mapped_length)
+        return 3;
+    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
+    if (source_address > XBOX_VRAM_SIZE)
+        return 4;
+    const uint32_t available = dma->mapped_length - texture_offset;
+    return XboxNV2A_DecodeTextureRGBA8(format, width, height, source_pitch,
+        g_vram + (size_t)source_address, available, destination,
+        destination_capacity, destination_pitch);
+}
+
 int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,
     uint32_t surface_pitch, uint32_t color_offset, uint32_t zeta_offset,
     uint32_t clip_horizontal, uint32_t clip_vertical,

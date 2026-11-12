@@ -53,6 +53,7 @@ using DecodeTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,
 using DecodeSwizzledTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeMipChainFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeMipChainDmaFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
+using DecodeTextureDmaFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
 
@@ -112,6 +113,7 @@ int main() {
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
     auto decodeMipChainFromDma = reinterpret_cast<DecodeMipChainDmaFn>(Need(module, "XboxNV2A_DecodeTextureMipChainFromDMA"));
+    auto decodeTextureFromDma = reinterpret_cast<DecodeTextureDmaFn>(Need(module, "XboxNV2A_DecodeTextureFromDMA"));
     auto decodeSwizzledTexture = reinterpret_cast<DecodeSwizzledTextureFn>(Need(module, "XboxNV2A_DecodeSwizzledTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -557,6 +559,28 @@ int main() {
             2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
             textureMipOffsets, textureMipSizes) == 0) {
         std::cerr << "FAIL: DMA-bound texture mip-chain fetch/decode\\n";
+        stop();
+        return 1;
+    }
+
+
+    /* Linear-image DMA decode honors the guest's padded row pitch. */
+    const uint8_t pitchedTexture[20] = {
+        0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF, 0xDE,0xAD,0xBE,0xEF,
+        0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
+    };
+    uint8_t pitchedOutput[16]{};
+    uint32_t pitchedOutputStride = 0;
+    if (writeVram(0x1500u, pitchedTexture, sizeof(pitchedTexture)) != 0 ||
+        decodeTextureFromDma(channel, 0u, 0x0184u, 0x500u, 0x1200u,
+            2u, 2u, 12u, pitchedOutput, sizeof(pitchedOutput),
+            &pitchedOutputStride) != 0 ||
+        pitchedOutputStride != 8u ||
+        pitchedOutput[0] != 1u || pitchedOutput[1] != 2u ||
+        pitchedOutput[2] != 3u || pitchedOutput[3] != 0xFFu ||
+        pitchedOutput[8] != 7u || pitchedOutput[9] != 8u ||
+        pitchedOutput[10] != 9u || pitchedOutput[11] != 0xFFu) {
+        std::cerr << "FAIL: pitched linear texture DMA decode\\n";
         stop();
         return 1;
     }

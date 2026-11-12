@@ -364,3 +364,12 @@ slots (DMA_A through DMA_D), rather than only DMA_A and DMA_B. It still
 requires a resolved local-VRAM object and validates the selected object's
 mapped range before reading. Smoke tests exercise slots A, B, C and D and
 reject an out-of-range context selector.
+
+
+## Pitched linear texture DMA decode
+
+A single-level DMA texture decoder now accepts an explicit source row pitch
+and reads from a validated local-VRAM DMA object. It reuses the checked RGBA8
+format decoder, so row padding is skipped correctly and source/destination
+bounds remain enforced. The smoke test uses a padded 2x2 ARGB image and checks
+that the second row begins at the requested 12-byte source stride.

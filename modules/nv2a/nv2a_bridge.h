@@ -99,6 +99,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(
     uint32_t height, uint32_t level_count, void* destination,
     uint32_t destination_capacity, uint32_t* level_offsets,
     uint32_t* level_sizes);
+/* Decode one pitched texture level from any bound local-VRAM DMA context. */
+__declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureFromDMA(
+    uint32_t channel, uint32_t subchannel, uint32_t context_method,
+    uint32_t texture_offset, uint32_t format, uint32_t width,
+    uint32_t height, uint32_t source_pitch, void* destination,
+    uint32_t destination_capacity, uint32_t* destination_pitch);
 
 /* Map NV097 texture-filter fields to D3D8 minification, magnification and mip filters. */
 __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
