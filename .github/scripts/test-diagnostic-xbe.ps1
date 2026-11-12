@@ -655,7 +655,11 @@ try {
     $read = 0
     while ($read -lt $report.Length) {
         $n = $pipe.Read($report,$read,$report.Length-$read)
-        if ($n -le 0) { throw "Guest ended without returning diagnostic results." }
+        if ($n -le 0) {
+            $proc.Refresh()
+            $exit = if ($proc.HasExited) { '0x{0:X8}' -f ($proc.ExitCode -band 0xFFFFFFFFL) } else { 'still running' }
+            throw "Guest ended without returning diagnostic results; process exit=$exit."
+        }
         $read += $n
     }
     $reportMagic = [BitConverter]::ToUInt32($report,0)
