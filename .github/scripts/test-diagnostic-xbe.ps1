@@ -232,7 +232,9 @@ EmitCheckEqual 1234
 
 # UnicodeString descriptor at report+0x150; its buffer is report+0x180.
 $unicodeDescriptorVa = [uint32]($reportVa + 0x150)
-$unicodeBufferVa = [uint32]($reportVa + 0x180)
+$unicodeBufferVa = [uint32]($reportVa + 0x1A0)
+$letterVa = [uint32]($reportVa + 0x180)
+$formattedVa = [uint32]($reportVa + 0x190)
 EmitMovMemoryImmediate $unicodeDescriptorVa 0
 EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 4)) 16
 EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 8)) $unicodeBufferVa
@@ -241,6 +243,14 @@ EmitPush 10
 EmitPush 42
 EmitCallImport 293
 EmitCheckEqual 0
+EmitPush $formattedVa
+EmitPush 8
+EmitPush 16
+EmitPush 255
+EmitCallImport 292
+EmitCheckEqual 0
+EmitLoadEax $formattedVa
+EmitCheckEqual 0x66
 EmitPush $numberValueVa
 EmitPush 10
 EmitPush $unicodeDescriptorVa
@@ -251,17 +261,17 @@ EmitCheckEqual 42
 
 # Convert one ASCII byte to UTF-16 and back.
 EmitPush 1
-EmitPush $numberTextVa
+EmitPush $letterVa
+EmitPush $numberValueVa
 EmitPush 2
-EmitPush ([uint32]($unicodeBufferVa + 0x20))
-EmitPush 4
+EmitPush $unicodeBufferVa
 EmitCallImport 299
 EmitCheckEqual 0
 EmitPush 2
-EmitPush ([uint32]($unicodeBufferVa + 0x24))
-EmitPush 1
-EmitPush ([uint32]($unicodeBufferVa + 0x20))
+EmitPush $unicodeBufferVa
+EmitPush $numberValueVa
 EmitPush 4
+EmitPush $formattedVa
 EmitCallImport 310
 EmitCheckEqual 0
 
