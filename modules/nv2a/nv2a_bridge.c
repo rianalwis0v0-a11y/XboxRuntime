@@ -23,6 +23,8 @@ static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
+static uint32_t g_primitive_mode[32][8];
+static int draw_nv2a_arrays(uint32_t channel, uint32_t subchannel, uint32_t parameter);
 typedef struct NV2A_SURFACE_REGS {
     uint32_t format, pitch, color_offset, zeta_offset;
     uint32_t clip_horizontal, clip_vertical;
@@ -168,9 +170,18 @@ static int apply_nv2a_render_state(uint32_t method, uint32_t parameter)
         device, (D3DRENDERSTATETYPE)state, value)) ? 1 : 0;
 }
 
-static void submit_pgraph_method(uint32_t subchannel, uint32_t method,
+static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
+    if (method == NV097_SET_BEGIN_END)
+        g_primitive_mode[channel][subchannel] = parameter;
+
+    if (method == NV097_DRAW_ARRAYS) {
+        (void)draw_nv2a_arrays(channel, subchannel, parameter);
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
+    }
+
     switch (method) {
     case NV097_SET_SURFACE_FORMAT: g_surface_regs.format = parameter; g_surface_regs.dirty = 1; break;
     case NV097_SET_SURFACE_PITCH: g_surface_regs.pitch = parameter; g_surface_regs.dirty = 1; break;
@@ -246,6 +257,7 @@ int __cdecl ModuleStart(void)
     memset(g_bound_engine, 0, sizeof(g_bound_engine));
     memset(g_ref_counter, 0, sizeof(g_ref_counter));
     memset(g_dma_contexts, 0, sizeof(g_dma_contexts));
+    memset(g_primitive_mode, 0, sizeof(g_primitive_mode));
     memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
     g_pgraph_custom_methods = 0;
@@ -341,7 +353,7 @@ int __cdecl XboxNV2A_SubmitMethod(
     if (subchannel > 7 || method >= 0x2000u * 4u || (method & 3u))
         return 2;
 
-    submit_pgraph_method(subchannel, method, parameter);
+    submit_pgraph_method(0u, subchannel, method, parameter);
     return 0;
 }
 
@@ -879,7 +891,7 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
         const uint32_t instance = (context & 0xFFFFu) << 4;
         if (engine != 1u) return 2; /* This bridge currently drives PGRAPH only. */
         if (!memory_range_valid(instance, 4u, XBOX_RAMIN_SIZE)) return 3;
-        submit_pgraph_method(subchannel, 0u, instance);
+        submit_pgraph_method(channel, subchannel, 0u, instance);
         g_bound_engine[channel][subchannel] = engine;
         return 0;
     }
@@ -903,7 +915,7 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
             return 6;
     }
 
-    submit_pgraph_method(subchannel, method, parameter);
+    submit_pgraph_method(channel, subchannel, method, parameter);
     return 0;
 }
 
@@ -1116,7 +1128,7 @@ static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* subm
             uint32_t parameter;
             memcpy(&parameter, g_vram + offset + (cursor + i) * 4u, sizeof(parameter));
             if (dispatch)
-                submit_pgraph_method(subchannel,
+                submit_pgraph_method(0u, subchannel,
                     command_type == 2u ? method : method + i * 4u,
                     parameter);
         }
@@ -1148,7 +1160,7 @@ int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, u
         if (method >= 0x2000u * 4u || (method & 3u)) return 3;
     }
     for (uint32_t i = 0; i < pair_count; ++i)
-        submit_pgraph_method(subchannel, pairs[i * 2u], pairs[i * 2u + 1u]);
+        submit_pgraph_method(0u, subchannel, pairs[i * 2u], pairs[i * 2u + 1u]);
     return 0;
 }
 
