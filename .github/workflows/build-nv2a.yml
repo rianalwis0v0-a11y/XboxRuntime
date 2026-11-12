@@ -35,7 +35,7 @@ jobs:
         run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke input input_smoke xdvdfs xdvdfs_smoke
 
       - name: Test FATX, NV2A, controller input, and XDVDFS host subsystems
-        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|nv2a_vsh_smoke|input_smoke|xdvdfs_smoke"
+        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|nv2a_vsh_smoke|nv2a_hlsl_smoke|input_smoke|xdvdfs_smoke"
 
       - name: Configure native x86 guest process
         run: cmake -S guest32 -B build-guest32 -A Win32

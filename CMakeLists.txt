@@ -60,6 +60,15 @@ target_include_directories(nv2a_vsh_smoke PRIVATE
 target_compile_definitions(nv2a_vsh_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME nv2a_vsh_smoke COMMAND nv2a_vsh_smoke)
 
+# Verify NV2A microcode is translated into compilable HLSL (no GPU required).
+add_executable(nv2a_hlsl_smoke tests/nv2a_hlsl_smoke.c)
+target_include_directories(nv2a_hlsl_smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/src/d3d"
+)
+target_link_libraries(nv2a_hlsl_smoke PRIVATE xbox_d3d8)
+target_compile_definitions(nv2a_hlsl_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME nv2a_hlsl_smoke COMMAND nv2a_hlsl_smoke)
+
 # Exercise XDVDFS descriptor parsing, directory-tree lookup, and bounded file reads.
 add_executable(xdvdfs_smoke
     tests/xdvdfs_smoke.cpp
