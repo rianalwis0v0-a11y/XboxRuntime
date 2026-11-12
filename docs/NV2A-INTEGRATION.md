@@ -196,3 +196,17 @@ shutdown also read the active color target back into VRAM. Depth surfaces are
 created and bound but are not yet synchronized back to guest depth memory.
 This path currently supports linear single-sample surfaces only; swizzled,
 multisampled, tiled, and unsupported color/depth formats remain rejected.
+
+
+## PFIFO CACHE1 DMA_PUT integration
+
+The bridge now also accepts a PFIFO DMA instance directly, using the RAMIN
+instance address from `CACHE1_DMA_INSTANCE`. When `CACHE1_PUSH1` selects DMA
+mode, `CACHE1_DMA_PUSH_ACCESS` is enabled, and the guest writes
+`CACHE1_DMA_PUT`, the bridge resolves the DMA object, executes the bounded
+GET-to-PUT command stream, and advances `CACHE1_DMA_GET` only after successful
+validation and dispatch. PIO mode and disabled DMA push access are left alone.
+
+This connects the software pusher to the guest-visible PFIFO MMIO path. Ring
+wraparound, DMA fetch caching, push-buffer interrupts/error recovery, channel
+scheduling, and full PFIFO timing/flow semantics are still not implemented.
