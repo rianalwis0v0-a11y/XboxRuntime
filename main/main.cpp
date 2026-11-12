@@ -232,12 +232,15 @@ namespace XboxRuntime
 
     static bool SelectTitle(std::wstring& titlePath)
     {
-        // Automatically boot dashboard.xbe when present. Otherwise let the
-        // user choose a retail or homebrew XBE from any accessible drive.
-        if (FindDashboard(titlePath))
-            return true;
-
+        // Preselect dashboard.xbe when found, but always let the user choose
+        // any retail or homebrew XBE from any accessible drive.
+        std::wstring dashboard;
         std::vector<wchar_t> path(32768, L'\0');
+        if (FindDashboard(dashboard) && dashboard.size() < path.size())
+        {
+            std::copy(dashboard.begin(), dashboard.end(), path.begin());
+            path[dashboard.size()] = L'\0';
+        }
         OPENFILENAMEW dialog{};
         dialog.lStructSize = sizeof(dialog);
         dialog.lpstrFilter =
