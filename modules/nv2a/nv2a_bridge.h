@@ -147,6 +147,11 @@ __declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
     uint32_t channel, uint32_t subchannel, uint32_t first_vertex,
     uint32_t vertex_count, XboxNV2A_VERTEX* destination,
     uint32_t destination_capacity, uint32_t* stride_out, uint32_t* fvf_out);
+__declspec(dllexport) int __cdecl XboxNV2A_BuildIndexedVertexStream(
+    uint32_t channel, uint32_t subchannel, const uint32_t* indices,
+    uint32_t index_count, XboxNV2A_VERTEX* destination,
+    uint32_t destination_capacity, uint32_t* stride_out,
+    uint32_t* fvf_out);
 
 /* Fetch packed vertex elements from the bound NV097 VERTEX_A/B DMA context. */
 __declspec(dllexport) int __cdecl XboxNV2A_ReadVertexArray(

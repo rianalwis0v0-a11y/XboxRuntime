@@ -27,6 +27,41 @@ static uint32_t g_pgraph_custom_methods;
 static uint32_t g_pgraph_custom_draws;
 static uint32_t g_pgraph_custom_vertices;
 static uint32_t g_primitive_mode[32][8];
+
+int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
+    uint32_t subchannel, const uint32_t* indices, uint32_t index_count,
+    XboxNV2A_VERTEX* destination, uint32_t destination_capacity,
+    uint32_t* stride_out, uint32_t* fvf_out)
+{
+    if (stride_out) *stride_out = 0;
+    if (fvf_out) *fvf_out = 0;
+    if (!indices || !destination || !index_count || index_count > 255u ||
+        destination_capacity < index_count * (uint32_t)sizeof(XboxNV2A_VERTEX))
+        return 1;
+
+    uint32_t common_stride = 0, common_fvf = 0;
+    for (uint32_t i = 0; i < index_count; ++i) {
+        XboxNV2A_VERTEX vertex;
+        uint32_t stride = 0, fvf = 0;
+        const int result = XboxNV2A_BuildVertexStream(
+            channel, subchannel, indices[i], 1u, &vertex,
+            (uint32_t)sizeof(vertex), &stride, &fvf);
+        if (result != 0) return 2 + result;
+        if (stride != sizeof(XboxNV2A_VERTEX) ||
+            (i && (stride != common_stride || fvf != common_fvf)))
+            return 3;
+        if (!i) {
+            common_stride = stride;
+            common_fvf = fvf;
+        }
+        destination[i] = vertex;
+    }
+
+    if (stride_out) *stride_out = common_stride;
+    if (fvf_out) *fvf_out = common_fvf;
+    return 0;
+}
+
 static int draw_nv2a_arrays(uint32_t channel, uint32_t subchannel, uint32_t parameter);
 typedef struct NV2A_SURFACE_REGS {
     uint32_t format, pitch, color_offset, zeta_offset;

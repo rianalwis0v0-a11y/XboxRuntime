@@ -339,3 +339,14 @@ can be decoded as a single level; swizzled formats continue through the
 Morton decoder, while DXT formats use the block decoder. Host tests cover
 linear ARGB and luminance input. Padded linear-image pitch and multi-level
 linear images are not yet supported by the mip-chain entry point.
+
+
+## Indexed vertex expansion
+
+`XboxNV2A_BuildIndexedVertexStream` now expands a bounded list of 32-bit
+vertex indices by fetching each referenced element through the existing
+VERTEX_A/VERTEX_B DMA array path. It checks index count, output capacity, and
+that every fetched vertex has a consistent host stride/FVF. Tests cover
+reordered and repeated indices plus null-input and undersized-output rejection.
+This is the index-to-vertex expansion primitive; NV097 ARRAY_ELEMENT16/32
+packet accumulation and the indexed draw submission path are still pending.

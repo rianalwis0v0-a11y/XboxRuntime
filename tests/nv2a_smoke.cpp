@@ -40,6 +40,7 @@ using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
 struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1; };
+using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
 struct SurfaceInfo {
@@ -105,6 +106,7 @@ int main() {
     auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
     auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
     auto buildVertexStream = reinterpret_cast<BuildVertexStreamFn>(Need(module, "XboxNV2A_BuildVertexStream"));
+    auto buildIndexedVertexStream = reinterpret_cast<BuildIndexedVertexStreamFn>(Need(module, "XboxNV2A_BuildIndexedVertexStream"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
@@ -403,6 +405,24 @@ int main() {
         readVertexArray(channel, 0u, 0u, 0u, 2u, fetchedVertices,
                         12u, &vertexStride, &vertexElementBytes) == 0) {
         std::cerr << "FAIL: NV097 VERTEX_A float3 DMA fetch\\n";
+        stop();
+        return 1;
+    }
+
+
+    const uint32_t vertexIndices[3] = {1u, 0u, 1u};
+    HostVertex indexedVertices[3]{};
+    uint32_t indexedStride = 0, indexedFvf = 0;
+    if (buildIndexedVertexStream(channel, 0u, vertexIndices, 3u,
+            indexedVertices, sizeof(indexedVertices), &indexedStride, &indexedFvf) != 0 ||
+        indexedStride != sizeof(HostVertex) || indexedFvf != hostFvf ||
+        indexedVertices[0].x != 4.0f || indexedVertices[1].x != 1.0f ||
+        indexedVertices[2].x != 4.0f ||
+        buildIndexedVertexStream(channel, 0u, nullptr, 3u,
+            indexedVertices, sizeof(indexedVertices), &indexedStride, &indexedFvf) == 0 ||
+        buildIndexedVertexStream(channel, 0u, vertexIndices, 3u,
+            indexedVertices, sizeof(HostVertex), &indexedStride, &indexedFvf) == 0) {
+        std::cerr << "FAIL: indexed vertex fetch/expansion\\n";
         stop();
         return 1;
     }
