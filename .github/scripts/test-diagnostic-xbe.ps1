@@ -314,6 +314,12 @@ EmitCheckEqual 0
 EmitLoadEax $caseOutputBufferVa
 EmitByte 0x25; Emit32 0xFFFF
 EmitCheckEqual 0x61
+
+# Temporary isolation stop: validate through Unicode case conversion only.
+EmitIncrement $skippedVa
+EmitIncrement $skippedVa
+EmitIncrement $skippedVa
+EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 EmitPush 1
 EmitPush $letterVa
 EmitPush $numberValueVa
