@@ -294,6 +294,80 @@ static int memory_range_valid(uint32_t offset, uint32_t length, uint32_t capacit
     return offset <= capacity && length <= capacity - offset;
 }
 
+int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,
+    uint32_t surface_pitch, uint32_t color_offset, uint32_t zeta_offset,
+    uint32_t clip_horizontal, uint32_t clip_vertical,
+    XboxNV2A_SURFACE_INFO* output)
+{
+    if (!output) return 1;
+    memset(output, 0, sizeof(*output));
+
+    const uint32_t type = (surface_format >> 8) & 0xFu;
+    const uint32_t aa = (surface_format >> 12) & 0xFu;
+    const uint32_t color = surface_format & 0xFu;
+    const uint32_t zeta = (surface_format >> 4) & 0xFu;
+    const uint32_t width = (clip_horizontal >> 16) & 0xFFFFu;
+    const uint32_t height = (clip_vertical >> 16) & 0xFFFFu;
+    const uint32_t color_pitch = surface_pitch & 0xFFFFu;
+    const uint32_t zeta_pitch = surface_pitch >> 16;
+
+    /* The first backend only supports linear/pitch surfaces without MSAA. */
+    if (type != 1u) return 2;
+    if (aa != 0u) return 3;
+    if (!width || !height || width > 16384u || height > 16384u)
+        return 4;
+
+    uint32_t d3d_color = 0, color_bpp = 0;
+    switch (color) {
+    case 0x01u: d3d_color = D3DFMT_X1R5G5B5; color_bpp = 2u; break;
+    case 0x02u: d3d_color = D3DFMT_A1R5G5B5; color_bpp = 2u; break;
+    case 0x03u: d3d_color = D3DFMT_R5G6B5; color_bpp = 2u; break;
+    case 0x04u: case 0x05u:
+        d3d_color = D3DFMT_X8R8G8B8; color_bpp = 4u; break;
+    case 0x06u: case 0x07u: case 0x08u:
+        d3d_color = D3DFMT_A8R8G8B8; color_bpp = 4u; break;
+    default: return 5;
+    }
+
+    const uint64_t color_row = (uint64_t)width * color_bpp;
+    const uint64_t color_span = (uint64_t)color_pitch * (height - 1u) + color_row;
+    if (!color_pitch || color_pitch < color_row ||
+        color_span > (uint64_t)XBOX_VRAM_SIZE - color_offset)
+        return 6;
+
+    uint32_t d3d_zeta = 0, zeta_bpp = 0;
+    if (zeta == 0u) {
+        if (zeta_pitch != 0u || zeta_offset != 0u) return 7;
+    } else if (zeta == 1u) {
+        d3d_zeta = D3DFMT_D16; zeta_bpp = 2u;
+    } else if (zeta == 2u) {
+        d3d_zeta = D3DFMT_D24S8; zeta_bpp = 4u;
+    } else {
+        return 7;
+    }
+
+    if (zeta_bpp) {
+        const uint64_t zeta_row = (uint64_t)width * zeta_bpp;
+        const uint64_t zeta_span = (uint64_t)zeta_pitch * (height - 1u) + zeta_row;
+        if (!zeta_pitch || zeta_pitch < zeta_row ||
+            zeta_offset > XBOX_VRAM_SIZE ||
+            zeta_span > (uint64_t)XBOX_VRAM_SIZE - zeta_offset)
+            return 8;
+    }
+
+    output->width = width;
+    output->height = height;
+    output->color_format = d3d_color;
+    output->zeta_format = d3d_zeta;
+    output->color_bytes_per_pixel = color_bpp;
+    output->zeta_bytes_per_pixel = zeta_bpp;
+    output->color_pitch = color_pitch;
+    output->zeta_pitch = zeta_pitch;
+    output->color_offset = color_offset;
+    output->zeta_offset = zeta_offset;
+    return 0;
+}
+
 int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t length)
 {
     if (!g_started || !destination || !memory_range_valid(offset, length, XBOX_VRAM_SIZE)) return 1;
