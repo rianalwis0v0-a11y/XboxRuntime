@@ -290,6 +290,31 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+static int validate_puller_method(uint32_t channel, uint32_t subchannel,
+                                      uint32_t method, uint32_t parameter,
+                                      uint32_t bound_engines[8])
+{
+    if (method == 0x0000u) {
+        uint32_t context = 0;
+        if (ramht_lookup(channel, parameter, &context) != 0) return 1;
+        const uint32_t engine = (context & 0x00030000u) >> 16;
+        const uint32_t instance = (context & 0xFFFFu) << 4;
+        if (engine != 1u || !memory_range_valid(instance, 4u, XBOX_RAMIN_SIZE))
+            return 2;
+        bound_engines[subchannel] = engine;
+        return 0;
+    }
+    if (method == 0x0008u || method == 0x0050u) return 0;
+    if (method < 0x0100u || bound_engines[subchannel] != 1u) return 3;
+    if (method >= 0x0180u && method < 0x0200u) {
+        uint32_t context = 0;
+        if (ramht_lookup(channel, parameter, &context) != 0) return 4;
+        const uint32_t instance = (context & 0xFFFFu) << 4;
+        if (!memory_range_valid(instance, 4u, XBOX_RAMIN_SIZE)) return 5;
+    }
+    return 0;
+}
+
 static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
                                uint32_t mapped_length, uint32_t initial_get,
                                uint32_t put, uint32_t* final_get,
@@ -299,6 +324,8 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     uint32_t methods = 0;
     uint32_t steps = 0;
     uint32_t method = 0, subchannel = 0, remaining = 0;
+    uint32_t validation_engines[8];
+    memcpy(validation_engines, g_bound_engine[channel], sizeof(validation_engines));
     int non_incrementing = 0;
     int subroutine_active = 0;
     uint32_t subroutine_return = 0;
@@ -318,6 +345,11 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
             if (dispatch) {
                 const int result = dispatch_puller_method(channel, subchannel,
                                                           method, word);
+                if (result != 0) return 10 + result;
+            } else {
+                const int result = validate_puller_method(channel, subchannel,
+                                                          method, word,
+                                                          validation_engines);
                 if (result != 0) return 10 + result;
             }
             if (!non_incrementing) method += 4u;
