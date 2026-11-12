@@ -422,16 +422,6 @@ extern "C" uint32_t __stdcall K_RtlNtStatusToDosError(LONG status){
 extern "C" void __stdcall K_RtlInitAnsiString(GuestAnsiString*d,const char*s){if(!d)return;size_t n=s?strlen(s):0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?1:0));d->Buffer=const_cast<char*>(s);}
 extern "C" void __stdcall K_RtlInitUnicodeString(GuestUnicodeString*d,const wchar_t*s){if(!d)return;size_t n=s?wcslen(s)*2:0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?2:0));d->Buffer=const_cast<wchar_t*>(s);}
 
-extern "C" LONG __stdcall K_RtlEnterCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
-    K_KeEnterCriticalRegion();
-    const LONG status = K_RtlEnterCriticalSection(c);
-    if (status < 0) K_KeLeaveCriticalRegion();
-    return status;
-}
-extern "C" void __stdcall K_RtlLeaveCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
-    K_RtlLeaveCriticalSection(c);
-    K_KeLeaveCriticalRegion();
-}
 extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){if(!c)return LONG(0xC000000Du);EnterCriticalSection(c);return 0;}
 extern "C" void __stdcall K_RtlLeaveCriticalSection(RTL_CRITICAL_SECTION*c){if(c)LeaveCriticalSection(c);}
 extern "C" void __stdcall K_RtlInitializeCriticalSection(RTL_CRITICAL_SECTION*c){if(c)InitializeCriticalSection(c);}
@@ -623,6 +613,17 @@ extern "C" void __stdcall K_ExReleaseReadWriteLock(void* lock) {
 }
 extern "C" void __stdcall K_KeEnterCriticalRegion() { ++g_criticalRegionDepth; }
 extern "C" void __stdcall K_KeLeaveCriticalRegion() { if (g_criticalRegionDepth) --g_criticalRegionDepth; }
+extern "C" LONG __stdcall K_RtlEnterCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
+    K_KeEnterCriticalRegion();
+    const LONG status = K_RtlEnterCriticalSection(c);
+    if (status < 0) K_KeLeaveCriticalRegion();
+    return status;
+}
+extern "C" void __stdcall K_RtlLeaveCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
+    K_RtlLeaveCriticalSection(c);
+    K_KeLeaveCriticalRegion();
+}
+
 extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR level) {
     const UCHAR previous = UCHAR(g_guestIrql);
     if (level > g_guestIrql) g_guestIrql = level;
