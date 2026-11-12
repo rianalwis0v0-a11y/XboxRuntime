@@ -178,3 +178,21 @@ color formats plus Z16/Z24S8 to the D3D8 compatibility formats, checks row
 pitches, and proves the final color/depth byte spans stay inside the 64 MiB
 VRAM aperture. The first implementation intentionally rejects swizzled and
 multisampled render surfaces instead of treating them as linear memory.
+
+
+## Render-target binding and VRAM synchronization
+
+When a game writes NV097 surface format, pitch, color/depth offsets, and clip
+dimensions, the bridge records those registers. Before a clear or draw-begin
+method, it decodes the descriptor, creates a lockable D3D8 compatibility render
+target (and optional depth surface), uploads the guest color-buffer rows from
+VRAM, and binds the target. The compatibility layer's D3D11 implementation
+therefore receives the actual guest render target instead of always drawing
+into the host default target.
+
+On target changes, the previous color target is read back to its guest VRAM
+span before the replacement target is uploaded. `XboxNV2A_Flush` and module
+shutdown also read the active color target back into VRAM. Depth surfaces are
+created and bound but are not yet synchronized back to guest depth memory.
+This path currently supports linear single-sample surfaces only; swizzled,
+multisampled, tiled, and unsupported color/depth formats remain rejected.
