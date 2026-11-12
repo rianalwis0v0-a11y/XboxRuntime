@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -527,6 +528,7 @@ int __cdecl ModuleStart(void)
     memset(g_element_indices, 0, sizeof(g_element_indices));
     memset(g_element_count, 0, sizeof(g_element_count));
     memset(g_element_overflow, 0, sizeof(g_element_overflow));
+    g_transform_execution_mode = 0;
     mark_all_textures_dirty();
     memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
@@ -2048,6 +2050,7 @@ static uint32_t nv2a_pack_color(const float color[4])
 static void nv2a_vertex_shader_inputs(const XboxNV2A_VERTEX *v, float in[16][4])
 {
     memset(in, 0, sizeof(float) * 16u * 4u);
+    for (unsigned i = 0; i < 16u; ++i) in[i][3] = 1.0f;
     in[0][0] = v->x; in[0][1] = v->y; in[0][2] = v->z; in[0][3] = 1.0f;
     in[2][0] = v->nx; in[2][1] = v->ny; in[2][2] = v->nz;
     in[3][0] = ((v->diffuse >> 16) & 0xFFu) / 255.0f;
@@ -2058,10 +2061,11 @@ static void nv2a_vertex_shader_inputs(const XboxNV2A_VERTEX *v, float in[16][4])
     in[4][1] = ((v->specular >> 8) & 0xFFu) / 255.0f;
     in[4][2] = (v->specular & 0xFFu) / 255.0f;
     in[4][3] = ((v->specular >> 24) & 0xFFu) / 255.0f;
-    in[9][0] = v->u; in[9][1] = v->v; in[9][3] = 1.0f;
-    in[10][0] = v->u1; in[10][1] = v->v1; in[10][3] = 1.0f;
-    in[11][0] = v->u2; in[11][1] = v->v2; in[11][3] = 1.0f;
-    in[12][0] = v->u3; in[12][1] = v->v3; in[12][3] = 1.0f;
+    /* NV097 vertex arrays map TEX0..TEX3 to v7..v10. */
+    in[7][0] = v->u; in[7][1] = v->v;
+    in[8][0] = v->u1; in[8][1] = v->v1;
+    in[9][0] = v->u2; in[9][1] = v->v2;
+    in[10][0] = v->u3; in[10][1] = v->v3;
 }
 
 static int nv2a_execute_vertex_program(const XboxNV2A_VERTEX *source,
@@ -2073,6 +2077,9 @@ static int nv2a_execute_vertex_program(const XboxNV2A_VERTEX *source,
         nv2a_vertex_shader_inputs(&source[i], input);
         if (!nv2a_vsh_run((const float (*)[4])input, &output))
             return 0;
+        const float *components = (const float *)&output;
+        for (unsigned k = 0; k < sizeof(output) / sizeof(float); ++k)
+            if (!isfinite(components[k])) return 0;
         destination[i].x = output.pos[0];
         destination[i].y = output.pos[1];
         destination[i].z = output.pos[2];
