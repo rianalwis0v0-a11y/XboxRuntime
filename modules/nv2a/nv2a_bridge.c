@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "nv2a_bridge.h"
 #include "nv2a_state.h"
@@ -9,6 +10,9 @@
 #define XBOX_VRAM_SIZE  (64u * 1024u * 1024u)
 #define XBOX_RAMIN_SIZE (1u * 1024u * 1024u)
 #define XBOX_GPU_MEMORY_SIZE (XBOX_VRAM_SIZE + XBOX_RAMIN_SIZE)
+
+static uint8_t* g_vram;
+static uint8_t* g_ramin;
 
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
@@ -19,32 +23,24 @@ int __cdecl ModuleStart(void)
     if (g_started)
         return 0;
 
-    // Keep the Xbox's 64 MiB VRAM + 1 MiB RAMIN model. This is host-backed
-    // memory, not a limit on the PC's physical RAM.
-    g_gpu_memory = (uint8_t*)VirtualAlloc(
-        NULL,
-        XBOX_GPU_MEMORY_SIZE,
-        MEM_RESERVE | MEM_COMMIT,
-        PAGE_READWRITE
-    );
-
-    if (!g_gpu_memory) {
-        OutputDebugStringW(L"[XboxRuntime:NV2A] VRAM/RAMIN allocation failed.\n");
-        return 1;
-    }
-
-    g_gpu = nv2a_init_standalone(
-        g_gpu_memory,
-        XBOX_VRAM_SIZE,
-        g_gpu_memory + XBOX_VRAM_SIZE,
-        XBOX_RAMIN_SIZE
-    );
-
+    // NV2A state is a process-wide singleton without a destroy API.
+    // Reuse its original backing allocation after ModuleStop.
     if (!g_gpu) {
-        VirtualFree(g_gpu_memory, 0, MEM_RELEASE);
-        g_gpu_memory = NULL;
-        OutputDebugStringW(L"[XboxRuntime:NV2A] nv2a_init_standalone failed.\n");
-        return 2;
+        g_gpu_memory = (uint8_t*)VirtualAlloc(NULL, XBOX_GPU_MEMORY_SIZE,
+            MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        if (!g_gpu_memory) {
+            OutputDebugStringW(L"[XboxRuntime:NV2A] VRAM/RAMIN allocation failed.\n");
+            return 1;
+        }
+        g_vram = g_gpu_memory;
+        g_ramin = g_gpu_memory + XBOX_VRAM_SIZE;
+        g_gpu = nv2a_init_standalone(g_vram, XBOX_VRAM_SIZE, g_ramin, XBOX_RAMIN_SIZE);
+        if (!g_gpu) {
+            VirtualFree(g_gpu_memory, 0, MEM_RELEASE);
+            g_gpu_memory = g_vram = g_ramin = NULL;
+            OutputDebugStringW(L"[XboxRuntime:NV2A] nv2a_init_standalone failed.\n");
+            return 2;
+        }
     }
 
     // Initializes the PGRAPH method translator. Its D3D8 device is supplied
@@ -114,6 +110,53 @@ int __cdecl XboxNV2A_SubmitMethod(
         return 2;
 
     pgraph_method(g_gpu, subchannel, method, parameter);
+    return 0;
+}
+
+
+static int memory_range_valid(uint32_t offset, uint32_t length, uint32_t capacity)
+{
+    return offset <= capacity && length <= capacity - offset;
+}
+
+int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t length)
+{
+    if (!g_started || !destination || !memory_range_valid(offset, length, XBOX_VRAM_SIZE)) return 1;
+    if (length) memcpy(destination, g_vram + offset, length);
+    return 0;
+}
+
+int __cdecl XboxNV2A_WriteVRAM(uint32_t offset, const void* source, uint32_t length)
+{
+    if (!g_started || (!source && length) || !memory_range_valid(offset, length, XBOX_VRAM_SIZE)) return 1;
+    if (length) memcpy(g_vram + offset, source, length);
+    return 0;
+}
+
+int __cdecl XboxNV2A_ReadRAMIN(uint32_t offset, void* destination, uint32_t length)
+{
+    if (!g_started || !destination || !memory_range_valid(offset, length, XBOX_RAMIN_SIZE)) return 1;
+    if (length) memcpy(destination, g_ramin + offset, length);
+    return 0;
+}
+
+int __cdecl XboxNV2A_WriteRAMIN(uint32_t offset, const void* source, uint32_t length)
+{
+    if (!g_started || (!source && length) || !memory_range_valid(offset, length, XBOX_RAMIN_SIZE)) return 1;
+    if (length) memcpy(g_ramin + offset, source, length);
+    return 0;
+}
+
+int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, uint32_t pair_count)
+{
+    if (!g_started || !g_gpu || subchannel > 7 || (!pairs && pair_count)) return 1;
+    if (pair_count > 1048576u) return 2;
+    for (uint32_t i = 0; i < pair_count; ++i) {
+        uint32_t method = pairs[i * 2u];
+        if (method >= 0x2000u * 4u || (method & 3u)) return 3;
+    }
+    for (uint32_t i = 0; i < pair_count; ++i)
+        pgraph_method(g_gpu, subchannel, pairs[i * 2u], pairs[i * 2u + 1u]);
     return 0;
 }
 
