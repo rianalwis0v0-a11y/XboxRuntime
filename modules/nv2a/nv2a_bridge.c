@@ -377,7 +377,7 @@ static uint8_t expand6(uint32_t value) { return (uint8_t)((value << 2) | (value 
 static void decode_dxt1_block(const uint8_t* block, uint8_t* dst,
                               uint32_t width, uint32_t height,
                               uint32_t block_x, uint32_t block_y,
-                              uint32_t destination_pitch)
+                              uint32_t destination_pitch, int force_four_color)
 {
     const uint16_t c0 = (uint16_t)(block[0] | (block[1] << 8));
     const uint16_t c1 = (uint16_t)(block[2] | (block[3] << 8));
@@ -388,7 +388,7 @@ static void decode_dxt1_block(const uint8_t* block, uint8_t* dst,
     colors[1][0] = expand5((c1 >> 11) & 31u);
     colors[1][1] = expand6((c1 >> 5) & 63u);
     colors[1][2] = expand5(c1 & 31u); colors[1][3] = 255;
-    if (c0 > c1) {
+    if (c0 > c1 || force_four_color) {
         for (uint32_t k=0;k<3;k++) {
             colors[2][k]=(uint8_t)((2u*colors[0][k]+colors[1][k])/3u);
             colors[3][k]=(uint8_t)((colors[0][k]+2u*colors[1][k])/3u);
@@ -408,6 +408,39 @@ static void decode_dxt1_block(const uint8_t* block, uint8_t* dst,
     }
 }
 
+
+static void decode_dxt_alpha_block(const uint8_t* block, uint8_t* dst,
+    uint32_t width, uint32_t height, uint32_t bx, uint32_t by,
+    uint32_t destination_pitch, int dxt5)
+{
+    uint8_t alpha[8];
+    uint64_t bits=0;
+    if (!dxt5) {
+        for(uint32_t i=0;i<6;i++) bits |= (uint64_t)block[2u+i] << (8u*i);
+        for(uint32_t i=0;i<16;i++) {
+            const uint32_t x=bx*4u+(i&3u), y=by*4u+(i>>2);
+            if(x>=width || y>=height) continue;
+            const uint8_t nibble=(uint8_t)((bits>>(4u*i))&15u);
+            dst[(size_t)y*destination_pitch+x*4u+3u]=(uint8_t)(nibble*17u);
+        }
+        return;
+    }
+    alpha[0]=block[0]; alpha[1]=block[1];
+    if(alpha[0]>alpha[1]) {
+        for(uint32_t i=1;i<=6;i++) alpha[i+1]=(uint8_t)(((7u-i)*alpha[0]+i*alpha[1])/7u);
+    } else {
+        for(uint32_t i=1;i<=4;i++) alpha[i+1]=(uint8_t)(((5u-i)*alpha[0]+i*alpha[1])/5u);
+        alpha[6]=0; alpha[7]=255;
+    }
+    for(uint32_t i=0;i<6;i++) bits |= (uint64_t)block[2u+i] << (8u*i);
+    for(uint32_t i=0;i<16;i++) {
+        const uint32_t x=bx*4u+(i&3u), y=by*4u+(i>>2);
+        if(x>=width || y>=height) continue;
+        const uint32_t index=(uint32_t)((bits>>(3u*i))&7u);
+        dst[(size_t)y*destination_pitch+x*4u+3u]=alpha[index];
+    }
+}
+
 int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     uint32_t height, uint32_t source_pitch, const void* source,
     uint32_t source_length, void* destination, uint32_t destination_capacity,
@@ -424,14 +457,14 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     case 0x02u: case 0x03u: case 0x04u: case 0x05u: bytes_per_pixel=2u; break;
     case 0x06u: case 0x07u: bytes_per_pixel=4u; break;
     case 0x19u: case 0x00u: bytes_per_pixel=1u; break;
-    case 0x0Cu: break; /* DXT1 */
+    case 0x0Cu: case 0x0Eu: case 0x0Fu: break; /* DXT1/3/5 */
     default: return 3;
     }
     uint64_t min_pitch=0, required=0;
-    if(color==0x0Cu) {
+    if(color==0x0Cu || color==0x0Eu || color==0x0Fu) {
         const uint64_t blocks_x=((uint64_t)width+3u)/4u;
         const uint64_t blocks_y=((uint64_t)height+3u)/4u;
-        min_pitch=blocks_x*8u;
+        min_pitch=blocks_x*(color==0x0Cu?8u:16u);
         const uint64_t pitch=source_pitch?source_pitch:min_pitch;
         if(pitch<min_pitch || pitch>0xFFFFFFFFu) return 4;
         required=pitch*blocks_y;
@@ -440,8 +473,19 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
         uint8_t* dst=(uint8_t*)destination;
         for(uint32_t by=0;by<(uint32_t)blocks_y;by++)
             for(uint32_t bx=0;bx<(uint32_t)blocks_x;bx++)
-                decode_dxt1_block(src+(size_t)by*(size_t)pitch+bx*8u,
-                    dst,width,height,bx,by,(uint32_t)out_pitch);
+                {
+                const uint8_t* block=src+(size_t)by*(size_t)pitch+
+                    (size_t)bx*(color==0x0Cu?8u:16u);
+                if(color==0x0Cu) {
+                    decode_dxt1_block(block,dst,width,height,bx,by,
+                        (uint32_t)out_pitch,0);
+                } else {
+                    decode_dxt_alpha_block(block,dst,width,height,bx,by,
+                        (uint32_t)out_pitch,color==0x0Fu);
+                    decode_dxt1_block(block+8u,dst,width,height,bx,by,
+                        (uint32_t)out_pitch,1);
+                }
+            }
     } else {
         min_pitch=(uint64_t)width*bytes_per_pixel;
         const uint64_t pitch=source_pitch?source_pitch:min_pitch;
