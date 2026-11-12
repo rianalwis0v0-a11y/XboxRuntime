@@ -303,6 +303,54 @@ static std::string FormatUnsigned(ULONG value, ULONG base) {
     std::reverse(out.begin(), out.end());
     return out;
 }
+// Original Xbox RTL 64-bit arithmetic exports (ordinals 281-283).
+extern "C" LARGE_INTEGER __stdcall K_RtlExtendedIntegerMultiply(LARGE_INTEGER multiplicand, LONG multiplier) {
+    LARGE_INTEGER result{};
+    const uint64_t product = static_cast<uint64_t>(multiplicand.QuadPart) *
+                             static_cast<uint64_t>(static_cast<int64_t>(multiplier));
+    result.QuadPart = static_cast<LONGLONG>(product);
+    return result;
+}
+extern "C" LARGE_INTEGER __stdcall K_RtlExtendedLargeIntegerDivide(
+    LARGE_INTEGER dividend, ULONG divisor, ULONG* remainder) {
+    LARGE_INTEGER result = dividend;
+    if (!divisor) {
+        K_RtlRaiseStatus(LONG(0xC0000094u));
+        return result;
+    }
+    const uint64_t bits = static_cast<uint64_t>(dividend.QuadPart);
+    result.QuadPart = static_cast<LONGLONG>(bits / divisor);
+    if (remainder) *remainder = static_cast<ULONG>(bits % divisor);
+    return result;
+}
+extern "C" LARGE_INTEGER __stdcall K_RtlExtendedMagicDivide(
+    LARGE_INTEGER dividend, LARGE_INTEGER magicDivisor, CHAR shiftCount) {
+    LARGE_INTEGER result{};
+    const uint8_t shift = static_cast<uint8_t>(shiftCount);
+    if (shift >= 64) {
+        K_RtlRaiseStatus(LONG(0xC000000Du));
+        return result;
+    }
+    const int64_t signedDividend = dividend.QuadPart;
+    const bool positive = signedDividend >= 0;
+    const uint64_t magnitude = positive
+        ? static_cast<uint64_t>(signedDividend)
+        : static_cast<uint64_t>(-(signedDividend + 1)) + 1u;
+    const uint64_t inverse = static_cast<uint64_t>(magicDivisor.QuadPart);
+    const uint64_t dh = magnitude >> 32, dl = magnitude & 0xFFFFFFFFu;
+    const uint64_t ih = inverse >> 32, il = inverse & 0xFFFFFFFFu;
+    const uint64_t ah_bl = dh * il;
+    const uint64_t al_bh = dl * ih;
+    const uint64_t low_halves = dl * il;
+    const uint64_t middle = (ah_bl & 0xFFFFFFFFu) +
+                            (al_bh & 0xFFFFFFFFu) + (low_halves >> 32);
+    uint64_t quotient = (dh * ih + (ah_bl >> 32) + (al_bh >> 32) +
+                         (middle >> 32)) >> shift;
+    if (!positive) quotient = uint64_t(0) - quotient;
+    result.QuadPart = static_cast<LONGLONG>(quotient);
+    return result;
+}
+
 extern "C" LONG __stdcall K_RtlCharToInteger(const char* text, ULONG base, ULONG* value) {
     if (!text || !value) return LONG(0xC000000Du);
     return ParseUnsigned(text, base, value) ? 0 : LONG(0xC000000Du);
@@ -1281,6 +1329,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_bswap32
         cmp eax, 318
         je rtl_bswap16
+        cmp eax, 281
+        je rtl_ext_mul
+        cmp eax, 282
+        je rtl_ext_div
+        cmp eax, 283
+        je rtl_ext_magic
         cmp eax, 320
         je rtl_zero
         cmp eax, 267
@@ -1490,6 +1544,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_move: jmp K_RtlMoveMemory
     rtl_bswap32: jmp K_RtlUlongByteSwap
     rtl_bswap16: jmp K_RtlUshortByteSwap
+    rtl_ext_mul: jmp K_RtlExtendedIntegerMultiply
+    rtl_ext_div: jmp K_RtlExtendedLargeIntegerDivide
+    rtl_ext_magic: jmp K_RtlExtendedMagicDivide
     rtl_zero: jmp K_RtlZeroMemory
 
     rtl_char_to_integer: jmp K_RtlCharToInteger
