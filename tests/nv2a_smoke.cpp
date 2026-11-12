@@ -115,7 +115,15 @@ int main() {
 
 
     uint32_t mappedState = 0, mappedValue = 0;
-    if (!mapRenderState(0x033Cu, 0x0203u, &mappedState, &mappedValue) ||
+    if (!mapRenderState(0x0300u, 1u, &mappedState, &mappedValue) ||
+        mappedState != 15u || mappedValue != 1u ||
+        !mapRenderState(0x0308u, 0u, &mappedState, &mappedValue) ||
+        mappedState != 22u || mappedValue != 1u ||
+        !mapRenderState(0x0308u, 1u, &mappedState, &mappedValue) ||
+        mappedState != 22u || mappedValue != 3u ||
+        !mapRenderState(0x030Cu, 1u, &mappedState, &mappedValue) ||
+        mappedState != 7u || mappedValue != 1u ||
+        !mapRenderState(0x033Cu, 0x0203u, &mappedState, &mappedValue) ||
         mappedState != 25u || mappedValue != 4u ||
         !mapRenderState(0x0350u, 0x800Bu, &mappedState, &mappedValue) ||
         mappedState != 171u || mappedValue != 3u ||

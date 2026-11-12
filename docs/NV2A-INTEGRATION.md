@@ -319,3 +319,12 @@ guest pointers. The smoke test binds a real RAMHT-resolved DMA_A object through
 the NV4 pusher, decodes a 2x2-to-1x1 swizzled chain from its VRAM span, and
 checks unbound-context and out-of-range failures. D3D8 texture allocation,
 upload, cache invalidation, and stage binding remain outstanding.
+
+
+## Additional alpha, depth and cull enables
+
+The NV097 alpha-test enable, depth-test enable and cull-face enable methods now
+have explicit D3D8 render-state mappings and are routed through the bridge's
+state application path. Culling preserves the selected front/back winding when
+enabled and keeps `D3DCULL_NONE` when the face selector changes while culling
+is disabled. Host tests verify the state IDs and enable values.

@@ -92,7 +92,16 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
     uint32_t state = 0, value = parameter;
     if (!state_out || !value_out) return 0;
 
-    switch (method) {    case 0x0304u:
+    switch (method) {
+    case NV097_SET_ALPHA_TEST_ENABLE:
+        state = D3DRS_ALPHATESTENABLE; value = parameter ? 1u : 0u; break;
+    case NV097_SET_CULL_FACE_ENABLE:
+        state = D3DRS_CULLMODE;
+        value = parameter ? D3DCULL_CCW : D3DCULL_NONE;
+        break;
+    case NV097_SET_DEPTH_TEST_ENABLE:
+        state = D3DRS_ZENABLE; value = parameter ? 1u : 0u; break;
+    case 0x0304u:
         state = D3DRS_ALPHABLENDENABLE; value = parameter ? 1u : 0u; break;
     case 0x0344u:
         state = D3DRS_SRCBLEND;
@@ -192,6 +201,18 @@ static int apply_nv2a_render_state(uint32_t method, uint32_t parameter)
     uint32_t state = 0, value = 0;
     if (!XboxNV2A_MapRenderState(method, parameter, &state, &value))
         return 0;
+
+    /* CULL_FACE and CULL_FACE_ENABLE are independent NV097 registers.
+     * Preserve the selected winding when toggling culling, and preserve
+     * disabled culling when the face selector changes. */
+    if (method == NV097_SET_CULL_FACE_ENABLE && parameter) {
+        const uint32_t face = g_gpu->pgraph.regs[NV097_SET_CULL_FACE / 4u];
+        if (face == NV097_SET_CULL_FACE_V_FRONT) value = D3DCULL_CW;
+        else if (face == NV097_SET_CULL_FACE_V_BACK) value = D3DCULL_CCW;
+    } else if (method == NV097_SET_CULL_FACE &&
+               g_gpu->pgraph.regs[NV097_SET_CULL_FACE_ENABLE / 4u] == 0u) {
+        value = D3DCULL_NONE;
+    }
 
     IDirect3DDevice8* device = xbox_GetD3DDevice();
     if (!device || !device->lpVtbl || !device->lpVtbl->SetRenderState)
@@ -331,7 +352,10 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         (void)update_surface_target();
     /* These real NV097 offsets collide with incorrect aliases in the
      * pinned translator. Apply them here and do not feed them to that switch. */
-    if (method == NV097_SET_DEPTH_FUNC ||
+    if (method == NV097_SET_ALPHA_TEST_ENABLE ||
+        method == NV097_SET_DEPTH_TEST_ENABLE ||
+        method == NV097_SET_CULL_FACE_ENABLE ||
+        method == NV097_SET_DEPTH_FUNC ||
         method == NV097_SET_CULL_FACE ||
         method == NV097_SET_SHADE_MODE ||
         method == NV097_SET_STENCIL_FUNC_REF) {
