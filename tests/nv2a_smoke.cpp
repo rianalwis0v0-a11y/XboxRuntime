@@ -38,6 +38,9 @@ using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
+struct HostVertex { float x, y, z; uint32_t diffuse; float u, v; };
+using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
+    HostVertex*, uint32_t, uint32_t*, uint32_t*);
 struct SurfaceInfo {
     uint32_t width, height, color_format, zeta_format;
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
@@ -95,6 +98,7 @@ int main() {
     auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
     auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
     auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
+    auto buildVertexStream = reinterpret_cast<BuildVertexStreamFn>(Need(module, "XboxNV2A_BuildVertexStream"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -240,6 +244,30 @@ int main() {
         readVertexArray(channel, 0u, 0u, 0u, 2u, fetchedVertices,
                         12u, &vertexStride, &vertexElementBytes) == 0) {
         std::cerr << "FAIL: NV097 VERTEX_A float3 DMA fetch\\n";
+        stop();
+        return 1;
+    }
+
+    const uint32_t vertexColors[2] = { 0xFF112233u, 0xFF445566u };
+    const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
+    HostVertex hostVertices[2]{};
+    uint32_t hostVertexStride = 0, hostFvf = 0;
+    if (writeVram(0x1400u, vertexColors, sizeof(vertexColors)) != 0 ||
+        writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
+        submit(0u, 0x172Cu, 0x400u) != 0 ||
+        submit(0u, 0x176Cu, (4u << 8) | (4u << 4)) != 0 ||
+        submit(0u, 0x173Cu, 0x500u) != 0 ||
+        submit(0u, 0x177Cu, (8u << 8) | (2u << 4) | 2u) != 0 ||
+        buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
+                          sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
+        hostVertexStride != 24u || hostFvf != 0x142u ||
+        hostVertices[0].diffuse != vertexColors[0] ||
+        hostVertices[1].diffuse != vertexColors[1] ||
+        hostVertices[0].u != 0.25f || hostVertices[0].v != 0.5f ||
+        hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
+        buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
+                          sizeof(HostVertex), &hostVertexStride, &hostFvf) == 0) {
+        std::cerr << "FAIL: NV2A position/color/TEX0 host vertex stream build\\n";
         stop();
         return 1;
     }
