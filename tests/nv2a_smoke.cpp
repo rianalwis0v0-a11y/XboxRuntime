@@ -555,18 +555,26 @@ int main() {
         (1u << 18), dmaHandle + 1u
     };
     Stats beforeBadHandle{}, afterBadHandle{};
-    if (getStats(&beforeBadHandle) != 0 ||
-        writeVram(0x1000u, badHandleStream, sizeof(badHandleStream)) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, sizeof(badHandleStream),
-                      &dmaGet, &dmaMethods) == 0 ||
-        dmaMethods != 0 ||
-        getStats(&afterBadHandle) != 0 ||
+    const int badStatsBefore = getStats(&beforeBadHandle);
+    const int badVramWrite = writeVram(0x1000u, badHandleStream, sizeof(badHandleStream));
+    const int badDmaResult = submitDmaPush(channel, dmaHandle, 0u,
+        sizeof(badHandleStream), &dmaGet, &dmaMethods);
+    const int badStatsAfter = getStats(&afterBadHandle);
+    const uint32_t badInterrupt = (uint32_t)read(0x2100u, 4u);
+    const uint32_t badDmaState = (uint32_t)read(0x3228u, 4u);
+    const int badInterruptClear = write(0x2100u, 0x1000u, 4u);
+    const uint32_t clearedInterrupt = (uint32_t)read(0x2100u, 4u);
+    if (badStatsBefore != 0 || badVramWrite != 0 || badDmaResult == 0 ||
+        dmaMethods != 0 || badStatsAfter != 0 ||
         beforeBadHandle.methods_handled != afterBadHandle.methods_handled ||
-        (read(0x2100u, 4u) & 0x1000u) == 0u ||
-        (read(0x3228u, 4u) >> 29) != 2u ||
-        write(0x2100u, 0x1000u, 4u) != 0 ||
-        (read(0x2100u, 4u) & 0x1000u) != 0u) {
-        std::cerr << "FAIL: DMA pusher partial dispatch or missing NON_CACHE interrupt\\n";
+        (badInterrupt & 0x1000u) == 0u || (badDmaState >> 29) != 2u ||
+        badInterruptClear != 0 || (clearedInterrupt & 0x1000u) != 0u) {
+        std::cerr << "FAIL: DMA error reporting: submit=" << badDmaResult
+                  << " methods=" << dmaMethods
+                  << " intr=0x" << std::hex << badInterrupt
+                  << " state=0x" << badDmaState
+                  << " clear=" << std::dec << badInterruptClear
+                  << " after_clear=0x" << std::hex << clearedInterrupt << "\\n";
         stop();
         return 1;
     }
