@@ -124,13 +124,25 @@ int main() {
     const uint32_t unsupportedPushbuffer[] = {
         (4u << 29) | (1u << 18) | 0x01D4u, 0xFF000000u
     };
-    if (writeVram(0x2100, malformedPushbuffer, sizeof(malformedPushbuffer)) != 0 ||
+    const uint32_t partiallyInvalidPushbuffer[] = {
+        (1u << 18) | 0x01D4u, 0xFF000000u,
+        (4u << 29) | (1u << 18) | 0x01D4u, 0xFF000000u
+    };
+    Stats beforeInvalid{};
+    Stats afterInvalid{};
+    if (getStats(&beforeInvalid) != 0 ||
+        writeVram(0x2100, malformedPushbuffer, sizeof(malformedPushbuffer)) != 0 ||
         submitPushBuffer(0x2100, sizeof(malformedPushbuffer), &methodsSubmitted) == 0 ||
         methodsSubmitted != 0 ||
         writeVram(0x2200, unsupportedPushbuffer, sizeof(unsupportedPushbuffer)) != 0 ||
         submitPushBuffer(0x2200, sizeof(unsupportedPushbuffer), &methodsSubmitted) == 0 ||
-        methodsSubmitted != 0) {
-        std::cerr << "FAIL: malformed/unsupported NV2A pushbuffer was accepted\\n";
+        methodsSubmitted != 0 ||
+        writeVram(0x2300, partiallyInvalidPushbuffer, sizeof(partiallyInvalidPushbuffer)) != 0 ||
+        submitPushBuffer(0x2300, sizeof(partiallyInvalidPushbuffer), &methodsSubmitted) == 0 ||
+        methodsSubmitted != 0 ||
+        getStats(&afterInvalid) != 0 ||
+        beforeInvalid.methods_handled != afterInvalid.methods_handled) {
+        std::cerr << "FAIL: malformed NV2A pushbuffer accepted or partially dispatched\\n";
         stop();
         return 1;
     }
