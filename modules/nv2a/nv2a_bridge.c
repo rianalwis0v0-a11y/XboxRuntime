@@ -1785,26 +1785,42 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     int has_color = 0;
     const uint32_t color_format = g_gpu->pgraph.regs[0x176Cu / 4u];
     if (color_format != 0u) {
-        if ((color_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+        const uint32_t color_type = color_format & 0xFu;
+        if ((color_type != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D &&
+             color_type != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) ||
             ((color_format >> 4) & 0xFu) != 4u)
             return 5;
         result = XboxNV2A_ReadVertexArray(channel, subchannel, 3u,
             first_vertex, vertex_count, colors, sizeof(colors),
             &stride, &element_bytes);
         if (result != 0 || element_bytes != 4u) return 7;
+        if (color_type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) {
+            for (uint32_t i = 0; i < vertex_count; ++i)
+                colors[i] = (colors[i] & 0xFF00FF00u) |
+                    ((colors[i] & 0x000000FFu) << 16) |
+                    ((colors[i] & 0x00FF0000u) >> 16);
+        }
         has_color = 1;
     }
 
     int has_specular = 0;
     const uint32_t specular_format = g_gpu->pgraph.regs[0x1770u / 4u];
     if (specular_format != 0u) {
-        if ((specular_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+        const uint32_t specular_type = specular_format & 0xFu;
+        if ((specular_type != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D &&
+             specular_type != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) ||
             ((specular_format >> 4) & 0xFu) != 4u)
             return 8;
         result = XboxNV2A_ReadVertexArray(channel, subchannel, 4u,
             first_vertex, vertex_count, specular, sizeof(specular),
             &stride, &element_bytes);
         if (result != 0 || element_bytes != 4u) return 9;
+        if (specular_type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) {
+            for (uint32_t i = 0; i < vertex_count; ++i)
+                specular[i] = (specular[i] & 0xFF00FF00u) |
+                    ((specular[i] & 0x000000FFu) << 16) |
+                    ((specular[i] & 0x00FF0000u) >> 16);
+        }
         has_specular = 1;
     }
     int has_texcoord = 0;

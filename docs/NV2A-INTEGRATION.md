@@ -439,3 +439,11 @@ from the NV097 low-byte-red packing to D3DCOLOR's AARRGGBB packing. The same
 special-method path now routes the already mapped lighting-enable and point-
 size methods instead of allowing the pinned translator to mis-handle them.
 Smoke tests verify fog enable, mode and channel order.
+
+
+## UB_OGL vertex color conversion
+
+Diffuse and specular arrays now accept both packed UB_D3D and byte-ordered
+UB_OGL formats. UB_OGL RGBA bytes are converted to the D3DCOLOR AARRGGBB
+layout expected by the D3D8 FVF. Smoke tests cover both diffuse and specular
+channel ordering.

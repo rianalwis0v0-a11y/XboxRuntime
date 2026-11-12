@@ -496,6 +496,23 @@ int main() {
         return 1;
     }
 
+    /* UB_OGL arrays are RGBA bytes; the D3D8 FVF requires D3DCOLOR ARGB. */
+    const uint32_t oglDiffuse[2] = {0xFF332211u,0xFF665544u};
+    const uint32_t oglSpecular[2] = {0x00332211u,0x00665544u};
+    if (writeVram(0x1400u,oglDiffuse,sizeof(oglDiffuse))!=0||
+        writeVram(0x1700u,oglSpecular,sizeof(oglSpecular))!=0||
+        submit(0u,0x176Cu,(4u<<8)|(4u<<4)|NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL)!=0||
+        submit(0u,0x1770u,(4u<<8)|(4u<<4)|NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL)!=0||
+        buildVertexStream(channel,0u,0u,2u,hostVertices,sizeof(hostVertices),
+            &hostVertexStride,&hostFvf)!=0||
+        hostVertices[0].diffuse!=0xFF112233u||
+        hostVertices[1].diffuse!=0xFF445566u||
+        hostVertices[0].specular!=0x00112233u||
+        hostVertices[1].specular!=0x00445566u){
+        std::cerr<<"FAIL: UB_OGL vertex color channel conversion\\n";
+        stop();return 1;
+    }
+
     /* Invalid RAMHT handles are rejected before any earlier methods dispatch. */
     const uint32_t badHandleStream[] = {
         (1u << 18), dmaHandle,
