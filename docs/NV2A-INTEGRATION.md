@@ -134,3 +134,20 @@ unimplemented puller special methods, nested calls, PCI/AGP DMA, DMA page
 translation, interrupts, scheduling/channel switching, and IB mode remain
 unsupported. This is a functional NV4-style software pusher path, not a full
 hardware PFIFO implementation.
+
+
+## Additional Kelvin fixed-function state mappings
+
+The bridge now maps a tested subset of additional NV097 methods into the
+D3D8 compatibility device's render states, which the Windows backend applies
+through D3D11. Covered state includes alpha/depth comparisons and masks,
+stencil enable/function/reference/masks/operations, blend equation, fog enable,
+color and mode, lighting enable, shade mode, and point size. Compare functions,
+stencil operations and blend/fog enumerations are translated explicitly rather
+than copied as incompatible numeric values.
+
+The mapping function is separately exported and smoke-tested without requiring
+a graphics device. Runtime application occurs only when the D3D8 compatibility
+device is available. Surface format/offset and render-target binding, texture
+sampling, vertex array formats/data, shader microcode, combiners, and broad
+method coverage are still separate PGRAPH tasks.
