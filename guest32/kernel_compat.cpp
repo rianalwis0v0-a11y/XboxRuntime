@@ -10,6 +10,8 @@
 #include <cctype>
 #include <cwctype>
 #include <string>
+#include <mutex>
+#include <array>
 #include "kernel_compat.h"
 
 extern "C" void KernelDispatch();
@@ -23,6 +25,44 @@ static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static uint32_t g_data[379]{};
 static std::wstring g_titleDirectory;
+std::array<uint8_t, 256> g_eeprom{};
+std::wstring g_eepromPath;
+std::mutex g_eepromMutex;
+bool g_eepromReady = false;
+
+constexpr uint32_t kStatusInvalidParameter = 0xC000000Du;
+constexpr uint32_t kStatusDeviceNotConnected = 0xC000009Du;
+
+extern "C" uint32_t __stdcall K_HalReadSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t* value) {
+    if (!value) return kStatusInvalidParameter;
+    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    const uint32_t count = word ? 2u : 1u;
+    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
+    std::lock_guard<std::mutex> lock(g_eepromMutex);
+    *value = g_eeprom[command];
+    if (word) *value |= uint32_t(g_eeprom[uint32_t(command) + 1]) << 8;
+    return 0;
+}
+
+extern "C" uint32_t __stdcall K_HalWriteSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t value) {
+    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    const uint32_t count = word ? 2u : 1u;
+    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
+    {
+        std::lock_guard<std::mutex> lock(g_eepromMutex);
+        g_eeprom[command] = uint8_t(value & 0xFFu);
+        if (word) g_eeprom[uint32_t(command) + 1] = uint8_t((value >> 8) & 0xFFu);
+    }
+    // Persist each SMBus write so a guest crash does not discard EEPROM changes.
+    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return kStatusDeviceNotConnected;
+    DWORD written = 0;
+    BOOL ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
+    if (ok) ok = (written == g_eeprom.size()) && FlushFileBuffers(f);
+    CloseHandle(f);
+    return ok ? 0u : kStatusDeviceNotConnected;
+}
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
 void* StubFor(uint32_t ordinal){
@@ -179,6 +219,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je pool_free
         cmp eax, 23
         je pool_size
+        cmp eax, 45
+        je smbus_read
+        cmp eax, 50
+        je smbus_write
         cmp eax, 51
         je icx
         cmp eax, 52
@@ -292,6 +336,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     pool_alloc_tag: jmp K_ExAllocatePoolWithTag
     pool_free: jmp K_ExFreePool
     pool_size: jmp K_ExQueryPoolBlockSize
+    smbus_read: jmp K_HalReadSMBusValue
+    smbus_write: jmp K_HalWriteSMBusValue
     icx: jmp K_InterlockedCompareExchange
     idec: jmp K_InterlockedDecrement
     iinc: jmp K_InterlockedIncrement
@@ -347,6 +393,46 @@ extern "C" __declspec(naked) void KernelDispatch(){
 namespace {
 bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
 }
+bool XboxKernelInitializeEeprom(const wchar_t* path) {
+    if (!path || !*path) return false;
+    g_eepromPath = path;
+    HANDLE f = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size{};
+    bool ok = GetFileSizeEx(f, &size) != FALSE;
+    if (ok && size.QuadPart == 0) {
+        // Blank EEPROM is intentionally unprovisioned, not a fabricated Xbox identity.
+        g_eeprom.fill(0xFF);
+        DWORD written = 0;
+        ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr) &&
+             written == g_eeprom.size() && FlushFileBuffers(f);
+    } else if (ok && size.QuadPart == static_cast<LONGLONG>(g_eeprom.size())) {
+        DWORD read = 0;
+        ok = SetFilePointer(f, 0, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+             ReadFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &read, nullptr) &&
+             read == g_eeprom.size();
+    } else {
+        ok = false; // Never silently truncate or replace a user's EEPROM backup.
+    }
+    CloseHandle(f);
+    g_eepromReady = ok;
+    if (ok) OutputDebugStringW(L"[XboxEEPROM] Persistent 256-byte EEPROM loaded. A blank all-FF image is unprovisioned and cannot register with Insignia.\\n");
+    return ok;
+}
+
+void XboxKernelFlushEeprom() {
+    if (!g_eepromReady || g_eepromPath.empty()) return;
+    std::lock_guard<std::mutex> lock(g_eepromMutex);
+    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return;
+    DWORD written = 0;
+    WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
+    FlushFileBuffers(f);
+    CloseHandle(f);
+}
+
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
