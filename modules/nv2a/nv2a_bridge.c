@@ -23,6 +23,8 @@ static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
+static uint32_t g_pgraph_custom_draws;
+static uint32_t g_pgraph_custom_vertices;
 static uint32_t g_primitive_mode[32][8];
 static int draw_nv2a_arrays(uint32_t channel, uint32_t subchannel, uint32_t parameter);
 typedef struct NV2A_SURFACE_REGS {
@@ -177,8 +179,11 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         g_primitive_mode[channel][subchannel] = parameter;
 
     if (method == NV097_DRAW_ARRAYS) {
-        (void)draw_nv2a_arrays(channel, subchannel, parameter);
-        g_gpu->pgraph.regs[method / 4u] = parameter;
+        if (draw_nv2a_arrays(channel, subchannel, parameter) == 0) {
+            g_gpu->pgraph.regs[method / 4u] = parameter;
+            return;
+        }
+        pgraph_method(g_gpu, subchannel, method, parameter);
         return;
     }
 
@@ -261,6 +266,8 @@ int __cdecl ModuleStart(void)
     memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
     g_pgraph_custom_methods = 0;
+    g_pgraph_custom_draws = 0;
+    g_pgraph_custom_vertices = 0;
 
     // Initializes the PGRAPH method translator. Its D3D8 device is supplied
     // by xbox_d3d8 when the game/runtime creates the Xbox D3D device.
@@ -880,6 +887,108 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+static int draw_nv2a_arrays(uint32_t channel, uint32_t subchannel,
+                              uint32_t parameter)
+{
+    const uint32_t count = (parameter & NV097_DRAW_ARRAYS_COUNT) >> 24;
+    const uint32_t first = parameter & NV097_DRAW_ARRAYS_START_INDEX;
+    const uint32_t mode = g_primitive_mode[channel][subchannel];
+    if (!count || count > 255u || mode == NV097_SET_BEGIN_END_OP_END)
+        return 1;
+
+    XboxNV2A_VERTEX vertices[255];
+    uint32_t stride = 0, fvf = 0;
+    if (XboxNV2A_BuildVertexStream(channel, subchannel, first, count,
+            vertices, sizeof(vertices), &stride, &fvf) != 0)
+        return 2;
+
+    XboxNV2A_VERTEX expanded[768];
+    const XboxNV2A_VERTEX* draw_vertices = vertices;
+    uint32_t draw_count = count;
+    D3DPRIMITIVETYPE primitive = D3DPT_TRIANGLELIST;
+    uint32_t primitive_count = 0;
+
+    switch (mode) {
+    case NV097_SET_BEGIN_END_OP_POINTS:
+        primitive = D3DPT_POINTLIST; primitive_count = count; break;
+    case NV097_SET_BEGIN_END_OP_LINES:
+        if (count < 2u || (count & 1u)) return 3;
+        primitive = D3DPT_LINELIST; primitive_count = count / 2u; break;
+    case NV097_SET_BEGIN_END_OP_LINE_STRIP:
+        if (count < 2u) return 3;
+        primitive = D3DPT_LINESTRIP; primitive_count = count - 1u; break;
+    case NV097_SET_BEGIN_END_OP_LINE_LOOP:
+        if (count < 2u) return 3;
+        memcpy(expanded, vertices, count * sizeof(XboxNV2A_VERTEX));
+        expanded[count] = vertices[0];
+        draw_vertices = expanded;
+        draw_count = count + 1u;
+        primitive = D3DPT_LINESTRIP; primitive_count = count; break;
+    case NV097_SET_BEGIN_END_OP_TRIANGLES:
+        if (count < 3u || (count % 3u)) return 3;
+        primitive = D3DPT_TRIANGLELIST; primitive_count = count / 3u; break;
+    case NV097_SET_BEGIN_END_OP_TRIANGLE_STRIP:
+        if (count < 3u) return 3;
+        primitive = D3DPT_TRIANGLESTRIP; primitive_count = count - 2u; break;
+    case NV097_SET_BEGIN_END_OP_TRIANGLE_FAN:
+    case NV097_SET_BEGIN_END_OP_POLYGON:
+        if (count < 3u) return 3;
+        primitive = D3DPT_TRIANGLEFAN; primitive_count = count - 2u; break;
+    case NV097_SET_BEGIN_END_OP_QUADS: {
+        if (count < 4u || (count % 4u)) return 3;
+        draw_count = (count / 4u) * 6u;
+        for (uint32_t q = 0, out = 0; q < count; q += 4u) {
+            expanded[out++] = vertices[q + 0u];
+            expanded[out++] = vertices[q + 1u];
+            expanded[out++] = vertices[q + 2u];
+            expanded[out++] = vertices[q + 0u];
+            expanded[out++] = vertices[q + 2u];
+            expanded[out++] = vertices[q + 3u];
+        }
+        draw_vertices = expanded;
+        primitive = D3DPT_TRIANGLELIST;
+        primitive_count = draw_count / 3u;
+        break;
+    }
+    case NV097_SET_BEGIN_END_OP_QUAD_STRIP: {
+        if (count < 4u || (count & 1u)) return 3;
+        const uint32_t quads = count / 2u - 1u;
+        draw_count = quads * 6u;
+        for (uint32_t q = 0, out = 0; q < quads; ++q) {
+            const uint32_t i = q * 2u;
+            expanded[out++] = vertices[i + 0u];
+            expanded[out++] = vertices[i + 1u];
+            expanded[out++] = vertices[i + 3u];
+            expanded[out++] = vertices[i + 0u];
+            expanded[out++] = vertices[i + 3u];
+            expanded[out++] = vertices[i + 2u];
+        }
+        draw_vertices = expanded;
+        primitive = D3DPT_TRIANGLELIST;
+        primitive_count = draw_count / 3u;
+        break;
+    }
+    default:
+        return 4;
+    }
+
+    IDirect3DDevice8* device = xbox_GetD3DDevice();
+    if (!device || !device->lpVtbl || !device->lpVtbl->SetVertexShader ||
+        !device->lpVtbl->DrawPrimitiveUP)
+        return 5;
+    if (FAILED(device->lpVtbl->SetVertexShader(device, fvf)))
+        return 6;
+    if (FAILED(device->lpVtbl->DrawPrimitiveUP(
+            device, primitive, primitive_count, draw_vertices, stride)))
+        return 7;
+
+    ++g_pgraph_custom_methods;
+    ++g_pgraph_custom_draws;
+    g_pgraph_custom_vertices += count;
+    (void)draw_count;
+    return 0;
+}
+
 static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
                                   uint32_t method, uint32_t parameter)
 {
@@ -1181,8 +1290,8 @@ int __cdecl XboxNV2A_GetStats(XboxNV2A_STATS* output)
 
     pgraph_d3d11_get_stats(&stats);
     output->frames = stats.frames;
-    output->draw_calls = stats.draw_calls;
-    output->vertices_submitted = stats.vertices_submitted;
+    output->draw_calls = stats.draw_calls + g_pgraph_custom_draws;
+    output->vertices_submitted = stats.vertices_submitted + g_pgraph_custom_vertices;
     output->methods_handled = stats.methods_handled + g_pgraph_custom_methods;
     output->methods_ignored = stats.methods_ignored >= g_pgraph_fallback_methods
         ? stats.methods_ignored - g_pgraph_fallback_methods : 0;
