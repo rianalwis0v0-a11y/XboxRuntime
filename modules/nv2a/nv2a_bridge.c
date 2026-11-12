@@ -244,6 +244,7 @@ int __cdecl ModuleStart(void)
     /* PFIFO channel bindings belong to the bridge lifecycle. */
     memset(g_bound_engine, 0, sizeof(g_bound_engine));
     memset(g_ref_counter, 0, sizeof(g_ref_counter));
+    memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
     g_pgraph_custom_methods = 0;
 
@@ -262,7 +263,9 @@ void __cdecl ModuleStop(void)
         return;
 
     pgraph_d3d11_flush();
+    sync_surface_to_vram();
     pgraph_d3d11_shutdown();
+    release_surface_targets();
 
     // The upstream NV2A singleton currently has no public destroy/reset API.
     // Keep its backing allocation alive until the host process exits; freeing
@@ -933,8 +936,10 @@ int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, u
 
 void __cdecl XboxNV2A_Flush(void)
 {
-    if (g_started)
+    if (g_started) {
         pgraph_d3d11_flush();
+        sync_surface_to_vram();
+    }
 }
 
 int __cdecl XboxNV2A_GetStats(XboxNV2A_STATS* output)
