@@ -1,5 +1,6 @@
 add_library(nv2a MODULE
     nv2a_bridge.c
+    nv2a_vertex_shader.c
 )
 
 target_include_directories(nv2a PRIVATE
