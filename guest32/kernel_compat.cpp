@@ -960,7 +960,7 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE sourceProcess, HANDLE sourc
         return LONG(0xC0000008u);
     return 0;
 }
-extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
+extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
