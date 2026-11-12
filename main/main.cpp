@@ -1,6 +1,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <commdlg.h>
 
 #include "main.h"
 
@@ -27,7 +28,6 @@ namespace XboxRuntime
     static std::vector<Module> modules =
     {
         { L"nv2a.dll" },
-        { L"insignia_dns.dll" },
         { L"fatx.dll" },
         { L"xbe_loader.dll" }
     };
@@ -230,10 +230,37 @@ namespace XboxRuntime
         return false;
     }
 
-    static bool StartDashboard()
+    static bool SelectTitle(std::wstring& titlePath)
+    {
+        // Automatically boot dashboard.xbe when present. Otherwise let the
+        // user choose a retail or homebrew XBE from any accessible drive.
+        if (FindDashboard(titlePath))
+            return true;
+
+        std::vector<wchar_t> path(32768, L'\0');
+        OPENFILENAMEW dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        dialog.lpstrFilter =
+            L"Xbox executable files (*.xbe)\0*.xbe\0All files (*.*)\0*.*\0\0";
+        dialog.lpstrFile = path.data();
+        dialog.nMaxFile = static_cast<DWORD>(path.size());
+        dialog.lpstrTitle = L"Select an Xbox XBE";
+        dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
+                       OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+
+        if (!GetOpenFileNameW(&dialog))
+        {
+            Log(L"No XBE selected.");
+            return false;
+        }
+
+        titlePath.assign(path.data());
+        return true;
+    }
+
+    static bool StartTitle()
     {
         Module& loader = modules.back();
-
         auto loadXbe = reinterpret_cast<LoadXbe>(
             GetProcAddress(loader.handle, "LoadXbe")
         );
@@ -244,12 +271,12 @@ namespace XboxRuntime
             return false;
         }
 
-        std::wstring dashboard;
-        if (!FindDashboard(dashboard))
+        std::wstring title;
+        if (!SelectTitle(title))
             return false;
 
-        Log(L"Staging discovered dashboard.xbe in the native x86 guest process.");
-        return loadXbe(dashboard.c_str()) == 0;
+        Log(L"Starting selected XBE in the native x86 guest process.");
+        return loadXbe(title.c_str()) == 0;
     }
 }
 
@@ -271,7 +298,7 @@ extern "C" int __cdecl MainStart()
     if (!StartModules())
         return 2;
 
-    if (!StartDashboard())
+    if (!StartTitle())
     {
         StopModules();
         return 3;
