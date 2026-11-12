@@ -839,6 +839,33 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     return 0;
 }
 
+static int submit_dma_pushbuffer_info(uint32_t channel,
+                                       const XboxNV2A_DMA_INFO* dma,
+                                       uint32_t get, uint32_t put,
+                                       uint32_t* new_get,
+                                       uint32_t* methods_submitted)
+{
+    if (!dma) return 1;
+    if (dma->dma_class != 0x02u && dma->dma_class != 0x3Du)
+        return 8;
+    if (get > put || put > dma->mapped_length || (get & 3u) || (put & 3u))
+        return 9;
+
+    uint32_t checked_get = get, checked_methods = 0;
+    int result = walk_dma_pushbuffer(channel, dma->base_address,
+        dma->mapped_length, get, put, &checked_get, &checked_methods, 0);
+    if (result != 0) return 16 + result;
+
+    /* Only dispatch after the complete packet/control-flow stream validates. */
+    uint32_t executed_get = get, executed_methods = 0;
+    result = walk_dma_pushbuffer(channel, dma->base_address,
+        dma->mapped_length, get, put, &executed_get, &executed_methods, 1);
+    if (result != 0) return 32 + result;
+    if (new_get) *new_get = executed_get;
+    if (methods_submitted) *methods_submitted = executed_methods;
+    return 0;
+}
+
 int __cdecl XboxNV2A_SubmitDMAPushBuffer(uint32_t channel, uint32_t handle,
                                          uint32_t get, uint32_t put,
                                          uint32_t* new_get,
@@ -849,26 +876,26 @@ int __cdecl XboxNV2A_SubmitDMAPushBuffer(uint32_t channel, uint32_t handle,
     if (methods_submitted) *methods_submitted = 0;
     if (!g_started || !g_gpu || channel > 31u) return 1;
 
-    int result = XboxNV2A_ResolveDMAHandle(channel, handle, &dma);
+    const int result = XboxNV2A_ResolveDMAHandle(channel, handle, &dma);
     if (result != 0) return 2 + result;
-    if (dma.dma_class != 0x02u && dma.dma_class != 0x3Du)
-        return 8; /* Pushbuffer must be readable. */
-    if (get > put || put > dma.mapped_length || (get & 3u) || (put & 3u))
-        return 9;
+    return submit_dma_pushbuffer_info(channel, &dma, get, put,
+                                      new_get, methods_submitted);
+}
 
-    uint32_t checked_get = get, checked_methods = 0;
-    result = walk_dma_pushbuffer(channel, dma.base_address, dma.mapped_length,
-                                 get, put, &checked_get, &checked_methods, 0);
-    if (result != 0) return 16 + result;
+int __cdecl XboxNV2A_SubmitDMAInstance(uint32_t channel, uint32_t instance_offset,
+                                       uint32_t get, uint32_t put,
+                                       uint32_t* new_get,
+                                       uint32_t* methods_submitted)
+{
+    XboxNV2A_DMA_INFO dma;
+    if (new_get) *new_get = get;
+    if (methods_submitted) *methods_submitted = 0;
+    if (!g_started || !g_gpu || channel > 31u) return 1;
 
-    /* Only dispatch after the entire stream, including control flow, validates. */
-    uint32_t executed_get = get, executed_methods = 0;
-    result = walk_dma_pushbuffer(channel, dma.base_address, dma.mapped_length,
-                                 get, put, &executed_get, &executed_methods, 1);
-    if (result != 0) return 32 + result;
-    if (new_get) *new_get = executed_get;
-    if (methods_submitted) *methods_submitted = executed_methods;
-    return 0;
+    const int result = resolve_dma_instance(instance_offset, 0u, 0u, &dma);
+    if (result != 0) return 2 + result;
+    return submit_dma_pushbuffer_info(channel, &dma, get, put,
+                                      new_get, methods_submitted);
 }
 
 static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* submitted, int dispatch)
