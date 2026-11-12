@@ -220,3 +220,14 @@ per-channel/per-subchannel DMA contexts after RAMHT lookup. The bridge exposes
 translation paths can retrieve the actual mapped object base and limit rather
 than only seeing the raw guest handle. The first context slot is covered by the
 smoke test; the remaining slots share the same validated storage path.
+
+
+## Bounded vertex-array fetch
+
+`XboxNV2A_ReadVertexArray` now reads guest vertex elements through the bound
+`SET_CONTEXT_DMA_VERTEX_A` or `VERTEX_B` object. It reads the NV097 array
+offset/format registers, supports UB_D3D, UB_OGL, S1, S32K, and float component
+encodings, honors per-array stride, and checks both DMA-object and VRAM bounds
+before copying packed elements. Compressed vertex format and conversion to a
+host vertex declaration are not included yet; this is the validated guest-data
+fetch stage for a later DRAW_ARRAYS translator.
