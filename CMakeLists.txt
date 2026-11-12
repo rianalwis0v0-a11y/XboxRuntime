@@ -49,6 +49,17 @@ endforeach()
 add_dependencies(nv2a_smoke nv2a)
 add_test(NAME nv2a_smoke COMMAND nv2a_smoke)
 
+# Exercise the pinned NV2A vertex-program interpreter independently of D3D.
+add_executable(nv2a_vsh_smoke
+    tests/nv2a_vsh_smoke.c
+    third_party/xboxrecomp/src/kernel/nv2a_vsh_interp.c
+)
+target_include_directories(nv2a_vsh_smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/src/kernel"
+)
+target_compile_definitions(nv2a_vsh_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME nv2a_vsh_smoke COMMAND nv2a_vsh_smoke)
+
 # Exercise XDVDFS descriptor parsing, directory-tree lookup, and bounded file reads.
 add_executable(xdvdfs_smoke
     tests/xdvdfs_smoke.cpp
