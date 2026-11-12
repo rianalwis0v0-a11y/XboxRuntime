@@ -1277,8 +1277,10 @@ static int copy_surface_to_vram(IDirect3DSurface8* surface,
 
 static void sync_surface_to_vram(void)
 {
-    if (g_surface_bound && g_color_surface)
-        (void)copy_surface_to_vram(g_color_surface, &g_bound_surface_info);
+    if (g_surface_bound && g_color_surface) {
+        if (copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
+            mark_all_textures_dirty();
+    }
 }
 
 static void release_surface_targets(void)
@@ -1345,6 +1347,8 @@ static int update_surface_target(void)
         new_color->lpVtbl->Release(new_color);
         return 19;
     }
+    if (g_surface_bound && g_color_surface)
+        mark_all_textures_dirty();
 
     if (!copy_vram_to_surface(new_color, &info)) {
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);

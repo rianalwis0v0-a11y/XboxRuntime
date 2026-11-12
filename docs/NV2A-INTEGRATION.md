@@ -385,3 +385,16 @@ CONTROL1; swizzled dimensions come from the format exponents and mip count is
 clamped by the format and MAX_LOD_CLAMP. The current stage decoder supports
 the implemented 2D color formats only; cubemaps, 3D textures, palettes and
 unsupported color encodings remain outside this path.
+
+
+## D3D8 texture-stage binding
+
+The draw path now creates D3D8 A8R8G8B8 textures from the live NV097 stage
+decoder, uploads every decoded mip level with row-pitch handling and RGBA-to-
+BGRA channel conversion, and binds the texture with SetTexture before drawing.
+A per-channel/subchannel/stage cache avoids recreating unchanged textures.
+Register writes, bridge VRAM writes, DMA-context rebinding and surface-to-VRAM
+synchronization invalidate the affected cache entries. The initial uploader is
+limited to the decoder's supported 2D formats and a 64 MiB decoded-texture cap;
+full palette/cubemap/3D support and coherence for DMA writes that bypass the
+bridge VRAM-write API still need implementation and tests.
