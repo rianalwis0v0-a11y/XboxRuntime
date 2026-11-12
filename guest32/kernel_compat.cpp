@@ -919,6 +919,19 @@ extern "C" LONG __stdcall K_NtCancelTimer(HANDLE timer, BOOL* previous) {
     if (previous) *previous = ok;
     return ok ? 0 : LONG(0xC0000008u);
 }
+
+extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
+    if (!out) return LONG(0xC000000Du);
+    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
+    if (!h) return LONG(0xC0000017u);
+    *out = h; return 0;
+}
+extern "C" LONG __stdcall K_NtReleaseMutant(HANDLE mutant, LONG, BOOL, LONG* previous) {
+    if (previous) *previous = 0;
+    if (!mutant) return LONG(0xC0000008u);
+    if (previous) *previous = 1;
+    return ReleaseMutex(mutant) ? 0 : LONG(0xC0000008u);
+}
 extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK, void*, ULONG type) {
     if (!out) return LONG(0xC000000Du);
     HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
@@ -1028,12 +1041,6 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_assert
                 cmp eax, 9
         je hal_read_tray
-        cmp eax, 19
-        je ex_raise_status
-        cmp eax, 24
-        je fsc_get_cache
-        cmp eax, 25
-        je fsc_invalidate
         cmp eax, 26
         je ex_raise_exception
         cmp eax, 27
@@ -1044,7 +1051,11 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je fsc_invalidate
         cmp eax, 37
         je fsc_set_cache
-        cmp eax, 185
+        cmp eax, 192
+        je nt_create_mutant
+        cmp eax, 221
+        je nt_release_mutant
+                cmp eax, 185
         je nt_cancel_timer
         cmp eax, 192
         je nt_create_mutant
@@ -1364,6 +1375,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     fsc_invalidate: jmp K_FscInvalidateIdleBlocks
     fsc_set_cache: jmp K_FscSetCacheSize
     ex_raise_exception: jmp K_ExRaiseException
+    nt_create_mutant: jmp K_NtCreateMutant
+    nt_release_mutant: jmp K_NtReleaseMutant
     nt_cancel_timer: jmp K_NtCancelTimer
     nt_create_timer: jmp K_NtCreateTimer
     nt_duplicate_object: jmp K_NtDuplicateObject
