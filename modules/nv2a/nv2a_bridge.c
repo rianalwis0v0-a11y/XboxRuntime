@@ -11,6 +11,7 @@
 #include "nv2a_pgraph_d3d11.h"
 #include "d3d8_xbox.h"
 #include "d3d8_swizzle.h"
+#include "d3d8_vsh.h"
 
 #define XBOX_VRAM_SIZE  (64u * 1024u * 1024u)
 #define XBOX_RAMIN_SIZE (1u * 1024u * 1024u)
@@ -26,6 +27,16 @@ static uint32_t g_ref_counter[32];
 static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
 static uint32_t g_transform_execution_mode;
+/* Mirror NV2A program/constant upload ports into the existing D3D11 HLSL
+ * translator. The translator compiles on the first draw and caches by
+ * microcode hash; subsequent draws bind the cached ID3D11VertexShader. */
+static DWORD g_nv2a_vsh_program[136][4];
+static float g_nv2a_vsh_constants[192][4];
+static uint32_t g_nv2a_vsh_load_slot, g_nv2a_vsh_load_word;
+static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
+static uint32_t g_nv2a_vsh_constant_word;
+static DWORD g_nv2a_vsh_handle;
+static int g_nv2a_vsh_dirty = 1;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
 static uint32_t g_pgraph_custom_draws;
@@ -389,16 +400,50 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         return;
     }
     if (method == 0x1E98u) { nv2a_vsh_set_cxt_write(parameter); return; }
-    if (method == 0x1E9Cu) { nv2a_vsh_set_load_slot(parameter); return; }
-    if (method == 0x1EA0u) { nv2a_vsh_set_start_slot(parameter); return; }
-    if (method == 0x1EA4u) { nv2a_vsh_set_constant_load(parameter); return; }
+    if (method == 0x1E9Cu) {
+        nv2a_vsh_set_load_slot(parameter);
+        g_nv2a_vsh_load_slot = parameter;
+        g_nv2a_vsh_load_word = 0;
+        g_nv2a_vsh_dirty = 1;
+        return;
+    }
+    if (method == 0x1EA0u) {
+        nv2a_vsh_set_start_slot(parameter);
+        g_nv2a_vsh_start_slot = parameter;
+        g_nv2a_vsh_dirty = 1;
+        return;
+    }
+    if (method == 0x1EA4u) {
+        nv2a_vsh_set_constant_load(parameter);
+        g_nv2a_vsh_constant_load = parameter;
+        g_nv2a_vsh_constant_word = 0;
+        return;
+    }
     if (method >= 0x0B00u && method < 0x0B80u) {
         nv2a_vsh_program_word(parameter);
+        if (g_nv2a_vsh_load_slot < 136u) {
+            g_nv2a_vsh_program[g_nv2a_vsh_load_slot][g_nv2a_vsh_load_word] = parameter;
+            if (++g_nv2a_vsh_load_word == 4u) {
+                g_nv2a_vsh_load_word = 0;
+                ++g_nv2a_vsh_load_slot;
+            }
+            g_nv2a_vsh_dirty = 1;
+        }
         g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
     if (method >= 0x0B80u && method < 0x0C00u) {
         nv2a_vsh_constant_word(parameter);
+        if (g_nv2a_vsh_constant_load < 192u) {
+            memcpy(&g_nv2a_vsh_constants[g_nv2a_vsh_constant_load][g_nv2a_vsh_constant_word],
+                   &parameter, sizeof(parameter));
+            if (++g_nv2a_vsh_constant_word == 4u) {
+                g_nv2a_vsh_constant_word = 0;
+                d3d8_vsh_set_constant((int)g_nv2a_vsh_constant_load,
+                    g_nv2a_vsh_constants[g_nv2a_vsh_constant_load], 1);
+                ++g_nv2a_vsh_constant_load;
+            }
+        }
         g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
@@ -529,6 +574,16 @@ int __cdecl ModuleStart(void)
     memset(g_element_count, 0, sizeof(g_element_count));
     memset(g_element_overflow, 0, sizeof(g_element_overflow));
     g_transform_execution_mode = 0;
+    memset(g_nv2a_vsh_program, 0, sizeof(g_nv2a_vsh_program));
+    memset(g_nv2a_vsh_constants, 0, sizeof(g_nv2a_vsh_constants));
+    g_nv2a_vsh_load_slot = g_nv2a_vsh_load_word = 0;
+    g_nv2a_vsh_start_slot = g_nv2a_vsh_constant_load = 0;
+    g_nv2a_vsh_constant_word = 0;
+    if (g_nv2a_vsh_handle) {
+        (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+        g_nv2a_vsh_handle = 0;
+    }
+    g_nv2a_vsh_dirty = 1;
     mark_all_textures_dirty();
     memset(&g_surface_regs, 0, sizeof(g_surface_regs));
     g_pgraph_fallback_methods = 0;
@@ -2094,6 +2149,37 @@ static int nv2a_execute_vertex_program(const XboxNV2A_VERTEX *source,
 /* D3D8 XYZRHW + diffuse/specular + four four-component texture sets. */
 #define NV2A_FVF_VERTEX_PROGRAM (0x004u | 0x040u | 0x080u | (4u << 8) | (3u << 16) | (3u << 18) | (3u << 20) | (3u << 22))
 
+static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
+{
+    if (!device || !device->lpVtbl || !device->lpVtbl->SetVertexShader)
+        return 0;
+    if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle) {
+        uint32_t instruction_count = 0;
+        if (g_nv2a_vsh_start_slot >= 136u)
+            return 0;
+        for (uint32_t slot = g_nv2a_vsh_start_slot; slot < 136u; ++slot) {
+            ++instruction_count;
+            if (g_nv2a_vsh_program[slot][3] & 1u)
+                break;
+        }
+        if (!instruction_count ||
+            !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
+            return 0;
+        if (g_nv2a_vsh_handle) {
+            (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+            g_nv2a_vsh_handle = 0;
+        }
+        if (FAILED(d3d8_vsh_create_shader(
+                &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
+                (int)instruction_count, &g_nv2a_vsh_handle)))
+            return 0;
+        g_nv2a_vsh_dirty = 0;
+    }
+    /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
+     * compiles it on cache miss, and binds the cached GPU vertex shader. */
+    return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
+}
+
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
 {
     const uint32_t mode=g_primitive_mode[channel][subchannel];
@@ -2122,16 +2208,15 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     IDirect3DDevice8* d=xbox_GetD3DDevice();
     if(!d||!d->lpVtbl||!d->lpVtbl->SetVertexShader||!d->lpVtbl->DrawPrimitiveUP)return 5;
     const void *draw_data = draw;
-    uint32_t draw_stride = stride;
-    NV2A_SHADER_VERTEX shader_vertices[768];
+    const uint32_t draw_stride = stride;
     if ((g_transform_execution_mode & 3u) == 2u) {
-        if (!nv2a_execute_vertex_program(draw, draw_count, shader_vertices))
-            return 9; /* Never silently draw model-space data as screen-space. */
-        draw_data = shader_vertices;
-        draw_stride = (uint32_t)sizeof(shader_vertices[0]);
-        fvf = NV2A_FVF_VERTEX_PROGRAM;
+        /* Keep original model-space attributes in the stream. The D3D8
+         * compatibility layer executes the translated HLSL on the GPU. */
+        if (!nv2a_prepare_gpu_vertex_shader(d))
+            return 9;
+    } else if (FAILED(d->lpVtbl->SetVertexShader(d,fvf))) {
+        return 6;
     }
-    if(FAILED(d->lpVtbl->SetVertexShader(d,fvf)))return 6;
     if(bind_nv2a_textures(channel,subchannel,d)!=0)return 8;
     if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride)))return 7;
     ++g_pgraph_custom_methods;++g_pgraph_custom_draws;g_pgraph_custom_vertices+=count;(void)draw_count;return 0;
