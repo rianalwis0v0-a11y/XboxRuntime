@@ -48,3 +48,13 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 add_dependencies(nv2a_smoke nv2a)
 add_test(NAME nv2a_smoke COMMAND nv2a_smoke)
+
+# Exercise XDVDFS descriptor parsing, directory-tree lookup, and bounded file reads.
+add_executable(xdvdfs_smoke
+    tests/xdvdfs_smoke.cpp
+    modules/xdvdfs/xdvdfs.cpp
+)
+target_include_directories(xdvdfs_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modules/xdvdfs")
+target_compile_features(xdvdfs_smoke PRIVATE cxx_std_17)
+target_compile_definitions(xdvdfs_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME xdvdfs_smoke COMMAND xdvdfs_smoke)
