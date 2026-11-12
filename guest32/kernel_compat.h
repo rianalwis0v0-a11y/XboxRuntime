@@ -1,0 +1,16 @@
+#pragma once
+#include <windows.h>
+#include <cstdint>
+
+struct XboxKernelState {
+    uint32_t imageBase;
+    uint32_t imageSize;
+    uint32_t entryPoint;
+    uint32_t sectionCount;
+    uint32_t tlsAddress;
+};
+bool XboxKernelInitializeEeprom(const wchar_t* path);
+void XboxKernelFlushEeprom();
+void XboxKernelSetTitlePath(const wchar_t* path);
+bool XboxKernelResolveImports(const XboxKernelState& image);
+DWORD WINAPI XboxKernelStartXbe(void* context);

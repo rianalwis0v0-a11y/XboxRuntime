@@ -1,6 +1,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <commdlg.h>
 
 #include "main.h"
 
@@ -22,18 +23,14 @@ namespace XboxRuntime
         bool started = false;
     };
 
+    // Only implemented modules are started. Add each remaining Xbox
+    // subsystem when its real implementation and build target are ready.
     static std::vector<Module> modules =
     {
-        { L"eeprom.dll" },
-        { L"xbox_storage.dll" },
-        { L"fatx.dll" },
-        { L"xdvdfs.dll" },
-        { L"xbox_kernel.dll" },
         { L"nv2a.dll" },
-        { L"xbox_graphics.dll" },
-        { L"xbox_audio.dll" },
-        { L"xbox_input.dll" },
-        { L"xbox_network.dll" },
+        { L"fatx.dll" },
+        { L"input.dll" },
+        { L"xdvdfs.dll" },
         { L"xbe_loader.dll" }
     };
 
@@ -186,10 +183,89 @@ namespace XboxRuntime
         return true;
     }
 
-    static bool StartDashboard()
+    static bool FindDashboard(std::wstring& dashboardPath)
+    {
+        // GetLogicalDrives returns a bit for every currently assigned drive
+        // letter (fixed, removable, optical, RAM disk, and mapped drives).
+        const DWORD drives = GetLogicalDrives();
+        if (!drives)
+        {
+            Log(L"Could not enumerate logical drives.");
+            return false;
+        }
+
+        for (unsigned int index = 0; index < 26; ++index)
+        {
+            if ((drives & (1u << index)) == 0)
+                continue;
+
+            wchar_t root[] = L"A:\\\\";
+            root[0] = static_cast<wchar_t>(L'A' + index);
+
+            if (GetDriveTypeW(root) == DRIVE_NO_ROOT_DIR)
+                continue;
+
+            const std::wstring driveRoot(root);
+
+            // Prefer a dashboard placed directly in the drive root, then
+            // support the conventional XboxRuntime subdirectory.
+            const std::wstring candidates[] =
+            {
+                driveRoot + L"dashboard.xbe",
+                driveRoot + L"XboxRuntime\\\\dashboard.xbe"
+            };
+
+            for (const auto& candidate : candidates)
+            {
+                const DWORD attributes = GetFileAttributesW(candidate.c_str());
+                if (attributes != INVALID_FILE_ATTRIBUTES &&
+                    (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+                {
+                    dashboardPath = candidate;
+                    Log(L"Found dashboard.xbe on a mounted drive.");
+                    return true;
+                }
+            }
+        }
+
+        Log(L"dashboard.xbe was not found in any mounted drive root.");
+        return false;
+    }
+
+    static bool SelectTitle(std::wstring& titlePath)
+    {
+        // Preselect dashboard.xbe when found, but always let the user choose
+        // any retail or homebrew XBE from any accessible drive.
+        std::wstring dashboard;
+        std::vector<wchar_t> path(32768, L'\0');
+        if (FindDashboard(dashboard) && dashboard.size() < path.size())
+        {
+            std::copy(dashboard.begin(), dashboard.end(), path.begin());
+            path[dashboard.size()] = L'\0';
+        }
+        OPENFILENAMEW dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        dialog.lpstrFilter =
+            L"Xbox executable files (*.xbe)\0*.xbe\0All files (*.*)\0*.*\0\0";
+        dialog.lpstrFile = path.data();
+        dialog.nMaxFile = static_cast<DWORD>(path.size());
+        dialog.lpstrTitle = L"Select an Xbox XBE";
+        dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
+                       OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+
+        if (!GetOpenFileNameW(&dialog))
+        {
+            Log(L"No XBE selected.");
+            return false;
+        }
+
+        titlePath.assign(path.data());
+        return true;
+    }
+
+    static bool StartTitle()
     {
         Module& loader = modules.back();
-
         auto loadXbe = reinterpret_cast<LoadXbe>(
             GetProcAddress(loader.handle, "LoadXbe")
         );
@@ -200,12 +276,12 @@ namespace XboxRuntime
             return false;
         }
 
-        std::wstring dashboard =
-            runtimeDirectory + L"\\dashboard.xbe";
+        std::wstring title;
+        if (!SelectTitle(title))
+            return false;
 
-        Log(L"Loading dashboard.xbe");
-
-        return loadXbe(dashboard.c_str()) == 0;
+        Log(L"Starting selected XBE in the native x86 guest process.");
+        return loadXbe(title.c_str()) == 0;
     }
 }
 
@@ -227,7 +303,7 @@ extern "C" int __cdecl MainStart()
     if (!StartModules())
         return 2;
 
-    if (!StartDashboard())
+    if (!StartTitle())
     {
         StopModules();
         return 3;
@@ -235,7 +311,7 @@ extern "C" int __cdecl MainStart()
 
     running = true;
 
-    Log(L"XboxRuntime initialized.");
+    Log(L"XboxRuntime host initialized; XBE guest entry thread started. Compatibility remains partial.");
 
     return 0;
 }

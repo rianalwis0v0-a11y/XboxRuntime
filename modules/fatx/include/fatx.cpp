@@ -540,7 +540,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     DWORD spc = v->sectorsPerCluster;
 
-    if (spc < 8 || spc > 128 ||
+    if (spc < 2 || spc > 128 ||
         (spc & (spc - 1)) != 0)
     {
         delete v;

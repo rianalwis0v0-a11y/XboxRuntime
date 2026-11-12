@@ -297,12 +297,21 @@ namespace XboxBoot
         switch (message)
         {
         case WM_CREATE:
+            // The startup AVI is optional; missing media must not block boot.
             if (!PlayStartupAnimation(window))
             {
                 OutputDebugStringW(
-                    L"[XboxBoot] Could not open startup.avi.\n"
+                    L"[XboxBoot] startup.avi unavailable; skipping animation.\\n"
                 );
-                return -1;
+
+                if (g_animation)
+                {
+                    DestroyWindow(g_animation);
+                    g_animation = nullptr;
+                }
+
+                PostMessageW(window, WM_START_RUNTIME, 0, 0);
+                return 0;
             }
 
             PlayStartupSound();
