@@ -6,6 +6,7 @@
 #include "nv2a_bridge.h"
 #include "nv2a_state.h"
 #include "nv2a_pgraph_d3d11.h"
+#include "d3d8_xbox.h"
 
 #define XBOX_VRAM_SIZE  (64u * 1024u * 1024u)
 #define XBOX_RAMIN_SIZE (1u * 1024u * 1024u)
@@ -17,6 +18,133 @@ static uint8_t* g_ramin;
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
 static int g_started;
+static uint32_t g_pgraph_fallback_methods;
+
+static int map_compare_function(uint32_t parameter, uint32_t* value)
+{
+    if (parameter < 0x0200u || parameter > 0x0207u) return 0;
+    *value = parameter - 0x01FFu;
+    return 1;
+}
+
+static int map_stencil_operation(uint32_t parameter, uint32_t* value)
+{
+    switch (parameter) {
+    case 0x1E00u: *value = 1u; return 1;
+    case 0x0000u: *value = 2u; return 1;
+    case 0x1E01u: *value = 3u; return 1;
+    case 0x1E02u: *value = 4u; return 1;
+    case 0x1E03u: *value = 5u; return 1;
+    case 0x150Au: *value = 6u; return 1;
+    case 0x8507u: *value = 7u; return 1;
+    case 0x8508u: *value = 8u; return 1;
+    default: return 0;
+    }
+}
+
+int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
+                                    uint32_t* state_out, uint32_t* value_out)
+{
+    uint32_t state = 0, value = parameter;
+    if (!state_out || !value_out) return 0;
+
+    switch (method) {
+    case NV097_SET_ALPHA_FUNC:
+        state = D3DRS_ALPHAFUNC;
+        if (!map_compare_function(parameter, &value)) return 0;
+        break;
+    case NV097_SET_ALPHA_REF:
+        state = D3DRS_ALPHAREF; value = parameter & 0xFFu; break;
+    case NV097_SET_DEPTH_FUNC:
+        state = D3DRS_ZFUNC;
+        if (!map_compare_function(parameter, &value)) return 0;
+        break;
+    case NV097_SET_DEPTH_MASK:
+        state = D3DRS_ZWRITEENABLE; value = parameter ? 1u : 0u; break;
+    case NV097_SET_STENCIL_TEST_ENABLE:
+        state = D3DRS_STENCILENABLE; value = parameter ? 1u : 0u; break;
+    case NV097_SET_STENCIL_MASK:
+        state = D3DRS_STENCILWRITEMASK; break;
+    case NV097_SET_STENCIL_FUNC:
+        state = D3DRS_STENCILFUNC;
+        if (!map_compare_function(parameter, &value)) return 0;
+        break;
+    case NV097_SET_STENCIL_FUNC_REF:
+        state = D3DRS_STENCILREF; break;
+    case NV097_SET_STENCIL_FUNC_MASK:
+        state = D3DRS_STENCILMASK; break;
+    case NV097_SET_STENCIL_OP_FAIL:
+        state = D3DRS_STENCILFAIL;
+        if (!map_stencil_operation(parameter, &value)) return 0;
+        break;
+    case NV097_SET_STENCIL_OP_ZFAIL:
+        state = D3DRS_STENCILZFAIL;
+        if (!map_stencil_operation(parameter, &value)) return 0;
+        break;
+    case NV097_SET_STENCIL_OP_ZPASS:
+        state = D3DRS_STENCILPASS;
+        if (!map_stencil_operation(parameter, &value)) return 0;
+        break;
+    case NV097_SET_BLEND_EQUATION:
+        state = D3DRS_BLENDOP;
+        switch (parameter) {
+        case 0x8006u: value = 1u; break;
+        case 0x800Au: value = 2u; break;
+        case 0x800Bu: value = 3u; break;
+        case 0x8007u: value = 4u; break;
+        case 0x8008u: value = 5u; break;
+        default: return 0;
+        }
+        break;
+    case NV097_SET_FOG_ENABLE:
+        state = D3DRS_FOGENABLE; value = parameter ? 1u : 0u; break;
+    case NV097_SET_FOG_COLOR:
+        state = D3DRS_FOGCOLOR; break;
+    case NV097_SET_FOG_MODE:
+        state = D3DRS_FOGTABLEMODE;
+        switch (parameter) {
+        case 0x2601u: case 0x0804u: value = D3DFOG_LINEAR; break;
+        case 0x0800u: case 0x0802u: value = D3DFOG_EXP; break;
+        case 0x0801u: case 0x0803u: value = D3DFOG_EXP2; break;
+        default: return 0;
+        }
+        break;
+    case NV097_SET_LIGHTING_ENABLE:
+        state = D3DRS_LIGHTING; value = parameter ? 1u : 0u; break;
+    case NV097_SET_SHADE_MODE:
+        state = D3DRS_SHADEMODE;
+        if (parameter == NV097_SET_SHADE_MODE_V_FLAT) value = 1u;
+        else if (parameter == NV097_SET_SHADE_MODE_V_SMOOTH) value = 2u;
+        else return 0;
+        break;
+    case NV097_SET_POINT_SIZE:
+        state = D3DRS_POINTSIZE; break;
+    default:
+        return 0;
+    }
+
+    *state_out = state;
+    *value_out = value;
+    return 1;
+}
+
+static void submit_pgraph_method(uint32_t subchannel, uint32_t method,
+                                 uint32_t parameter)
+{
+    uint32_t state = 0, value = 0;
+    if (XboxNV2A_MapRenderState(method, parameter, &state, &value)) {
+        IDirect3DDevice8* device = xbox_GetD3DDevice();
+        if (device && device->lpVtbl && device->lpVtbl->SetRenderState &&
+            SUCCEEDED(device->lpVtbl->SetRenderState(
+                device, (D3DRENDERSTATETYPE)state, value))) {
+            if (method != NV097_SET_SHADE_MODE)
+                ++g_pgraph_fallback_methods;
+        }
+    }
+    pgraph_method(g_gpu, subchannel, method, parameter);
+}
+
+
 
 int __cdecl ModuleStart(void)
 {
@@ -109,7 +237,7 @@ int __cdecl XboxNV2A_SubmitMethod(
     if (subchannel > 7 || method >= 0x2000u * 4u || (method & 3u))
         return 2;
 
-    pgraph_method(g_gpu, subchannel, method, parameter);
+    submit_pgraph_method(subchannel, method, parameter);
     return 0;
 }
 
@@ -262,7 +390,7 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
         const uint32_t instance = (context & 0xFFFFu) << 4;
         if (engine != 1u) return 2; /* This bridge currently drives PGRAPH only. */
         if (!memory_range_valid(instance, 4u, XBOX_RAMIN_SIZE)) return 3;
-        pgraph_method(g_gpu, subchannel, 0u, instance);
+        submit_pgraph_method(subchannel, 0u, instance);
         g_bound_engine[channel][subchannel] = engine;
         return 0;
     }
@@ -285,7 +413,7 @@ static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
             return 6;
     }
 
-    pgraph_method(g_gpu, subchannel, method, parameter);
+    submit_pgraph_method(subchannel, method, parameter);
     return 0;
 }
 
@@ -470,7 +598,7 @@ static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* subm
             uint32_t parameter;
             memcpy(&parameter, g_vram + offset + (cursor + i) * 4u, sizeof(parameter));
             if (dispatch)
-                pgraph_method(g_gpu, subchannel,
+                submit_pgraph_method(subchannel,
                     command_type == 2u ? method : method + i * 4u,
                     parameter);
         }
@@ -502,7 +630,7 @@ int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, u
         if (method >= 0x2000u * 4u || (method & 3u)) return 3;
     }
     for (uint32_t i = 0; i < pair_count; ++i)
-        pgraph_method(g_gpu, subchannel, pairs[i * 2u], pairs[i * 2u + 1u]);
+        submit_pgraph_method(subchannel, pairs[i * 2u], pairs[i * 2u + 1u]);
     return 0;
 }
 
@@ -524,7 +652,8 @@ int __cdecl XboxNV2A_GetStats(XboxNV2A_STATS* output)
     output->draw_calls = stats.draw_calls;
     output->vertices_submitted = stats.vertices_submitted;
     output->methods_handled = stats.methods_handled;
-    output->methods_ignored = stats.methods_ignored;
+    output->methods_ignored = stats.methods_ignored >= g_pgraph_fallback_methods
+        ? stats.methods_ignored - g_pgraph_fallback_methods : 0;
     output->clears = stats.clears;
     return 0;
 }
