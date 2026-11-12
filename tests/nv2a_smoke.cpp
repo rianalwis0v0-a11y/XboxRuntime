@@ -38,7 +38,7 @@ using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
-struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v; };
+struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1; };
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
 struct SurfaceInfo {
@@ -252,12 +252,18 @@ int main() {
     const uint32_t vertexSpecular[2] = { 0x00112233u, 0x00445566u };
     const float vertexNormals[6] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
     const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
+    const float vertexTexcoords1[4] = { 0.125f, 0.25f, 0.625f, 0.875f };
+    const uint32_t vertexContextBStream[] = { (1u << 18) | 0x01A0u, dmaHandle };
     HostVertex hostVertices[2]{};
     uint32_t hostVertexStride = 0, hostFvf = 0;
     if (writeVram(0x1400u, vertexColors, sizeof(vertexColors)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
+        writeVram(0x1800u, vertexTexcoords1, sizeof(vertexTexcoords1)) != 0 ||
+        writeVram(0x1000u, vertexContextBStream, sizeof(vertexContextBStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, sizeof(vertexContextBStream),
+                      &dmaGet, &dmaMethods) != 0 ||
         submit(0u, 0x1728u, 0x600u) != 0 ||
         submit(0u, 0x1768u, (12u << 8) | (3u << 4) | 2u) != 0 ||
         submit(0u, 0x1730u, 0x700u) != 0 ||
@@ -266,9 +272,11 @@ int main() {
         submit(0u, 0x176Cu, (4u << 8) | (4u << 4)) != 0 ||
         submit(0u, 0x173Cu, 0x500u) != 0 ||
         submit(0u, 0x177Cu, (8u << 8) | (2u << 4) | 2u) != 0 ||
+        submit(0u, 0x1740u, 0x800u) != 0 ||
+        submit(0u, 0x1780u, (8u << 8) | (2u << 4) | 2u) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
-        hostVertexStride != 40u || hostFvf != 0x1D2u ||
+        hostVertexStride != 48u || hostFvf != 0x2D2u ||
         hostVertices[0].nx != 0.0f || hostVertices[0].ny != 0.0f || hostVertices[0].nz != 1.0f ||
         hostVertices[1].nx != 0.0f || hostVertices[1].ny != 1.0f || hostVertices[1].nz != 0.0f ||
         hostVertices[0].diffuse != vertexColors[0] ||
@@ -277,6 +285,8 @@ int main() {
         hostVertices[1].specular != vertexSpecular[1] ||
         hostVertices[0].u != 0.25f || hostVertices[0].v != 0.5f ||
         hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
+        hostVertices[0].u1 != 0.125f || hostVertices[0].v1 != 0.25f ||
+        hostVertices[1].u1 != 0.625f || hostVertices[1].v1 != 0.875f ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(HostVertex), &hostVertexStride, &hostFvf) == 0) {
         std::cerr << "FAIL: NV2A position/color/TEX0 host vertex stream build\\n";
