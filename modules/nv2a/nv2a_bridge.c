@@ -307,7 +307,7 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
         return 1;
 
     while (get != put) {
-        if (++steps > 1048576u || get > put || put - get < 4u)
+        if (++steps > 1048576u || get > mapped_length || mapped_length - get < 4u)
             return 2;
 
         const uint32_t word = read_le32(g_vram + base + get);
@@ -328,12 +328,12 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
         if ((word & 0xE0000003u) == 0x20000000u) {
             /* Legacy 29-bit jump command. */
             const uint32_t target = word & 0x1FFFFFFCu;
-            if ((target & 3u) || target >= mapped_length || target >= put)
+            if ((target & 3u) || target >= mapped_length)
                 return 4;
             get = target;
         } else if ((word & 3u) == 1u) {
             const uint32_t target = word & 0xFFFFFFFCu;
-            if (target >= mapped_length || target >= put)
+            if (target >= mapped_length)
                 return 4;
             get = target;
         } else if ((word & 3u) == 2u) {
@@ -352,7 +352,7 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
             subchannel = (word >> 13) & 7u;
             remaining = (word >> 18) & 0x7FFu;
             non_incrementing = 0;
-            if (!remaining || remaining > (put - get) / 4u ||
+            if (!remaining || remaining > (mapped_length - get) / 4u ||
                 remaining > 0x800u || method > 0x1FFCu ||
                 remaining - 1u > (0x1FFCu - method) / 4u)
                 return 7;
