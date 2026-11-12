@@ -53,6 +53,26 @@ __declspec(dllexport) int __cdecl XboxNV2A_MapRenderState(
     uint32_t method, uint32_t parameter,
     uint32_t* d3d_state_out, uint32_t* d3d_value_out);
 
+typedef struct XboxNV2A_SURFACE_INFO {
+    uint32_t width;
+    uint32_t height;
+    uint32_t color_format;
+    uint32_t zeta_format;
+    uint32_t color_bytes_per_pixel;
+    uint32_t zeta_bytes_per_pixel;
+    uint32_t color_pitch;
+    uint32_t zeta_pitch;
+    uint32_t color_offset;
+    uint32_t zeta_offset;
+} XboxNV2A_SURFACE_INFO;
+
+/* Decode a linear-pitch NV097 surface and validate its VRAM spans. */
+__declspec(dllexport) int __cdecl XboxNV2A_DecodeSurface(
+    uint32_t surface_format, uint32_t surface_pitch,
+    uint32_t color_offset, uint32_t zeta_offset,
+    uint32_t clip_horizontal, uint32_t clip_vertical,
+    XboxNV2A_SURFACE_INFO* output);
+
 typedef struct XboxNV2A_DMA_INFO {
     uint32_t handle;
     uint32_t instance_offset;
