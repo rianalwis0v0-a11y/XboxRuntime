@@ -699,6 +699,29 @@ extern "C" void __stdcall K_RtlTimeToTimeFields(const LARGE_INTEGER* time, Guest
     fields->Hour = SHORT(st.wHour); fields->Minute = SHORT(st.wMinute); fields->Second = SHORT(st.wSecond);
     fields->Milliseconds = SHORT(st.wMilliseconds); fields->Weekday = SHORT(st.wDayOfWeek);
 }
+
+extern "C" int __cdecl K_RtlSnprintf(char* output, size_t capacity, const char* format, ...) {
+    if (!output || !capacity || !format) return -1;
+    va_list args; va_start(args, format);
+    const int result = vsnprintf(output, capacity, format, args);
+    va_end(args);
+    return result;
+}
+extern "C" int __cdecl K_RtlSprintf(char* output, const char* format, ...) {
+    if (!output || !format) return -1;
+    va_list args; va_start(args, format);
+    const int result = vsprintf(output, format, args);
+    va_end(args);
+    return result;
+}
+extern "C" int __cdecl K_RtlVsnprintf(char* output, size_t capacity, const char* format, va_list args) {
+    if (!output || !capacity || !format) return -1;
+    return vsnprintf(output, capacity, format, args);
+}
+extern "C" int __cdecl K_RtlVsprintf(char* output, const char* format, va_list args) {
+    if (!output || !format) return -1;
+    return vsprintf(output, format, args);
+}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -737,7 +760,15 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
-        cmp eax, 12
+        cmp eax, 361
+        je rtl_snprintf
+        cmp eax, 362
+        je rtl_sprintf
+        cmp eax, 363
+        je rtl_vsnprintf
+        cmp eax, 364
+        je rtl_vsprintf
+                cmp eax, 12
         je ex_acquire_rw_exclusive
         cmp eax, 13
         je ex_acquire_rw_shared
@@ -975,6 +1006,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     iinc: jmp K_InterlockedIncrement
     iex: jmp K_InterlockedExchange
     iexa: jmp K_InterlockedExchangeAdd
+    rtl_snprintf: jmp K_RtlSnprintf
+    rtl_sprintf: jmp K_RtlSprintf
+    rtl_vsnprintf: jmp K_RtlVsnprintf
+    rtl_vsprintf: jmp K_RtlVsprintf
     ex_acquire_rw_exclusive: jmp K_ExAcquireReadWriteLockExclusive
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
