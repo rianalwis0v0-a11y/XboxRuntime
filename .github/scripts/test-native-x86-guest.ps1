@@ -34,7 +34,7 @@ $code = [byte[]]@(0x68,0,0,0,0, 0xA1,0,0,0,0, 0xFF,0xD0, 0x83,0xC4,0x04, 0xC3)
 [BitConverter]::GetBytes([uint32]0x10001100).CopyTo($code,6)
 $code.CopyTo($b,0x1000)
 # Import table: 0x80000008 = xboxkrnl ordinal 8 (DbgPrint), then terminator.
-Put32 0x1100 0x80000008
+Put32 0x1100 ([uint32]2147483656)
 Put32 0x1104 0
 [Text.Encoding]::ASCII.GetBytes("XboxRuntime kernel thunk test").CopyTo($b,0x1120)
 [IO.File]::WriteAllBytes($xbe, $b)
