@@ -29,7 +29,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,307,309,310,311,314,315,317,318,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -334,11 +334,6 @@ EmitCheckEqual 0
 EmitLoadEax $numberValueVa
 EmitCheckEqual 1
 
-# Temporary isolation stop: validate through conversion-size APIs.
-EmitIncrement $skippedVa
-EmitIncrement $skippedVa
-EmitIncrement $skippedVa
-EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
 
 # Additional RTL APIs: compare memory, allocate/free Unicode strings, uppercase.
@@ -384,6 +379,46 @@ EmitCheckEqual 0
 EmitLoadEax $formattedVa
 EmitByte 0x25; Emit32 0xFF
 EmitCheckEqual 0x41
+
+# ANSI/Unicode descriptor initialization, comparison, equality, and status mapping.
+$extraAnsiDescVa = [uint32]($reportVa + 0x2A0)
+$extraUnicodeDescVa = [uint32]($reportVa + 0x2B0)
+EmitPush $formattedVa
+EmitPush $extraAnsiDescVa
+EmitCallImport 289
+EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $extraAnsiDescVa
+EmitCheckEqual 2
+EmitPush 0
+EmitPush $extraAnsiDescVa
+EmitPush $ansiSourceVa
+EmitCallImport 270
+EmitCheckEqual 0
+EmitPush 1
+EmitPush $extraAnsiDescVa
+EmitPush $ansiSourceVa
+EmitCallImport 279
+EmitCheckEqual 1
+EmitPush $unicodeBufferVa
+EmitPush $extraUnicodeDescVa
+EmitCallImport 290
+EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $extraUnicodeDescVa
+EmitCheckEqual 2
+EmitPush 0
+EmitPush $extraUnicodeDescVa
+EmitPush $caseSourceDescriptorVa
+EmitCallImport 271
+EmitCheckEqual 0
+EmitPush 1
+EmitPush $extraUnicodeDescVa
+EmitPush $caseSourceDescriptorVa
+EmitCallImport 280
+EmitCheckEqual 1
+EmitPush 0x61
+EmitCallImport 316
+EmitCheckEqual 0x41
+EmitPush ([uint32]0xC000000D)
+EmitCallImport 301
+EmitCheckEqual 87
 
 # Temporary isolation boundary while validating the kernel API groups.
 EmitIncrement $skippedVa
