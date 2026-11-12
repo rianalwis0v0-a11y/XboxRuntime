@@ -398,11 +398,6 @@ EmitPush $extraAnsiDescVa
 EmitPush $extraAnsiDescVa
 EmitCallImport 279
 EmitCheckEqual 1
-# Temporary isolation checkpoint: ANSI descriptor APIs.
-EmitIncrement $skippedVa
-EmitIncrement $skippedVa
-EmitIncrement $skippedVa
-EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 EmitPush $unicodeBufferVa
 EmitPush $extraUnicodeDescVa
 EmitCallImport 290
@@ -425,11 +420,6 @@ EmitPush ([uint32]3221225485)
 EmitCallImport 301
 EmitCheckEqual 87
 
-# Temporary isolation boundary while validating the kernel API groups.
-EmitIncrement $skippedVa
-EmitIncrement $skippedVa
-EmitIncrement $skippedVa
-EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
 # Kernel dispatcher event lifecycle: initialize, signal, wait, reset, timeout.
 $eventObjectVa = [uint32]($reportVa + 0x220)
