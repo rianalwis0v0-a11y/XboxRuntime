@@ -1735,6 +1735,37 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+static int read_vertex_float_array(uint32_t channel,uint32_t subchannel,
+    uint32_t array_index,uint32_t first_vertex,uint32_t vertex_count,
+    uint32_t expected_components,float* destination,uint32_t destination_capacity)
+{
+    if(!destination||!vertex_count||vertex_count>255u)return 1;
+    const uint32_t format=g_gpu->pgraph.regs[(0x1760u+array_index*4u)/4u];
+    const uint32_t type=format&0xFu,components=(format>>4)&0xFu;
+    if(components!=expected_components||
+       (type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F&&
+        type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S1&&
+        type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S32K))return 2;
+    const uint32_t bytes_per_component=type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F?4u:2u;
+    uint8_t raw[255u*4u*4u];uint32_t stride=0,element_bytes=0;
+    int result=XboxNV2A_ReadVertexArray(channel,subchannel,array_index,
+        first_vertex,vertex_count,raw,sizeof(raw),&stride,&element_bytes);
+    if(result!=0||element_bytes!=components*bytes_per_component)return 3;
+    if((uint64_t)vertex_count*components*sizeof(float)>destination_capacity)return 4;
+    for(uint32_t i=0;i<vertex_count*components;++i){
+        if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F)
+            memcpy(&destination[i],raw+(size_t)i*4u,4u);
+        else{
+            int16_t value;memcpy(&value,raw+(size_t)i*2u,2u);
+            if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S1){
+                float normalized=(float)value/32767.0f;
+                destination[i]=normalized < -1.0f ? -1.0f : normalized;
+            }else destination[i]=(float)value;
+        }
+    }
+    return 0;
+}
+
 int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     uint32_t first_vertex, uint32_t vertex_count,
     XboxNV2A_VERTEX* destination, uint32_t destination_capacity,
@@ -1751,9 +1782,7 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     if (!vertex_count) return 0;
 
     const uint32_t position_format = g_gpu->pgraph.regs[0x1760u / 4u];
-    if ((position_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
-        ((position_format >> 4) & 0xFu) != 3u)
-        return 3; /* This first FVF path requires float3 position. */
+    if (((position_format >> 4) & 0xFu) != 3u) return 3;
 
     float positions[255u * 3u];
     float normals[255u * 3u];
@@ -1764,21 +1793,17 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     float texcoords2[255u * 2u];
     float texcoords3[255u * 2u];
     uint32_t stride = 0, element_bytes = 0;
-    int result = XboxNV2A_ReadVertexArray(channel, subchannel, 0u,
-        first_vertex, vertex_count, positions, sizeof(positions),
-        &stride, &element_bytes);
-    if (result != 0 || element_bytes != 12u) return 4;
+    int result=read_vertex_float_array(channel,subchannel,0u,
+        first_vertex,vertex_count,3u,positions,sizeof(positions));
+    if(result!=0)return 4;
 
     int has_normal = 0;
     const uint32_t normal_format = g_gpu->pgraph.regs[0x1768u / 4u];
     if (normal_format != 0u) {
-        if ((normal_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
-            ((normal_format >> 4) & 0xFu) != 3u)
-            return 5;
-        result = XboxNV2A_ReadVertexArray(channel, subchannel, 2u,
-            first_vertex, vertex_count, normals, sizeof(normals),
-            &stride, &element_bytes);
-        if (result != 0 || element_bytes != 12u) return 6;
+        if (((normal_format >> 4) & 0xFu) != 3u) return 5;
+        result=read_vertex_float_array(channel,subchannel,2u,
+            first_vertex,vertex_count,3u,normals,sizeof(normals));
+        if(result!=0)return 6;
         has_normal = 1;
     }
 
@@ -1826,50 +1851,40 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     int has_texcoord = 0;
     const uint32_t tex_format = g_gpu->pgraph.regs[0x177Cu / 4u];
     if (tex_format != 0u) {
-        if ((tex_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
-            ((tex_format >> 4) & 0xFu) != 2u)
-            return 7;
-        result = XboxNV2A_ReadVertexArray(channel, subchannel, 7u,
-            first_vertex, vertex_count, texcoords, sizeof(texcoords),
-            &stride, &element_bytes);
-        if (result != 0 || element_bytes != 8u) return 10;
+        if(((tex_format>>4)&0xFu)!=2u)return 7;
+        result=read_vertex_float_array(channel,subchannel,7u,
+            first_vertex,vertex_count,2u,texcoords,sizeof(texcoords));
+        if(result!=0)return 10;
         has_texcoord = 1;
     }
 
     int has_texcoord1 = 0;
     const uint32_t tex1_format = g_gpu->pgraph.regs[0x1780u / 4u];
     if (tex1_format != 0u) {
-        if ((tex1_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
-            ((tex1_format >> 4) & 0xFu) != 2u)
-            return 11;
-        result = XboxNV2A_ReadVertexArray(channel, subchannel, 8u,
-            first_vertex, vertex_count, texcoords1, sizeof(texcoords1),
-            &stride, &element_bytes);
-        if (result != 0 || element_bytes != 8u) return 12;
+        if(((tex1_format>>4)&0xFu)!=2u)return 11;
+        result=read_vertex_float_array(channel,subchannel,8u,
+            first_vertex,vertex_count,2u,texcoords1,sizeof(texcoords1));
+        if(result!=0)return 12;
         has_texcoord1 = 1;
     }
 
     int has_texcoord2 = 0;
     const uint32_t tex2_format = g_gpu->pgraph.regs[0x1784u / 4u];
     if (tex2_format != 0u) {
-        if ((tex2_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
-            ((tex2_format >> 4) & 0xFu) != 2u) return 13;
-        result = XboxNV2A_ReadVertexArray(channel, subchannel, 9u,
-            first_vertex, vertex_count, texcoords2, sizeof(texcoords2),
-            &stride, &element_bytes);
-        if (result != 0 || element_bytes != 8u) return 14;
+        if(((tex2_format>>4)&0xFu)!=2u)return 13;
+        result=read_vertex_float_array(channel,subchannel,9u,
+            first_vertex,vertex_count,2u,texcoords2,sizeof(texcoords2));
+        if(result!=0)return 14;
         has_texcoord2 = 1;
     }
 
     int has_texcoord3 = 0;
     const uint32_t tex3_format = g_gpu->pgraph.regs[0x1788u / 4u];
     if (tex3_format != 0u) {
-        if ((tex3_format & 0xFu) != NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F ||
-            ((tex3_format >> 4) & 0xFu) != 2u) return 15;
-        result = XboxNV2A_ReadVertexArray(channel, subchannel, 10u,
-            first_vertex, vertex_count, texcoords3, sizeof(texcoords3),
-            &stride, &element_bytes);
-        if (result != 0 || element_bytes != 8u) return 16;
+        if(((tex3_format>>4)&0xFu)!=2u)return 15;
+        result=read_vertex_float_array(channel,subchannel,10u,
+            first_vertex,vertex_count,2u,texcoords3,sizeof(texcoords3));
+        if(result!=0)return 16;
         has_texcoord3 = 1;
     }
 

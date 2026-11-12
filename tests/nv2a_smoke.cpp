@@ -513,6 +513,25 @@ int main() {
         stop();return 1;
     }
 
+    /* S1 normals normalize; S32K texture coordinates preserve signed scale. */
+    const int16_t signedNormals[6]={32767,0,-32768,0,-16384,16384};
+    const int16_t signedUvs[4]={-12,34,56,-78};
+    if(writeVram(0x1B00u,signedNormals,sizeof(signedNormals))!=0||
+       writeVram(0x1C00u,signedUvs,sizeof(signedUvs))!=0||
+       submit(0u,0x1728u,0xB00u)!=0||
+       submit(0u,0x1768u,(12u<<8)|(3u<<4)|1u)!=0||
+       submit(0u,0x173Cu,0xC00u)!=0||
+       submit(0u,0x177Cu,(4u<<8)|(2u<<4)|5u)!=0||
+       buildVertexStream(channel,0u,0u,2u,hostVertices,sizeof(hostVertices),
+          &hostVertexStride,&hostFvf)!=0||
+       hostVertices[0].nx!=1.0f||hostVertices[0].ny!=0.0f||
+       hostVertices[0].nz!=-1.0f||hostVertices[1].nx < -0.501f||
+       hostVertices[0].u!=-12.0f||hostVertices[0].v!=34.0f||
+       hostVertices[1].u!=56.0f||hostVertices[1].v!=-78.0f){
+        std::cerr<<"FAIL: S1/S32K NV097 vertex attribute conversion\\n";
+        stop();return 1;
+    }
+
     /* Invalid RAMHT handles are rejected before any earlier methods dispatch. */
     const uint32_t badHandleStream[] = {
         (1u << 18), dmaHandle,

@@ -447,3 +447,13 @@ Diffuse and specular arrays now accept both packed UB_D3D and byte-ordered
 UB_OGL formats. UB_OGL RGBA bytes are converted to the D3DCOLOR AARRGGBB
 layout expected by the D3D8 FVF. Smoke tests cover both diffuse and specular
 channel ordering.
+
+
+## Signed NV097 vertex attributes
+
+The DMA-backed vertex builder now converts S1 signed-normalized attributes
+to the [-1,1] float range and S32K signed-short attributes to unnormalized
+float values. Float attributes remain bit-preserving. Position, normal and
+TEX0-TEX3 arrays use the shared checked conversion path; color arrays retain
+their dedicated UB_D3D/UB_OGL channel handling. Tests cover signed extrema,
+normalization, and signed UV values.
