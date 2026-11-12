@@ -81,12 +81,14 @@ function EmitCheckAtLeast([uint32]$minimum) {
     EmitIncrement $script:failedAddress
 }
 function EmitCheckPoolSize {
+    $script:checkIndex++
     EmitByte 0x3D; Emit32 ([uint32]4294967295)
     EmitByte 0x74; EmitByte 15
     EmitByte 0x3D; Emit32 ([uint32]64)
     EmitByte 0x72; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 6
+    EmitByte 0xEB; EmitByte 16
+    EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
 
