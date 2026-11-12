@@ -123,12 +123,12 @@ channel switching and puller scheduling.
 resolves a readable DMA object through RAMHT and processes its NV4-style command
 stream. GET/PUT are byte offsets within that object. The implementation handles
 incrementing and non-incrementing method packets, legacy and NV1A jump commands,
-single-level CALL/RETURN, NOP, and the reference-counter method. It validates
+single-level CALL/RETURN, and the reference-counter method. It validates
 all reads and control-flow targets against the mapped DMA span, bounds execution
 to one million command/data words, and performs a validation pass before GPU
 dispatch so malformed streams do not partially execute.
 
-The puller currently binds only the graphics engine. Object-bind method 0 and
+The puller currently binds only the graphics engine. It does not enable the later-generation NOP method on NV2A. Object-bind method 0 and
 the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
 unimplemented puller special methods, nested calls, PCI/AGP DMA, DMA page
 translation, interrupts, scheduling/channel switching, and IB mode remain
