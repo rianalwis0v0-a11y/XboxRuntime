@@ -305,6 +305,29 @@ extern "C" void __stdcall K_MmSetAddressProtect(void* address, uint32_t size, ui
     DWORD oldProtect = 0;
     if (address && size) VirtualProtect(address, size, protect, &oldProtect);
 }
+struct GuestTimeFields { SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday; };
+extern "C" BOOL __stdcall K_RtlTimeFieldsToTime(const GuestTimeFields* fields, LARGE_INTEGER* time) {
+    if (!fields || !time) return FALSE;
+    SYSTEMTIME st{};
+    st.wYear = WORD(fields->Year); st.wMonth = WORD(fields->Month); st.wDay = WORD(fields->Day);
+    st.wHour = WORD(fields->Hour); st.wMinute = WORD(fields->Minute); st.wSecond = WORD(fields->Second);
+    st.wMilliseconds = WORD(fields->Milliseconds);
+    FILETIME ft{};
+    if (!SystemTimeToFileTime(&st, &ft)) return FALSE;
+    ULARGE_INTEGER value{}; value.LowPart = ft.dwLowDateTime; value.HighPart = ft.dwHighDateTime;
+    time->QuadPart = LONGLONG(value.QuadPart);
+    return TRUE;
+}
+extern "C" void __stdcall K_RtlTimeToTimeFields(const LARGE_INTEGER* time, GuestTimeFields* fields) {
+    if (!time || !fields) return;
+    ULARGE_INTEGER value{}; value.QuadPart = ULONGLONG(time->QuadPart);
+    FILETIME ft{}; ft.dwLowDateTime = value.LowPart; ft.dwHighDateTime = value.HighPart;
+    SYSTEMTIME st{};
+    if (!FileTimeToSystemTime(&ft, &st)) { std::memset(fields, 0, sizeof(*fields)); return; }
+    fields->Year = SHORT(st.wYear); fields->Month = SHORT(st.wMonth); fields->Day = SHORT(st.wDay);
+    fields->Hour = SHORT(st.wHour); fields->Minute = SHORT(st.wMinute); fields->Second = SHORT(st.wSecond);
+    fields->Milliseconds = SHORT(st.wMilliseconds); fields->Weekday = SHORT(st.wDayOfWeek);
+}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -463,6 +486,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_map_generic
         cmp eax, 301
         je rtl_status_dos
+        cmp eax, 304
+        je rtl_time_fields_to_time
+        cmp eax, 305
+        je rtl_time_to_fields
         cmp eax, 308
         je rtl_unicode_to_ansi
         cmp eax, 204
@@ -557,6 +584,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_free_unicode: jmp K_RtlFreeUnicodeString
     rtl_map_generic: jmp K_RtlMapGenericMask
     rtl_status_dos: jmp K_RtlNtStatusToDosError
+    rtl_time_fields_to_time: jmp K_RtlTimeFieldsToTime
+    rtl_time_to_fields: jmp K_RtlTimeToTimeFields
     rtl_unicode_to_ansi: jmp K_RtlUnicodeStringToAnsiString
     nt_protect_vm: jmp K_NtProtectVirtualMemory
     nt_query_vm: jmp K_NtQueryVirtualMemory
