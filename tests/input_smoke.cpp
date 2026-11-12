@@ -3,7 +3,7 @@
 #include "input.h"
 
 static_assert(sizeof(XBOX_INPUT_GAMEPAD) == 18, "Original Xbox gamepad layout must be 18 bytes");
-static_assert(sizeof(XBOX_INPUT_STATE) == 22, "Original Xbox input state layout must be 22 bytes");
+static_assert(sizeof(XBOX_INPUT_STATE) == 24, "Original Xbox input state must retain DWORD alignment");
 static_assert(sizeof(XBOX_INPUT_VIBRATION) == 4, "Original Xbox vibration layout must be 4 bytes");
 
 int main() {
