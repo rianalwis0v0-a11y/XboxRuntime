@@ -370,8 +370,13 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
 static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
-    if(method>=0x1B00u&&method<=0x1BDCu&&((method-0x1B00u)/0x40u)<4u)
-        g_texture_cache[channel][subchannel][(method-0x1B00u)/0x40u].dirty=1;
+    if (method >= 0x1B00u && method <= 0x1BDCu) {
+        const uint32_t stage = (method - 0x1B00u) / 0x40u;
+        const uint32_t reg = (method - 0x1B00u) % 0x40u;
+        if (stage < 4u && (reg == 0x00u || reg == 0x04u ||
+            reg == 0x0Cu || reg == 0x10u || reg == 0x1Cu))
+            g_texture_cache[channel][subchannel][stage].dirty = 1;
+    }
     if (apply_texture_stage_method(method, parameter)) {
         ++g_pgraph_custom_methods;
         g_gpu->pgraph.regs[method / 4u] = parameter;
@@ -1050,6 +1055,19 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
     return 0;
 }
 
+static int nv2a_texture_format_is_supported(uint32_t color)
+{
+    switch (color) {
+    case 0x00u: case 0x02u: case 0x03u: case 0x04u: case 0x05u:
+    case 0x06u: case 0x07u: case 0x0Cu: case 0x0Eu: case 0x0Fu:
+    case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x19u:
+    case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 static int nv2a_texture_format_is_linear(uint32_t color)
 {
     switch (color) {
@@ -1082,6 +1100,7 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
     const uint32_t max_lod = (control0 >> 6) & 0xFFFu;
     const uint32_t encoded_levels = (format >> 16) & 0xFu;
     const int linear = nv2a_texture_format_is_linear(color);
+    if (!nv2a_texture_format_is_supported(color)) return 6;
     uint32_t width = 0, height = 0, levels = encoded_levels;
     uint32_t source_pitch = (control1 >> 16) & 0xFFFFu;
 

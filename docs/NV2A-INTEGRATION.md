@@ -398,3 +398,9 @@ synchronization invalidate the affected cache entries. The initial uploader is
 limited to the decoder's supported 2D formats and a 64 MiB decoded-texture cap;
 full palette/cubemap/3D support and coherence for DMA writes that bypass the
 bridge VRAM-write API still need implementation and tests.
+
+
+The live stage reader now rejects color-format codes outside the decoder's
+implemented set instead of treating unknown linear/paletted encodings as
+swizzled textures. Cache invalidation is limited to source-shape and DMA
+registers; sampler-only changes no longer force a texture re-decode.
