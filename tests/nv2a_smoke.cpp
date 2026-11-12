@@ -34,6 +34,13 @@ using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
+struct SurfaceInfo {
+    uint32_t width, height, color_format, zeta_format;
+    uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
+    uint32_t color_pitch, zeta_pitch, color_offset, zeta_offset;
+};
+using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
+                                       uint32_t, uint32_t, SurfaceInfo*);
 
 
 static FARPROC Need(HMODULE module, const char* name) {
@@ -82,6 +89,7 @@ int main() {
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
+    auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
 
     uint32_t mappedState = 0, mappedValue = 0;
@@ -99,6 +107,26 @@ int main() {
         mappedState != 22u || mappedValue != 3u ||
         mapRenderState(0x0999u, 0u, &mappedState, &mappedValue)) {
         std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
+        FreeLibrary(module);
+        return 1;
+    }
+
+    SurfaceInfo surfaceInfo{};
+    const uint32_t surfaceFormat = 0x03u | (0x02u << 4) | (1u << 8);
+    const uint32_t surfacePitch = (2560u << 16) | 1280u;
+    if (decodeSurface(surfaceFormat, surfacePitch, 0x10000u, 0x200000u,
+                      640u << 16, 480u << 16, &surfaceInfo) != 0 ||
+        surfaceInfo.width != 640u || surfaceInfo.height != 480u ||
+        surfaceInfo.color_format != 5u || surfaceInfo.zeta_format != 0x2Au ||
+        surfaceInfo.color_bytes_per_pixel != 2u ||
+        surfaceInfo.zeta_bytes_per_pixel != 4u ||
+        decodeSurface(surfaceFormat, (2560u << 16) | 1000u,
+                      0x10000u, 0x200000u, 640u << 16, 480u << 16,
+                      &surfaceInfo) == 0 ||
+        decodeSurface(surfaceFormat, surfacePitch,
+                      64u * 1024u * 1024u - 100u, 0x200000u,
+                      640u << 16, 480u << 16, &surfaceInfo) == 0) {
+        std::cerr << "FAIL: NV097 linear surface decode / VRAM bounds\\n";
         FreeLibrary(module);
         return 1;
     }
