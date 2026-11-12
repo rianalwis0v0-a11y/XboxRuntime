@@ -397,6 +397,155 @@ int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,
     return 0;
 }
 
+static int copy_vram_to_surface(IDirect3DSurface8* surface,
+                                     const XboxNV2A_SURFACE_INFO* info)
+{
+    if (!surface || !surface->lpVtbl || !surface->lpVtbl->LockRect ||
+        !surface->lpVtbl->UnlockRect || !info)
+        return 0;
+
+    D3DLOCKED_RECT locked;
+    memset(&locked, 0, sizeof(locked));
+    if (FAILED(surface->lpVtbl->LockRect(surface, &locked, NULL, 0u)))
+        return 0;
+
+    const uint32_t row_bytes = info->width * info->color_bytes_per_pixel;
+    int ok = locked.pBits != NULL && locked.Pitch >= (INT)row_bytes;
+    if (ok) {
+        for (uint32_t y = 0; y < info->height; ++y) {
+            const uint8_t* source = g_vram + info->color_offset + y * info->color_pitch;
+            uint8_t* destination = (uint8_t*)locked.pBits + (size_t)y * (size_t)locked.Pitch;
+            memcpy(destination, source, row_bytes);
+        }
+    }
+    const HRESULT unlock_result = surface->lpVtbl->UnlockRect(surface);
+    return ok && SUCCEEDED(unlock_result);
+}
+
+static int copy_surface_to_vram(IDirect3DSurface8* surface,
+                                const XboxNV2A_SURFACE_INFO* info)
+{
+    if (!surface || !surface->lpVtbl || !surface->lpVtbl->LockRect ||
+        !surface->lpVtbl->UnlockRect || !info)
+        return 0;
+
+    D3DLOCKED_RECT locked;
+    memset(&locked, 0, sizeof(locked));
+    if (FAILED(surface->lpVtbl->LockRect(surface, &locked, NULL, D3DLOCK_READONLY)))
+        return 0;
+
+    const uint32_t row_bytes = info->width * info->color_bytes_per_pixel;
+    int ok = locked.pBits != NULL && locked.Pitch >= (INT)row_bytes;
+    if (ok) {
+        for (uint32_t y = 0; y < info->height; ++y) {
+            const uint8_t* source = (const uint8_t*)locked.pBits + (size_t)y * (size_t)locked.Pitch;
+            uint8_t* destination = g_vram + info->color_offset + y * info->color_pitch;
+            memcpy(destination, source, row_bytes);
+        }
+    }
+    const HRESULT unlock_result = surface->lpVtbl->UnlockRect(surface);
+    return ok && SUCCEEDED(unlock_result);
+}
+
+static void sync_surface_to_vram(void)
+{
+    if (g_surface_bound && g_color_surface)
+        (void)copy_surface_to_vram(g_color_surface, &g_bound_surface_info);
+}
+
+static void release_surface_targets(void)
+{
+    if (g_color_surface && g_color_surface->lpVtbl && g_color_surface->lpVtbl->Release)
+        g_color_surface->lpVtbl->Release(g_color_surface);
+    if (g_zeta_surface && g_zeta_surface->lpVtbl && g_zeta_surface->lpVtbl->Release)
+        g_zeta_surface->lpVtbl->Release(g_zeta_surface);
+    g_color_surface = NULL;
+    g_zeta_surface = NULL;
+    g_surface_bound = 0;
+    memset(&g_bound_surface_info, 0, sizeof(g_bound_surface_info));
+}
+
+static int update_surface_target(void)
+{
+    if (!g_surface_regs.dirty)
+        return 0;
+
+    IDirect3DDevice8* device = xbox_GetD3DDevice();
+    if (!device || !device->lpVtbl ||
+        !device->lpVtbl->CreateRenderTarget ||
+        !device->lpVtbl->SetRenderTarget)
+        return 1;
+
+    XboxNV2A_SURFACE_INFO info;
+    int result = XboxNV2A_DecodeSurface(
+        g_surface_regs.format, g_surface_regs.pitch,
+        g_surface_regs.color_offset, g_surface_regs.zeta_offset,
+        g_surface_regs.clip_horizontal, g_surface_regs.clip_vertical, &info);
+    if (result != 0) return 2 + result;
+
+    if (g_surface_bound &&
+        memcmp(&info, &g_bound_surface_info, sizeof(info)) == 0) {
+        g_surface_regs.dirty = 0;
+        return 0;
+    }
+
+    IDirect3DSurface8* new_color = NULL;
+    IDirect3DSurface8* new_zeta = NULL;
+    HRESULT hr = device->lpVtbl->CreateRenderTarget(
+        device, info.width, info.height, (D3DFORMAT)info.color_format,
+        D3DMULTISAMPLE_NONE, TRUE, &new_color);
+    if (FAILED(hr) || !new_color)
+        return 16;
+
+    if (info.zeta_format) {
+        if (!device->lpVtbl->CreateDepthStencilSurface) {
+            new_color->lpVtbl->Release(new_color);
+            return 17;
+        }
+        hr = device->lpVtbl->CreateDepthStencilSurface(
+            device, info.width, info.height, (D3DFORMAT)info.zeta_format,
+            D3DMULTISAMPLE_NONE, &new_zeta);
+        if (FAILED(hr) || !new_zeta) {
+            new_color->lpVtbl->Release(new_color);
+            return 18;
+        }
+    }
+
+    if (!copy_vram_to_surface(new_color, &info)) {
+        if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
+        new_color->lpVtbl->Release(new_color);
+        return 19;
+    }
+
+    if (g_surface_bound && g_color_surface &&
+        !copy_surface_to_vram(g_color_surface, &g_bound_surface_info)) {
+        if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
+        new_color->lpVtbl->Release(new_color);
+        return 20;
+    }
+
+    hr = device->lpVtbl->SetRenderTarget(device, new_color, new_zeta);
+    if (FAILED(hr)) {
+        if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
+        new_color->lpVtbl->Release(new_color);
+        return 21;
+    }
+
+    IDirect3DSurface8* old_color = g_color_surface;
+    IDirect3DSurface8* old_zeta = g_zeta_surface;
+    g_color_surface = new_color;
+    g_zeta_surface = new_zeta;
+    g_bound_surface_info = info;
+    g_surface_bound = 1;
+    g_surface_regs.dirty = 0;
+
+    if (old_color && old_color->lpVtbl && old_color->lpVtbl->Release)
+        old_color->lpVtbl->Release(old_color);
+    if (old_zeta && old_zeta->lpVtbl && old_zeta->lpVtbl->Release)
+        old_zeta->lpVtbl->Release(old_zeta);
+    return 0;
+}
+
 int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t length)
 {
     if (!g_started || !destination || !memory_range_valid(offset, length, XBOX_VRAM_SIZE)) return 1;
