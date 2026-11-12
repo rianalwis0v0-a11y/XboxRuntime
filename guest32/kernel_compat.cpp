@@ -912,6 +912,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je mm_alloc_system
         cmp eax, 172
         je mm_free_system
+                cmp eax, 49
+        je hal_return_firmware
+        cmp eax, 264
+        je rtl_assert
                 cmp eax, 7
         je dbg_load_symbols
         cmp eax, 10
@@ -1200,6 +1204,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     interlocked_flush_slist: jmp K_InterlockedFlushSList
     interlocked_pop_slist: jmp K_InterlockedPopEntrySList
     interlocked_push_slist: jmp K_InterlockedPushEntrySList
+    hal_return_firmware: jmp K_HalReturnToFirmware
+    rtl_assert: jmp K_RtlAssert
     dbg_load_symbols: jmp K_DbgLoadImageSymbols
     dbg_prompt: jmp K_DbgPrompt
     dbg_unload_symbols: jmp K_DbgUnLoadImageSymbols
