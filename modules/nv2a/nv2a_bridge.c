@@ -301,6 +301,29 @@ int __cdecl XboxNV2A_WriteRegister(
         return 2;
 
     nv2a_mmio_write(g_gpu, (hwaddr)register_offset, value, access_size);
+
+    /* PFIFO CACHE1 DMA mode: a PUT write kicks the validated software pusher. */
+    if (register_offset == 0x3240u && access_size == 4u) {
+        const uint32_t push1 = (uint32_t)nv2a_mmio_read(g_gpu, 0x3204u, 4u);
+        const uint32_t dma_push = (uint32_t)nv2a_mmio_read(g_gpu, 0x3220u, 4u);
+        if ((push1 & NV_PFIFO_CACHE1_PUSH1_MODE) ==
+                NV_PFIFO_CACHE1_PUSH1_MODE_DMA &&
+            (dma_push & NV_PFIFO_CACHE1_DMA_PUSH_ACCESS) != 0u) {
+            const uint32_t channel = push1 & NV_PFIFO_CACHE1_PUSH1_CHID;
+            const uint32_t instance = ((uint32_t)nv2a_mmio_read(
+                g_gpu, 0x322Cu, 4u) & NV_PFIFO_CACHE1_DMA_INSTANCE_ADDRESS) << 4;
+            const uint32_t get = (uint32_t)nv2a_mmio_read(g_gpu, 0x3244u, 4u);
+            const uint32_t put = (uint32_t)value;
+            if (get != put) {
+                uint32_t new_get = get, methods = 0;
+                const int pusher_result = XboxNV2A_SubmitDMAInstance(
+                    channel, instance, get, put, &new_get, &methods);
+                if (pusher_result != 0)
+                    return 3;
+                nv2a_mmio_write(g_gpu, 0x3244u, new_get, 4u);
+            }
+        }
+    }
     return 0;
 }
 
