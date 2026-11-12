@@ -47,6 +47,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_SubmitPushBuffer(uint32_t vram_offset
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, uint32_t pair_count);
 
 
+/* Map selected NV097 fixed-function methods to D3D8 render-state IDs/values.
+ * Returns 1 for a supported mapping, 0 for unsupported/invalid input. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapRenderState(
+    uint32_t method, uint32_t parameter,
+    uint32_t* d3d_state_out, uint32_t* d3d_value_out);
+
 typedef struct XboxNV2A_DMA_INFO {
     uint32_t handle;
     uint32_t instance_offset;
