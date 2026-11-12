@@ -3,6 +3,7 @@ add_library(main SHARED
     main.h
 )
 target_compile_features(main PRIVATE cxx_std_17)
+target_link_libraries(main PRIVATE comdlg32)
 target_compile_definitions(main PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 set_target_properties(main PROPERTIES
     OUTPUT_NAME "main"
