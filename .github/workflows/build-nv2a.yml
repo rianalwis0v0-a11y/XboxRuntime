@@ -40,6 +40,10 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/test-native-x86-guest.ps1
 
+      - name: Build and run comprehensive diagnostic XBE
+        shell: pwsh
+        run: ./.github/scripts/test-diagnostic-xbe.ps1
+
       - name: Verify outputs
         shell: pwsh
         run: |
@@ -50,7 +54,8 @@ jobs:
             "build/out/insignia_dns.dll",
             "build/out/xbe_loader.dll",
             "build/out/fatx.dll",
-            "build/out/xbe_guest32.exe"
+            "build/out/xbe_guest32.exe",
+            "build/out/xboxruntime-diagnostic.xbe"
           )
           foreach ($file in $files) {
             if (!(Test-Path $file)) { throw "Expected output not found: $file" }
@@ -69,4 +74,5 @@ jobs:
             build/out/xbe_loader.dll
             build/out/fatx.dll
             build/out/xbe_guest32.exe
+            build/out/xboxruntime-diagnostic.xbe
           if-no-files-found: error
