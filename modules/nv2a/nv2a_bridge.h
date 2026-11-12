@@ -66,6 +66,15 @@ typedef struct XboxNV2A_SURFACE_INFO {
     uint32_t zeta_offset;
 } XboxNV2A_SURFACE_INFO;
 
+/* Decode supported NV097 texture formats to tightly packed RGBA8.
+ * format is the NV097_SET_TEXTURE_FORMAT method value. source_pitch=0 uses
+ * the minimum row pitch. Compressed DXT1 input uses 8-byte 4x4 blocks. */
+__declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureRGBA8(
+    uint32_t format, uint32_t width, uint32_t height, uint32_t source_pitch,
+    const void* source, uint32_t source_length,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* destination_pitch);
+
 /* Decode a linear-pitch NV097 surface and validate its VRAM spans. */
 __declspec(dllexport) int __cdecl XboxNV2A_DecodeSurface(
     uint32_t surface_format, uint32_t surface_pitch,
