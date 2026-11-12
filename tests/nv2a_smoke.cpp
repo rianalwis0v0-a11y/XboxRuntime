@@ -126,7 +126,8 @@ int main() {
         dmaInfo.instance_offset != 0x100u || dmaInfo.dma_class != 2u ||
         dmaInfo.engine != 1u || dmaInfo.base_address != 0x1000u ||
         dmaInfo.mapped_length != 0x0FFFu ||
-        lookupRamht(channel, dmaHandle + 1u, &ramhtContext) == 0) {
+        lookupRamht(channel, dmaHandle + 1u, &ramhtContext) == 0 ||
+        lookupRamht(channel + 1u, dmaHandle, &ramhtContext) == 0) {
         std::cerr << "FAIL: RAMHT lookup / DMA object resolution\\n";
         stop();
         return 1;
@@ -137,14 +138,15 @@ int main() {
     const uint32_t dmaCallStream[] = {
         0x0000001Au,                         /* CALL +24 */
         (1u << 18) | 0x01D4u, 0xFF334455u,   /* Main stream: set clear colour */
-        0u, 0u, 0u,
+        (1u << 18) | 0x0180u, dmaHandle,     /* Resolve a RAMHT object method */
+        0u,                                  /* alignment/padding before helper */
         (1u << 18), dmaHandle,               /* Subroutine: bind object */
         0x00020000u                          /* RETURN */
     };
     uint32_t dmaGet = 0, dmaMethods = 0;
     if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, 12u, &dmaGet, &dmaMethods) != 0 ||
-        dmaGet != 12u || dmaMethods != 2u) {
+        submitDmaPush(channel, dmaHandle, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 20u || dmaMethods != 3u || read(0x400180u, 4u) != 0x100u) {
         std::cerr << "FAIL: NV2A DMA pusher CALL/RETURN execution\\n";
         stop();
         return 1;
