@@ -33,6 +33,7 @@ struct DmaInfo {
 using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
+using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 
 
 static FARPROC Need(HMODULE module, const char* name) {
@@ -80,7 +81,23 @@ int main() {
     auto lookupRamht = reinterpret_cast<LookupRamhtFn>(Need(module, "XboxNV2A_LookupRAMHT"));
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
+    auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
 
+
+    uint32_t mappedState = 0, mappedValue = 0;
+    if (!mapRenderState(0x033Cu, 0x0203u, &mappedState, &mappedValue) ||
+        mappedState != 25u || mappedValue != 4u ||
+        !mapRenderState(0x0350u, 0x800Bu, &mappedState, &mappedValue) ||
+        mappedState != 171u || mappedValue != 3u ||
+        !mapRenderState(0x0370u, 0x1E02u, &mappedState, &mappedValue) ||
+        mappedState != 53u || mappedValue != 4u ||
+        !mapRenderState(0x029Cu, 0x0801u, &mappedState, &mappedValue) ||
+        mappedState != 35u || mappedValue != 2u ||
+        mapRenderState(0x0999u, 0u, &mappedState, &mappedValue)) {
+        std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
+        FreeLibrary(module);
+        return 1;
+    }
 
     if (start() != 0) {
         std::cerr << "FAIL: NV2A module initialization\n";
