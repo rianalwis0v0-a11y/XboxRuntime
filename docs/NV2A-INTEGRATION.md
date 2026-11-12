@@ -84,8 +84,9 @@ when distributing modified builds.
 
 `XboxNV2A_SubmitPushBuffer(vram_offset, byte_length, methods_submitted)` parses a bounded
 little-endian command stream already stored in the module's 64 MiB VRAM aperture.
-It currently supports the NV4-style incrementing-method (`000`) and
-non-incrementing-method (`010`) packet forms. Packet counts, subchannels, method
+It currently supports the NV4-style incrementing-method (type `000`) and
+non-incrementing-method (type `010`) packet forms. The full three-bit command type
+is checked, so reserved high-bit command types cannot be mistaken for method packets. Packet counts, subchannels, method
 alignment/ranges, stream bounds, and the total method budget are checked. The
 complete stream is validated before any PGRAPH method is dispatched, preventing
 a malformed trailing packet from leaving a partially submitted buffer.
