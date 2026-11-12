@@ -17,6 +17,7 @@
 #include <array>
 #include <unordered_set>
 #include <unordered_map>
+#include <memory>
 #include "kernel_compat.h"
 
 extern "C" void KernelDispatch();
@@ -37,6 +38,21 @@ std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
 std::unordered_map<void*, HANDLE> g_kernelObjects;
+std::mutex g_rwLockMapMutex;
+std::unordered_map<void*, std::unique_ptr<SRWLOCK>> g_rwLocks;
+thread_local std::unordered_map<void*, bool> g_heldRwLocks;
+SRWLOCK* GetGuestRwLock(void* address, bool create) {
+    if (!address) return nullptr;
+    std::lock_guard<std::mutex> lock(g_rwLockMapMutex);
+    auto it = g_rwLocks.find(address);
+    if (it != g_rwLocks.end()) return it->second.get();
+    if (!create) return nullptr;
+    auto value = std::make_unique<SRWLOCK>();
+    InitializeSRWLock(value.get());
+    SRWLOCK* result = value.get();
+    g_rwLocks.emplace(address, std::move(value));
+    return result;
+}
 thread_local ULONG g_guestIrql = 0;
 thread_local ULONG g_criticalRegionDepth = 0;
 HANDLE FindKernelObject(void* object) {
@@ -574,6 +590,26 @@ extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, BOOL, BOOL) {
     return ReleaseMutex(h) ? 0 : LONG(0xC0000008u);
 }
 
+
+extern "C" void __stdcall K_ExInitializeReadWriteLock(void* lock) { (void)GetGuestRwLock(lock, true); }
+extern "C" void __stdcall K_ExAcquireReadWriteLockExclusive(void* lock) {
+    SRWLOCK* native = GetGuestRwLock(lock, true);
+    if (native) { AcquireSRWLockExclusive(native); g_heldRwLocks[lock] = true; }
+}
+extern "C" void __stdcall K_ExAcquireReadWriteLockShared(void* lock) {
+    SRWLOCK* native = GetGuestRwLock(lock, true);
+    if (native) { AcquireSRWLockShared(native); g_heldRwLocks[lock] = false; }
+}
+extern "C" void __stdcall K_ExReleaseReadWriteLock(void* lock) {
+    SRWLOCK* native = GetGuestRwLock(lock, false);
+    if (!native) return;
+    auto it = g_heldRwLocks.find(lock);
+    if (it == g_heldRwLocks.end()) return;
+    const bool exclusive = it->second;
+    g_heldRwLocks.erase(it);
+    if (exclusive) ReleaseSRWLockExclusive(native);
+    else ReleaseSRWLockShared(native);
+}
 extern "C" void __stdcall K_KeEnterCriticalRegion() { ++g_criticalRegionDepth; }
 extern "C" void __stdcall K_KeLeaveCriticalRegion() { if (g_criticalRegionDepth) --g_criticalRegionDepth; }
 extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR level) {
@@ -689,7 +725,15 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
-        cmp eax, 97
+        cmp eax, 12
+        je ex_acquire_rw_exclusive
+        cmp eax, 13
+        je ex_acquire_rw_shared
+        cmp eax, 18
+        je ex_init_rw
+        cmp eax, 28
+        je ex_release_rw
+                cmp eax, 97
         je ke_cancel_timer
         cmp eax, 101
         je ke_enter_critical
@@ -915,6 +959,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     iinc: jmp K_InterlockedIncrement
     iex: jmp K_InterlockedExchange
     iexa: jmp K_InterlockedExchangeAdd
+    ex_acquire_rw_exclusive: jmp K_ExAcquireReadWriteLockExclusive
+    ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
+    ex_init_rw: jmp K_ExInitializeReadWriteLock
+    ex_release_rw: jmp K_ExReleaseReadWriteLock
     ke_cancel_timer: jmp K_KeCancelTimer
     ke_enter_critical: jmp K_KeEnterCriticalRegion
     ke_init_timer: jmp K_KeInitializeTimerEx
