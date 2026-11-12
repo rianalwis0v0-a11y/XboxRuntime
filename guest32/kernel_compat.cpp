@@ -15,6 +15,7 @@
 #include <string>
 #include <mutex>
 #include <array>
+#include <unordered_set>
 #include "kernel_compat.h"
 
 extern "C" void KernelDispatch();
@@ -31,6 +32,22 @@ static std::wstring g_titleDirectory;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
 std::mutex g_eepromMutex;
+std::mutex g_stringAllocationMutex;
+std::unordered_set<void*> g_stringAllocations;
+void TrackStringAllocation(void* p) {
+    if (!p) return;
+    std::lock_guard<std::mutex> lock(g_stringAllocationMutex);
+    g_stringAllocations.insert(p);
+}
+bool FreeStringAllocation(void* p) {
+    if (!p) return false;
+    std::lock_guard<std::mutex> lock(g_stringAllocationMutex);
+    auto it = g_stringAllocations.find(p);
+    if (it == g_stringAllocations.end()) return false;
+    g_stringAllocations.erase(it);
+    HeapFree(GetProcessHeap(), 0, p);
+    return true;
+}
 bool g_eepromReady = false;
 
 constexpr uint32_t kStatusInvalidParameter = 0xC000000Du;
@@ -287,7 +304,7 @@ extern "C" LONG __stdcall K_RtlAnsiStringToUnicodeString(GuestUnicodeString* d,c
     int chars=s->Length?MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,nullptr,0):0;
     if(s->Length&&chars<=0)return LONG(0xC000000Du);
     uint32_t bytes=uint32_t(chars)*sizeof(wchar_t), required=bytes+sizeof(wchar_t);
-    if(allocate){d->Buffer=static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
+    if(allocate){d->Buffer=static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);TrackStringAllocation(d->Buffer);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
     else if(!d->Buffer||d->MaximumLength<bytes)return LONG(0xC0000023u);
     if(chars&&MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,d->Buffer,chars)!=chars)return LONG(0xC000000Du);
     d->Length=USHORT(bytes);if(d->MaximumLength>d->Length)d->Buffer[chars]=0;return 0;
@@ -297,13 +314,54 @@ extern "C" LONG __stdcall K_RtlUnicodeStringToAnsiString(GuestAnsiString* d,cons
     int bytes=s->Length?WideCharToMultiByte(CP_ACP,0,s->Buffer,s->Length/sizeof(wchar_t),nullptr,0,nullptr,nullptr):0;
     if(s->Length&&bytes<=0)return LONG(0xC000000Du);
     uint32_t required=uint32_t(bytes)+1;
-    if(allocate){d->Buffer=static_cast<char*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
+    if(allocate){d->Buffer=static_cast<char*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);TrackStringAllocation(d->Buffer);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
     else if(!d->Buffer||d->MaximumLength<uint32_t(bytes))return LONG(0xC0000023u);
     if(bytes&&WideCharToMultiByte(CP_ACP,0,s->Buffer,s->Length/sizeof(wchar_t),d->Buffer,bytes,nullptr,nullptr)!=bytes)return LONG(0xC000000Du);
     d->Length=USHORT(bytes);if(d->MaximumLength>d->Length)d->Buffer[bytes]=0;return 0;
 }
-extern "C" void __stdcall K_RtlFreeAnsiString(GuestAnsiString* s){if(s&&s->Buffer){HeapFree(GetProcessHeap(),0,s->Buffer);s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
-extern "C" void __stdcall K_RtlFreeUnicodeString(GuestUnicodeString* s){if(s&&s->Buffer){HeapFree(GetProcessHeap(),0,s->Buffer);s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+extern "C" void __stdcall K_RtlFreeAnsiString(GuestAnsiString* s){if(s&&s->Buffer&&FreeStringAllocation(s->Buffer)){s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+extern "C" void __stdcall K_RtlFreeUnicodeString(GuestUnicodeString* s){if(s&&s->Buffer&&FreeStringAllocation(s->Buffer)){s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+
+extern "C" BOOL __stdcall K_RtlCreateUnicodeString(GuestUnicodeString* destination, const wchar_t* source) {
+    if (!destination || !source) return FALSE;
+    const size_t chars = wcslen(source);
+    if (chars > 0x7FFE) return FALSE;
+    const size_t bytes = (chars + 1) * sizeof(wchar_t);
+    wchar_t* buffer = static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes));
+    if (!buffer) return FALSE;
+    std::memcpy(buffer, source, chars * sizeof(wchar_t));
+    TrackStringAllocation(buffer);
+    destination->Buffer = buffer;
+    destination->Length = USHORT(chars * sizeof(wchar_t));
+    destination->MaximumLength = USHORT(bytes);
+    return TRUE;
+}
+extern "C" void __stdcall K_RtlUpperString(GuestAnsiString* destination, const GuestAnsiString* source) {
+    if (!destination || !source || !destination->Buffer || !source->Buffer) return;
+    const USHORT count = std::min(source->Length, destination->MaximumLength);
+    for (USHORT i = 0; i < count; ++i)
+        destination->Buffer[i] = char(std::toupper(static_cast<unsigned char>(source->Buffer[i])));
+    destination->Length = count;
+}
+extern "C" ULONG __stdcall K_RtlCompareMemory(const void* a, const void* b, ULONG length) {
+    if (!a || !b) return 0;
+    const auto* x = static_cast<const uint8_t*>(a);
+    const auto* y = static_cast<const uint8_t*>(b);
+    ULONG matched = 0;
+    while (matched < length && x[matched] == y[matched]) ++matched;
+    return matched;
+}
+extern "C" LONG __stdcall K_RtlUpcaseUnicodeToMultiByteN(char* output, ULONG maxBytes, ULONG* bytesWritten,
+                                                           const wchar_t* input, ULONG inputBytes) {
+    if (bytesWritten) *bytesWritten = 0;
+    if ((!output && maxBytes) || (!input && inputBytes) || (inputBytes & 1))
+        return LONG(0xC000000Du);
+    const ULONG chars = inputBytes / sizeof(wchar_t);
+    std::wstring upper;
+    upper.resize(chars);
+    for (ULONG i = 0; i < chars; ++i) upper[i] = wchar_t(towupper(input[i]));
+    return K_RtlUnicodeToMultiByteN(output, maxBytes, bytesWritten, upper.data(), inputBytes);
+}
 extern "C" uint32_t __stdcall K_RtlCompareMemoryUlong(const void* p,uint32_t length,uint32_t pattern){
     if(!p)return 0;const uint8_t* b=static_cast<const uint8_t*>(p);uint32_t matched=0;
     while(matched+4<=length){uint32_t v;std::memcpy(&v,b+matched,4);if(v!=pattern)break;matched+=4;}return matched;
@@ -578,12 +636,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_append_w
         cmp eax, 263
         je rtl_append_wchar
+        cmp eax, 268
+        je rtl_cmp_memory
         cmp eax, 270
         je rtl_cmp_a
         cmp eax, 271
         je rtl_cmp_w
         cmp eax, 272
         je rtl_copy_a
+        cmp eax, 274
+        je rtl_create_unicode
         cmp eax, 273
         je rtl_copy_w
         cmp eax, 276
@@ -610,6 +672,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je rtl_try_cs
         cmp eax, 314
         je rtl_upcase_unicode_string
+        cmp eax, 315
+        je rtl_upcase_unicode_mb
+        cmp eax, 317
+        je rtl_upper_string
         cmp eax, 313
         je rtl_upper_w
         cmp eax, 316
@@ -725,6 +791,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_append_w: jmp K_RtlAppendUnicodeStringToString
     rtl_append_wchar: jmp K_RtlAppendUnicodeToString
     rtl_cmp_a: jmp K_RtlCompareString
+    rtl_cmp_memory: jmp K_RtlCompareMemory
+    rtl_create_unicode: jmp K_RtlCreateUnicodeString
+    rtl_upcase_unicode_mb: jmp K_RtlUpcaseUnicodeToMultiByteN
+    rtl_upper_string: jmp K_RtlUpperString
     rtl_cmp_w: jmp K_RtlCompareUnicodeString
     rtl_copy_a: jmp K_RtlCopyString
     rtl_copy_w: jmp K_RtlCopyUnicodeString
