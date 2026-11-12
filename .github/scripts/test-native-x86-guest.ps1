@@ -7,8 +7,8 @@ $temp = Join-Path $env:RUNNER_TEMP "XboxRuntimeGuestSmoke"
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
 $xbe = Join-Path $temp "native-ret-xbe.xbe"
 
-# Minimal XBEH: one executable section containing RET, no kernel imports.
-# This verifies real 32-bit entry execution, not a retail game's compatibility.
+# Minimal XBEH: executable section imports DbgPrint (ordinal 8), calls it, then returns.
+# This verifies kernel thunk decoding and dispatch, not retail game compatibility.
 $b = [byte[]]::new(0x1001)
 [Text.Encoding]::ASCII.GetBytes("XBEH").CopyTo($b, 0)
 function Put32([int]$offset, [uint32]$value) {
@@ -21,14 +21,22 @@ Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
 Put32 0x128 (0x10001000 -bxor [Convert]::ToUInt32('A8FC57AB', 16))
-Put32 0x158 0x5B6D40B6
+Put32 0x154 (0x10001100 -bxor [Convert]::ToUInt32('5B6D40B6', 16))
 # Section header at file offset 0x178.
-Put32 0x178 4
+Put32 0x178 5
 Put32 0x17C 0x10001000
 Put32 0x180 0x1000
 Put32 0x184 0x1000
 Put32 0x188 1
-$b[0x1000] = 0xC3
+# x86: push message; mov eax,[thunk slot]; call eax; add esp,4; ret
+$code = [byte[]]@(0x68,0,0,0,0, 0xA1,0,0,0,0, 0xFF,0xD0, 0x83,0xC4,0x04, 0xC3)
+[BitConverter]::GetBytes([uint32]0x10001120).CopyTo($code,1)
+[BitConverter]::GetBytes([uint32]0x10001100).CopyTo($code,6)
+$code.CopyTo($b,0x1000)
+# Import table: 0x80000008 = xboxkrnl ordinal 8 (DbgPrint), then terminator.
+Put32 0x1100 0x80000008
+Put32 0x1104 0
+[Text.Encoding]::ASCII.GetBytes("XboxRuntime kernel thunk test").CopyTo($b,0x1120)
 [IO.File]::WriteAllBytes($xbe, $b)
 
 # The guest requires a 256-byte EEPROM file before it starts the XBE.
