@@ -1408,12 +1408,73 @@ static int copy_surface_to_vram(IDirect3DSurface8* surface,
     return ok && SUCCEEDED(unlock_result);
 }
 
+static int copy_vram_to_zeta_surface(IDirect3DSurface8* surface,
+                                      const XboxNV2A_SURFACE_INFO* info)
+{
+    if (!surface || !surface->lpVtbl || !surface->lpVtbl->LockRect ||
+        !surface->lpVtbl->UnlockRect || !info ||
+        !info->zeta_format || !info->zeta_bytes_per_pixel)
+        return 0;
+
+    D3DLOCKED_RECT locked;
+    memset(&locked, 0, sizeof(locked));
+    if (FAILED(surface->lpVtbl->LockRect(surface, &locked, NULL, 0u)))
+        return 0;
+
+    const uint32_t row_bytes = info->width * info->zeta_bytes_per_pixel;
+    int ok = locked.pBits != NULL && locked.Pitch >= (INT)row_bytes;
+    if (ok) {
+        for (uint32_t y = 0; y < info->height; ++y) {
+            const uint8_t* source = g_vram + info->zeta_offset +
+                                    (size_t)y * info->zeta_pitch;
+            uint8_t* destination = (uint8_t*)locked.pBits +
+                                   (size_t)y * (size_t)locked.Pitch;
+            memcpy(destination, source, row_bytes);
+        }
+    }
+    const HRESULT unlock_result = surface->lpVtbl->UnlockRect(surface);
+    return ok && SUCCEEDED(unlock_result);
+}
+
+static int copy_zeta_surface_to_vram(IDirect3DSurface8* surface,
+                                     const XboxNV2A_SURFACE_INFO* info)
+{
+    if (!surface || !surface->lpVtbl || !surface->lpVtbl->LockRect ||
+        !surface->lpVtbl->UnlockRect || !info ||
+        !info->zeta_format || !info->zeta_bytes_per_pixel)
+        return 0;
+
+    D3DLOCKED_RECT locked;
+    memset(&locked, 0, sizeof(locked));
+    if (FAILED(surface->lpVtbl->LockRect(surface, &locked, NULL, D3DLOCK_READONLY)))
+        return 0;
+
+    const uint32_t row_bytes = info->width * info->zeta_bytes_per_pixel;
+    int ok = locked.pBits != NULL && locked.Pitch >= (INT)row_bytes;
+    if (ok) {
+        for (uint32_t y = 0; y < info->height; ++y) {
+            const uint8_t* source = (const uint8_t*)locked.pBits +
+                                    (size_t)y * (size_t)locked.Pitch;
+            uint8_t* destination = g_vram + info->zeta_offset +
+                                   (size_t)y * info->zeta_pitch;
+            memcpy(destination, source, row_bytes);
+        }
+    }
+    const HRESULT unlock_result = surface->lpVtbl->UnlockRect(surface);
+    return ok && SUCCEEDED(unlock_result);
+}
+
 static void sync_surface_to_vram(void)
 {
-    if (g_surface_bound && g_color_surface) {
-        if (copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
-            mark_all_textures_dirty();
-    }
+    if (!g_surface_bound)
+        return;
+
+    if (g_color_surface &&
+        copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
+        mark_all_textures_dirty();
+
+    if (g_zeta_surface)
+        (void)copy_zeta_surface_to_vram(g_zeta_surface, &g_bound_surface_info);
 }
 
 static void release_surface_targets(void)
@@ -1487,6 +1548,11 @@ static int update_surface_target(void)
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 20;
+    }
+    if (new_zeta && !copy_vram_to_zeta_surface(new_zeta, &info)) {
+        if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
+        new_color->lpVtbl->Release(new_color);
+        return 22;
     }
 
     hr = device->lpVtbl->SetRenderTarget(device, new_color, new_zeta);
