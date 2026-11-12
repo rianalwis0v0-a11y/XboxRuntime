@@ -1745,14 +1745,28 @@ static int read_vertex_float_array(uint32_t channel,uint32_t subchannel,
     if(components!=expected_components||
        (type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F&&
         type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S1&&
-        type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S32K))return 2;
-    const uint32_t bytes_per_component=type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F?4u:2u;
+        type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S32K&&
+        type!=NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP))return 2;
+    if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP&&
+       (array_index!=2u||expected_components!=3u))return 2;
+    const uint32_t bytes_per_component=(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F||
+        type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP)?4u:2u;
     uint8_t raw[255u*4u*4u];uint32_t stride=0,element_bytes=0;
     int result=XboxNV2A_ReadVertexArray(channel,subchannel,array_index,
         first_vertex,vertex_count,raw,sizeof(raw),&stride,&element_bytes);
     if(result!=0||element_bytes!=components*bytes_per_component)return 3;
     if((uint64_t)vertex_count*components*sizeof(float)>destination_capacity)return 4;
-    for(uint32_t i=0;i<vertex_count*components;++i){
+    if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_CMP){
+        for(uint32_t v=0;v<vertex_count;++v){
+            uint32_t packed;memcpy(&packed,raw+(size_t)v*4u,4u);
+            int32_t x=(int32_t)(packed&0x7FFu);if(x&0x400)x-=0x800;
+            int32_t y=(int32_t)((packed>>11)&0x7FFu);if(y&0x400)y-=0x800;
+            int32_t z=(int32_t)((packed>>22)&0x3FFu);if(z&0x200)z-=0x400;
+            destination[v*3u+0u]=(float)x/1023.0f;
+            destination[v*3u+1u]=(float)y/1023.0f;
+            destination[v*3u+2u]=(float)z/511.0f;
+        }
+    }else for(uint32_t i=0;i<vertex_count*components;++i){
         if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F)
             memcpy(&destination[i],raw+(size_t)i*4u,4u);
         else{

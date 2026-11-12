@@ -532,6 +532,22 @@ int main() {
         stop();return 1;
     }
 
+    /* CMP packs signed 11/11/10 normal components in one word. */
+    const uint32_t compressedNormals[2]={
+        (0x1FFu<<22)|(0x400u<<11)|0x3FFu, 0u
+    };
+    if(writeVram(0x1D00u,compressedNormals,sizeof(compressedNormals))!=0||
+       submit(0u,0x1728u,0xD00u)!=0||
+       submit(0u,0x1768u,(4u<<8)|(3u<<4)|6u)!=0||
+       buildVertexStream(channel,0u,0u,2u,hostVertices,sizeof(hostVertices),
+          &hostVertexStride,&hostFvf)!=0||
+       hostVertices[0].nx!=1.0f||hostVertices[0].ny > -0.99f||
+       hostVertices[0].ny < -1.0f||hostVertices[0].nz > 1.0f||
+       hostVertices[0].nz < 0.99f){
+        std::cerr<<"FAIL: CMP compressed NV097 normal decode\\n";
+        stop();return 1;
+    }
+
     /* Invalid RAMHT handles are rejected before any earlier methods dispatch. */
     const uint32_t badHandleStream[] = {
         (1u << 18), dmaHandle,

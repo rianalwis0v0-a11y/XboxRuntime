@@ -457,3 +457,13 @@ float values. Float attributes remain bit-preserving. Position, normal and
 TEX0-TEX3 arrays use the shared checked conversion path; color arrays retain
 their dedicated UB_D3D/UB_OGL channel handling. Tests cover signed extrema,
 normalization, and signed UV values.
+
+
+## CMP packed normal decoding
+
+The vertex conversion path now accepts CMP on the normal array and unpacks
+signed 11-bit X, signed 11-bit Y, and signed 10-bit Z into normalized floats.
+This follows the documented NV2A compressed-normal field widths and is
+restricted to the three-component normal attribute. The host smoke test checks
+positive and negative packed extrema. The field interpretation remains an
+implementation assumption pending comparison against hardware captures.
