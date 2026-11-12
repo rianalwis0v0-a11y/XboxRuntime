@@ -37,6 +37,8 @@ std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
 std::unordered_map<void*, HANDLE> g_kernelObjects;
+thread_local ULONG g_guestIrql = 0;
+thread_local ULONG g_criticalRegionDepth = 0;
 HANDLE FindKernelObject(void* object) {
     std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
     auto it = g_kernelObjects.find(object);
@@ -134,7 +136,7 @@ extern "C" LONG __fastcall K_InterlockedDecrement(volatile LONG*p){return Interl
 extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return InterlockedIncrement(p);}
 extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
-extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return 0;}
+extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
 extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
     if(!interval){Sleep(0);return 0;}
@@ -571,6 +573,34 @@ extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, BOOL, BOOL) {
     if (!h) return LONG(0xC0000008u);
     return ReleaseMutex(h) ? 0 : LONG(0xC0000008u);
 }
+
+extern "C" void __stdcall K_KeEnterCriticalRegion() { ++g_criticalRegionDepth; }
+extern "C" void __stdcall K_KeLeaveCriticalRegion() { if (g_criticalRegionDepth) --g_criticalRegionDepth; }
+extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR level) {
+    const UCHAR previous = UCHAR(g_guestIrql);
+    if (level > g_guestIrql) g_guestIrql = level;
+    return previous;
+}
+extern "C" void __fastcall K_KfLowerIrql(UCHAR level) { g_guestIrql = level; }
+extern "C" UCHAR __stdcall K_KeRaiseIrqlToDpcLevel() { return K_KfRaiseIrql(2); }
+extern "C" UCHAR __stdcall K_KeRaiseIrqlToSynchLevel() { return K_KfRaiseIrql(1); }
+extern "C" void __stdcall K_KeInitializeTimerEx(void* timer, ULONG type) {
+    if (!timer) return;
+    HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
+    if (h) StoreKernelObject(timer, h);
+}
+extern "C" BOOL __stdcall K_KeSetTimer(void* timer, const LARGE_INTEGER* dueTime, void*) {
+    HANDLE h = FindKernelObject(timer);
+    return h && dueTime ? SetWaitableTimer(h, dueTime, 0, nullptr, nullptr, FALSE) : FALSE;
+}
+extern "C" BOOL __stdcall K_KeSetTimerEx(void* timer, const LARGE_INTEGER* dueTime, LONG period, void*) {
+    HANDLE h = FindKernelObject(timer);
+    return h && dueTime && period >= 0 ? SetWaitableTimer(h, dueTime, period, nullptr, nullptr, FALSE) : FALSE;
+}
+extern "C" BOOL __stdcall K_KeCancelTimer(void* timer) {
+    HANDLE h = FindKernelObject(timer);
+    return h ? CancelWaitableTimer(h) : FALSE;
+}
 extern "C" uint64_t __stdcall K_KeQueryInterruptTime() {
     return GetTickCount64() * 10000ull;
 }
@@ -659,7 +689,27 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
-        cmp eax, 108
+        cmp eax, 97
+        je ke_cancel_timer
+        cmp eax, 101
+        je ke_enter_critical
+        cmp eax, 113
+        je ke_init_timer
+        cmp eax, 122
+        je ke_leave_critical
+        cmp eax, 129
+        je ke_raise_dpc
+        cmp eax, 130
+        je ke_raise_synch
+        cmp eax, 149
+        je ke_set_timer
+        cmp eax, 150
+        je ke_set_timer_ex
+        cmp eax, 160
+        je kf_raise_irql
+        cmp eax, 161
+        je kf_lower_irql
+                cmp eax, 108
         je ke_init_event
         cmp eax, 110
         je ke_init_mutant
@@ -865,6 +915,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
     iinc: jmp K_InterlockedIncrement
     iex: jmp K_InterlockedExchange
     iexa: jmp K_InterlockedExchangeAdd
+    ke_cancel_timer: jmp K_KeCancelTimer
+    ke_enter_critical: jmp K_KeEnterCriticalRegion
+    ke_init_timer: jmp K_KeInitializeTimerEx
+    ke_leave_critical: jmp K_KeLeaveCriticalRegion
+    ke_raise_dpc: jmp K_KeRaiseIrqlToDpcLevel
+    ke_raise_synch: jmp K_KeRaiseIrqlToSynchLevel
+    ke_set_timer: jmp K_KeSetTimer
+    ke_set_timer_ex: jmp K_KeSetTimerEx
+    kf_raise_irql: jmp K_KfRaiseIrql
+    kf_lower_irql: jmp K_KfLowerIrql
     ke_init_event: jmp K_KeInitializeEvent
     ke_init_mutant: jmp K_KeInitializeMutant
     ke_init_semaphore: jmp K_KeInitializeSemaphore
