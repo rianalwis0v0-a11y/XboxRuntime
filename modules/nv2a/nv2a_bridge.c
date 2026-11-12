@@ -1551,11 +1551,11 @@ static int update_surface_target(void)
         new_color->lpVtbl->Release(new_color);
         return 20;
     }
-    if (new_zeta && !copy_vram_to_zeta_surface(new_zeta, &info)) {
-        if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
-        new_color->lpVtbl->Release(new_color);
-        return 22;
-    }
+    /* Some D3D8 backends expose depth surfaces as non-lockable. Preserve
+     * render-target binding in that case; depth upload/readback is best-effort
+     * and must not make an otherwise valid color target unusable. */
+    if (new_zeta)
+        (void)copy_vram_to_zeta_surface(new_zeta, &info);
 
     hr = device->lpVtbl->SetRenderTarget(device, new_color, new_zeta);
     if (FAILED(hr)) {
