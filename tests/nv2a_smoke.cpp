@@ -38,7 +38,7 @@ using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
-struct HostVertex { float x, y, z; uint32_t diffuse; float u, v; };
+struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v; };
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
 struct SurfaceInfo {
@@ -249,20 +249,32 @@ int main() {
     }
 
     const uint32_t vertexColors[2] = { 0xFF112233u, 0xFF445566u };
+    const uint32_t vertexSpecular[2] = { 0x00112233u, 0x00445566u };
+    const float vertexNormals[6] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
     const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
     HostVertex hostVertices[2]{};
     uint32_t hostVertexStride = 0, hostFvf = 0;
     if (writeVram(0x1400u, vertexColors, sizeof(vertexColors)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
+        writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
+        writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
+        submit(0u, 0x1728u, 0x600u) != 0 ||
+        submit(0u, 0x1768u, (12u << 8) | (3u << 4) | 2u) != 0 ||
+        submit(0u, 0x1730u, 0x700u) != 0 ||
+        submit(0u, 0x1770u, (4u << 8) | (4u << 4)) != 0 ||
         submit(0u, 0x172Cu, 0x400u) != 0 ||
         submit(0u, 0x176Cu, (4u << 8) | (4u << 4)) != 0 ||
         submit(0u, 0x173Cu, 0x500u) != 0 ||
         submit(0u, 0x177Cu, (8u << 8) | (2u << 4) | 2u) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
-        hostVertexStride != 24u || hostFvf != 0x142u ||
+        hostVertexStride != 40u || hostFvf != 0x1D2u ||
+        hostVertices[0].nx != 0.0f || hostVertices[0].ny != 0.0f || hostVertices[0].nz != 1.0f ||
+        hostVertices[1].nx != 0.0f || hostVertices[1].ny != 1.0f || hostVertices[1].nz != 0.0f ||
         hostVertices[0].diffuse != vertexColors[0] ||
         hostVertices[1].diffuse != vertexColors[1] ||
+        hostVertices[0].specular != vertexSpecular[0] ||
+        hostVertices[1].specular != vertexSpecular[1] ||
         hostVertices[0].u != 0.25f || hostVertices[0].v != 0.5f ||
         hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
