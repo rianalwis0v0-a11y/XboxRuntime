@@ -95,6 +95,18 @@ __declspec(dllexport) int __cdecl XboxNV2A_ResolveDMAHandle(
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAPushBuffer(
     uint32_t channel, uint32_t handle, uint32_t get, uint32_t put,
     uint32_t* new_get, uint32_t* methods_submitted);
+typedef struct XboxNV2A_VERTEX {
+    float x, y, z;
+    uint32_t diffuse;
+    float u, v;
+} XboxNV2A_VERTEX;
+
+/* Build a host FVF stream from position, diffuse-color and TEX0 guest arrays. */
+__declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
+    uint32_t channel, uint32_t subchannel, uint32_t first_vertex,
+    uint32_t vertex_count, XboxNV2A_VERTEX* destination,
+    uint32_t destination_capacity, uint32_t* stride_out, uint32_t* fvf_out);
+
 /* Fetch packed vertex elements from the bound NV097 VERTEX_A/B DMA context. */
 __declspec(dllexport) int __cdecl XboxNV2A_ReadVertexArray(
     uint32_t channel, uint32_t subchannel, uint32_t array_index,
