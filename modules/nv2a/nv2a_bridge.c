@@ -36,6 +36,7 @@ static uint32_t g_nv2a_vsh_load_slot, g_nv2a_vsh_load_word;
 static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
 static uint32_t g_nv2a_vsh_constant_word;
 static DWORD g_nv2a_vsh_handle;
+static uint16_t g_nv2a_vsh_input_mask;
 static int g_nv2a_vsh_dirty = 1;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
@@ -2155,6 +2156,7 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
         return 0;
     if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle) {
         uint32_t instruction_count = 0;
+        XboxNV2A_VERTEX_PROGRAM_INFO metadata;
         if (g_nv2a_vsh_start_slot >= 136u)
             return 0;
         for (uint32_t slot = g_nv2a_vsh_start_slot; slot < 136u; ++slot) {
@@ -2165,6 +2167,11 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
         if (!instruction_count ||
             !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
             return 0;
+        if (XboxNV2A_ValidateVertexProgram(
+                &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
+                instruction_count, &metadata) != 0)
+            return 0;
+        g_nv2a_vsh_input_mask = metadata.input_mask;
         if (g_nv2a_vsh_handle) {
             (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
             g_nv2a_vsh_handle = 0;
@@ -2178,6 +2185,67 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
     /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
      * compiles it on cache miss, and binds the cached GPU vertex shader. */
     return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
+}
+
+static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
+    uint32_t vertex_count, uint16_t input_mask, uint8_t* output,
+    uint32_t output_capacity, uint32_t* stride_out)
+{
+    uint32_t stride = 0;
+    if (stride_out) *stride_out = 0;
+    if (!vertices || !output || !vertex_count || !stride_out)
+        return 0;
+    for (uint32_t reg = 0; reg < 16u; ++reg) {
+        if (!(input_mask & (uint16_t)(1u << reg)))
+            continue;
+        switch (reg) {
+        case 0u: case 2u: case 3u: case 4u:
+        case 5u: case 6u: case 7u:
+        case 8u: case 9u: case 10u: case 11u:
+        case 1u: case 12u: case 13u: case 14u: case 15u:
+            break;
+        default: return 0;
+        }
+        uint32_t element_size = 0;
+        switch (reg) {
+        case 0u: case 2u: element_size = 12u; break;
+        case 3u: case 4u: case 7u: element_size = 4u; break;
+        case 5u: case 6u: element_size = 4u; break;
+        case 8u: case 9u: case 10u: case 11u: element_size = 8u; break;
+        default: element_size = 16u; break;
+        }
+        if ((uint64_t)vertex_count * (stride + element_size) > output_capacity)
+            return 0;
+        for (uint32_t i = 0; i < vertex_count; ++i) {
+            uint8_t* dst = output + (size_t)i * (stride + element_size) + stride;
+            const XboxNV2A_VERTEX* v = &vertices[i];
+            switch (reg) {
+            case 0u: memcpy(dst, &v->x, 12u); break;
+            case 1u: {
+                const float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+                memcpy(dst, weights, sizeof(weights)); break;
+            }
+            case 2u: memcpy(dst, &v->nx, 12u); break;
+            case 3u: memcpy(dst, &v->diffuse, 4u); break;
+            case 4u: memcpy(dst, &v->specular, 4u); break;
+            case 5u: { const float fog = 1.0f; memcpy(dst, &fog, 4u); break; }
+            case 6u: { const float point_size = 1.0f; memcpy(dst, &point_size, 4u); break; }
+            case 7u: { const uint32_t back_specular = 0u; memcpy(dst, &back_specular, 4u); break; }
+            case 8u: memcpy(dst, &v->u, 8u); break;
+            case 9u: memcpy(dst, &v->u1, 8u); break;
+            case 10u: memcpy(dst, &v->u2, 8u); break;
+            case 11u: memcpy(dst, &v->u3, 8u); break;
+            default: {
+                const float generic[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                memcpy(dst, generic, sizeof(generic)); break;
+            }
+            }
+        }
+        stride += element_size;
+    }
+    if (!stride) return 0;
+    *stride_out = stride;
+    return 1;
 }
 
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
@@ -2208,12 +2276,17 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     IDirect3DDevice8* d=xbox_GetD3DDevice();
     if(!d||!d->lpVtbl||!d->lpVtbl->SetVertexShader||!d->lpVtbl->DrawPrimitiveUP)return 5;
     const void *draw_data = draw;
-    const uint32_t draw_stride = stride;
+    uint32_t draw_stride = stride;
+    uint8_t gpu_vertex_stream[768u * 256u];
     if ((g_transform_execution_mode & 3u) == 2u) {
-        /* Keep original model-space attributes in the stream. The D3D8
-         * compatibility layer executes the translated HLSL on the GPU. */
-        if (!nv2a_prepare_gpu_vertex_shader(d))
+        /* Pack only the referenced NV2A attributes in register order. The
+         * D3D11 translator's input-layout builder uses this compact ordering. */
+        if (!nv2a_prepare_gpu_vertex_shader(d) ||
+            !nv2a_pack_gpu_vertex_stream(draw, draw_count,
+                g_nv2a_vsh_input_mask, gpu_vertex_stream,
+                (uint32_t)sizeof(gpu_vertex_stream), &draw_stride))
             return 9;
+        draw_data = gpu_vertex_stream;
     } else if (FAILED(d->lpVtbl->SetVertexShader(d,fvf))) {
         return 6;
     }
