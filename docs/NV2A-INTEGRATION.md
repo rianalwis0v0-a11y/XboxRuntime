@@ -404,3 +404,9 @@ The live stage reader now rejects color-format codes outside the decoder's
 implemented set instead of treating unknown linear/paletted encodings as
 swizzled textures. Cache invalidation is limited to source-shape and DMA
 registers; sampler-only changes no longer force a texture re-decode.
+
+
+The D3D8 cache key now includes the owning device pointer, so recreating the
+host D3D device cannot reuse a texture object from the previous device. The
+stage decoder explicitly rejects cubemap and border-layout flags until their
+layer/edge addressing is implemented.

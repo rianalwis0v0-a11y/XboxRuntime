@@ -642,6 +642,10 @@ int main() {
         linearStageOffsets[0] != 0u || linearStageSizes[0] != 16u ||
         linearStagePixels[0] != 1u || linearStagePixels[8] != 7u ||
         submit(0u, 0x1B04u, 1u | (2u << 4) | (0x17u << 8) | (1u << 16)) != 0 ||
+        getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0 ||
+        submit(0u, 0x1B04u, textureFormat | (1u << 2)) != 0 ||
+        getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0 ||
+        submit(0u, 0x1B04u, textureFormat | (1u << 3)) != 0 ||
         getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0) {
         std::cerr << "FAIL: live linear NV097 texture stage decode\\n";
         stop();

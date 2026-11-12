@@ -33,6 +33,7 @@ static uint32_t g_element_count[32][8];
 static int g_element_overflow[32][8];
 typedef struct NV2A_TEXTURE_CACHE {
     IDirect3DTexture8* texture;
+    IDirect3DDevice8* owner_device;
     uint32_t format, offset, control0, control1, image_rect;
     uint32_t dma_handle, dma_base, dma_length;
     int dirty;
@@ -994,7 +995,7 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
         const XboxNV2A_DMA_INFO* dma=&g_dma_contexts[channel][subchannel][slot];
         const uint32_t control1=g_gpu->pgraph.regs[(base+0x10u)/4u];
         const uint32_t image_rect=g_gpu->pgraph.regs[(base+0x1Cu)/4u];
-        const int changed=e->dirty||!e->texture||e->format!=info.format||
+        const int changed=e->dirty||!e->texture||e->owner_device!=device||e->format!=info.format||
             e->offset!=info.texture_offset||e->control0!=control0||
             e->control1!=control1||e->image_rect!=image_rect||
             e->dma_handle!=dma->handle||e->dma_base!=dma->base_address||
@@ -1045,7 +1046,7 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
             free(decoded);
             if(!ok){texture->lpVtbl->Release(texture);return 9;}
             if(e->texture&&e->texture->lpVtbl&&e->texture->lpVtbl->Release)e->texture->lpVtbl->Release(e->texture);
-            e->texture=texture;e->format=info.format;e->offset=info.texture_offset;
+            e->texture=texture;e->owner_device=device;e->format=info.format;e->offset=info.texture_offset;
             e->control0=control0;e->control1=control1;e->image_rect=image_rect;
             e->dma_handle=dma->handle;e->dma_base=dma->base_address;
             e->dma_length=dma->mapped_length;e->dirty=0;
@@ -1094,6 +1095,8 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
     const uint32_t control1 = g_gpu->pgraph.regs[(base + 0x10u) / 4u];
     const uint32_t image_rect = g_gpu->pgraph.regs[(base + 0x1Cu) / 4u];
     const uint32_t color = (format >> 8) & 0xFFu;
+    /* Cubemaps and texture-border layouts need separate layer/edge handling. */
+    if (format & 0x0000000Cu) return 6;
     const uint32_t dimensionality = (format >> 4) & 0xFu;
     const uint32_t context_slot = format & 3u;
     const uint32_t context_method = 0x0180u + context_slot * 4u;
