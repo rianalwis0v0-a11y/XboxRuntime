@@ -32,6 +32,7 @@ struct DmaInfo {
 };
 using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
+using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 
 
 static FARPROC Need(HMODULE module, const char* name) {
@@ -78,6 +79,7 @@ int main() {
     auto submitPushBuffer = reinterpret_cast<PushBufferFn>(Need(module, "XboxNV2A_SubmitPushBuffer"));
     auto lookupRamht = reinterpret_cast<LookupRamhtFn>(Need(module, "XboxNV2A_LookupRAMHT"));
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
+    auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
 
 
     if (start() != 0) {
@@ -126,6 +128,39 @@ int main() {
         dmaInfo.mapped_length != 0x0FFFu ||
         lookupRamht(channel, dmaHandle + 1u, &ramhtContext) == 0) {
         std::cerr << "FAIL: RAMHT lookup / DMA object resolution\\n";
+        stop();
+        return 1;
+    }
+
+    /* Exercise NV4-style DMA GET/PUT with a real RAMHT-bound PGRAPH object.
+     * CALL enters a helper at +24, binds the object, RETURN resumes at +4. */
+    const uint32_t dmaCallStream[] = {
+        0x0000001Au,                         /* CALL +24 */
+        (1u << 18) | 0x01D4u, 0xFF334455u,   /* Main stream: set clear colour */
+        0u, 0u, 0u,
+        (1u << 18), dmaHandle,               /* Subroutine: bind object */
+        0x00020000u                          /* RETURN */
+    };
+    uint32_t dmaGet = 0, dmaMethods = 0;
+    if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 12u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 12u || dmaMethods != 2u) {
+        std::cerr << "FAIL: NV2A DMA pusher CALL/RETURN execution\\n";
+        stop();
+        return 1;
+    }
+
+    /* A jump may target a command beyond PUT and jump back to PUT. */
+    const uint32_t dmaJumpStream[] = {
+        0x00000011u,                         /* JUMP +16 */
+        0u, 0u, 0u,
+        (1u << 18) | 0x01D4u, 0xFF556677u,
+        0x00000005u                          /* JUMP +4 (the PUT position) */
+    };
+    if (writeVram(0x1000u, dmaJumpStream, sizeof(dmaJumpStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 4u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 4u || dmaMethods != 1u) {
+        std::cerr << "FAIL: NV2A DMA pusher JUMP execution\\n";
         stop();
         return 1;
     }
