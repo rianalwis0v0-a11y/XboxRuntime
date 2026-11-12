@@ -1,3 +1,437 @@
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <cerrno>
+#include <algorithm>
+#include <cstdarg>
+#include <intrin.h>
+#include <cstring>
+#include <cwchar>
+#include <cctype>
+#include <cwctype>
+#include <string>
+#include <mutex>
+#include <array>
+#include <unordered_set>
+#include <unordered_map>
+#include <memory>
+#include "kernel_compat.h"
+
+extern "C" void KernelDispatch();
+namespace {
+constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
+constexpr uint32_t kThunkMax=379;
+static uint8_t* g_image=nullptr;
+static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
+static void* g_stubPage=nullptr;
+static uint32_t g_stubCount=0;
+static void* g_savedAv=nullptr;
+static std::array<std::array<uint8_t, 512>, 379> g_data{};
+static std::wstring g_titleDirectory;
+std::array<uint8_t, 256> g_eeprom{};
+std::wstring g_eepromPath;
+std::mutex g_eepromMutex;
+std::mutex g_stringAllocationMutex;
+std::unordered_set<void*> g_stringAllocations;
+std::mutex g_kernelObjectMutex;
+std::unordered_map<void*, HANDLE> g_kernelObjects;
+std::mutex g_rwLockMapMutex;
+std::unordered_map<void*, std::unique_ptr<SRWLOCK>> g_rwLocks;
+thread_local std::unordered_map<void*, bool> g_heldRwLocks;
+SRWLOCK* GetGuestRwLock(void* address, bool create) {
+    if (!address) return nullptr;
+    std::lock_guard<std::mutex> lock(g_rwLockMapMutex);
+    auto it = g_rwLocks.find(address);
+    if (it != g_rwLocks.end()) return it->second.get();
+    if (!create) return nullptr;
+    auto value = std::make_unique<SRWLOCK>();
+    InitializeSRWLock(value.get());
+    SRWLOCK* result = value.get();
+    g_rwLocks.emplace(address, std::move(value));
+    return result;
+}
+thread_local ULONG g_guestIrql = 0;
+thread_local ULONG g_criticalRegionDepth = 0;
+HANDLE FindKernelObject(void* object) {
+    std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
+    auto it = g_kernelObjects.find(object);
+    return it == g_kernelObjects.end() ? nullptr : it->second;
+}
+void StoreKernelObject(void* object, HANDLE handle) {
+    if (!object || !handle) return;
+    std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
+    auto it = g_kernelObjects.find(object);
+    if (it != g_kernelObjects.end()) CloseHandle(it->second);
+    g_kernelObjects[object] = handle;
+}
+DWORD KernelTimeout(const LARGE_INTEGER* timeout) {
+    if (!timeout) return INFINITE;
+    const LONGLONG ticks = timeout->QuadPart;
+    if (ticks >= 0) return 0;
+    const ULONGLONG ms = (ULONGLONG(-(ticks + 1)) + 1) / 10000ull;
+    return DWORD(ms > MAXDWORD ? MAXDWORD : ms);
+}
+void TrackStringAllocation(void* p) {
+    if (!p) return;
+    std::lock_guard<std::mutex> lock(g_stringAllocationMutex);
+    g_stringAllocations.insert(p);
+}
+bool FreeStringAllocation(void* p) {
+    if (!p) return false;
+    std::lock_guard<std::mutex> lock(g_stringAllocationMutex);
+    auto it = g_stringAllocations.find(p);
+    if (it == g_stringAllocations.end()) return false;
+    g_stringAllocations.erase(it);
+    HeapFree(GetProcessHeap(), 0, p);
+    return true;
+}
+bool g_eepromReady = false;
+
+constexpr uint32_t kStatusInvalidParameter = 0xC000000Du;
+constexpr uint32_t kStatusDeviceNotConnected = 0xC000009Du;
+
+extern "C" uint32_t __stdcall K_HalReadSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t* value) {
+    if (!value) return kStatusInvalidParameter;
+    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    const uint32_t count = word ? 2u : 1u;
+    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
+    std::lock_guard<std::mutex> lock(g_eepromMutex);
+    *value = g_eeprom[command];
+    if (word) *value |= uint32_t(g_eeprom[uint32_t(command) + 1]) << 8;
+    return 0;
+}
+
+extern "C" uint32_t __stdcall K_HalWriteSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t value) {
+    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    const uint32_t count = word ? 2u : 1u;
+    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
+    std::lock_guard<std::mutex> lock(g_eepromMutex);
+    g_eeprom[command] = uint8_t(value & 0xFFu);
+    if (word) g_eeprom[uint32_t(command) + 1] = uint8_t((value >> 8) & 0xFFu);
+    // Persist each SMBus write so a guest crash does not discard EEPROM changes.
+    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return kStatusDeviceNotConnected;
+    DWORD written = 0;
+    BOOL ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
+    if (ok) ok = (written == DWORD(g_eeprom.size())) && FlushFileBuffers(f);
+    CloseHandle(f);
+    return ok ? 0u : kStatusDeviceNotConnected;
+}
+
+bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
+void* StubFor(uint32_t ordinal){
+    if(!g_stubPage||g_stubCount>=kThunkMax)return nullptr;
+    uint8_t* p=static_cast<uint8_t*>(g_stubPage)+g_stubCount*10;
+    p[0]=0x68;std::memcpy(p+1,&ordinal,4);p[5]=0xE9;
+    int32_t rel=int32_t(reinterpret_cast<uintptr_t>(&KernelDispatch)-reinterpret_cast<uintptr_t>(p+10));
+    std::memcpy(p+6,&rel,4);++g_stubCount;return p;
+}
+void* DataFor(uint32_t ordinal){
+    switch(ordinal){
+    case 16: case 22: case 30: case 31: case 40: case 41: case 42:
+    case 64: case 70: case 71: case 88: case 89: case 102: case 120:
+    case 154: case 156: case 157: case 162: case 164: case 240: case 245:
+    case 249: case 259: case 321: case 322: case 323: case 324: case 325:
+    case 326: case 353: case 354: case 355: case 356: case 357:
+        return g_data[ordinal].data();
+    default:return nullptr;
+    }
+}
+extern "C" void* __stdcall K_ExAllocatePool(uint32_t n){return HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,n?n:1);}
+extern "C" void* __stdcall K_ExAllocatePoolWithTag(uint32_t n,uint32_t){return K_ExAllocatePool(n);}
+extern "C" void __stdcall K_ExFreePool(void*p){if(p)HeapFree(GetProcessHeap(),0,p);}
+extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
+extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
+extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
+extern "C" LONG __fastcall K_InterlockedCompareExchange(volatile LONG*p,LONG e,LONG c){return InterlockedCompareExchange(p,e,c);}
+extern "C" LONG __fastcall K_InterlockedDecrement(volatile LONG*p){return InterlockedDecrement(p);}
+extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return InterlockedIncrement(p);}
+extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
+extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
+extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
+extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
+extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
+    if(!interval){Sleep(0);return 0;}
+    LONGLONG ticks=interval->QuadPart;
+    if(ticks<0){ULONGLONG ms=ULONGLONG(-ticks)/10000ull;Sleep(DWORD(ms>MAXDWORD?MAXDWORD:ms));}
+    else Sleep(0);
+    return 0;
+}
+extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
+    LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
+}
+extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){LARGE_INTEGER f{};QueryPerformanceFrequency(&f);return f.QuadPart;}
+extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){if(out){FILETIME ft{};GetSystemTimeAsFileTime(&ft);out->LowPart=ft.dwLowDateTime;out->HighPart=LONG(ft.dwHighDateTime);}}
+extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
+extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
+extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,MEM_RELEASE);}
+extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
+extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
+struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
+struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
+std::wstring TranslateXboxPath(const GuestUnicodeString* name){
+    if(!name||!name->Buffer||!name->Length)return {};
+    std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
+    const std::wstring cd=L"\\Device\\Cdrom0";
+    const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
+    if(p.rfind(cd,0)==0)p=g_titleDirectory+p.substr(cd.size());
+    else if(p.rfind(hd,0)==0)p=g_titleDirectory+p.substr(hd.size());
+    else if(p.rfind(L"\\??\\",0)==0)p=p.substr(4);
+    else if(p.size()>2&&p[1]==L':'&&(p[2]==L'\\'||p[2]==L'/')){
+        if(p[0]==L'D'||p[0]==L'd')p=g_titleDirectory+p.substr(2);
+    }else if(p[0]==L'\\')p=g_titleDirectory+p;
+    return p;
+}
+DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
+DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
+LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
+    if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
+    DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
+    if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
+    HANDLE h=CreateFileW(path.c_str(),FileAccess(access),((share&1)?FILE_SHARE_READ:0)|((share&2)?FILE_SHARE_WRITE:0)|((share&4)?FILE_SHARE_DELETE:0),nullptr,FileDisposition(disposition),flags,nullptr);
+    if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
+    *out=h;if(io){io->Status=0;io->Information=1;}return 0;
+}
+extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
+extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
+    DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
+    if(io){io->Status=read?0:LONG(0xC0000011u);io->Information=read;}if(event)SetEvent(event);return read?0:LONG(0xC0000011u);
+}
+extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
+    DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
+    if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
+}
+extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
+    if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
+}
+extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h,BOOL alertable,const LARGE_INTEGER*timeout){
+    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
+    DWORD r=WaitForSingleObject(h,ms);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+}
+struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+
+static bool ParseUnsigned(const char* text, ULONG base, ULONG* value) {
+    if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
+    while (*text && std::isspace(static_cast<unsigned char>(*text))) ++text;
+    if (!*text || *text == '-') return false;
+    errno = 0;
+    char* end = nullptr;
+    unsigned long parsed = std::strtoul(text, &end, static_cast<int>(base));
+    if (errno == ERANGE || end == text || parsed > 0xFFFFFFFFul) return false;
+    while (*end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+    if (*end) return false;
+    *value = static_cast<ULONG>(parsed);
+    return true;
+}
+static bool ParseUnsigned(const wchar_t* text, ULONG chars, ULONG base, ULONG* value) {
+    if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
+    std::wstring input(text, chars);
+    size_t first = input.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos || input[first] == L'-') return false;
+    errno = 0;
+    wchar_t* end = nullptr;
+    unsigned long parsed = std::wcstoul(input.c_str(), &end, static_cast<int>(base));
+    if (errno == ERANGE || end == input.c_str() || parsed > 0xFFFFFFFFul) return false;
+    while (*end && iswspace(*end)) ++end;
+    if (*end) return false;
+    *value = static_cast<ULONG>(parsed);
+    return true;
+}
+static std::string FormatUnsigned(ULONG value, ULONG base) {
+    static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    std::string out;
+    do { out.push_back(digits[value % base]); value /= base; } while (value);
+    std::reverse(out.begin(), out.end());
+    return out;
+}
+extern "C" LONG __stdcall K_RtlCharToInteger(const char* text, ULONG base, ULONG* value) {
+    if (!text || !value) return LONG(0xC000000Du);
+    return ParseUnsigned(text, base, value) ? 0 : LONG(0xC000000Du);
+}
+extern "C" LONG __stdcall K_RtlUnicodeStringToInteger(const GuestUnicodeString* text, ULONG base, ULONG* value) {
+    if (!text || !value || (!text->Buffer && text->Length) || (text->Length & 1))
+        return LONG(0xC000000Du);
+    return ParseUnsigned(text->Buffer, text->Length / sizeof(wchar_t), base, value)
+        ? 0 : LONG(0xC000000Du);
+}
+extern "C" LONG __stdcall K_RtlIntegerToChar(ULONG value, ULONG base, LONG length, char* output) {
+    if (!output || length <= 0 || base < 2 || base > 36) return LONG(0xC000000Du);
+    const std::string formatted = FormatUnsigned(value, base);
+    if (formatted.size() + 1 > static_cast<size_t>(length)) return LONG(0xC0000023u);
+    std::memcpy(output, formatted.c_str(), formatted.size() + 1);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlIntegerToUnicodeString(ULONG value, ULONG base, GuestUnicodeString* output) {
+    if (!output || !output->Buffer || (base != 0 && (base < 2 || base > 36)))
+        return LONG(0xC000000Du);
+    const std::string formatted = FormatUnsigned(value, base ? base : 10);
+    const size_t bytes = (formatted.size() + 1) * sizeof(wchar_t);
+    if (bytes > output->MaximumLength || formatted.size() * sizeof(wchar_t) > 0xFFFF)
+        return LONG(0xC0000023u);
+    for (size_t i = 0; i < formatted.size(); ++i) output->Buffer[i] = wchar_t(formatted[i]);
+    output->Buffer[formatted.size()] = L'\0';
+    output->Length = USHORT(formatted.size() * sizeof(wchar_t));
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlMultiByteToUnicodeN(wchar_t* output, ULONG maxBytes, ULONG* bytesWritten,
+                                                    const char* input, ULONG inputBytes) {
+    if (bytesWritten) *bytesWritten = 0;
+    if ((!output && maxBytes) || (!input && inputBytes) || (maxBytes % sizeof(wchar_t)))
+        return LONG(0xC000000Du);
+    if (!inputBytes) return 0;
+    int chars = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes), nullptr, 0);
+    if (chars <= 0) return LONG(0xC000000Du);
+    ULONG capacity = maxBytes / sizeof(wchar_t);
+    int count = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes),
+                                    output, static_cast<int>(capacity));
+    if (count <= 0) return LONG(0xC0000023u);
+    if (bytesWritten) *bytesWritten = ULONG(count) * sizeof(wchar_t);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlUnicodeToMultiByteN(char* output, ULONG maxBytes, ULONG* bytesWritten,
+                                                    const wchar_t* input, ULONG inputBytes) {
+    if (bytesWritten) *bytesWritten = 0;
+    if ((!output && maxBytes) || (!input && inputBytes) || (inputBytes % sizeof(wchar_t)))
+        return LONG(0xC000000Du);
+    if (!inputBytes) return 0;
+    int chars = WideCharToMultiByte(CP_ACP, 0, input, static_cast<int>(inputBytes / sizeof(wchar_t)),
+                                    nullptr, 0, nullptr, nullptr);
+    if (chars <= 0) return LONG(0xC000000Du);
+    int count = WideCharToMultiByte(CP_ACP, 0, input, static_cast<int>(inputBytes / sizeof(wchar_t)),
+                                    output, static_cast<int>(maxBytes), nullptr, nullptr);
+    if (count <= 0) return LONG(0xC0000023u);
+    if (bytesWritten) *bytesWritten = ULONG(count);
+    return 0;
+}
+
+extern "C" LONG __stdcall K_RtlMultiByteToUnicodeSize(ULONG* bytes, const char* input, ULONG inputBytes) {
+    if (!bytes || (!input && inputBytes)) return LONG(0xC000000Du);
+    *bytes = 0;
+    if (!inputBytes) return 0;
+    if (inputBytes > ULONG(INT_MAX)) return LONG(0xC000000Du);
+    const int chars = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes), nullptr, 0);
+    if (chars <= 0 || uint64_t(chars) * sizeof(wchar_t) > MAXULONG) return LONG(0xC000000Du);
+    *bytes = ULONG(chars) * sizeof(wchar_t);
+    return 0;
+}
+extern "C" LONG __stdcall K_RtlUnicodeToMultiByteSize(ULONG* bytes, const wchar_t* input, ULONG inputBytes) {
+    if (!bytes || (!input && inputBytes) || (inputBytes & 1)) return LONG(0xC000000Du);
+    *bytes = 0;
+    if (!inputBytes) return 0;
+    if (inputBytes / sizeof(wchar_t) > ULONG(INT_MAX)) return LONG(0xC000000Du);
+    const int count = WideCharToMultiByte(CP_ACP, 0, input, static_cast<int>(inputBytes / sizeof(wchar_t)),
+                                          nullptr, 0, nullptr, nullptr);
+    if (count <= 0) return LONG(0xC000000Du);
+    *bytes = ULONG(count);
+    return 0;
+}
+
+extern "C" LONG __stdcall K_RtlAnsiStringToUnicodeString(GuestUnicodeString* d,const GuestAnsiString* s,BOOL allocate){
+    if(!d||!s||(!s->Buffer&&s->Length))return LONG(0xC000000Du);
+    int chars=s->Length?MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,nullptr,0):0;
+    if(s->Length&&chars<=0)return LONG(0xC000000Du);
+    uint32_t bytes=uint32_t(chars)*sizeof(wchar_t), required=bytes+sizeof(wchar_t);
+    if(allocate){d->Buffer=static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);TrackStringAllocation(d->Buffer);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
+    else if(!d->Buffer||d->MaximumLength<bytes)return LONG(0xC0000023u);
+    if(chars&&MultiByteToWideChar(CP_ACP,0,s->Buffer,s->Length,d->Buffer,chars)!=chars)return LONG(0xC000000Du);
+    d->Length=USHORT(bytes);if(d->MaximumLength>d->Length)d->Buffer[chars]=0;return 0;
+}
+extern "C" LONG __stdcall K_RtlUnicodeStringToAnsiString(GuestAnsiString* d,const GuestUnicodeString* s,BOOL allocate){
+    if(!d||!s||(!s->Buffer&&s->Length))return LONG(0xC000000Du);
+    int bytes=s->Length?WideCharToMultiByte(CP_ACP,0,s->Buffer,s->Length/sizeof(wchar_t),nullptr,0,nullptr,nullptr):0;
+    if(s->Length&&bytes<=0)return LONG(0xC000000Du);
+    uint32_t required=uint32_t(bytes)+1;
+    if(allocate){d->Buffer=static_cast<char*>(HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,required));if(!d->Buffer)return LONG(0xC0000017u);TrackStringAllocation(d->Buffer);d->MaximumLength=USHORT(required>0xFFFF?0xFFFF:required);}
+    else if(!d->Buffer||d->MaximumLength<uint32_t(bytes))return LONG(0xC0000023u);
+    if(bytes&&WideCharToMultiByte(CP_ACP,0,s->Buffer,s->Length/sizeof(wchar_t),d->Buffer,bytes,nullptr,nullptr)!=bytes)return LONG(0xC000000Du);
+    d->Length=USHORT(bytes);if(d->MaximumLength>d->Length)d->Buffer[bytes]=0;return 0;
+}
+extern "C" void __stdcall K_RtlFreeAnsiString(GuestAnsiString* s){if(s&&s->Buffer&&FreeStringAllocation(s->Buffer)){s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+extern "C" void __stdcall K_RtlFreeUnicodeString(GuestUnicodeString* s){if(s&&s->Buffer&&FreeStringAllocation(s->Buffer)){s->Buffer=nullptr;s->Length=s->MaximumLength=0;}}
+
+extern "C" BOOL __stdcall K_RtlCreateUnicodeString(GuestUnicodeString* destination, const wchar_t* source) {
+    if (!destination || !source) return FALSE;
+    const size_t chars = wcslen(source);
+    if (chars > 0x7FFE) return FALSE;
+    const size_t bytes = (chars + 1) * sizeof(wchar_t);
+    wchar_t* buffer = static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes));
+    if (!buffer) return FALSE;
+    std::memcpy(buffer, source, chars * sizeof(wchar_t));
+    TrackStringAllocation(buffer);
+    destination->Buffer = buffer;
+    destination->Length = USHORT(chars * sizeof(wchar_t));
+    destination->MaximumLength = USHORT(bytes);
+    return TRUE;
+}
+extern "C" void __stdcall K_RtlUpperString(GuestAnsiString* destination, const GuestAnsiString* source) {
+    if (!destination || !source || !destination->Buffer || !source->Buffer) return;
+    const USHORT count = std::min(source->Length, destination->MaximumLength);
+    for (USHORT i = 0; i < count; ++i)
+        destination->Buffer[i] = char(std::toupper(static_cast<unsigned char>(source->Buffer[i])));
+    destination->Length = count;
+}
+extern "C" ULONG __stdcall K_RtlCompareMemory(const void* a, const void* b, ULONG length) {
+    if (!a || !b) return 0;
+    const auto* x = static_cast<const uint8_t*>(a);
+    const auto* y = static_cast<const uint8_t*>(b);
+    ULONG matched = 0;
+    while (matched < length && x[matched] == y[matched]) ++matched;
+    return matched;
+}
+extern "C" LONG __stdcall K_RtlUpcaseUnicodeToMultiByteN(char* output, ULONG maxBytes, ULONG* bytesWritten,
+                                                           const wchar_t* input, ULONG inputBytes) {
+    if (bytesWritten) *bytesWritten = 0;
+    if ((!output && maxBytes) || (!input && inputBytes) || (inputBytes & 1))
+        return LONG(0xC000000Du);
+    const ULONG chars = inputBytes / sizeof(wchar_t);
+    std::wstring upper;
+    upper.resize(chars);
+    for (ULONG i = 0; i < chars; ++i) upper[i] = wchar_t(towupper(input[i]));
+    return K_RtlUnicodeToMultiByteN(output, maxBytes, bytesWritten, upper.data(), inputBytes);
+}
+extern "C" uint32_t __stdcall K_RtlCompareMemoryUlong(const void* p,uint32_t length,uint32_t pattern){
+    if(!p)return 0;const uint8_t* b=static_cast<const uint8_t*>(p);uint32_t matched=0;
+    while(matched+4<=length){uint32_t v;std::memcpy(&v,b+matched,4);if(v!=pattern)break;matched+=4;}return matched;
+}
+extern "C" void __stdcall K_RtlFillMemoryUlong(void* p,uint32_t length,uint32_t pattern){
+    if(!p)return;uint8_t* b=static_cast<uint8_t*>(p);for(uint32_t i=0;i+4<=length;i+=4)std::memcpy(b+i,&pattern,4);
+}
+extern "C" void __stdcall K_RtlMapGenericMask(ACCESS_MASK* access,const GENERIC_MAPPING* mapping){
+    if(!access||!mapping)return;ACCESS_MASK v=*access;v&=~(GENERIC_READ|GENERIC_WRITE|GENERIC_EXECUTE|GENERIC_ALL);
+    if(*access&GENERIC_READ)v|=mapping->GenericRead;if(*access&GENERIC_WRITE)v|=mapping->GenericWrite;
+    if(*access&GENERIC_EXECUTE)v|=mapping->GenericExecute;if(*access&GENERIC_ALL)v|=mapping->GenericAll;*access=v;
+}
+extern "C" uint32_t __stdcall K_RtlNtStatusToDosError(LONG status){
+    using Fn=ULONG (WINAPI*)(LONG);static Fn fn=[](){HMODULE n=GetModuleHandleW(L"ntdll.dll");return n?reinterpret_cast<Fn>(GetProcAddress(n,"RtlNtStatusToDosError")):nullptr;}();
+    if(fn)return fn(status);
+    switch(uint32_t(status)){case 0:return ERROR_SUCCESS;case 0xC000000Du:return ERROR_INVALID_PARAMETER;case 0xC0000008u:return ERROR_INVALID_HANDLE;case 0xC000000Fu:case 0xC0000034u:return ERROR_FILE_NOT_FOUND;case 0xC0000022u:return ERROR_ACCESS_DENIED;case 0xC0000017u:return ERROR_NOT_ENOUGH_MEMORY;case 0xC000003Au:return ERROR_PATH_NOT_FOUND;default:return ERROR_MR_MID_NOT_FOUND;}
+}
+extern "C" void __stdcall K_RtlInitAnsiString(GuestAnsiString*d,const char*s){if(!d)return;size_t n=s?strlen(s):0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?1:0));d->Buffer=const_cast<char*>(s);}
+extern "C" void __stdcall K_RtlInitUnicodeString(GuestUnicodeString*d,const wchar_t*s){if(!d)return;size_t n=s?wcslen(s)*2:0;d->Length=USHORT(n>0xFFFE?0xFFFE:n);d->MaximumLength=USHORT(d->Length+(s?2:0));d->Buffer=const_cast<wchar_t*>(s);}
+
+extern "C" LONG __stdcall K_RtlEnterCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
+    K_KeEnterCriticalRegion();
+    const LONG status = K_RtlEnterCriticalSection(c);
+    if (status < 0) K_KeLeaveCriticalRegion();
+    return status;
+}
+extern "C" void __stdcall K_RtlLeaveCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
+    K_RtlLeaveCriticalSection(c);
+    K_KeLeaveCriticalRegion();
+}
 extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){if(!c)return LONG(0xC000000Du);EnterCriticalSection(c);return 0;}
 extern "C" void __stdcall K_RtlLeaveCriticalSection(RTL_CRITICAL_SECTION*c){if(c)LeaveCriticalSection(c);}
 extern "C" void __stdcall K_RtlInitializeCriticalSection(RTL_CRITICAL_SECTION*c){if(c)InitializeCriticalSection(c);}
@@ -610,766 +1044,6 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_enter_cs: jmp K_RtlEnterCriticalSection
     rtl_enter_cs_region: jmp K_RtlEnterCriticalSectionAndRegion
     rtl_leave_cs_region: jmp K_RtlLeaveCriticalSectionAndRegion
-    rtl_equal_a: jmp K_RtlEqualString
-    rtl_equal_w: jmp K_RtlEqualUnicodeString
-    rtl_init_a: jmp K_RtlInitAnsiString
-    rtl_init_w: jmp K_RtlInitUnicodeString
-    rtl_init_cs: jmp K_RtlInitializeCriticalSection
-    rtl_leave_cs: jmp K_RtlLeaveCriticalSection
-    rtl_lower_a: jmp K_RtlLowerChar
-    rtl_try_cs: jmp K_RtlTryEnterCriticalSection
-    rtl_upper_w: jmp K_RtlUpcaseUnicodeChar
-    rtl_upper_a: jmp K_RtlUpperChar
-    rtl_fill: jmp K_RtlFillMemory
-    rtl_move: jmp K_RtlMoveMemory
-    rtl_bswap32: jmp K_RtlUlongByteSwap
-    rtl_bswap16: jmp K_RtlUshortByteSwap
-    rtl_zero: jmp K_RtlZeroMemory
-
-    rtl_char_to_integer: jmp K_RtlCharToInteger
-    rtl_integer_to_char: jmp K_RtlIntegerToChar
-    rtl_integer_to_unicode: jmp K_RtlIntegerToUnicodeString
-    rtl_mb_to_unicode: jmp K_RtlMultiByteToUnicodeN
-    rtl_unicode_to_integer: jmp K_RtlUnicodeStringToInteger
-    rtl_unicode_to_mb: jmp K_RtlUnicodeToMultiByteN
-    rtl_mb_to_unicode_size: jmp K_RtlMultiByteToUnicodeSize
-    rtl_unicode_to_mb_size: jmp K_RtlUnicodeToMultiByteSize
-    rtl_ansi_to_unicode: jmp K_RtlAnsiStringToUnicodeString
-    rtl_cmp_mem_ulong: jmp K_RtlCompareMemoryUlong
-    rtl_fill_ulong: jmp K_RtlFillMemoryUlong
-    rtl_free_ansi: jmp K_RtlFreeAnsiString
-    rtl_free_unicode: jmp K_RtlFreeUnicodeString
-    rtl_map_generic: jmp K_RtlMapGenericMask
-    rtl_status_dos: jmp K_RtlNtStatusToDosError
-    rtl_time_fields_to_time: jmp K_RtlTimeFieldsToTime
-    rtl_time_to_fields: jmp K_RtlTimeToTimeFields
-    rtl_unicode_to_ansi: jmp K_RtlUnicodeStringToAnsiString
-    nt_protect_vm: jmp K_NtProtectVirtualMemory
-    nt_query_vm: jmp K_NtQueryVirtualMemory
-    nt_create_semaphore: jmp K_NtCreateSemaphore
-    nt_release_semaphore: jmp K_NtReleaseSemaphore
-    nt_wait_multiple: jmp K_NtWaitForMultipleObjects
-    nt_signal_wait: jmp K_NtSignalAndWaitForSingleObject
-    }
-}
-namespace {
-bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
-}
-bool XboxKernelInitializeEeprom(const wchar_t* path) {
-    if (!path || !*path) return false;
-    g_eepromPath = path;
-    HANDLE f = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    LARGE_INTEGER size{};
-    bool ok = GetFileSizeEx(f, &size) != FALSE;
-    if (ok && size.QuadPart == 0) {
-        // Blank EEPROM is intentionally unprovisioned, not a fabricated Xbox identity.
-        g_eeprom.fill(0xFF);
-        DWORD written = 0;
-        ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr) &&
-             written == g_eeprom.size() && FlushFileBuffers(f);
-    } else if (ok && size.QuadPart == static_cast<LONGLONG>(g_eeprom.size())) {
-        DWORD read = 0;
-        ok = SetFilePointer(f, 0, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
-             ReadFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &read, nullptr) &&
-             read == g_eeprom.size();
-    } else {
-        ok = false; // Never silently truncate or replace a user's EEPROM backup.
-    }
-    CloseHandle(f);
-    g_eepromReady = ok;
-    if (ok) OutputDebugStringW(L"[XboxEEPROM] Persistent 256-byte EEPROM loaded. A blank all-FF image is unprovisioned and cannot register with Insignia.\\n");
-    return ok;
-}
-
-void XboxKernelFlushEeprom() {
-    if (!g_eepromReady || g_eepromPath.empty()) return;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
-    FlushFileBuffers(f);
-    CloseHandle(f);
-}
-
-void XboxKernelSetTitlePath(const wchar_t* path){
-    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
-}
-bool XboxKernelResolveImports(const XboxKernelState& image){
-    g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
-    if(!g_image||!InImage(g_entry))return false;
-    const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x154);
-    uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
-        // Some homebrew images have no kernel imports.
-        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return true;return false;
-    }
-    g_stubPage=VirtualAlloc(nullptr,0x2000,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
-    if(!g_stubPage)return false;
-    uint32_t* table=reinterpret_cast<uint32_t*>(uintptr_t(thunk));
-    for(uint32_t i=0;i<kThunkMax;i++){
-        if(!InImage(thunk+i*4,4))return false;
-        uint32_t v=table[i];if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return true;}
-        if((v&0x80000000u)==0)return false;
-        uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;
-        void* target=DataFor(ordinal);
-        if(!target)target=StubFor(ordinal);
-        if(!target)return false;
-        table[i]=uint32_t(reinterpret_cast<uintptr_t>(target));
-    }
-    return false;
-}
-DWORD WINAPI XboxKernelStartXbe(void*){
-    if(!g_entry)return ERROR_INVALID_ADDRESS;
-    DWORD tlsIndex=TLS_OUT_OF_INDEXES;void* tlsBlock=nullptr;
-    if(g_tls){
-        struct TlsDirectory { uint32_t start,end,index,callbacks,zeroFill,characteristics; };
-        if(!InImage(g_tls,sizeof(TlsDirectory)))return ERROR_INVALID_ADDRESS;
-        auto*t=reinterpret_cast<TlsDirectory*>(uintptr_t(g_tls));
-        if(t->end<t->start||!InImage(t->start,t->end-t->start)||!InImage(t->index,4))return ERROR_INVALID_ADDRESS;
-        tlsIndex=TlsAlloc();if(tlsIndex==TLS_OUT_OF_INDEXES)return ERROR_NOT_ENOUGH_MEMORY;
-        uint64_t total=uint64_t(t->end-t->start)+t->zeroFill;
-        if(total>0x1000000){TlsFree(tlsIndex);return ERROR_INVALID_DATA;}
-        tlsBlock=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,size_t(total?total:1));
-        if(!tlsBlock){TlsFree(tlsIndex);return ERROR_NOT_ENOUGH_MEMORY;}
-        if(t->end>t->start)std::memcpy(tlsBlock,reinterpret_cast<void*>(uintptr_t(t->start)),t->end-t->start);
-        *reinterpret_cast<uint32_t*>(uintptr_t(t->index))=tlsIndex;
-        if(!TlsSetValue(tlsIndex,tlsBlock)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return GetLastError();}
-        if(t->callbacks){
-            if(!InImage(t->callbacks,4)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return ERROR_INVALID_ADDRESS;}
-            auto callbacks=reinterpret_cast<uint32_t*>(uintptr_t(t->callbacks));
-            for(uint32_t i=0;i<64&&InImage(t->callbacks+i*4,4)&&callbacks[i];++i){
-                using Callback=void (NTAPI*)(void*,DWORD,void*);
-                reinterpret_cast<Callback>(uintptr_t(callbacks[i]))(g_image,DLL_PROCESS_ATTACH,nullptr);
-            }
-        }
-    }
-    using Entry=void(__cdecl*)();
-    DWORD result=0;
-    __try { reinterpret_cast<Entry>(uintptr_t(g_entry))(); }
-    __except(EXCEPTION_EXECUTE_HANDLER){OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");result=GetExceptionCode();}
-    if(tlsIndex!=TLS_OUT_OF_INDEXES){TlsSetValue(tlsIndex,nullptr);if(tlsBlock)HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);}
-    return result;
-}
-
-extern "C" LONG __stdcall K_RtlEnterCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
-    K_KeEnterCriticalRegion();
-    const LONG status = K_RtlEnterCriticalSection(c);
-    if (status < 0) K_KeLeaveCriticalRegion();
-    return status;
-}
-extern "C" void __stdcall K_RtlLeaveCriticalSectionAndRegion(RTL_CRITICAL_SECTION* c) {
-    K_RtlLeaveCriticalSection(c);
-    K_KeLeaveCriticalRegion();
-}
-extern "C" LONG __stdcall K_RtlEnterCriticalSection(RTL_CRITICAL_SECTION*c){if(!c)return LONG(0xC000000Du);EnterCriticalSection(c);return 0;}
-extern "C" void __stdcall K_RtlLeaveCriticalSection(RTL_CRITICAL_SECTION*c){if(c)LeaveCriticalSection(c);}
-extern "C" void __stdcall K_RtlInitializeCriticalSection(RTL_CRITICAL_SECTION*c){if(c)InitializeCriticalSection(c);}
-extern "C" BOOL __stdcall K_RtlTryEnterCriticalSection(RTL_CRITICAL_SECTION*c){return c?TryEnterCriticalSection(c):FALSE;}
-extern "C" LONG __stdcall K_RtlCompareString(const GuestAnsiString*a,const GuestAnsiString*b,BOOL ci){
- if(!a||!b)return 0;size_t n=a->Length<b->Length?a->Length:b->Length;int r=ci?_strnicmp(a->Buffer,b->Buffer,n):strncmp(a->Buffer,b->Buffer,n);return r?r:int(a->Length)-int(b->Length);
-}
-extern "C" BOOL __stdcall K_RtlEqualString(const GuestAnsiString*a,const GuestAnsiString*b,BOOL ci){return K_RtlCompareString(a,b,ci)==0;}
-extern "C" LONG __stdcall K_RtlCompareUnicodeString(const GuestUnicodeString*a,const GuestUnicodeString*b,BOOL ci){
- if(!a||!b)return 0;size_t an=a->Length/2,bn=b->Length/2,n=an<bn?an:bn;int r=ci?_wcsnicmp(a->Buffer,b->Buffer,n):wcsncmp(a->Buffer,b->Buffer,n);return r?r:int(an)-int(bn);
-}
-extern "C" BOOL __stdcall K_RtlEqualUnicodeString(const GuestUnicodeString*a,const GuestUnicodeString*b,BOOL ci){return K_RtlCompareUnicodeString(a,b,ci)==0;}
-extern "C" void __stdcall K_RtlCopyString(GuestAnsiString*d,const GuestAnsiString*s){if(!d||!d->Buffer)return;USHORT n=s?s->Length:0;if(n>d->MaximumLength)n=d->MaximumLength;if(n&&s&&s->Buffer)memmove(d->Buffer,s->Buffer,n);d->Length=n;}
-extern "C" void __stdcall K_RtlCopyUnicodeString(GuestUnicodeString*d,const GuestUnicodeString*s){if(!d||!d->Buffer)return;USHORT n=s?s->Length:0;if(n>d->MaximumLength)n=d->MaximumLength&~1u;if(n&&s&&s->Buffer)memmove(d->Buffer,s->Buffer,n);d->Length=n;}
-extern "C" LONG __stdcall K_RtlAppendStringToString(GuestAnsiString*d,const GuestAnsiString*s){if(!d||!s||!d->Buffer||!s->Buffer||uint32_t(d->Length)+s->Length>d->MaximumLength)return LONG(0xC0000023u);memmove(d->Buffer+d->Length,s->Buffer,s->Length);d->Length+=s->Length;return 0;}
-extern "C" LONG __stdcall K_RtlAppendUnicodeStringToString(GuestUnicodeString*d,const GuestUnicodeString*s){if(!d||!s||!d->Buffer||!s->Buffer||uint32_t(d->Length)+s->Length>d->MaximumLength)return LONG(0xC0000023u);memmove(reinterpret_cast<uint8_t*>(d->Buffer)+d->Length,s->Buffer,s->Length);d->Length+=s->Length;return 0;}
-extern "C" LONG __stdcall K_RtlAppendUnicodeToString(GuestUnicodeString*d,const wchar_t*s){if(!d||!s||!d->Buffer)return LONG(0xC000000Du);size_t n=wcslen(s)*2;if(uint32_t(d->Length)+n>d->MaximumLength)return LONG(0xC0000023u);memcpy(reinterpret_cast<uint8_t*>(d->Buffer)+d->Length,s,n);d->Length+=USHORT(n);return 0;}
-extern "C" wchar_t __stdcall K_RtlUpcaseUnicodeChar(wchar_t c){return wchar_t(towupper(c));}
-extern "C" wchar_t __stdcall K_RtlDowncaseUnicodeChar(wchar_t c){return wchar_t(towlower(c));}
-static LONG RtlCaseUnicodeString(GuestUnicodeString* destination, const GuestUnicodeString* source, BOOL allocate, bool upper) {
-    if (!destination || !source || (!source->Buffer && source->Length) || (source->Length & 1))
-        return LONG(0xC000000Du);
-    const ULONG bytes = source->Length;
-    if (allocate) {
-        if (bytes > 0xFFFD) return LONG(0xC0000023u);
-        wchar_t* buffer = static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes + sizeof(wchar_t)));
-        if (!buffer) return LONG(0xC0000017u);
-        destination->Buffer = buffer;
-        destination->MaximumLength = USHORT(bytes + sizeof(wchar_t));
-    } else if (!destination->Buffer || destination->MaximumLength < bytes) {
-        return LONG(0xC0000023u);
-    }
-    const ULONG chars = bytes / sizeof(wchar_t);
-    for (ULONG i = 0; i < chars; ++i) {
-        const wchar_t c = source->Buffer[i];
-        destination->Buffer[i] = upper ? wchar_t(towupper(c)) : wchar_t(towlower(c));
-    }
-    if (destination->MaximumLength >= bytes + sizeof(wchar_t)) destination->Buffer[chars] = L'\\0';
-    destination->Length = USHORT(bytes);
-    return 0;
-}
-extern "C" LONG __stdcall K_RtlDowncaseUnicodeString(GuestUnicodeString* d, const GuestUnicodeString* s, BOOL allocate) {
-    return RtlCaseUnicodeString(d, s, allocate, false);
-}
-extern "C" LONG __stdcall K_RtlUpcaseUnicodeString(GuestUnicodeString* d, const GuestUnicodeString* s, BOOL allocate) {
-    return RtlCaseUnicodeString(d, s, allocate, true);
-}
-extern "C" char __stdcall K_RtlUpperChar(char c){return char(toupper((unsigned char)c));}
-extern "C" char __stdcall K_RtlLowerChar(char c){return char(tolower((unsigned char)c));}
-extern "C" void __stdcall K_RtlZeroMemory(void*d,uint32_t n){if(d)std::memset(d,0,n);}
-extern "C" void __stdcall K_RtlFillMemory(void*d,uint32_t n,uint8_t v){if(d)std::memset(d,v,n);}
-extern "C" void __stdcall K_RtlMoveMemory(void*d,const void*s,uint32_t n){if(d&&s)std::memmove(d,s,n);}
-extern "C" uint32_t __stdcall K_RtlCompareMemory(const void*a,const void*b,uint32_t n){const uint8_t*x=(const uint8_t*)a,*y=(const uint8_t*)b;uint32_t i=0;while(i<n&&x[i]==y[i])++i;return i;}
-extern "C" uint32_t __fastcall K_RtlUlongByteSwap(uint32_t v){return _byteswap_ulong(v);}
-extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_ushort(v);}
-extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
-extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
-extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
-extern "C" LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR, SIZE_T* size, ULONG type, ULONG protect) {
-    if (!base || !size || !*size) return LONG(0xC000000Du);
-    void* p = VirtualAlloc(*base, *size, type, protect);
-    if (!p) return LONG(0xC0000017u);
-    *base = p;
-    MEMORY_BASIC_INFORMATION info{};
-    if (VirtualQuery(p, &info, sizeof(info))) *size = info.RegionSize;
-    return 0;
-}
-extern "C" LONG __stdcall K_NtProtectVirtualMemory(void** base,SIZE_T* size,ULONG protect,ULONG* oldProtect){
-    if(!base||!*base||!size||!*size)return LONG(0xC000000Du);DWORD old=0;
-    if(!VirtualProtect(*base,*size,protect,&old))return LONG(0xC000000Du);
-    if(oldProtect)*oldProtect=old;return 0;
-}
-extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* base,ULONG infoClass,void* out,ULONG length,ULONG* returned){
-    if(infoClass!=0||!base||!out)return LONG(0xC0000003u);
-    MEMORY_BASIC_INFORMATION info{};SIZE_T n=VirtualQuery(base,&info,sizeof(info));if(!n)return LONG(0xC000000Du);
-    if(returned)*returned=ULONG(n);if(length<sizeof(info))return LONG(0xC0000023u);
-    std::memcpy(out,&info,sizeof(info));return 0;
-}
-extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out,void*,LONG initial,LONG maximum){
-    if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
-    HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
-}
-extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
-    if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count,const HANDLE* handles,ULONG waitType,BOOL alertable,const LARGE_INTEGER* timeout,void*){
-    if(!handles||!count||count>MAXIMUM_WAIT_OBJECTS||waitType>1)return LONG(0xC000000Du);
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=WaitForMultipleObjects(count,handles,waitType==0,ms);if(r>=WAIT_OBJECT_0&&r<WAIT_OBJECT_0+count)return 0;
-    if(r>=WAIT_ABANDONED_0&&r<WAIT_ABANDONED_0+count)return LONG(0x80);
-    return r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal,HANDLE wait,BOOL alertable,const LARGE_INTEGER* timeout){
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=SignalObjectAndWait(signal,wait,ms,FALSE);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG type) {
-    if (!base || !*base) return LONG(0xC000000Du);
-    SIZE_T n = size ? *size : 0;
-    if (!VirtualFree(*base, n, type)) return LONG(0xC000000Du);
-    if (type & MEM_RELEASE) { *base = nullptr; if (size) *size = 0; }
-    return 0;
-}
-
-extern "C" void __stdcall K_KeInitializeEvent(void* event, ULONG type, BOOL initialState) {
-    if (!event) return;
-    HANDLE h = CreateEventW(nullptr, type == 0, initialState, nullptr);
-    if (h) StoreKernelObject(event, h);
-}
-extern "C" LONG __stdcall K_KeSetEvent(void* event, LONG, BOOL) {
-    HANDLE h = FindKernelObject(event);
-    if (!h) return LONG(0xC0000008u);
-    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
-    return SetEvent(h) ? previous : LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_KeResetEvent(void* event) {
-    HANDLE h = FindKernelObject(event);
-    if (!h) return LONG(0xC0000008u);
-    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
-    return ResetEvent(h) ? previous : LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_KePulseEvent(void* event, LONG, BOOL) {
-    HANDLE h = FindKernelObject(event);
-    if (!h) return LONG(0xC0000008u);
-    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
-    if (!PulseEvent(h)) return LONG(0xC0000008u);
-    return previous;
-}
-extern "C" LONG __stdcall K_KeWaitForSingleObject(void* object, ULONG, ULONG, BOOL, const LARGE_INTEGER* timeout) {
-    HANDLE h = FindKernelObject(object);
-    if (!h) return LONG(0xC0000008u);
-    const DWORD result = WaitForSingleObject(h, KernelTimeout(timeout));
-    return result == WAIT_OBJECT_0 ? 0 : result == WAIT_TIMEOUT ? LONG(0x102) : LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_KeWaitForMultipleObjects(ULONG count, void** objects, ULONG waitType, ULONG, ULONG,
-                                                       BOOL, const LARGE_INTEGER* timeout, void*) {
-    if (!objects || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
-    HANDLE handles[MAXIMUM_WAIT_OBJECTS]{};
-    for (ULONG i = 0; i < count; ++i) {
-        handles[i] = FindKernelObject(objects[i]);
-        if (!handles[i]) return LONG(0xC0000008u);
-    }
-    const DWORD result = WaitForMultipleObjects(count, handles, waitType == 0, KernelTimeout(timeout));
-    if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count) return LONG(result - WAIT_OBJECT_0);
-    if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + count) return LONG(0x80);
-    return result == WAIT_TIMEOUT ? LONG(0x102) : LONG(0xC0000008u);
-}
-extern "C" void __stdcall K_KeInitializeSemaphore(void* semaphore, LONG count, LONG limit) {
-    if (!semaphore || limit <= 0 || count < 0 || count > limit) return;
-    HANDLE h = CreateSemaphoreW(nullptr, count, limit, nullptr);
-    if (h) StoreKernelObject(semaphore, h);
-}
-extern "C" LONG __stdcall K_KeReleaseSemaphore(void* semaphore, LONG, LONG adjustment, BOOL) {
-    HANDLE h = FindKernelObject(semaphore);
-    if (!h || adjustment <= 0) return LONG(0xC000000Du);
-    LONG previous = 0;
-    return ReleaseSemaphore(h, adjustment, &previous) ? previous : LONG(0xC0000008u);
-}
-extern "C" void __stdcall K_KeInitializeMutant(void* mutant, BOOL initialOwner) {
-    if (!mutant) return;
-    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
-    if (h) StoreKernelObject(mutant, h);
-}
-extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, BOOL, BOOL) {
-    HANDLE h = FindKernelObject(mutant);
-    if (!h) return LONG(0xC0000008u);
-    return ReleaseMutex(h) ? 0 : LONG(0xC0000008u);
-}
-
-
-extern "C" void __stdcall K_ExInitializeReadWriteLock(void* lock) { (void)GetGuestRwLock(lock, true); }
-extern "C" void __stdcall K_ExAcquireReadWriteLockExclusive(void* lock) {
-    SRWLOCK* native = GetGuestRwLock(lock, true);
-    if (native) { AcquireSRWLockExclusive(native); g_heldRwLocks[lock] = true; }
-}
-extern "C" void __stdcall K_ExAcquireReadWriteLockShared(void* lock) {
-    SRWLOCK* native = GetGuestRwLock(lock, true);
-    if (native) { AcquireSRWLockShared(native); g_heldRwLocks[lock] = false; }
-}
-extern "C" void __stdcall K_ExReleaseReadWriteLock(void* lock) {
-    SRWLOCK* native = GetGuestRwLock(lock, false);
-    if (!native) return;
-    auto it = g_heldRwLocks.find(lock);
-    if (it == g_heldRwLocks.end()) return;
-    const bool exclusive = it->second;
-    g_heldRwLocks.erase(it);
-    if (exclusive) ReleaseSRWLockExclusive(native);
-    else ReleaseSRWLockShared(native);
-}
-extern "C" void __stdcall K_KeEnterCriticalRegion() { ++g_criticalRegionDepth; }
-extern "C" void __stdcall K_KeLeaveCriticalRegion() { if (g_criticalRegionDepth) --g_criticalRegionDepth; }
-extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR level) {
-    const UCHAR previous = UCHAR(g_guestIrql);
-    if (level > g_guestIrql) g_guestIrql = level;
-    return previous;
-}
-extern "C" void __fastcall K_KfLowerIrql(UCHAR level) { g_guestIrql = level; }
-extern "C" UCHAR __stdcall K_KeRaiseIrqlToDpcLevel() { return K_KfRaiseIrql(2); }
-extern "C" UCHAR __stdcall K_KeRaiseIrqlToSynchLevel() { return K_KfRaiseIrql(1); }
-extern "C" void __stdcall K_KeInitializeTimerEx(void* timer, ULONG type) {
-    if (!timer) return;
-    HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
-    if (h) StoreKernelObject(timer, h);
-}
-extern "C" BOOL __stdcall K_KeSetTimer(void* timer, const LARGE_INTEGER* dueTime, void*) {
-    HANDLE h = FindKernelObject(timer);
-    return h && dueTime ? SetWaitableTimer(h, dueTime, 0, nullptr, nullptr, FALSE) : FALSE;
-}
-extern "C" BOOL __stdcall K_KeSetTimerEx(void* timer, const LARGE_INTEGER* dueTime, LONG period, void*) {
-    HANDLE h = FindKernelObject(timer);
-    return h && dueTime && period >= 0 ? SetWaitableTimer(h, dueTime, period, nullptr, nullptr, FALSE) : FALSE;
-}
-extern "C" BOOL __stdcall K_KeCancelTimer(void* timer) {
-    HANDLE h = FindKernelObject(timer);
-    return h ? CancelWaitableTimer(h) : FALSE;
-}
-extern "C" uint64_t __stdcall K_KeQueryInterruptTime() {
-    return GetTickCount64() * 10000ull;
-}
-extern "C" void __stdcall K_KeStallExecutionProcessor(uint32_t microseconds) {
-    LARGE_INTEGER start{}, now{}, frequency{};
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&start);
-    const uint64_t target = (uint64_t(frequency.QuadPart) * microseconds) / 1000000ull;
-    do { QueryPerformanceCounter(&now); YieldProcessor(); }
-    while (uint64_t(now.QuadPart - start.QuadPart) < target);
-}
-extern "C" LONG __stdcall K_NtYieldExecution() {
-    SwitchToThread();
-    return 0;
-}
-extern "C" uint32_t __stdcall K_MmQueryAddressProtect(void* address) {
-    MEMORY_BASIC_INFORMATION info{};
-    return address && VirtualQuery(address, &info, sizeof(info)) ? info.Protect : 0;
-}
-extern "C" uint32_t __stdcall K_MmQueryAllocationSize(void* address) {
-    MEMORY_BASIC_INFORMATION info{};
-    return address && VirtualQuery(address, &info, sizeof(info)) ? uint32_t(info.RegionSize) : 0;
-}
-extern "C" void __stdcall K_MmSetAddressProtect(void* address, uint32_t size, uint32_t protect) {
-    DWORD oldProtect = 0;
-    if (address && size) VirtualProtect(address, size, protect, &oldProtect);
-}
-struct GuestTimeFields { SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday; };
-extern "C" BOOL __stdcall K_RtlTimeFieldsToTime(const GuestTimeFields* fields, LARGE_INTEGER* time) {
-    if (!fields || !time) return FALSE;
-    SYSTEMTIME st{};
-    st.wYear = WORD(fields->Year); st.wMonth = WORD(fields->Month); st.wDay = WORD(fields->Day);
-    st.wHour = WORD(fields->Hour); st.wMinute = WORD(fields->Minute); st.wSecond = WORD(fields->Second);
-    st.wMilliseconds = WORD(fields->Milliseconds);
-    FILETIME ft{};
-    if (!SystemTimeToFileTime(&st, &ft)) return FALSE;
-    ULARGE_INTEGER value{}; value.LowPart = ft.dwLowDateTime; value.HighPart = ft.dwHighDateTime;
-    time->QuadPart = LONGLONG(value.QuadPart);
-    return TRUE;
-}
-extern "C" void __stdcall K_RtlTimeToTimeFields(const LARGE_INTEGER* time, GuestTimeFields* fields) {
-    if (!time || !fields) return;
-    ULARGE_INTEGER value{}; value.QuadPart = ULONGLONG(time->QuadPart);
-    FILETIME ft{}; ft.dwLowDateTime = value.LowPart; ft.dwHighDateTime = value.HighPart;
-    SYSTEMTIME st{};
-    if (!FileTimeToSystemTime(&ft, &st)) { std::memset(fields, 0, sizeof(*fields)); return; }
-    fields->Year = SHORT(st.wYear); fields->Month = SHORT(st.wMonth); fields->Day = SHORT(st.wDay);
-    fields->Hour = SHORT(st.wHour); fields->Minute = SHORT(st.wMinute); fields->Second = SHORT(st.wSecond);
-    fields->Milliseconds = SHORT(st.wMilliseconds); fields->Weekday = SHORT(st.wDayOfWeek);
-}
-extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
-}
-extern "C" __declspec(naked) void KernelDispatch(){
-    __asm {
-        mov eax, [esp]
-        add esp, 4
-        cmp eax, 1
-        je av_get
-        cmp eax, 4
-        je av_set
-        cmp eax, 5
-        je dbg_break
-        cmp eax, 6
-        je dbg_break_status
-        cmp eax, 8
-        je dbg_print
-        cmp eax, 14
-        je pool_alloc
-        cmp eax, 15
-        je pool_alloc_tag
-        cmp eax, 17
-        je pool_free
-        cmp eax, 23
-        je pool_size
-        cmp eax, 45
-        je smbus_read
-        cmp eax, 50
-        je smbus_write
-        cmp eax, 51
-        je icx
-        cmp eax, 52
-        je idec
-        cmp eax, 53
-        je iinc
-        cmp eax, 54
-        je iex
-        cmp eax, 55
-        je iexa
-        cmp eax, 12
-        je ex_acquire_rw_exclusive
-        cmp eax, 13
-        je ex_acquire_rw_shared
-        cmp eax, 18
-        je ex_init_rw
-        cmp eax, 28
-        je ex_release_rw
-                cmp eax, 97
-        je ke_cancel_timer
-        cmp eax, 101
-        je ke_enter_critical
-        cmp eax, 113
-        je ke_init_timer
-        cmp eax, 122
-        je ke_leave_critical
-        cmp eax, 129
-        je ke_raise_dpc
-        cmp eax, 130
-        je ke_raise_synch
-        cmp eax, 149
-        je ke_set_timer
-        cmp eax, 150
-        je ke_set_timer_ex
-        cmp eax, 160
-        je kf_raise_irql
-        cmp eax, 161
-        je kf_lower_irql
-                cmp eax, 108
-        je ke_init_event
-        cmp eax, 110
-        je ke_init_mutant
-        cmp eax, 112
-        je ke_init_semaphore
-        cmp eax, 123
-        je ke_pulse_event
-        cmp eax, 132
-        je ke_release_semaphore
-        cmp eax, 131
-        je ke_release_mutant
-        cmp eax, 138
-        je ke_reset_event
-        cmp eax, 145
-        je ke_set_event
-        cmp eax, 158
-        je ke_wait_multiple
-        cmp eax, 159
-        je ke_wait_single
-                cmp eax, 99
-        je delay_thread
-        cmp eax, 103
-        je current_irql
-        cmp eax, 104
-        je current_thread
-        cmp eax, 126
-        je qpc
-        cmp eax, 127
-        je qpf
-        cmp eax, 128
-        je qst
-        cmp eax, 125
-        je query_interrupt
-        cmp eax, 151
-        je stall_processor
-        cmp eax, 165
-        je mm_alloc
-        cmp eax, 166
-        je mm_alloc_ex
-        cmp eax, 171
-        je mm_free
-        cmp eax, 173
-        je mm_phys
-        cmp eax, 174
-        je mm_valid
-        cmp eax, 179
-        je mm_query_protect
-        cmp eax, 180
-        je mm_query_size
-        cmp eax, 182
-        je mm_set_protect
-        cmp eax, 184
-        je nt_alloc_vm
-        cmp eax, 199
-        je nt_free_vm
-        cmp eax, 238
-        je nt_yield
-        cmp eax, 190
-        je nt_create_file
-        cmp eax, 202
-        je nt_open_file
-        cmp eax, 219
-        je nt_read_file
-        cmp eax, 236
-        je nt_write_file
-        cmp eax, 198
-        je nt_flush
-        cmp eax, 187
-        je nt_close
-        cmp eax, 189
-        je nt_event
-        cmp eax, 225
-        je nt_set_event
-        cmp eax, 186
-        je nt_clear_event
-        cmp eax, 233
-        je nt_wait
-        cmp eax, 261
-        je rtl_append_a
-        cmp eax, 262
-        je rtl_append_w
-        cmp eax, 263
-        je rtl_append_wchar
-        cmp eax, 268
-        je rtl_cmp_memory
-        cmp eax, 270
-        je rtl_cmp_a
-        cmp eax, 271
-        je rtl_cmp_w
-        cmp eax, 272
-        je rtl_copy_a
-        cmp eax, 274
-        je rtl_create_unicode
-        cmp eax, 273
-        je rtl_copy_w
-        cmp eax, 276
-        je rtl_downcase_unicode_string
-        cmp eax, 275
-        je rtl_lower_w
-        cmp eax, 277
-        je rtl_enter_cs
-        cmp eax, 279
-        je rtl_equal_a
-        cmp eax, 280
-        je rtl_equal_w
-        cmp eax, 289
-        je rtl_init_a
-        cmp eax, 290
-        je rtl_init_w
-        cmp eax, 291
-        je rtl_init_cs
-        cmp eax, 294
-        je rtl_leave_cs
-        cmp eax, 296
-        je rtl_lower_a
-        cmp eax, 306
-        je rtl_try_cs
-        cmp eax, 314
-        je rtl_upcase_unicode_string
-        cmp eax, 315
-        je rtl_upcase_unicode_mb
-        cmp eax, 317
-        je rtl_upper_string
-        cmp eax, 313
-        je rtl_upper_w
-        cmp eax, 316
-        je rtl_upper_a
-        cmp eax, 284
-        je rtl_fill
-        cmp eax, 298
-        je rtl_move
-        cmp eax, 307
-        je rtl_bswap32
-        cmp eax, 318
-        je rtl_bswap16
-        cmp eax, 320
-        je rtl_zero
-        cmp eax, 267
-        je rtl_char_to_integer
-        cmp eax, 292
-        je rtl_integer_to_char
-        cmp eax, 293
-        je rtl_integer_to_unicode
-        cmp eax, 300
-        je rtl_mb_to_unicode_size
-        cmp eax, 299
-        je rtl_mb_to_unicode
-        cmp eax, 309
-        je rtl_unicode_to_integer
-        cmp eax, 311
-        je rtl_unicode_to_mb_size
-        cmp eax, 310
-        je rtl_unicode_to_mb
-        cmp eax, 260
-        je rtl_ansi_to_unicode
-        cmp eax, 269
-        je rtl_cmp_mem_ulong
-        cmp eax, 285
-        je rtl_fill_ulong
-        cmp eax, 286
-        je rtl_free_ansi
-        cmp eax, 287
-        je rtl_free_unicode
-        cmp eax, 297
-        je rtl_map_generic
-        cmp eax, 301
-        je rtl_status_dos
-        cmp eax, 304
-        je rtl_time_fields_to_time
-        cmp eax, 305
-        je rtl_time_to_fields
-        cmp eax, 308
-        je rtl_unicode_to_ansi
-        cmp eax, 204
-        je nt_protect_vm
-        cmp eax, 217
-        je nt_query_vm
-        cmp eax, 193
-        je nt_create_semaphore
-        cmp eax, 222
-        je nt_release_semaphore
-        cmp eax, 235
-        je nt_wait_multiple
-        cmp eax, 230
-        je nt_signal_wait
-        push eax
-        call K_Unsupported
-        add esp, 4
-        ret
-    av_get: jmp K_AvGetSavedDataAddress
-    av_set: jmp K_AvSetSavedDataAddress
-    dbg_break: jmp K_DbgBreakPoint
-    dbg_break_status: jmp K_DbgBreakPointWithStatus
-    dbg_print: jmp K_DbgPrint
-    pool_alloc: jmp K_ExAllocatePool
-    pool_alloc_tag: jmp K_ExAllocatePoolWithTag
-    pool_free: jmp K_ExFreePool
-    pool_size: jmp K_ExQueryPoolBlockSize
-    smbus_read: jmp K_HalReadSMBusValue
-    smbus_write: jmp K_HalWriteSMBusValue
-    icx: jmp K_InterlockedCompareExchange
-    idec: jmp K_InterlockedDecrement
-    iinc: jmp K_InterlockedIncrement
-    iex: jmp K_InterlockedExchange
-    iexa: jmp K_InterlockedExchangeAdd
-    ex_acquire_rw_exclusive: jmp K_ExAcquireReadWriteLockExclusive
-    ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
-    ex_init_rw: jmp K_ExInitializeReadWriteLock
-    ex_release_rw: jmp K_ExReleaseReadWriteLock
-    ke_cancel_timer: jmp K_KeCancelTimer
-    ke_enter_critical: jmp K_KeEnterCriticalRegion
-    ke_init_timer: jmp K_KeInitializeTimerEx
-    ke_leave_critical: jmp K_KeLeaveCriticalRegion
-    ke_raise_dpc: jmp K_KeRaiseIrqlToDpcLevel
-    ke_raise_synch: jmp K_KeRaiseIrqlToSynchLevel
-    ke_set_timer: jmp K_KeSetTimer
-    ke_set_timer_ex: jmp K_KeSetTimerEx
-    kf_raise_irql: jmp K_KfRaiseIrql
-    kf_lower_irql: jmp K_KfLowerIrql
-    ke_init_event: jmp K_KeInitializeEvent
-    ke_init_mutant: jmp K_KeInitializeMutant
-    ke_init_semaphore: jmp K_KeInitializeSemaphore
-    ke_pulse_event: jmp K_KePulseEvent
-    ke_release_semaphore: jmp K_KeReleaseSemaphore
-    ke_release_mutant: jmp K_KeReleaseMutant
-    ke_reset_event: jmp K_KeResetEvent
-    ke_set_event: jmp K_KeSetEvent
-    ke_wait_multiple: jmp K_KeWaitForMultipleObjects
-    ke_wait_single: jmp K_KeWaitForSingleObject
-    delay_thread: jmp K_KeDelayExecutionThread
-    current_irql: jmp K_KeGetCurrentIrql
-    current_thread: jmp K_KeGetCurrentThread
-    qpc: jmp K_KeQueryPerformanceCounter
-    qpf: jmp K_KeQueryPerformanceFrequency
-    qst: jmp K_KeQuerySystemTime
-    mm_alloc: jmp K_MmAllocateContiguousMemory
-    mm_alloc_ex: jmp K_MmAllocateContiguousMemoryEx
-    mm_free: jmp K_MmFreeContiguousMemory
-    mm_phys: jmp K_MmGetPhysicalAddress
-    mm_valid: jmp K_MmIsAddressValid
-    query_interrupt: jmp K_KeQueryInterruptTime
-    stall_processor: jmp K_KeStallExecutionProcessor
-    mm_query_protect: jmp K_MmQueryAddressProtect
-    mm_query_size: jmp K_MmQueryAllocationSize
-    mm_set_protect: jmp K_MmSetAddressProtect
-    nt_alloc_vm: jmp K_NtAllocateVirtualMemory
-    nt_free_vm: jmp K_NtFreeVirtualMemory
-    nt_yield: jmp K_NtYieldExecution
-    nt_create_file: jmp K_NtCreateFile
-    nt_open_file: jmp K_NtOpenFile
-    nt_read_file: jmp K_NtReadFile
-    nt_write_file: jmp K_NtWriteFile
-    nt_flush: jmp K_NtFlushBuffersFile
-    nt_close: jmp K_NtClose
-    nt_event: jmp K_NtCreateEvent
-    nt_set_event: jmp K_NtSetEvent
-    nt_clear_event: jmp K_NtClearEvent
-    nt_wait: jmp K_NtWaitForSingleObject
-    rtl_append_a: jmp K_RtlAppendStringToString
-    rtl_append_w: jmp K_RtlAppendUnicodeStringToString
-    rtl_append_wchar: jmp K_RtlAppendUnicodeToString
-    rtl_cmp_a: jmp K_RtlCompareString
-    rtl_cmp_memory: jmp K_RtlCompareMemory
-    rtl_create_unicode: jmp K_RtlCreateUnicodeString
-    rtl_upcase_unicode_mb: jmp K_RtlUpcaseUnicodeToMultiByteN
-    rtl_upper_string: jmp K_RtlUpperString
-    rtl_cmp_w: jmp K_RtlCompareUnicodeString
-    rtl_copy_a: jmp K_RtlCopyString
-    rtl_copy_w: jmp K_RtlCopyUnicodeString
-    rtl_lower_w: jmp K_RtlDowncaseUnicodeChar
-    rtl_downcase_unicode_string: jmp K_RtlDowncaseUnicodeString
-    rtl_upcase_unicode_string: jmp K_RtlUpcaseUnicodeString
-    rtl_enter_cs: jmp K_RtlEnterCriticalSection
     rtl_equal_a: jmp K_RtlEqualString
     rtl_equal_w: jmp K_RtlEqualUnicodeString
     rtl_init_a: jmp K_RtlInitAnsiString
