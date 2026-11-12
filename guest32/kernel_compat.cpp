@@ -303,6 +303,8 @@ static std::string FormatUnsigned(ULONG value, ULONG base) {
     std::reverse(out.begin(), out.end());
     return out;
 }
+extern "C" void __stdcall K_RtlRaiseStatus(LONG status);
+
 // Original Xbox RTL 64-bit arithmetic exports (ordinals 281-283).
 extern "C" LARGE_INTEGER __stdcall K_RtlExtendedIntegerMultiply(LARGE_INTEGER multiplicand, LONG multiplier) {
     LARGE_INTEGER result{};
