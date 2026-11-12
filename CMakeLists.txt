@@ -16,6 +16,7 @@ add_subdirectory(modules/nv2a)
 add_subdirectory(modules/insignia_dns)
 add_subdirectory(modules/xbe_loader)
 add_subdirectory(modules/fatx)
+add_subdirectory(modules/input)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
