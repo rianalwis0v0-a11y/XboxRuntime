@@ -23,7 +23,7 @@ static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
-static uint32_t g_data[379]{};
+static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
@@ -76,7 +76,7 @@ void* DataFor(uint32_t ordinal){
     case 102: case 120: case 154: case 156: case 157: case 162:
     case 164: case 321: case 322: case 323: case 324: case 325:
     case 326: case 353: case 354: case 355: case 356: case 357:
-        return &g_data[ordinal];
+        return g_data[ordinal].data();
     default:return nullptr;
     }
 }
