@@ -58,3 +58,13 @@ target_include_directories(xdvdfs_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/mod
 target_compile_features(xdvdfs_smoke PRIVATE cxx_std_17)
 target_compile_definitions(xdvdfs_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME xdvdfs_smoke COMMAND xdvdfs_smoke)
+
+# Validate the original Xbox controller ABI and disconnected/invalid-user paths.
+add_executable(input_smoke
+    tests/input_smoke.cpp
+    modules/input/input.cpp
+)
+target_include_directories(input_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modules/input")
+target_compile_features(input_smoke PRIVATE cxx_std_17)
+target_compile_definitions(input_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME input_smoke COMMAND input_smoke)
