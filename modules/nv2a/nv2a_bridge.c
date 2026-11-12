@@ -1021,7 +1021,11 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
                 D3DLOCKED_RECT locked;memset(&locked,0,sizeof(locked));
                 hr=texture->lpVtbl->LockRect(texture,level,&locked,NULL,0);
                 uint32_t row_bytes=w*4u;
-                if(FAILED(hr)||!locked.pBits||locked.Pitch<(INT)row_bytes){ok=0;break;}
+                if(FAILED(hr)){ok=0;break;}
+                if(!locked.pBits||locked.Pitch<(INT)row_bytes){
+                    (void)texture->lpVtbl->UnlockRect(texture,level);
+                    ok=0;break;
+                }
                 for(uint32_t y=0;y<h;++y){
                     const uint8_t* src=decoded+offsets[level]+(size_t)y*row_bytes;
                     uint8_t* dst=(uint8_t*)locked.pBits+(size_t)y*(uint32_t)locked.Pitch;
