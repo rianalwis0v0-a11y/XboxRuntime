@@ -51,6 +51,29 @@ static int map_compare_function(uint32_t parameter, uint32_t* value)
     return 1;
 }
 
+static int map_blend_factor(uint32_t parameter, uint32_t* value)
+{
+    if (!value) return 0;
+    switch (parameter) {
+    case 0x0000u: *value = D3DBLEND_ZERO; return 1;
+    case 0x0001u: *value = D3DBLEND_ONE; return 1;
+    case 0x0300u: *value = D3DBLEND_SRCCOLOR; return 1;
+    case 0x0301u: *value = D3DBLEND_INVSRCCOLOR; return 1;
+    case 0x0302u: *value = D3DBLEND_SRCALPHA; return 1;
+    case 0x0303u: *value = D3DBLEND_INVSRCALPHA; return 1;
+    case 0x0304u: *value = D3DBLEND_DESTALPHA; return 1;
+    case 0x0305u: *value = D3DBLEND_INVDESTALPHA; return 1;
+    case 0x0306u: *value = D3DBLEND_DESTCOLOR; return 1;
+    case 0x0307u: *value = D3DBLEND_INVDESTCOLOR; return 1;
+    case 0x0308u: *value = D3DBLEND_SRCALPHASAT; return 1;
+    case 0x8001u: *value = D3DBLEND_BLENDFACTOR; return 1;
+    case 0x8002u: *value = D3DBLEND_INVBLENDFACTOR; return 1;
+    case 0x8003u: *value = D3DBLEND_BLENDFACTOR; return 1;
+    case 0x8004u: *value = D3DBLEND_INVBLENDFACTOR; return 1;
+    default: return 0;
+    }
+}
+
 static int map_stencil_operation(uint32_t parameter, uint32_t* value)
 {
     switch (parameter) {
@@ -72,7 +95,19 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
     uint32_t state = 0, value = parameter;
     if (!state_out || !value_out) return 0;
 
-    switch (method) {
+    switch (method) {    case 0x0304u:
+        state = D3DRS_ALPHABLENDENABLE; value = parameter ? 1u : 0u; break;
+    case 0x0344u:
+        state = D3DRS_SRCBLEND;
+        if (!map_blend_factor(parameter, &value)) return 0;
+        break;
+    case 0x0348u:
+        state = D3DRS_DESTBLEND;
+        if (!map_blend_factor(parameter, &value)) return 0;
+        break;
+    case 0x034Cu:
+        state = D3DRS_BLENDFACTOR; break;
+
     case NV097_SET_ALPHA_FUNC:
         state = D3DRS_ALPHAFUNC;
         if (!map_compare_function(parameter, &value)) return 0;
