@@ -28,7 +28,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,267,284,292,293,296,299,307,309,310,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,267,276,284,292,293,296,299,300,307,309,310,311,314,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -278,6 +278,48 @@ EmitCheckEqual 0
 EmitLoadEax $formattedVa
 EmitByte 0x25; Emit32 0xFF
 EmitCheckEqual 0x41
+
+
+# Unicode case conversion and conversion-size queries.
+$caseSourceDescriptorVa = [uint32]($reportVa + 0x160)
+$caseOutputDescriptorVa = [uint32]($reportVa + 0x170)
+$caseOutputBufferVa = [uint32]($reportVa + 0x1C0)
+EmitMovMemoryImmediate $caseSourceDescriptorVa 2
+EmitMovMemoryImmediate ([uint32]($caseSourceDescriptorVa + 4)) 2
+EmitMovMemoryImmediate ([uint32]($caseSourceDescriptorVa + 8)) $unicodeBufferVa
+EmitMovMemoryImmediate $caseOutputDescriptorVa 0
+EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 4)) 8
+EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 8)) $caseOutputBufferVa
+EmitPush 1
+EmitPush $caseSourceDescriptorVa
+EmitPush $caseOutputDescriptorVa
+EmitCallImport 314
+EmitCheckEqual 0
+EmitLoadEax $caseOutputBufferVa
+EmitByte 0x25; Emit32 0xFFFF
+EmitCheckEqual 0x41
+EmitPush 1
+EmitPush $caseSourceDescriptorVa
+EmitPush $caseOutputDescriptorVa
+EmitCallImport 276
+EmitCheckEqual 0
+EmitLoadEax $caseOutputBufferVa
+EmitByte 0x25; Emit32 0xFFFF
+EmitCheckEqual 0x61
+EmitPush 1
+EmitPush $letterVa
+EmitPush $numberValueVa
+EmitCallImport 300
+EmitCheckEqual 0
+EmitLoadEax $numberValueVa
+EmitCheckEqual 2
+EmitPush 2
+EmitPush $unicodeBufferVa
+EmitPush $numberValueVa
+EmitCallImport 311
+EmitCheckEqual 0
+EmitLoadEax $numberValueVa
+EmitCheckEqual 1
 
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
