@@ -926,11 +926,12 @@ extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
 }
-extern "C" LONG __stdcall K_NtReleaseMutant(HANDLE mutant, LONG, BOOL, LONG* previous) {
+extern "C" LONG __stdcall K_NtReleaseMutant(HANDLE mutant, LONG* previous) {
     if (previous) *previous = 0;
     if (!mutant) return LONG(0xC0000008u);
+    if (!ReleaseMutex(mutant)) return LONG(0xC0000008u);
     if (previous) *previous = 1;
-    return ReleaseMutex(mutant) ? 0 : LONG(0xC0000008u);
+    return 0;
 }
 extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK, void*, ULONG type) {
     if (!out) return LONG(0xC000000Du);
