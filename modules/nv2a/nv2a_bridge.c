@@ -7,6 +7,7 @@
 #include "nv2a_state.h"
 #include "nv2a_pgraph_d3d11.h"
 #include "d3d8_xbox.h"
+#include "d3d8_swizzle.h"
 
 #define XBOX_VRAM_SIZE  (64u * 1024u * 1024u)
 #define XBOX_RAMIN_SIZE (1u * 1024u * 1024u)
@@ -651,6 +652,49 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     }
     if(destination_pitch) *destination_pitch=(uint32_t)out_pitch;
     return 0;
+}
+
+
+int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(uint32_t format,
+    uint32_t width, uint32_t height, const void* source,
+    uint32_t source_length, void* destination,
+    uint32_t destination_capacity, uint32_t* destination_pitch)
+{
+    if (destination_pitch) *destination_pitch = 0;
+    if (!source || !destination || !width || !height ||
+        width > 16384u || height > 16384u ||
+        (width & (width - 1u)) || (height & (height - 1u)))
+        return 1;
+
+    const uint32_t color = (format >> 8) & 0xFFu;
+    uint32_t bytes_per_pixel = 0;
+    switch (color) {
+    case 0x00u: case 0x19u: bytes_per_pixel = 1u; break;
+    case 0x02u: case 0x03u: case 0x04u: case 0x05u:
+        bytes_per_pixel = 2u; break;
+    case 0x06u: case 0x07u: bytes_per_pixel = 4u; break;
+    default:
+        /* Linear-image and block-compressed formats use separate paths. */
+        return 2;
+    }
+
+    const uint64_t texels = (uint64_t)width * height;
+    const uint64_t source_bytes = texels * bytes_per_pixel;
+    const uint64_t output_pitch = (uint64_t)width * 4u;
+    const uint64_t output_bytes = output_pitch * height;
+    if (source_bytes > source_length || source_bytes > SIZE_MAX ||
+        output_pitch > UINT32_MAX || output_bytes > destination_capacity)
+        return 3;
+
+    uint8_t* linear = (uint8_t*)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)source_bytes);
+    if (!linear) return 4;
+    xbox_unswizzle_rect(linear, source, width, height, bytes_per_pixel);
+    const uint32_t linear_pitch = width * bytes_per_pixel;
+    const int result = XboxNV2A_DecodeTextureRGBA8(
+        format, width, height, linear_pitch, linear, (uint32_t)source_bytes,
+        destination, destination_capacity, destination_pitch);
+    HeapFree(GetProcessHeap(), 0, linear);
+    return result;
 }
 
 int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,

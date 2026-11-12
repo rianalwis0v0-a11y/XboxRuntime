@@ -75,6 +75,13 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureRGBA8(
     void* destination, uint32_t destination_capacity,
     uint32_t* destination_pitch);
 
+/* Decode a power-of-two Xbox Morton-swizzled texture into RGBA8. DXT is not accepted here. */
+__declspec(dllexport) int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(
+    uint32_t format, uint32_t width, uint32_t height,
+    const void* source, uint32_t source_length,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* destination_pitch);
+
 /* Map NV097 texture-filter fields to D3D8 minification, magnification and mip filters. */
 __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,

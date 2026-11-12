@@ -277,3 +277,16 @@ Texture sampler address methods are now translated per stage for U/V wrapping:
 wrap, mirror, clamp, border, and mirror-once map to the matching D3D8
 texture-stage states. Per-stage border color is also forwarded. Invalid address
 modes and unavailable device state are not silently reported as handled.
+
+
+## Swizzled texture decode
+
+`XboxNV2A_DecodeSwizzledTextureRGBA8` handles the common power-of-two
+Morton/Z-order texture layout for uncompressed Y8, A8, A1R5G5B5, X1R5G5B5,
+A4R4G4B4, R5G6B5, A8R8G8B8, and X8R8G8B8 data. It validates dimensions,
+source length, destination capacity, and allocation size before unswizzling
+through the pinned D3D8 compatibility helper and passing the linear result to
+the existing RGBA8 decoder. Linear-image and DXT block formats are explicitly
+rejected by this entry point; they use the linear or block decoder. This is
+the swizzle conversion stage, not yet DMA-driven texture creation, cache
+invalidation, mip-chain upload, or D3D8 texture-stage binding.

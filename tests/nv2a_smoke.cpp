@@ -49,6 +49,7 @@ struct SurfaceInfo {
 };
 using DecodeTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,
     const void*,uint32_t,void*,uint32_t,uint32_t*);
+using DecodeSwizzledTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
 
@@ -105,6 +106,7 @@ int main() {
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
+    auto decodeSwizzledTexture = reinterpret_cast<DecodeSwizzledTextureFn>(Need(module, "XboxNV2A_DecodeSwizzledTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
 
@@ -218,6 +220,31 @@ int main() {
             decodeTexture(0x0600u,2,1,0,argb,4,rgba,sizeof(rgba),&pitch)==0 ||
             decodeTexture(0x9900u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)==0) {
             std::cerr << "FAIL: texture decode bounds/format validation\n"; return 1;
+        }
+    }
+
+
+    {
+        /* 2x2 Morton order is (0,0), (1,0), (0,1), (1,1). */
+        const uint8_t swizzled[16] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
+        };
+        uint8_t linear[16]{};
+        uint32_t pitch = 0;
+        if (decodeSwizzledTexture(0x0600u, 2, 2, swizzled, sizeof(swizzled),
+                linear, sizeof(linear), &pitch) != 0 ||
+            pitch != 8u ||
+            linear[0] != 1u || linear[1] != 2u || linear[2] != 3u ||
+            linear[4] != 7u || linear[5] != 8u || linear[6] != 9u ||
+            linear[8] != 4u || linear[9] != 5u || linear[10] != 6u ||
+            linear[12] != 10u || linear[13] != 11u || linear[14] != 12u ||
+            decodeSwizzledTexture(0x0600u, 3, 2, swizzled, sizeof(swizzled),
+                linear, sizeof(linear), &pitch) == 0 ||
+            decodeSwizzledTexture(0x0C00u, 2, 2, swizzled, sizeof(swizzled),
+                linear, sizeof(linear), &pitch) == 0) {
+            std::cerr << "FAIL: swizzled texture decode / validation\\n";
+            return 1;
         }
     }
 
