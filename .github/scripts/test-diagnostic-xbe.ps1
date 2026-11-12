@@ -28,7 +28,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,267,268,274,276,284,287,292,293,296,299,300,307,309,310,311,314,315,317,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,108,110,112,123,131,132,138,145,158,159,267,268,274,276,284,287,292,293,296,299,300,307,309,310,311,314,315,317,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -367,6 +367,39 @@ EmitCheckEqual 0
 EmitLoadEax $formattedVa
 EmitByte 0x25; Emit32 0xFF
 EmitCheckEqual 0x41
+
+
+# Kernel dispatcher event lifecycle: initialize, signal, wait, reset, timeout.
+$eventObjectVa = [uint32]($reportVa + 0x220)
+$zeroTimeoutVa = [uint32]($reportVa + 0x230)
+EmitPush 0
+EmitPush 0
+EmitPush $eventObjectVa
+EmitCallImport 108
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $eventObjectVa
+EmitCallImport 145
+EmitCheckEqual 0
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $eventObjectVa
+EmitCallImport 159
+EmitCheckEqual 0
+EmitPush $eventObjectVa
+EmitCallImport 138
+EmitCheckEqual 1
+EmitPush $zeroTimeoutVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $eventObjectVa
+EmitCallImport 159
+EmitCheckEqual 0x102
 
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
