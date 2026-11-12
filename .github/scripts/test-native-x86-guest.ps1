@@ -21,7 +21,7 @@ Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
 Put32 0x128 (0x10001000 -bxor [Convert]::ToUInt32('A8FC57AB', 16))
-Put32 0x154 (0x10001100 -bxor [Convert]::ToUInt32('5B6D40B6', 16))
+Put32 0x158 (0x10001100 -bxor [Convert]::ToUInt32('5B6D40B6', 16))
 # Section header at file offset 0x178.
 Put32 0x178 5
 Put32 0x17C 0x10001000
