@@ -246,9 +246,8 @@ $unicodeDescriptorVa = [uint32]($reportVa + 0x150)
 $unicodeBufferVa = [uint32]($reportVa + 0x1A0)
 $letterVa = [uint32]($reportVa + 0x180)
 $formattedVa = [uint32]($reportVa + 0x190)
-EmitMovMemoryImmediate $unicodeDescriptorVa 0
-EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 4)) 16
-EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 8)) $unicodeBufferVa
+EmitMovMemoryImmediate $unicodeDescriptorVa 0x00100000
+EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 4)) $unicodeBufferVa
 EmitPush $unicodeDescriptorVa
 EmitPush 10
 EmitPush 42
@@ -295,12 +294,10 @@ EmitCheckEqual 0x41
 $caseSourceDescriptorVa = [uint32]($reportVa + 0x160)
 $caseOutputDescriptorVa = [uint32]($reportVa + 0x170)
 $caseOutputBufferVa = [uint32]($reportVa + 0x1C0)
-EmitMovMemoryImmediate $caseSourceDescriptorVa 2
-EmitMovMemoryImmediate ([uint32]($caseSourceDescriptorVa + 4)) 2
-EmitMovMemoryImmediate ([uint32]($caseSourceDescriptorVa + 8)) $unicodeBufferVa
-EmitMovMemoryImmediate $caseOutputDescriptorVa 0
-EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 4)) 8
-EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 8)) $caseOutputBufferVa
+EmitMovMemoryImmediate $caseSourceDescriptorVa 0x00020002
+EmitMovMemoryImmediate ([uint32]($caseSourceDescriptorVa + 4)) $unicodeBufferVa
+EmitMovMemoryImmediate $caseOutputDescriptorVa 0x00080000
+EmitMovMemoryImmediate ([uint32]($caseOutputDescriptorVa + 4)) $caseOutputBufferVa
 EmitPush 0
 EmitPush $caseSourceDescriptorVa
 EmitPush $caseOutputDescriptorVa
@@ -354,12 +351,10 @@ EmitIncrement $passedVa
 # RtlUpperString: lowercase "ff" in formattedVa becomes "FF".
 $ansiSourceVa = [uint32]($reportVa + 0x1E0)
 $ansiDestVa = [uint32]($reportVa + 0x1F0)
-EmitMovMemoryImmediate $ansiSourceVa 2
-EmitMovMemoryImmediate ([uint32]($ansiSourceVa + 4)) 2
-EmitMovMemoryImmediate ([uint32]($ansiSourceVa + 8)) $formattedVa
-EmitMovMemoryImmediate $ansiDestVa 0
-EmitMovMemoryImmediate ([uint32]($ansiDestVa + 4)) 8
-EmitMovMemoryImmediate ([uint32]($ansiDestVa + 8)) $caseOutputBufferVa
+EmitMovMemoryImmediate $ansiSourceVa 0x00020002
+EmitMovMemoryImmediate ([uint32]($ansiSourceVa + 4)) $formattedVa
+EmitMovMemoryImmediate $ansiDestVa 0x00080000
+EmitMovMemoryImmediate ([uint32]($ansiDestVa + 4)) $caseOutputBufferVa
 EmitPush $ansiSourceVa
 EmitPush $ansiDestVa
 EmitCallImport 317
