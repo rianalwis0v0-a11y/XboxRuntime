@@ -202,7 +202,13 @@ int main() {
     {
         const uint8_t argb[8] = { 0x33,0x22,0x11,0xFF, 0x66,0x55,0x44,0x80 };
         uint8_t rgba[8]{}; uint32_t pitch=0;
-        if (decodeTexture(0x0600u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)!=0 ||
+        if (decodeTexture(0x1200u,1,1,0,argb,4,rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x11 || rgba[1]!=0x22 || rgba[2]!=0x33 || rgba[3]!=0xFF ||
+            decodeTexture(0x1300u,1,1,0,argb,1,rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x33 || rgba[1]!=0x33 || rgba[2]!=0x33 || rgba[3]!=0xFF) {
+            std::cerr << "FAIL: linear-image texture formats\\n"; return 1;
+        }
+                if (decodeTexture(0x0600u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)!=0 ||
             pitch!=8 || rgba[0]!=0x11 || rgba[1]!=0x22 || rgba[2]!=0x33 || rgba[3]!=0xFF ||
             rgba[4]!=0x44 || rgba[5]!=0x55 || rgba[6]!=0x66 || rgba[7]!=0x80) {
             std::cerr << "FAIL: A8R8G8B8 texture decode\n"; return 1;
@@ -261,6 +267,16 @@ int main() {
 
 
     {
+        const uint8_t linearMipSource[4] = {0x33,0x22,0x11,0xFF};
+        uint8_t linearMipOutput[4]{};
+        uint32_t linearMipOffset[1]{}, linearMipSize[1]{};
+        if (decodeMipChain(0x1200u,1,1,1,linearMipSource,sizeof(linearMipSource),
+                linearMipOutput,sizeof(linearMipOutput),linearMipOffset,linearMipSize)!=0 ||
+            linearMipOffset[0]!=0u || linearMipSize[0]!=4u ||
+            linearMipOutput[0]!=0x11 || linearMipOutput[3]!=0xFF) {
+            std::cerr << "FAIL: linear-image mip-chain decode\\n"; return 1;
+        }
+
         const uint8_t mipSource[20] = {
             0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
             0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF,

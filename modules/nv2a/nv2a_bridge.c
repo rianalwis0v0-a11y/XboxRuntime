@@ -607,9 +607,13 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     if(out_pitch>0xFFFFFFFFu || out_size>destination_capacity) return 2;
     uint32_t bytes_per_pixel=0;
     switch(color) {
-    case 0x02u: case 0x03u: case 0x04u: case 0x05u: bytes_per_pixel=2u; break;
-    case 0x06u: case 0x07u: bytes_per_pixel=4u; break;
-    case 0x19u: case 0x00u: bytes_per_pixel=1u; break;
+    case 0x02u: case 0x03u: case 0x04u: case 0x05u:
+    case 0x10u: case 0x11u: case 0x1Cu: case 0x1Du:
+        bytes_per_pixel=2u; break;
+    case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
+        bytes_per_pixel=4u; break;
+    case 0x19u: case 0x00u: case 0x13u: case 0x1Fu:
+        bytes_per_pixel=1u; break;
     case 0x0Cu: case 0x0Eu: case 0x0Fu: break; /* DXT1/3/5 */
     default: return 3;
     }
@@ -650,21 +654,23 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
         for(uint32_t y=0;y<height;y++) for(uint32_t x=0;x<width;x++) {
             const uint8_t* p=src+(size_t)y*(size_t)pitch+(size_t)x*bytes_per_pixel;
             uint8_t* q=dst+(size_t)y*(size_t)out_pitch+x*4u;
-            if(color==0x06u || color==0x07u) {
-                q[0]=p[2]; q[1]=p[1]; q[2]=p[0]; q[3]=color==0x06u?p[3]:255u;
-            } else if(color==0x05u) {
+            if(color==0x06u || color==0x07u || color==0x12u || color==0x1Eu) {
+                q[0]=p[2]; q[1]=p[1]; q[2]=p[0];
+                q[3]=(color==0x06u || color==0x12u)?p[3]:255u;
+            } else if(color==0x05u || color==0x11u) {
                 const uint16_t v=(uint16_t)(p[0]|(p[1]<<8));
                 q[0]=expand5((v>>11)&31u); q[1]=expand6((v>>5)&63u); q[2]=expand5(v&31u); q[3]=255u;
-            } else if(color==0x02u || color==0x03u || color==0x04u) {
+            } else if(color==0x02u || color==0x03u || color==0x04u ||
+                      color==0x10u || color==0x1Cu || color==0x1Du) {
                 const uint16_t v=(uint16_t)(p[0]|(p[1]<<8));
-                if(color==0x04u) {
+                if(color==0x04u || color==0x1Du) {
                     q[0]=(uint8_t)(((v>>8)&15u)*17u); q[1]=(uint8_t)(((v>>4)&15u)*17u);
                     q[2]=(uint8_t)((v&15u)*17u); q[3]=(uint8_t)(((v>>12)&15u)*17u);
                 } else {
                     q[0]=expand5((v>>10)&31u); q[1]=expand5((v>>5)&31u); q[2]=expand5(v&31u);
-                    q[3]=color==0x02u?((v&0x8000u)?255u:0u):255u;
+                    q[3]=(color==0x02u || color==0x10u)?((v&0x8000u)?255u:0u):255u;
                 }
-            } else if(color==0x19u) {
+            } else if(color==0x19u || color==0x1Fu) {
                 q[0]=q[1]=q[2]=255u; q[3]=p[0];
             } else { q[0]=q[1]=q[2]=p[0]; q[3]=255u; }
         }
@@ -731,17 +737,26 @@ int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(uint32_t format,
     const uint32_t color = (format >> 8) & 0xFFu;
     const int dxt1 = color == 0x0Cu;
     const int dxt_other = color == 0x0Eu || color == 0x0Fu;
+    const int linear_image = color == 0x10u || color == 0x11u ||
+        color == 0x12u || color == 0x13u || color == 0x1Cu ||
+        color == 0x1Du || color == 0x1Eu || color == 0x1Fu;
     uint32_t bytes_per_pixel = 0;
     if (!dxt1 && !dxt_other) {
         switch (color) {
-        case 0x00u: case 0x19u: bytes_per_pixel = 1u; break;
+        case 0x00u: case 0x19u: case 0x13u: case 0x1Fu:
+            bytes_per_pixel = 1u; break;
         case 0x02u: case 0x03u: case 0x04u: case 0x05u:
+        case 0x10u: case 0x11u: case 0x1Cu: case 0x1Du:
             bytes_per_pixel = 2u; break;
-        case 0x06u: case 0x07u: bytes_per_pixel = 4u; break;
+        case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
+            bytes_per_pixel = 4u; break;
         default: return 2;
         }
-        if ((width & (width - 1u)) || (height & (height - 1u)))
+        if (linear_image) {
+            if (level_count != 1u) return 2;
+        } else if ((width & (width - 1u)) || (height & (height - 1u))) {
             return 2;
+        }
     }
 
     /* Validate the entire chain before writing any decoded level. */
@@ -786,7 +801,7 @@ int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(uint32_t format,
             input_size = (uint64_t)w * h * bytes_per_pixel;
         }
         uint32_t pitch = 0;
-        const int result = (dxt1 || dxt_other)
+        const int result = (dxt1 || dxt_other || linear_image)
             ? XboxNV2A_DecodeTextureRGBA8(format, w, h, 0u,
                 src + (size_t)source_offset, (uint32_t)input_size,
                 dst + destination_offset, destination_capacity - destination_offset, &pitch)

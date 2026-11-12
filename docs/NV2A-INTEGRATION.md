@@ -328,3 +328,14 @@ have explicit D3D8 render-state mappings and are routed through the bridge's
 state application path. Culling preserves the selected front/back winding when
 enabled and keeps `D3DCULL_NONE` when the face selector changes while culling
 is disabled. Host tests verify the state IDs and enable values.
+
+
+## Linear-image texture formats
+
+The CPU decoder now also handles common NV097 linear-image formats:
+LIN_A1R5G5B5, LIN_R5G6B5, LIN_A8R8G8B8, LIN_Y8, LIN_X1R5G5B5,
+LIN_A4R4G4B4, LIN_X8R8G8B8 and LIN_A8. These use row-major source data and
+can be decoded as a single level; swizzled formats continue through the
+Morton decoder, while DXT formats use the block decoder. Host tests cover
+linear ARGB and luminance input. Padded linear-image pitch and multi-level
+linear images are not yet supported by the mip-chain entry point.
