@@ -151,3 +151,20 @@ a graphics device. Runtime application occurs only when the D3D8 compatibility
 device is available. Surface format/offset and render-target binding, texture
 sampling, vertex array formats/data, shader microcode, combiners, and broad
 method coverage are still separate PGRAPH tasks.
+
+
+## NV097 method-offset compatibility
+
+The pinned PGRAPH translator contains several legacy method constants that do
+not match the NV2A register definitions. The bridge now normalizes the actual
+NV097 color-clear, clear-surface, clear-rectangle, depth-enable, and cull-enable
+methods to the translator's expected aliases. It deliberately handles actual
+depth-function, cull-face, shade-mode, and stencil-reference methods itself,
+because those offsets collide with the translator's incorrect aliases. The
+actual PGRAPH register file is still updated using the guest method offset.
+
+This prevents depth-function writes from being mistaken for depth-test enable,
+cull-face writes from being mistaken for cull enable, and stencil-reference
+writes from being mistaken for shade mode. Front/back cull mode, depth compare,
+shade mode, and stencil reference use the D3D8/D3D11 compatibility device when
+available.
