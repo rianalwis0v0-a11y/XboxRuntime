@@ -17,6 +17,8 @@ static uint8_t* g_ramin;
 
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
+static uint32_t g_bound_engine[32][8];
+static uint32_t g_ref_counter[32];
 static int g_started;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
@@ -421,8 +423,6 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
     return 0;
 }
 
-static uint32_t g_bound_engine[32][8];
-static uint32_t g_ref_counter[32];
 
 static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
                                   uint32_t method, uint32_t parameter)
