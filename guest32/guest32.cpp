@@ -72,10 +72,12 @@ int wmain(int argc,wchar_t**argv){
  HANDLE xbeThread=nullptr;
  if(r.status==OK){
   if(!XboxKernelInitializeEeprom(eepromPath))r.status=IO;
-  XboxKernelSetTitlePath(xbePath);
-  XboxKernelState image{r.imageBase,r.imageSize,r.entry,r.sectionCount,*reinterpret_cast<uint32_t*>(uintptr_t(r.imageBase+0x12C))};
-  if(!XboxKernelResolveImports(image))r.status=FORMAT;
-  else{xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);if(!xbeThread)r.status=MEMORY;}
+  else {
+   XboxKernelSetTitlePath(xbePath);
+   XboxKernelState image{r.imageBase,r.imageSize,r.entry,r.sectionCount,*reinterpret_cast<uint32_t*>(uintptr_t(r.imageBase+0x12C))};
+   if(!XboxKernelResolveImports(image))r.status=FORMAT;
+   else{xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);if(!xbeThread)r.status=MEMORY;}
+  }
  }
  bool ok=WriteExact(pipe,&r,sizeof(r));
  uint8_t command=0;
