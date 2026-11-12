@@ -504,7 +504,8 @@ static LONG RtlCaseUnicodeString(GuestUnicodeString* destination, const GuestUni
     const ULONG chars = bytes / sizeof(wchar_t);
     for (ULONG i = 0; i < chars; ++i) {
         const wchar_t c = source->Buffer[i];
-        destination->Buffer[i] = upper ? wchar_t(towupper(c)) : wchar_t(towlower(c));
+        if (upper) destination->Buffer[i] = (c >= L'a' && c <= L'z') ? wchar_t(c - 32) : wchar_t(towupper(c));
+        else destination->Buffer[i] = (c >= L'A' && c <= L'Z') ? wchar_t(c + 32) : wchar_t(towlower(c));
     }
     if (destination->MaximumLength >= bytes + sizeof(wchar_t)) destination->Buffer[chars] = L'\0';
     destination->Length = USHORT(bytes);
