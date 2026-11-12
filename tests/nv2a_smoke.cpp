@@ -501,8 +501,8 @@ int main() {
     const uint32_t oglSpecular[2] = {0x00332211u,0x00665544u};
     if (writeVram(0x1400u,oglDiffuse,sizeof(oglDiffuse))!=0||
         writeVram(0x1700u,oglSpecular,sizeof(oglSpecular))!=0||
-        submit(0u,0x176Cu,(4u<<8)|(4u<<4)|NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL)!=0||
-        submit(0u,0x1770u,(4u<<8)|(4u<<4)|NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL)!=0||
+        submit(0u,0x176Cu,(4u<<8)|(4u<<4)|4u)!=0||
+        submit(0u,0x1770u,(4u<<8)|(4u<<4)|4u)!=0||
         buildVertexStream(channel,0u,0u,2u,hostVertices,sizeof(hostVertices),
             &hostVertexStride,&hostFvf)!=0||
         hostVertices[0].diffuse!=0xFF112233u||
