@@ -579,7 +579,12 @@ int main() {
         pitchedOutput[0] != 1u || pitchedOutput[1] != 2u ||
         pitchedOutput[2] != 3u || pitchedOutput[3] != 0xFFu ||
         pitchedOutput[8] != 7u || pitchedOutput[9] != 8u ||
-        pitchedOutput[10] != 9u || pitchedOutput[11] != 0xFFu) {
+        pitchedOutput[10] != 9u || pitchedOutput[11] != 0xFFu ||
+        decodeTextureFromDma(channel, 0u, 0x0184u, 0x500u, 0x1200u,
+            2u, 2u, 7u, pitchedOutput, sizeof(pitchedOutput),
+            &pitchedOutputStride) == 0 ||
+        decodeTextureFromDma(channel, 0u, 0x0184u, 0x500u, 0x1200u,
+            2u, 2u, 12u, pitchedOutput, 15u, &pitchedOutputStride) == 0) {
         std::cerr << "FAIL: pitched linear texture DMA decode\\n";
         stop();
         return 1;

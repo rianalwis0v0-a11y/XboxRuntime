@@ -896,6 +896,8 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
         return 4;
 
     const uint32_t available = dma->mapped_length - texture_offset;
+    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
+        return 5;
     return XboxNV2A_DecodeTextureMipChainRGBA8(
         format, width, height, level_count,
         g_vram + (size_t)source_address, available,
@@ -923,6 +925,8 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
     if (source_address > XBOX_VRAM_SIZE)
         return 4;
     const uint32_t available = dma->mapped_length - texture_offset;
+    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
+        return 5;
     return XboxNV2A_DecodeTextureRGBA8(format, width, height, source_pitch,
         g_vram + (size_t)source_address, available, destination,
         destination_capacity, destination_pitch);
