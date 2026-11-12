@@ -1762,9 +1762,10 @@ static int read_vertex_float_array(uint32_t channel,uint32_t subchannel,
             int32_t x=(int32_t)(packed&0x7FFu);if(x&0x400)x-=0x800;
             int32_t y=(int32_t)((packed>>11)&0x7FFu);if(y&0x400)y-=0x800;
             int32_t z=(int32_t)((packed>>22)&0x3FFu);if(z&0x200)z-=0x400;
-            destination[v*3u+0u]=(float)x/1023.0f;
-            destination[v*3u+1u]=(float)y/1023.0f;
-            destination[v*3u+2u]=(float)z/511.0f;
+            float nx=(float)x/1023.0f,ny=(float)y/1023.0f,nz=(float)z/511.0f;
+            destination[v*3u+0u]=nx < -1.0f ? -1.0f : (nx > 1.0f ? 1.0f : nx);
+            destination[v*3u+1u]=ny < -1.0f ? -1.0f : (ny > 1.0f ? 1.0f : ny);
+            destination[v*3u+2u]=nz < -1.0f ? -1.0f : (nz > 1.0f ? 1.0f : nz);
         }
     }else for(uint32_t i=0;i<vertex_count*components;++i){
         if(type==NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F)
