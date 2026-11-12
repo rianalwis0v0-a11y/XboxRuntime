@@ -373,3 +373,15 @@ and reads from a validated local-VRAM DMA object. It reuses the checked RGBA8
 format decoder, so row padding is skipped correctly and source/destination
 bounds remain enforced. The smoke test uses a padded 2x2 ARGB image and checks
 that the second row begins at the requested 12-byte source stride.
+
+
+## Live NV097 texture-stage decoding
+
+The bridge can now derive a 2D texture's dimensions, mip count, linear/swizzled
+layout, image pitch, offset and DMA context directly from the live stage
+registers. It then decodes that stage to RGBA8 through the existing bounded
+DMA readers. Linear-image dimensions come from IMAGE_RECT and pitch from
+CONTROL1; swizzled dimensions come from the format exponents and mip count is
+clamped by the format and MAX_LOD_CLAMP. The current stage decoder supports
+the implemented 2D color formats only; cubemaps, 3D textures, palettes and
+unsupported color encodings remain outside this path.

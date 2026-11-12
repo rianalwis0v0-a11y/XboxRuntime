@@ -118,6 +118,28 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeSurface(
     uint32_t clip_horizontal, uint32_t clip_vertical,
     XboxNV2A_SURFACE_INFO* output);
 
+typedef struct XboxNV2A_TEXTURE_INFO {
+    uint32_t texture_offset;
+    uint32_t format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t level_count;
+    uint32_t source_pitch;
+    uint32_t context_method;
+    uint32_t enabled;
+    uint32_t linear;
+} XboxNV2A_TEXTURE_INFO;
+
+/* Read a stage's live NV097 texture registers and resolve its DMA context. */
+__declspec(dllexport) int __cdecl XboxNV2A_GetTextureInfo(
+    uint32_t channel, uint32_t subchannel, uint32_t stage,
+    XboxNV2A_TEXTURE_INFO* output);
+/* Decode a live stage to RGBA8 levels using its register-derived shape/DMA. */
+__declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureStageRGBA8(
+    uint32_t channel, uint32_t subchannel, uint32_t stage,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* level_offsets, uint32_t* level_sizes);
+
 typedef struct XboxNV2A_DMA_INFO {
     uint32_t handle;
     uint32_t instance_offset;

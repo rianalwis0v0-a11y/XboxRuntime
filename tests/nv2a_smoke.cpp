@@ -26,6 +26,7 @@ using ReadMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using WriteMemoryFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
 using BatchFn = int (__cdecl*)(uint32_t, const uint32_t*, uint32_t);
 using PushBufferFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
+struct TextureInfo { uint32_t texture_offset,format,width,height,level_count,source_pitch,context_method,enabled,linear; };
 struct DmaInfo {
     uint32_t handle, instance_offset, dma_class, dma_target;
     uint32_t engine, base_address, limit, mapped_length;
@@ -54,6 +55,8 @@ using DecodeSwizzledTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,const 
 using DecodeMipChainFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,const void*,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeMipChainDmaFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeTextureDmaFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*);
+using GetTextureInfoFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,TextureInfo*);
+using DecodeTextureStageFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,void*,uint32_t,uint32_t*,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
 
@@ -114,6 +117,8 @@ int main() {
     auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
     auto decodeMipChainFromDma = reinterpret_cast<DecodeMipChainDmaFn>(Need(module, "XboxNV2A_DecodeTextureMipChainFromDMA"));
     auto decodeTextureFromDma = reinterpret_cast<DecodeTextureDmaFn>(Need(module, "XboxNV2A_DecodeTextureFromDMA"));
+    auto getTextureInfo = reinterpret_cast<GetTextureInfoFn>(Need(module, "XboxNV2A_GetTextureInfo"));
+    auto decodeTextureStage = reinterpret_cast<DecodeTextureStageFn>(Need(module, "XboxNV2A_DecodeTextureStageRGBA8"));
     auto decodeSwizzledTexture = reinterpret_cast<DecodeSwizzledTextureFn>(Need(module, "XboxNV2A_DecodeSwizzledTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -586,6 +591,31 @@ int main() {
         decodeTextureFromDma(channel, 0u, 0x0184u, 0x500u, 0x1200u,
             2u, 2u, 12u, pitchedOutput, 15u, &pitchedOutputStride) == 0) {
         std::cerr << "FAIL: pitched linear texture DMA decode\\n";
+        stop();
+        return 1;
+    }
+
+
+    /* Derive the active stage shape/context from the real NV097 registers. */
+    const uint32_t textureFormat = 1u | (2u << 4) | (0x06u << 8) |
+        (2u << 16) | (1u << 20) | (1u << 24);
+    if (submit(0u, 0x1B00u, 0x400u) != 0 ||
+        submit(0u, 0x1B04u, textureFormat) != 0 ||
+        submit(0u, 0x1B0Cu, (1u << 30) | (1u << 6)) != 0)
+        return 1;
+    TextureInfo textureInfo{};
+    uint8_t stagePixels[20]{};
+    uint32_t stageOffsets[2]{}, stageSizes[2]{};
+    if (getTextureInfo(channel, 0u, 0u, &textureInfo) != 0 ||
+        textureInfo.texture_offset != 0x400u || textureInfo.width != 2u ||
+        textureInfo.height != 2u || textureInfo.level_count != 2u ||
+        textureInfo.context_method != 0x0184u || !textureInfo.enabled ||
+        textureInfo.linear ||
+        decodeTextureStage(channel, 0u, 0u, stagePixels, sizeof(stagePixels),
+            stageOffsets, stageSizes) != 0 ||
+        stageOffsets[1] != 16u || stageSizes[1] != 4u ||
+        stagePixels[0] != 1u || stagePixels[16] != 13u) {
+        std::cerr << "FAIL: live NV097 texture stage decode\\n";
         stop();
         return 1;
     }

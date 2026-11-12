@@ -932,6 +932,112 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
         destination_capacity, destination_pitch);
 }
 
+
+static int nv2a_texture_format_is_linear(uint32_t color)
+{
+    switch (color) {
+    case 0x10u: case 0x11u: case 0x12u: case 0x13u:
+    case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
+    uint32_t stage, XboxNV2A_TEXTURE_INFO* output)
+{
+    if (!output) return 1;
+    memset(output, 0, sizeof(*output));
+    if (!g_started || !g_gpu || channel > 31u || subchannel > 7u || stage > 3u)
+        return 2;
+
+    const uint32_t base = 0x1B00u + stage * 0x40u;
+    const uint32_t offset = g_gpu->pgraph.regs[(base + 0x00u) / 4u];
+    const uint32_t format = g_gpu->pgraph.regs[(base + 0x04u) / 4u];
+    const uint32_t control0 = g_gpu->pgraph.regs[(base + 0x0Cu) / 4u];
+    const uint32_t control1 = g_gpu->pgraph.regs[(base + 0x10u) / 4u];
+    const uint32_t image_rect = g_gpu->pgraph.regs[(base + 0x1Cu) / 4u];
+    const uint32_t color = (format >> 8) & 0xFFu;
+    const uint32_t dimensionality = (format >> 4) & 0xFu;
+    const uint32_t context_slot = format & 3u;
+    const uint32_t context_method = 0x0180u + context_slot * 4u;
+    const uint32_t max_lod = (control0 >> 6) & 0xFFFu;
+    const uint32_t encoded_levels = (format >> 16) & 0xFu;
+    const int linear = nv2a_texture_format_is_linear(color);
+    uint32_t width = 0, height = 0, levels = encoded_levels;
+    uint32_t source_pitch = (control1 >> 16) & 0xFFFFu;
+
+    if (dimensionality != 2u || !encoded_levels)
+        return 3;
+    if (linear) {
+        width = (image_rect >> 16) & 0xFFFFu;
+        height = image_rect & 0xFFFFu;
+        if (!width || !height || width > 16384u || height > 16384u ||
+            levels != 1u)
+            return 4;
+    } else {
+        const uint32_t log_width = (format >> 20) & 0xFu;
+        const uint32_t log_height = (format >> 24) & 0xFu;
+        if (log_width > 14u || log_height > 14u)
+            return 4;
+        width = 1u << log_width;
+        height = 1u << log_height;
+        const uint32_t max_dimension_log = log_width > log_height ? log_width : log_height;
+        if (levels > max_lod + 1u) levels = max_lod + 1u;
+        if (levels > max_dimension_log + 1u) levels = max_dimension_log + 1u;
+        if (!levels) return 4;
+        source_pitch = 0u;
+    }
+
+    const XboxNV2A_DMA_INFO* dma =
+        &g_dma_contexts[channel][subchannel][context_slot];
+    if (!dma->mapped_length || dma->dma_target != 0u)
+        return 5;
+
+    output->texture_offset = offset;
+    output->format = format;
+    output->width = width;
+    output->height = height;
+    output->level_count = levels;
+    output->source_pitch = source_pitch;
+    output->context_method = context_method;
+    output->enabled = (control0 & (1u << 30)) != 0u;
+    output->linear = (uint32_t)linear;
+    return 0;
+}
+
+int __cdecl XboxNV2A_DecodeTextureStageRGBA8(uint32_t channel,
+    uint32_t subchannel, uint32_t stage, void* destination,
+    uint32_t destination_capacity, uint32_t* level_offsets,
+    uint32_t* level_sizes)
+{
+    XboxNV2A_TEXTURE_INFO info;
+    if (!destination || !level_offsets || !level_sizes)
+        return 1;
+    const int info_result = XboxNV2A_GetTextureInfo(
+        channel, subchannel, stage, &info);
+    if (info_result != 0) return 10 + info_result;
+    if (!info.enabled) return 20;
+    if (info.linear) {
+        const uint64_t decoded_size = (uint64_t)info.width * info.height * 4u;
+        if (decoded_size > UINT32_MAX || decoded_size > destination_capacity)
+            return 21;
+        const int result = XboxNV2A_DecodeTextureFromDMA(
+            channel, subchannel, info.context_method, info.texture_offset,
+            info.format, info.width, info.height, info.source_pitch,
+            destination, destination_capacity, NULL);
+        if (result != 0) return 22 + result;
+        level_offsets[0] = 0u;
+        level_sizes[0] = (uint32_t)decoded_size;
+        return 0;
+    }
+    return XboxNV2A_DecodeTextureMipChainFromDMA(
+        channel, subchannel, info.context_method, info.texture_offset,
+        info.format, info.width, info.height, info.level_count,
+        destination, destination_capacity, level_offsets, level_sizes);
+}
+
 int __cdecl XboxNV2A_DecodeSurface(uint32_t surface_format,
     uint32_t surface_pitch, uint32_t color_offset, uint32_t zeta_offset,
     uint32_t clip_horizontal, uint32_t clip_vertical,
