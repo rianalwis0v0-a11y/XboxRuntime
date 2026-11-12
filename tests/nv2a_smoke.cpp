@@ -571,6 +571,28 @@ int main() {
         return 1;
     }
 
+    /* PFIFO reports the NV1A single-level CALL/RETURN faults in DMA_STATE. */
+    const uint32_t nestedCallStream[] = {
+        0x00000012u, 0u, 0u, 0u, 0x0000001Eu
+    };
+    const uint32_t inactiveReturnStream[] = { 0x00020000u };
+    if (writeVram(0x1000u, nestedCallStream, sizeof(nestedCallStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, sizeof(nestedCallStream),
+                      &dmaGet, &dmaMethods) == 0 ||
+        (read(0x2100u, 4u) & 0x1000u) == 0u ||
+        (read(0x3228u, 4u) >> 29) != 1u ||
+        write(0x2100u, 0x1000u, 4u) != 0 ||
+        writeVram(0x1000u, inactiveReturnStream, sizeof(inactiveReturnStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, sizeof(inactiveReturnStream),
+                      &dmaGet, &dmaMethods) == 0 ||
+        (read(0x2100u, 4u) & 0x1000u) == 0u ||
+        (read(0x3228u, 4u) >> 29) != 3u ||
+        write(0x2100u, 0x1000u, 4u) != 0) {
+        std::cerr << "FAIL: PFIFO CALL/RETURN error state and interrupt reporting\\n";
+        stop();
+        return 1;
+    }
+
     /* A jump may target a command beyond PUT and jump back to PUT. */
     const uint32_t dmaJumpStream[] = {
         0x00000011u,                         /* JUMP +16 */
