@@ -154,7 +154,7 @@ int main() {
      * CALL enters a helper at +24, binds the object, RETURN resumes at +4. */
     const uint32_t dmaCallStream[] = {
         0x0000001Au,                         /* CALL +24 */
-        (1u << 18) | 0x01D4u, 0xFF334455u,   /* Main stream: set clear colour */
+        (1u << 18) | 0x1D90u, 0xFF334455u,   /* Main stream: set clear colour */
         (1u << 18) | 0x0180u, dmaHandle,     /* Resolve a RAMHT object method */
         0u,                                  /* alignment/padding before helper */
         (1u << 18), dmaHandle,               /* Subroutine: bind object */
@@ -175,7 +175,7 @@ int main() {
     /* Invalid RAMHT handles are rejected before any earlier methods dispatch. */
     const uint32_t badHandleStream[] = {
         (1u << 18), dmaHandle,
-        (1u << 18) | 0x01D4u, 0xFFABCDEFu,
+        (1u << 18) | 0x1D90u, 0xFFABCDEFu,
         (1u << 18), dmaHandle + 1u
     };
     Stats beforeBadHandle{}, afterBadHandle{};
@@ -195,7 +195,7 @@ int main() {
     const uint32_t dmaJumpStream[] = {
         0x00000011u,                         /* JUMP +16 */
         0u, 0u, 0u,
-        (1u << 18) | 0x01D4u, 0xFF556677u,
+        (1u << 18) | 0x1D90u, 0xFF556677u,
         0x00000005u                          /* JUMP +4 (the PUT position) */
     };
     if (writeVram(0x1000u, dmaJumpStream, sizeof(dmaJumpStream)) != 0 ||
