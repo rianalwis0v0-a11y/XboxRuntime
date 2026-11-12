@@ -187,6 +187,40 @@ static int map_texture_address_mode(uint32_t mode, uint32_t* output)
     }
 }
 
+int __cdecl XboxNV2A_MapTextureFilter(uint32_t parameter,
+    uint32_t* min_filter_out, uint32_t* mag_filter_out,
+    uint32_t* mip_filter_out)
+{
+    if (!min_filter_out || !mag_filter_out || !mip_filter_out)
+        return 0;
+
+    const uint32_t min_mode = (parameter & 0x00FF0000u) >> 16;
+    const uint32_t mag_mode = (parameter & 0x0F000000u) >> 24;
+    uint32_t min_filter = 0, mag_filter = 0, mip_filter = D3DTEXF_NONE;
+
+    switch (min_mode) {
+    case 1u: min_filter = D3DTEXF_POINT; break;
+    case 2u: min_filter = D3DTEXF_LINEAR; break;
+    case 3u: min_filter = D3DTEXF_POINT; mip_filter = D3DTEXF_POINT; break;
+    case 4u: min_filter = D3DTEXF_LINEAR; mip_filter = D3DTEXF_POINT; break;
+    case 5u: min_filter = D3DTEXF_POINT; mip_filter = D3DTEXF_LINEAR; break;
+    case 6u: min_filter = D3DTEXF_LINEAR; mip_filter = D3DTEXF_LINEAR; break;
+    case 7u: min_filter = D3DTEXF_LINEAR; break; /* Convolution fallback. */
+    default: return 0;
+    }
+
+    switch (mag_mode) {
+    case 1u: mag_filter = D3DTEXF_POINT; break;
+    case 2u: case 4u: mag_filter = D3DTEXF_LINEAR; break;
+    default: return 0;
+    }
+
+    *min_filter_out = min_filter;
+    *mag_filter_out = mag_filter;
+    *mip_filter_out = mip_filter;
+    return 1;
+}
+
 static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
 {
     uint32_t stage=0, state_u=0, state_v=0;
@@ -204,6 +238,22 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
                 D3DTSS_ADDRESSU,state_u))) return 0;
         if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
                 D3DTSS_ADDRESSV,state_v))) return 0;
+        return 1;
+    }
+    if (method >= 0x1B14u && method <= 0x1BD4u &&
+        ((method - 0x1B14u) % 0x40u) == 0u) {
+        uint32_t min_filter = 0, mag_filter = 0, mip_filter = 0;
+        stage = (method - 0x1B14u) / 0x40u;
+        if (stage >= 4u ||
+            !XboxNV2A_MapTextureFilter(parameter, &min_filter,
+                                       &mag_filter, &mip_filter))
+            return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_MINFILTER, min_filter))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_MAGFILTER, mag_filter))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_MIPFILTER, mip_filter))) return 0;
         return 1;
     }
     if(method>=0x1B24u && method<=0x1BE4u &&
