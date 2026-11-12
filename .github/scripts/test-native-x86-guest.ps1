@@ -14,17 +14,17 @@ $b = [byte[]]::new(0x1001)
 function Put32([int]$offset, [uint32]$value) {
     [BitConverter]::GetBytes($value).CopyTo($b, $offset)
 }
-Put32 0x104 0x00010000
+Put32 0x104 0x10000000
 Put32 0x108 0x1000
 Put32 0x10C 0x2000
 Put32 0x110 0x178
 Put32 0x11C 1
-Put32 0x120 0x00010178
-Put32 0x128 (0x00011000 -bxor [Convert]::ToUInt32('A8FC57AB', 16))
+Put32 0x120 0x10000178
+Put32 0x128 (0x10001000 -bxor [Convert]::ToUInt32('A8FC57AB', 16))
 Put32 0x158 0x5B6D40B6
 # Section header at file offset 0x178.
 Put32 0x178 4
-Put32 0x17C 0x00011000
+Put32 0x17C 0x10001000
 Put32 0x180 0x1000
 Put32 0x184 0x1000
 Put32 0x188 1
@@ -56,7 +56,7 @@ try {
     $magic = [BitConverter]::ToUInt32($reply, 0)
     $status = [BitConverter]::ToUInt32($reply, 8)
     $entry = [BitConverter]::ToUInt32($reply, 20)
-    if ($magic -ne 0x47584258 -or $status -ne 0 -or $entry -ne 0x11000) {
+    if ($magic -ne 0x47584258 -or $status -ne 0 -or $entry -ne 0x10001000) {
         throw "Unexpected guest launch reply: magic=$('{0:X8}' -f $magic), status=$status, entry=$('{0:X8}' -f $entry)"
     }
     $pipe.WriteByte(0)
