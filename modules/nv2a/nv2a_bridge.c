@@ -878,9 +878,12 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
     uint32_t* level_offsets, uint32_t* level_sizes)
 {
     if (!g_started || !g_gpu || channel > 31u || subchannel > 7u ||
-        (context_method != 0x0184u && context_method != 0x0188u))
+        context_method < 0x0180u || context_method > 0x018Cu ||
+        ((context_method - 0x0180u) & 3u) != 0u)
         return 1;
 
+    /* Texture format's two-bit context-DMA selector addresses all four
+     * NV097 context slots: DMA_A, DMA_B, DMA_C and DMA_D. */
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
     if (!dma->mapped_length || dma->dma_target != 0u)

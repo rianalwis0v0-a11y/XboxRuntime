@@ -355,3 +355,12 @@ packet accumulation and the indexed draw submission path are still pending.
 ## NV097 inline indexed drawing
 
 PGRAPH now collects ARRAY_ELEMENT16/32 indices per channel/subchannel during BEGIN_END, then expands them through the checked guest vertex-array DMA path and submits the primitive through D3D8 DrawPrimitiveUP at END. The bounded accumulator holds 255 indices and drops overflowed batches rather than drawing truncated geometry. DRAW_ARRAYS now shares the indexed expansion and primitive conversion path. Full NV2A indexed DMA drawing remains separate work.
+
+
+## Texture DMA context selection
+
+The mip-chain VRAM decoder now accepts all four aligned NV097 context-DMA
+slots (DMA_A through DMA_D), rather than only DMA_A and DMA_B. It still
+requires a resolved local-VRAM object and validates the selected object's
+mapped range before reading. Smoke tests exercise slots A, B, C and D and
+reject an out-of-range context selector.

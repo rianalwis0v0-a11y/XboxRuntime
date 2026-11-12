@@ -538,7 +538,18 @@ int main() {
             textureMipOffsets, textureMipSizes) != 0 ||
         textureMipOffsets[1] != 16u || textureMipSizes[1] != 4u ||
         textureMipOutput[0] != 1u || textureMipOutput[16] != 13u ||
+        submit(0u, 0x0188u, dmaHandle) != 0 ||
+        submit(0u, 0x018Cu, dmaHandle) != 0 ||
+        decodeMipChainFromDma(channel, 0u, 0x0180u, 0x400u, 0x0600u,
+            2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
+            textureMipOffsets, textureMipSizes) != 0 ||
         decodeMipChainFromDma(channel, 0u, 0x0188u, 0x400u, 0x0600u,
+            2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
+            textureMipOffsets, textureMipSizes) != 0 ||
+        decodeMipChainFromDma(channel, 0u, 0x018Cu, 0x400u, 0x0600u,
+            2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
+            textureMipOffsets, textureMipSizes) != 0 ||
+        decodeMipChainFromDma(channel, 0u, 0x0190u, 0x400u, 0x0600u,
             2u, 2u, 2u, textureMipOutput, sizeof(textureMipOutput),
             textureMipOffsets, textureMipSizes) == 0 ||
         decodeMipChainFromDma(channel, 0u, 0x0184u, 0x0FF0u, 0x0600u,

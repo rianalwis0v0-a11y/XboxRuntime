@@ -91,7 +91,8 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(
     uint32_t* level_offsets, uint32_t* level_sizes);
 
 /* Decode a mip chain directly from a bound local-VRAM texture DMA context.
- * context_method must be SET_CONTEXT_DMA_A (0x184) or DMA_B (0x188). */
+ * context_method selects one of the four NV097 context-DMA slots (0x180..0x18c,
+ * four-byte aligned), corresponding to DMA_A through DMA_D. */
 __declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(
     uint32_t channel, uint32_t subchannel, uint32_t context_method,
     uint32_t texture_offset, uint32_t format, uint32_t width,
