@@ -269,3 +269,9 @@ capacity, and integer-size bounds. Supported formats are Y8, A8, A1R5G5B5,
 X1R5G5B5, A4R4G4B4, R5G6B5, A8R8G8B8, X8R8G8B8, and DXT1, DXT3, and DXT5 (including clipped edge blocks). This is the CPU format-conversion stage only: guest texture DMA
 address resolution, mip chains, palette formats, sampler state,
 texture object caching, and binding to D3D8 texture stages remain to be wired.
+
+
+Texture sampler address methods are now translated per stage for U/V wrapping:
+wrap, mirror, clamp, border, and mirror-once map to the matching D3D8
+texture-stage states. Per-stage border color is also forwarded. Invalid address
+modes and unavailable device state are not silently reported as handled.
