@@ -22,11 +22,13 @@ $fileHandleVa = [uint32]($reportVa + 0xB8)
 $readBufferVa = [uint32]($reportVa + 0xC0)
 $fileOffsetVa = [uint32]($reportVa + 0xD0)
 $testPathVa = [uint32]($reportVa + 0x100)
+$numberTextVa = [uint32]($reportVa + 0x140)
+$numberValueVa = [uint32]($reportVa + 0x148)
 $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,284,296,307,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,267,284,292,293,296,299,307,309,310,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -218,6 +220,51 @@ EmitPush 0x41
 EmitCallImport 296
 EmitCheckEqual 0x61
 
+# Integer parsing/formatting and narrow/wide string conversion.
+EmitMovMemoryImmediate $numberValueVa 0
+EmitPush $numberValueVa
+EmitPush 10
+EmitPush $numberTextVa
+EmitCallImport 267
+EmitCheckEqual 0
+EmitLoadEax $numberValueVa
+EmitCheckEqual 1234
+
+# UnicodeString descriptor at report+0x150; its buffer is report+0x180.
+$unicodeDescriptorVa = [uint32]($reportVa + 0x150)
+$unicodeBufferVa = [uint32]($reportVa + 0x180)
+EmitMovMemoryImmediate $unicodeDescriptorVa 0
+EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 4)) 16
+EmitMovMemoryImmediate ([uint32]($unicodeDescriptorVa + 8)) $unicodeBufferVa
+EmitPush $unicodeDescriptorVa
+EmitPush 10
+EmitPush 42
+EmitCallImport 293
+EmitCheckEqual 0
+EmitPush $numberValueVa
+EmitPush 10
+EmitPush $unicodeDescriptorVa
+EmitCallImport 309
+EmitCheckEqual 0
+EmitLoadEax $numberValueVa
+EmitCheckEqual 42
+
+# Convert one ASCII byte to UTF-16 and back.
+EmitPush 1
+EmitPush $numberTextVa
+EmitPush 2
+EmitPush ([uint32]($unicodeBufferVa + 0x20))
+EmitPush 4
+EmitCallImport 299
+EmitCheckEqual 0
+EmitPush 2
+EmitPush ([uint32]($unicodeBufferVa + 0x24))
+EmitPush 1
+EmitPush ([uint32]($unicodeBufferVa + 0x20))
+EmitPush 4
+EmitCallImport 310
+EmitCheckEqual 0
+
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
 EmitIncrement $skippedVa
@@ -267,6 +314,8 @@ Put32 0x22B0 0
 Put32 0x22B4 0
 Put32 0x22B8 0
 $guestPathBytes.CopyTo($b,0x2300)
+[Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x2340)
+[Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x2380)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
 New-Item -ItemType Directory -Force -Path $testDir | Out-Null
 $xbe = Join-Path $testDir "xboxruntime-diagnostic.xbe"
