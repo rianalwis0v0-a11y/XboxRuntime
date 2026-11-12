@@ -34,6 +34,7 @@ using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
+using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
@@ -102,6 +103,7 @@ int main() {
     auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
     auto buildVertexStream = reinterpret_cast<BuildVertexStreamFn>(Need(module, "XboxNV2A_BuildVertexStream"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
+    auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -123,6 +125,36 @@ int main() {
         std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
         FreeLibrary(module);
         return 1;
+    }
+
+    {
+        uint32_t minFilter=0, magFilter=0, mipFilter=0;
+        const uint32_t cases[] = {
+            (1u << 16) | (1u << 24), /* point / point / no mip */
+            (2u << 16) | (2u << 24), /* linear / linear / no mip */
+            (3u << 16) | (2u << 24), /* point / linear / point mip */
+            (4u << 16) | (1u << 24), /* linear / point / point mip */
+            (5u << 16) | (4u << 24), /* point / linear / linear mip */
+            (6u << 16) | (2u << 24), /* linear / linear / linear mip */
+            (7u << 16) | (4u << 24)  /* convolution fallback */
+        };
+        const uint32_t expectedMin[] = {1,2,1,2,1,2,2};
+        const uint32_t expectedMag[] = {1,2,2,1,2,2,2};
+        const uint32_t expectedMip[] = {0,0,1,1,2,2,0};
+        for (uint32_t i=0; i<7; ++i) {
+            if (!mapTextureFilter(cases[i], &minFilter, &magFilter, &mipFilter) ||
+                minFilter!=expectedMin[i] || magFilter!=expectedMag[i] ||
+                mipFilter!=expectedMip[i]) {
+                std::cerr << "FAIL: NV097 min/mag/mip filter mapping case " << i << "\\n";
+                FreeLibrary(module); return 1;
+            }
+        }
+        if (mapTextureFilter(0u, &minFilter, &magFilter, &mipFilter) ||
+            mapTextureFilter((1u << 16) | (3u << 24), &minFilter, &magFilter, &mipFilter) ||
+            mapTextureFilter((1u << 16) | (1u << 24), nullptr, &magFilter, &mipFilter)) {
+            std::cerr << "FAIL: invalid NV097 texture filter accepted\\n";
+            FreeLibrary(module); return 1;
+        }
     }
 
     SurfaceInfo surfaceInfo{};
