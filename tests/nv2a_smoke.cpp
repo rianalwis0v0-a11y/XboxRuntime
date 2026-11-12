@@ -561,8 +561,12 @@ int main() {
                       &dmaGet, &dmaMethods) == 0 ||
         dmaMethods != 0 ||
         getStats(&afterBadHandle) != 0 ||
-        beforeBadHandle.methods_handled != afterBadHandle.methods_handled) {
-        std::cerr << "FAIL: DMA pusher partially dispatched before bad RAMHT handle\\n";
+        beforeBadHandle.methods_handled != afterBadHandle.methods_handled ||
+        (read(0x2100u, 4u) & 0x1000u) == 0u ||
+        (read(0x3228u, 4u) >> 29) != 2u ||
+        write(0x2100u, 0x1000u, 4u) != 0 ||
+        (read(0x2100u, 4u) & 0x1000u) != 0u) {
+        std::cerr << "FAIL: DMA pusher partial dispatch or missing NON_CACHE interrupt\\n";
         stop();
         return 1;
     }
