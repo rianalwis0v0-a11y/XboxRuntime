@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "nv2a_bridge.h"
+#include "nv2a_vsh_interp.h"
 #include "nv2a_state.h"
 #include "nv2a_pgraph_d3d11.h"
 #include "d3d8_xbox.h"
@@ -23,6 +24,7 @@ static uint32_t g_bound_engine[32][8];
 static uint32_t g_ref_counter[32];
 static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
+static uint32_t g_transform_execution_mode;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
 static uint32_t g_pgraph_custom_draws;
@@ -379,6 +381,26 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
 static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
+    /* Kelvin transform program and constant upload ports. */
+    if (method == 0x1E94u) {
+        g_transform_execution_mode = parameter;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
+    }
+    if (method == 0x1E98u) { nv2a_vsh_set_cxt_write(parameter); return; }
+    if (method == 0x1E9Cu) { nv2a_vsh_set_load_slot(parameter); return; }
+    if (method == 0x1EA0u) { nv2a_vsh_set_start_slot(parameter); return; }
+    if (method == 0x1EA4u) { nv2a_vsh_set_constant_load(parameter); return; }
+    if (method >= 0x0B00u && method < 0x0B80u) {
+        nv2a_vsh_program_word(parameter);
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
+    }
+    if (method >= 0x0B80u && method < 0x0C00u) {
+        nv2a_vsh_constant_word(parameter);
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
+    }
     if (method >= 0x1B00u && method <= 0x1BDCu) {
         const uint32_t stage = (method - 0x1B00u) / 0x40u;
         const uint32_t reg = (method - 0x1B00u) % 0x40u;
@@ -2004,6 +2026,67 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+
+typedef struct NV2A_SHADER_VERTEX {
+    float x, y, z, rhw;
+    uint32_t diffuse, specular;
+    float tex[4][4];
+} NV2A_SHADER_VERTEX;
+
+static uint32_t nv2a_pack_color(const float color[4])
+{
+    uint32_t c[4];
+    for (unsigned i = 0; i < 4; ++i) {
+        float v = color[i];
+        if (!(v >= 0.0f)) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+        c[i] = (uint32_t)(v * 255.0f + 0.5f);
+    }
+    return (c[3] << 24) | (c[0] << 16) | (c[1] << 8) | c[2];
+}
+
+static void nv2a_vertex_shader_inputs(const XboxNV2A_VERTEX *v, float in[16][4])
+{
+    memset(in, 0, sizeof(float) * 16u * 4u);
+    in[0][0] = v->x; in[0][1] = v->y; in[0][2] = v->z; in[0][3] = 1.0f;
+    in[2][0] = v->nx; in[2][1] = v->ny; in[2][2] = v->nz;
+    in[3][0] = ((v->diffuse >> 16) & 0xFFu) / 255.0f;
+    in[3][1] = ((v->diffuse >> 8) & 0xFFu) / 255.0f;
+    in[3][2] = (v->diffuse & 0xFFu) / 255.0f;
+    in[3][3] = ((v->diffuse >> 24) & 0xFFu) / 255.0f;
+    in[4][0] = ((v->specular >> 16) & 0xFFu) / 255.0f;
+    in[4][1] = ((v->specular >> 8) & 0xFFu) / 255.0f;
+    in[4][2] = (v->specular & 0xFFu) / 255.0f;
+    in[4][3] = ((v->specular >> 24) & 0xFFu) / 255.0f;
+    in[9][0] = v->u; in[9][1] = v->v; in[9][3] = 1.0f;
+    in[10][0] = v->u1; in[10][1] = v->v1; in[10][3] = 1.0f;
+    in[11][0] = v->u2; in[11][1] = v->v2; in[11][3] = 1.0f;
+    in[12][0] = v->u3; in[12][1] = v->v3; in[12][3] = 1.0f;
+}
+
+static int nv2a_execute_vertex_program(const XboxNV2A_VERTEX *source,
+                                       uint32_t count, NV2A_SHADER_VERTEX *destination)
+{
+    for (uint32_t i = 0; i < count; ++i) {
+        float input[16][4];
+        Nv2aVshOutput output;
+        nv2a_vertex_shader_inputs(&source[i], input);
+        if (!nv2a_vsh_run((const float (*)[4])input, &output))
+            return 0;
+        destination[i].x = output.pos[0];
+        destination[i].y = output.pos[1];
+        destination[i].z = output.pos[2];
+        destination[i].rhw = output.pos[3] == 0.0f ? 1.0f : 1.0f / output.pos[3];
+        destination[i].diffuse = nv2a_pack_color(output.d0);
+        destination[i].specular = nv2a_pack_color(output.d1);
+        memcpy(destination[i].tex, output.tex, sizeof(destination[i].tex));
+    }
+    return 1;
+}
+
+/* D3D8 XYZRHW + diffuse/specular + four four-component texture sets. */
+#define NV2A_FVF_VERTEX_PROGRAM (0x004u | 0x040u | 0x080u | (4u << 8) | (3u << 16) | (3u << 18) | (3u << 20) | (3u << 22))
+
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
 {
     const uint32_t mode=g_primitive_mode[channel][subchannel];
@@ -2031,9 +2114,19 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     }
     IDirect3DDevice8* d=xbox_GetD3DDevice();
     if(!d||!d->lpVtbl||!d->lpVtbl->SetVertexShader||!d->lpVtbl->DrawPrimitiveUP)return 5;
+    const void *draw_data = draw;
+    uint32_t draw_stride = stride;
+    NV2A_SHADER_VERTEX shader_vertices[768];
+    if ((g_transform_execution_mode & 3u) == 2u) {
+        if (!nv2a_execute_vertex_program(draw, draw_count, shader_vertices))
+            return 9; /* Never silently draw model-space data as screen-space. */
+        draw_data = shader_vertices;
+        draw_stride = (uint32_t)sizeof(shader_vertices[0]);
+        fvf = NV2A_FVF_VERTEX_PROGRAM;
+    }
     if(FAILED(d->lpVtbl->SetVertexShader(d,fvf)))return 6;
     if(bind_nv2a_textures(channel,subchannel,d)!=0)return 8;
-    if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw,stride)))return 7;
+    if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride)))return 7;
     ++g_pgraph_custom_methods;++g_pgraph_custom_draws;g_pgraph_custom_vertices+=count;(void)draw_count;return 0;
 }
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)

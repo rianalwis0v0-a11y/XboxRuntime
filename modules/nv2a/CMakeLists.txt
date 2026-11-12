@@ -1,12 +1,14 @@
 add_library(nv2a MODULE
     nv2a_bridge.c
     nv2a_vertex_shader.c
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/kernel/nv2a_vsh_interp.c"
 )
 
 target_include_directories(nv2a PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/nv2a"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/d3d"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/kernel"
 )
 
 target_link_libraries(nv2a PRIVATE
