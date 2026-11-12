@@ -369,7 +369,7 @@ extern "C" LONG __stdcall K_RtlMultiByteToUnicodeSize(ULONG* bytes, const char* 
     if (!inputBytes) return 0;
     if (inputBytes > ULONG(INT_MAX)) return LONG(0xC000000Du);
     const int chars = MultiByteToWideChar(CP_ACP, 0, input, static_cast<int>(inputBytes), nullptr, 0);
-    if (chars <= 0 || uint64_t(chars) * sizeof(wchar_t) > MAXULONG) return LONG(0xC000000Du);
+    if (chars <= 0 || uint64_t(chars) * sizeof(wchar_t) > 0xFFFFFFFFu) return LONG(0xC000000Du);
     *bytes = ULONG(chars) * sizeof(wchar_t);
     return 0;
 }
@@ -496,6 +496,7 @@ static LONG RtlCaseUnicodeString(GuestUnicodeString* destination, const GuestUni
         wchar_t* buffer = static_cast<wchar_t*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes + sizeof(wchar_t)));
         if (!buffer) return LONG(0xC0000017u);
         destination->Buffer = buffer;
+        TrackStringAllocation(buffer);
         destination->MaximumLength = USHORT(bytes + sizeof(wchar_t));
     } else if (!destination->Buffer || destination->MaximumLength < bytes) {
         return LONG(0xC0000023u);
@@ -505,7 +506,7 @@ static LONG RtlCaseUnicodeString(GuestUnicodeString* destination, const GuestUni
         const wchar_t c = source->Buffer[i];
         destination->Buffer[i] = upper ? wchar_t(towupper(c)) : wchar_t(towlower(c));
     }
-    if (destination->MaximumLength >= bytes + sizeof(wchar_t)) destination->Buffer[chars] = L'\\0';
+    if (destination->MaximumLength >= bytes + sizeof(wchar_t)) destination->Buffer[chars] = L'\0';
     destination->Length = USHORT(bytes);
     return 0;
 }
@@ -520,7 +521,6 @@ extern "C" char __stdcall K_RtlLowerChar(char c){return char(tolower((unsigned c
 extern "C" void __stdcall K_RtlZeroMemory(void*d,uint32_t n){if(d)std::memset(d,0,n);}
 extern "C" void __stdcall K_RtlFillMemory(void*d,uint32_t n,uint8_t v){if(d)std::memset(d,v,n);}
 extern "C" void __stdcall K_RtlMoveMemory(void*d,const void*s,uint32_t n){if(d&&s)std::memmove(d,s,n);}
-extern "C" uint32_t __stdcall K_RtlCompareMemory(const void*a,const void*b,uint32_t n){const uint8_t*x=(const uint8_t*)a,*y=(const uint8_t*)b;uint32_t i=0;while(i<n&&x[i]==y[i])++i;return i;}
 extern "C" uint32_t __fastcall K_RtlUlongByteSwap(uint32_t v){return _byteswap_ulong(v);}
 extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_ushort(v);}
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
@@ -585,8 +585,8 @@ extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, vo
     if (!thread) return LONG(0xC0000017u);
     *threadHandle = thread;
     if (clientId) {
-        clientId->UniqueProcess = GetCurrentProcessId();
-        clientId->UniqueThread = threadId;
+        clientId->UniqueProcess = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(GetCurrentProcessId()));
+        clientId->UniqueThread = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(threadId));
     }
     return 0;
 }
