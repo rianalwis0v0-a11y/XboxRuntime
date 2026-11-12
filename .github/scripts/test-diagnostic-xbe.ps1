@@ -342,7 +342,7 @@ EmitPush $unicodeBufferVa
 EmitPush $createdUnicodeVa
 EmitCallImport 274
 EmitCheckNonZero
-EmitLoadEax $createdUnicodeVa
+EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $createdUnicodeVa
 EmitCheckEqual 2
 EmitPush $createdUnicodeVa
 EmitCallImport 287
