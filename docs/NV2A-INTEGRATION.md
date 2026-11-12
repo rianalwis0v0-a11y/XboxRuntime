@@ -271,6 +271,8 @@ address resolution, mip chains, palette formats, sampler state,
 texture object caching, and binding to D3D8 texture stages remain to be wired.
 
 
+Texture sampler filter methods (`NV097_SET_TEXTURE_FILTER`, per 0x40-byte stage) now map the NV2A minification and magnification selectors to D3D8 point/linear filters and the mip selector to none/point/linear. The supported NV2A convolution selector uses linear filtering as an explicit fallback. Invalid selector combinations are rejected; the mapping is exported as `XboxNV2A_MapTextureFilter` and covered by host smoke tests. This maps sampler state only: mip-level texture allocation and upload are still not implemented.
+
 Texture sampler address methods are now translated per stage for U/V wrapping:
 wrap, mirror, clamp, border, and mirror-once map to the matching D3D8
 texture-stage states. Per-stage border color is also forwarded. Invalid address
