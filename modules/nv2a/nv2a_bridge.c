@@ -163,8 +163,8 @@ static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* subm
 
         /* NV4-style method packets: 000 = incrementing, 010 = non-incrementing.
          * The packet carries an 11-bit word count, subchannel, and byte method. */
-        uint32_t command_type = header & 0x60000000u;
-        if (command_type != 0u && command_type != 0x40000000u)
+        uint32_t command_type = header >> 29;
+        if (command_type != 0u && command_type != 2u)
             return 2; /* Reject jump/call/return/long/unknown commands. */
 
         uint32_t count = (header >> 18) & 0x7FFu;
@@ -180,7 +180,7 @@ static int walk_pushbuffer(uint32_t offset, uint32_t byte_length, uint32_t* subm
             memcpy(&parameter, g_vram + offset + (cursor + i) * 4u, sizeof(parameter));
             if (dispatch)
                 pgraph_method(g_gpu, subchannel,
-                    command_type == 0x40000000u ? method : method + i * 4u,
+                    command_type == 2u ? method : method + i * 4u,
                     parameter);
         }
         cursor += count;
