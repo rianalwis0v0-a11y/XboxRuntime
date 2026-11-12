@@ -233,8 +233,8 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
     /* This standalone backend currently maps only linear local VRAM. */
     if (target != 0u)
         return 6;
-    if (base >= XBOX_VRAM_SIZE || limit >= XBOX_VRAM_SIZE ||
-        limit + 1u > XBOX_VRAM_SIZE - base)
+    /* Match the upstream DMA mapping contract: limit is the mapped span. */
+    if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
         return 7;
 
     output->handle = handle;
@@ -244,7 +244,7 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
     output->engine = (context & 0x00030000u) >> 16;
     output->base_address = base;
     output->limit = limit;
-    output->mapped_length = limit + 1u;
+    output->mapped_length = limit;
     return 0;
 }
 
