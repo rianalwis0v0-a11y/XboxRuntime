@@ -35,6 +35,7 @@ using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
+using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 struct SurfaceInfo {
     uint32_t width, height, color_format, zeta_format;
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
@@ -90,6 +91,7 @@ int main() {
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
     auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
+    auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
@@ -202,6 +204,16 @@ int main() {
         std::cerr << "FAIL: NV2A DMA CALL/RETURN result=" << dmaCallResult
                   << " get=" << dmaGet << " methods=" << dmaMethods
                   << " resolved=0x" << std::hex << resolvedMethod << "\\n";
+        stop();
+        return 1;
+    }
+
+    DmaInfo boundVertexContext{};
+    if (getDmaContext(channel, 0u, 0x0180u, &boundVertexContext) != 0 ||
+        boundVertexContext.handle != dmaHandle ||
+        boundVertexContext.instance_offset != 0x100u ||
+        boundVertexContext.base_address != 0x1000u) {
+        std::cerr << "FAIL: NV097 context-DMA binding was not retained\\n";
         stop();
         return 1;
     }
