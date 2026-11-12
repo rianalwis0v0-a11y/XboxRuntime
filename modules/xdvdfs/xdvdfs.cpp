@@ -32,6 +32,7 @@ struct Volume {
     uint64_t partition = 0;
     uint32_t rootSector = 0;
     uint32_t rootSize = 0;
+    uint64_t directoryBytesParsed = 0;
     std::unordered_map<std::string, Entry> entries;
     bool open = false;
 };
@@ -80,7 +81,8 @@ bool ParseDescriptor(Volume& v, uint64_t partition) {
 bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint32_t size, unsigned depth = 0) {
     if (!size) return true;
     if (depth >= 128) return false;
-    if (size > 64u * 1024u * 1024u) return false;
+    if (size > 16u * 1024u * 1024u || v.directoryBytesParsed > 128u * 1024u * 1024u - size) return false;
+    v.directoryBytesParsed += size;
     const uint64_t tableOffset = v.partition + uint64_t(sector) * kSector;
     if (!RangeOK(tableOffset, size, v.imageSize)) return false;
     std::vector<uint8_t> table(size);
@@ -109,7 +111,7 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
             name == "." || name == "..") return false;
         const std::string key = parent.empty() ? Normalize(name.c_str()) : parent + "/" + Normalize(name.c_str());
         Entry entry{fileSector, fileSize, attributes, name, (attributes & 0x10) != 0};
-        if (!v.entries.emplace(key, entry).second) return false;
+        if (v.entries.size() >= 500000 || !v.entries.emplace(key, entry).second) return false;
         if (entry.directory) {
             if (fileSize && !ParseDirectory(v, key, fileSector, fileSize, depth + 1)) return false;
         } else if (fileSize) {
