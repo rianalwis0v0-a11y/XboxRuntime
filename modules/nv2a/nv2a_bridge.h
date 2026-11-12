@@ -95,6 +95,11 @@ __declspec(dllexport) int __cdecl XboxNV2A_ResolveDMAHandle(
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAPushBuffer(
     uint32_t channel, uint32_t handle, uint32_t get, uint32_t put,
     uint32_t* new_get, uint32_t* methods_submitted);
+/* Retrieve a resolved context-DMA object bound by NV097 methods 0x180..0x1fc. */
+__declspec(dllexport) int __cdecl XboxNV2A_GetDMAContext(
+    uint32_t channel, uint32_t subchannel, uint32_t context_method,
+    XboxNV2A_DMA_INFO* output);
+
 /* Submit using PFIFO CACHE1_DMA_INSTANCE (RAMIN byte offset, 16-byte aligned). */
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAInstance(
     uint32_t channel, uint32_t instance_offset, uint32_t get, uint32_t put,
