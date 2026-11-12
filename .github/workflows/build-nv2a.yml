@@ -2,6 +2,9 @@ name: Build XboxRuntime modules
 
 on:
   pull_request:
+  push:
+    branches:
+      - work/nv2a-d3d11-integration
   workflow_dispatch:
 
 concurrency:
