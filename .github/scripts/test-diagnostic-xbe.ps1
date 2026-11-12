@@ -28,7 +28,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,267,276,284,292,293,296,299,300,307,309,310,311,314,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,267,268,274,276,284,292,293,296,299,300,307,309,310,311,314,315,317,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -320,6 +320,52 @@ EmitCallImport 311
 EmitCheckEqual 0
 EmitLoadEax $numberValueVa
 EmitCheckEqual 1
+
+
+# Additional RTL APIs: compare memory, allocate/free Unicode strings, uppercase.
+EmitPush 1
+EmitPush $letterVa
+EmitPush $letterVa
+EmitCallImport 268
+EmitCheckEqual 1
+
+$createdUnicodeVa = [uint32]($reportVa + 0x1D0)
+EmitPush $unicodeBufferVa
+EmitPush $createdUnicodeVa
+EmitCallImport 274
+EmitCheckNonZero
+EmitLoadEax $createdUnicodeVa
+EmitCheckEqual 2
+EmitPush $createdUnicodeVa
+EmitCallImport 287
+EmitIncrement $passedVa
+
+# RtlUpperString: lowercase "ff" in formattedVa becomes "FF".
+$ansiSourceVa = [uint32]($reportVa + 0x1E0)
+$ansiDestVa = [uint32]($reportVa + 0x1F0)
+EmitMovMemoryImmediate $ansiSourceVa 2
+EmitMovMemoryImmediate ([uint32]($ansiSourceVa + 4)) 2
+EmitMovMemoryImmediate ([uint32]($ansiSourceVa + 8)) $formattedVa
+EmitMovMemoryImmediate $ansiDestVa 0
+EmitMovMemoryImmediate ([uint32]($ansiDestVa + 4)) 8
+EmitMovMemoryImmediate ([uint32]($ansiDestVa + 8)) $caseOutputBufferVa
+EmitPush $ansiSourceVa
+EmitPush $ansiDestVa
+EmitCallImport 317
+EmitLoadEax $caseOutputBufferVa
+EmitByte 0x25; Emit32 0xFF
+EmitCheckEqual 0x46
+
+# Upcase Unicode-to-multibyte conversion.
+EmitPush $numberValueVa
+EmitPush $unicodeBufferVa
+EmitPush 1
+EmitPush $formattedVa
+EmitCallImport 315
+EmitCheckEqual 0
+EmitLoadEax $formattedVa
+EmitByte 0x25; Emit32 0xFF
+EmitCheckEqual 0x41
 
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
