@@ -64,6 +64,11 @@ __declspec(dllexport) int __cdecl XboxNV2A_LookupRAMHT(
     uint32_t channel, uint32_t handle, uint32_t* context_out);
 __declspec(dllexport) int __cdecl XboxNV2A_ResolveDMAHandle(
     uint32_t channel, uint32_t handle, XboxNV2A_DMA_INFO* output);
+/* Execute an NV4-style DMA pushbuffer through a validated RAMHT DMA handle.
+ * GET/PUT are byte offsets within the DMA object; nested calls are limited to one. */
+__declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAPushBuffer(
+    uint32_t channel, uint32_t handle, uint32_t get, uint32_t put,
+    uint32_t* new_get, uint32_t* methods_submitted);
 
 typedef struct XboxNV2A_STATS {
     uint32_t frames;
