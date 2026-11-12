@@ -1541,6 +1541,8 @@ static int update_surface_target(void)
         new_color->lpVtbl->Release(new_color);
         return 19;
     }
+    if (g_surface_bound && g_zeta_surface)
+        (void)copy_zeta_surface_to_vram(g_zeta_surface, &g_bound_surface_info);
     if (g_surface_bound && g_color_surface)
         mark_all_textures_dirty();
 
