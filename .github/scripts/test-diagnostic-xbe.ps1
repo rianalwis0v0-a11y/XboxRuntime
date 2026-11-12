@@ -15,11 +15,18 @@ $vmBaseVa = [uint32]($reportVa + 0x24)
 $vmSizeVa = [uint32]($reportVa + 0x28)
 $frequencyVa = [uint32]($reportVa + 0x2C)
 $systemTimeVa = [uint32]($reportVa + 0x34)
+$unicodeVa = [uint32]($reportVa + 0x80)
+$objectAttributesVa = [uint32]($reportVa + 0x90)
+$ioStatusVa = [uint32]($reportVa + 0xB0)
+$fileHandleVa = [uint32]($reportVa + 0xB8)
+$readBufferVa = [uint32]($reportVa + 0xC0)
+$fileOffsetVa = [uint32]($reportVa + 0xD0)
+$testPathVa = [uint32]($reportVa + 0x100)
 $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10002A00
-$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,199,238,284,296,307,320)
+$ordinals = @(8,14,17,23,45,50,53,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,284,296,307,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -159,6 +166,34 @@ EmitPush $vmBaseVa
 EmitCallImport 199
 EmitCheckEqual 0
 
+# Host-file mapping, NT open/read/close, using the XBE title directory as CD-ROM.
+EmitPush 0
+EmitPush 1
+EmitPush $ioStatusVa
+EmitPush $objectAttributesVa
+EmitPush 0x80000000
+EmitPush $fileHandleVa
+EmitCallImport 202
+EmitCheckEqual 0
+EmitPush 0
+EmitPush $fileOffsetVa
+EmitPush 8
+EmitPush $readBufferVa
+EmitPush $ioStatusVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $fileHandleVa
+EmitCallImport 219
+EmitCheckEqual 0
+EmitLoadEax $readBufferVa
+EmitCheckEqual 0x46545258
+EmitLoadEax ([uint32]($readBufferVa + 4))
+EmitCheckEqual 0x21454C49
+EmitPushMemory $fileHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
 # Contiguous memory allocation, address validation, and free.
 EmitPush 4096
 EmitCallImport 165
@@ -216,10 +251,27 @@ for ($i=0; $i -lt $ordinals.Count; $i++) {
 Put32 (0x2A00 + 4*$ordinals.Count) 0
 Put32 0x2200 0x54535258
 Put32 0x2228 4096
+# Guest-side OBJECT_ATTRIBUTES + UNICODE_STRING for \Device\Cdrom0\xbe-test.txt.
+$guestPath = "\Device\Cdrom0\xbe-test.txt"
+$guestPathBytes = [Text.Encoding]::Unicode.GetBytes($guestPath + [char]0)
+$guestPathLength = [uint32]($guestPath.Length * 2)
+Put32 0x2280 ([uint32]($guestPathLength -bor (($guestPathLength + 2) -shl 16)))
+Put32 0x2284 $testPathVa
+Put32 0x2290 24
+Put32 0x2294 0
+Put32 0x2298 $unicodeVa
+Put32 0x229C 0
+Put32 0x22A0 0
+Put32 0x22A4 0
+Put32 0x22B0 0
+Put32 0x22B4 0
+Put32 0x22B8 0
+$guestPathBytes.CopyTo($b,0x2300)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
 New-Item -ItemType Directory -Force -Path $testDir | Out-Null
 $xbe = Join-Path $testDir "xboxruntime-diagnostic.xbe"
 [IO.File]::WriteAllBytes($xbe,$b)
+[IO.File]::WriteAllBytes((Join-Path $testDir "xbe-test.txt"),[Text.Encoding]::ASCII.GetBytes("XRTFILE!"))
 $artifactXbe = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xboxruntime-diagnostic.xbe"))
 Copy-Item $xbe $artifactXbe -Force
 $eeprom = Join-Path $testDir "eeprom.bin"
