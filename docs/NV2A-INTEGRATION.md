@@ -231,3 +231,15 @@ encodings, honors per-array stride, and checks both DMA-object and VRAM bounds
 before copying packed elements. Compressed vertex format and conversion to a
 host vertex declaration are not included yet; this is the validated guest-data
 fetch stage for a later DRAW_ARRAYS translator.
+
+
+## Host FVF vertex stream generation
+
+`XboxNV2A_BuildVertexStream` combines the guest float3 position array with
+optional UB_D3D diffuse color and float2 TEX0 arrays into a D3D8 FVF-compatible
+vertex stream (`XYZ | DIFFUSE | TEX1`). Missing color defaults to opaque white
+and missing TEX0 defaults to (0,0). The smoke test checks two vertices, their
+colors/texture coordinates, the 24-byte host stride, and destination-capacity
+rejection. This prepares a bounded input stream for a subsequent DRAW_ARRAYS
+submission path; it does not yet cover normals, weights, specular, additional
+texture sets, compressed formats, or shader-driven vertex layouts.
