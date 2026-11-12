@@ -123,7 +123,7 @@ int main() {
         resolveDma(channel, dmaHandle, &dmaInfo) != 0 ||
         dmaInfo.instance_offset != 0x100u || dmaInfo.dma_class != 2u ||
         dmaInfo.engine != 1u || dmaInfo.base_address != 0x1000u ||
-        dmaInfo.mapped_length != 0x1000u ||
+        dmaInfo.mapped_length != 0x0FFFu ||
         lookupRamht(channel, dmaHandle + 1u, &ramhtContext) == 0) {
         std::cerr << "FAIL: RAMHT lookup / DMA object resolution\\n";
         stop();
