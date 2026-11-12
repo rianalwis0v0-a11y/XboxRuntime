@@ -64,12 +64,10 @@ function EmitCheckAtLeast([uint32]$minimum) {
 }
 function EmitCheckPoolSize {
     EmitByte 0x3D; Emit32 ([uint32]0xFFFFFFFF)
-    EmitByte 0x74; EmitByte 16
+    EmitByte 0x74; EmitByte 15
     EmitByte 0x3D; Emit32 ([uint32]64)
     EmitByte 0x72; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 6
-    EmitIncrement $script:failedAddress
     EmitByte 0xEB; EmitByte 6
     EmitIncrement $script:failedAddress
 }
@@ -181,7 +179,7 @@ EmitCheckEqual 1
 EmitByte 0xB9; Emit32 0x12345678
 EmitCallImport 307
 EmitCheckEqual 0x78563412
-EmitByte 0xB9; Emit32 0x41
+EmitPush 0x41
 EmitCallImport 296
 EmitCheckEqual 0x61
 
