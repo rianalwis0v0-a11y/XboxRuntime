@@ -22,6 +22,22 @@ static uint32_t g_ref_counter[32];
 static int g_started;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
+typedef struct NV2A_SURFACE_REGS {
+    uint32_t format, pitch, color_offset, zeta_offset;
+    uint32_t clip_horizontal, clip_vertical;
+    int dirty;
+} NV2A_SURFACE_REGS;
+
+static NV2A_SURFACE_REGS g_surface_regs;
+static XboxNV2A_SURFACE_INFO g_bound_surface_info;
+static IDirect3DSurface8* g_color_surface;
+static IDirect3DSurface8* g_zeta_surface;
+static int g_surface_bound;
+
+static int update_surface_target(void);
+static void sync_surface_to_vram(void);
+static void release_surface_targets(void);
+
 
 static int map_compare_function(uint32_t parameter, uint32_t* value)
 {
@@ -154,6 +170,19 @@ static int apply_nv2a_render_state(uint32_t method, uint32_t parameter)
 static void submit_pgraph_method(uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
+    switch (method) {
+    case NV097_SET_SURFACE_FORMAT: g_surface_regs.format = parameter; g_surface_regs.dirty = 1; break;
+    case NV097_SET_SURFACE_PITCH: g_surface_regs.pitch = parameter; g_surface_regs.dirty = 1; break;
+    case NV097_SET_SURFACE_COLOR_OFFSET: g_surface_regs.color_offset = parameter; g_surface_regs.dirty = 1; break;
+    case NV097_SET_SURFACE_ZETA_OFFSET: g_surface_regs.zeta_offset = parameter; g_surface_regs.dirty = 1; break;
+    case NV097_SET_SURFACE_CLIP_HORIZONTAL: g_surface_regs.clip_horizontal = parameter; g_surface_regs.dirty = 1; break;
+    case NV097_SET_SURFACE_CLIP_VERTICAL: g_surface_regs.clip_vertical = parameter; g_surface_regs.dirty = 1; break;
+    default: break;
+    }
+
+    if ((method == NV097_SET_BEGIN_END && parameter != 0u) ||
+        method == NV097_CLEAR_SURFACE)
+        (void)update_surface_target();
     /* These real NV097 offsets collide with incorrect aliases in the
      * pinned translator. Apply them here and do not feed them to that switch. */
     if (method == NV097_SET_DEPTH_FUNC ||
