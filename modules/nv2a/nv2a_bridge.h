@@ -33,6 +33,16 @@ __declspec(dllexport) int __cdecl XboxNV2A_SubmitMethod(
 
 __declspec(dllexport) void __cdecl XboxNV2A_Flush(void);
 
+/* Bounded access to Xbox GPU-local memory. Offsets are byte offsets. */
+__declspec(dllexport) int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t length);
+__declspec(dllexport) int __cdecl XboxNV2A_WriteVRAM(uint32_t offset, const void* source, uint32_t length);
+__declspec(dllexport) int __cdecl XboxNV2A_ReadRAMIN(uint32_t offset, void* destination, uint32_t length);
+__declspec(dllexport) int __cdecl XboxNV2A_WriteRAMIN(uint32_t offset, const void* source, uint32_t length);
+
+/* Interleaved method/parameter dword pairs. */
+__declspec(dllexport) int __cdecl XboxNV2A_SubmitMethods(uint32_t subchannel, const uint32_t* pairs, uint32_t pair_count);
+
+
 typedef struct XboxNV2A_STATS {
     uint32_t frames;
     uint32_t draw_calls;
