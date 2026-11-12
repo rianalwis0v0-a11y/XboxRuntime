@@ -8,10 +8,10 @@ Include `modules/input/input.h`.
 
 - `ModuleStart` loads the first available Windows provider: XInput 1.4, 1.3, then 9.1.0.
 - `XboxInput_GetConnectedMask` reports connected user slots 0–3.
-- `XboxInput_GetState` translates Windows digital buttons, sticks, and triggers into the 18-byte original Xbox gamepad structure.
+- `XboxInput_GetState` translates Windows digital buttons, sticks, and triggers into the 18-byte original Xbox gamepad structure and DWORD-aligned 24-byte state structure.
 - `XboxInput_SetState` forwards left/right motor speeds to Windows XInput vibration.
 
-The public structs intentionally use the original Xbox layout: 18-byte gamepad, 22-byte state, and 4-byte vibration structure.
+The public structs intentionally use the original Xbox layout: 18-byte gamepad, 24-byte DWORD-aligned state, and 4-byte vibration structure.
 
 ## Current limitations
 
