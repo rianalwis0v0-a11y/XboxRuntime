@@ -783,10 +783,11 @@ static int validate_puller_method(uint32_t channel, uint32_t subchannel,
     if (method == 0x0050u) return 0;
     if (method < 0x0100u || bound_engines[subchannel] != 1u) return 3;
     if (method >= 0x0180u && method < 0x0200u) {
-        uint32_t context = 0;
-        if (ramht_lookup(channel, parameter, &context) != 0) return 4;
-        const uint32_t instance = (context & 0xFFFFu) << 4;
-        if (!memory_range_valid(instance, 4u, XBOX_RAMIN_SIZE)) return 5;
+        XboxNV2A_DMA_INFO dma;
+        if (XboxNV2A_ResolveDMAHandle(channel, parameter, &dma) != 0)
+            return 4;
+        if (!memory_range_valid(dma.instance_offset, 12u, XBOX_RAMIN_SIZE))
+            return 5;
     }
     return 0;
 }
