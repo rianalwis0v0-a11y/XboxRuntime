@@ -97,7 +97,9 @@ __declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAPushBuffer(
     uint32_t* new_get, uint32_t* methods_submitted);
 typedef struct XboxNV2A_VERTEX {
     float x, y, z;
+    float nx, ny, nz;
     uint32_t diffuse;
+    uint32_t specular;
     float u, v;
 } XboxNV2A_VERTEX;
 
