@@ -192,10 +192,14 @@ into the host default target.
 
 On target changes, the previous color target is read back to its guest VRAM
 span before the replacement target is uploaded. `XboxNV2A_Flush` and module
-shutdown also read the active color target back into VRAM. Depth surfaces are
-created and bound but are not yet synchronized back to guest depth memory.
-This path currently supports linear single-sample surfaces only; swizzled,
-multisampled, tiled, and unsupported color/depth formats remain rejected.
+shutdown also read the active color target back into VRAM. The bridge now also
+uploads the guest Z16 or Z24S8 depth span into the newly created depth surface
+and attempts a row-pitched depth readback during flush, target changes, and
+shutdown. Depth synchronization is conditional on the D3D8 backend exposing a
+lockable depth surface; an unsupported depth LockRect operation is not treated
+as a successful guest-memory update. This path currently supports linear
+single-sample surfaces only; swizzled, multisampled, tiled, and unsupported
+color/depth formats remain rejected.
 
 
 ## PFIFO CACHE1 DMA_PUT integration
