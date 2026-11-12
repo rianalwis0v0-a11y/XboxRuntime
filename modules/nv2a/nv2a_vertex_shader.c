@@ -11,13 +11,15 @@ static int decode_source(const uint32_t *w,unsigned s,XboxNV2A_VERTEX_PROGRAM_IN
  if(s==0){mux=field(w[2],26,2);reg=field(w[2],28,4);}
  else if(s==1){mux=field(w[2],11,2);reg=field(w[2],13,4);}
  else {mux=field(w[3],28,2);reg=(field(w[2],0,2)<<2)|field(w[3],30,2);}
- if(mux==0)return 0;
- if(mux==1){if(reg>12)return 0;}
+ if(mux==1){ /* Temp 12 aliases oPos; 13..15 read as R0 on NV2A. */ }
  else if(mux==2)m->input_mask|=(uint16_t)(1u<<field(w[1],9,4));
- else if(mux==3){unsigned c=field(w[1],13,8);if(c>=192)return 0;m->constant_mask[c>>6]|=(uint64_t)1<<(c&63);}
- else return 0;
- /* Word 3 bit 1 applies to the instruction's constant source, regardless of source slot. */
- if(mux==3 && (w[3]&2u))m->uses_relative_constants=1;
+ else if(mux==0||mux==3){
+  unsigned c=field(w[1],13,8);
+  if(c>=192)return 0;
+  m->constant_mask[c>>6]|=(uint64_t)1<<(c&63);
+  /* Word 3 bit 1 applies to the instruction's constant source, regardless of slot. */
+  if(w[3]&2u)m->uses_relative_constants=1;
+ } else return 0;
  return 1;
 }
 __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
@@ -31,7 +33,6 @@ __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
   unsigned mm=field(w[3],24,4),im=field(w[3],16,4),om=field(w[3],12,4);
   unsigned dst=field(w[3],20,4),outreg=field(w[3],3,8);
   if(mac>13||ilu>7)return 2;
-  if(mac==13||ilu>=5)return 3; /* ARL/EXP/LOG/LIT need translator-specific handling. */
   if(mac&&!decode_source(w,0,&m))return 4;
   if(mac>=2&&mac<=12&&!decode_source(w,1,&m))return 5;
   if((ilu!=0||mac==4)&&!decode_source(w,2,&m))return 6;

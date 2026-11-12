@@ -164,6 +164,26 @@ int main() {
             FreeLibrary(module); return 1;
         }
 
+        /* Mux zero is also a constant source; ARL/EXP/LOG/LIT are executable. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (13u << 21) | (1u << 9);
+        words[2] = (2u << 26);
+        words[3] = 1u;
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            !(info.input_mask & (1u << 1))) {
+            std::cerr << "FAIL: NV2A ARL opcode validation\\n";
+            FreeLibrary(module); return 1;
+        }
+        std::memset(words, 0, sizeof(words));
+        words[1] = (7u << 25) | (3u << 13);
+        words[2] = (3u << 28);
+        words[3] = 1u;
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            !(info.constant_mask[0] & (UINT64_C(1) << 3))) {
+            std::cerr << "FAIL: NV2A LIT / mux-zero constant validation\\n";
+            FreeLibrary(module); return 1;
+        }
+
         /* BFC0/BFC1 are valid outputs; slots 1 and 2 remain reserved. */
         std::memset(words, 0, sizeof(words));
         words[3] = (1u << 11) | (1u << 12) | (7u << 3) | 1u;
