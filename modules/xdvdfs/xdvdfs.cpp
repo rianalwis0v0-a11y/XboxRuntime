@@ -77,8 +77,9 @@ bool ParseDescriptor(Volume& v, uint64_t partition) {
     v.rootSize = rootSize;
     return true;
 }
-bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint32_t size) {
+bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint32_t size, unsigned depth = 0) {
     if (!size) return true;
+    if (depth >= 128) return false;
     if (size > 64u * 1024u * 1024u) return false;
     const uint64_t tableOffset = v.partition + uint64_t(sector) * kSector;
     if (!RangeOK(tableOffset, size, v.imageSize)) return false;
@@ -110,7 +111,7 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
         Entry entry{fileSector, fileSize, attributes, name, (attributes & 0x10) != 0};
         if (!v.entries.emplace(key, entry).second) return false;
         if (entry.directory) {
-            if (fileSize && !ParseDirectory(v, key, fileSector, fileSize)) return false;
+            if (fileSize && !ParseDirectory(v, key, fileSector, fileSize, depth + 1)) return false;
         } else if (fileSize) {
             const uint64_t dataOffset = v.partition + uint64_t(fileSector) * kSector;
             if (!RangeOK(dataOffset, fileSize, v.imageSize)) return false;
