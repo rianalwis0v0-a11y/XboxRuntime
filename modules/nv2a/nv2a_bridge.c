@@ -727,6 +727,77 @@ int __cdecl XboxNV2A_GetDMAContext(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
+    uint32_t array_index, uint32_t first_vertex, uint32_t vertex_count,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* stride_out, uint32_t* element_bytes_out)
+{
+    if (stride_out) *stride_out = 0;
+    if (element_bytes_out) *element_bytes_out = 0;
+    if (!g_started || !g_gpu || channel > 31u || subchannel > 7u ||
+        array_index > 15u || (!destination && vertex_count != 0u))
+        return 1;
+
+    const uint32_t context_method = array_index < 8u ? 0x019Cu : 0x01A0u;
+    const uint32_t context_slot = (context_method - 0x0180u) / 4u;
+    const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][context_slot];
+    if (!dma->mapped_length || dma->dma_target != 0u)
+        return 2;
+
+    const uint32_t offset_method = 0x1720u + array_index * 4u;
+    const uint32_t format_method = 0x1760u + array_index * 4u;
+    const uint32_t offset = g_gpu->pgraph.regs[offset_method / 4u];
+    const uint32_t format = g_gpu->pgraph.regs[format_method / 4u];
+    const uint32_t type = format & 0xFu;
+    const uint32_t components = (format >> 4) & 0xFu;
+    uint32_t component_bytes = 0;
+
+    if (!components || components > 4u) return 3;
+    switch (type) {
+    case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D:
+    case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL:
+        component_bytes = 1u; break;
+    case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S1:
+    case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_S32K:
+        component_bytes = 2u; break;
+    case NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F:
+        component_bytes = 4u; break;
+    default:
+        return 4; /* Compressed and reserved vertex encodings need their own decoder. */
+    }
+
+    const uint32_t element_bytes = components * component_bytes;
+    uint32_t stride = (format & 0xFFFFFF00u) >> 8;
+    if (!stride) stride = element_bytes;
+    if (stride < element_bytes) return 5;
+    if (stride_out) *stride_out = stride;
+    if (element_bytes_out) *element_bytes_out = element_bytes;
+    if (!vertex_count) return 0;
+
+    const uint64_t output_bytes = (uint64_t)vertex_count * element_bytes;
+    if (output_bytes > destination_capacity) return 6;
+    const uint64_t first_offset = (uint64_t)offset +
+                                  (uint64_t)first_vertex * stride;
+    const uint64_t source_span = (uint64_t)(vertex_count - 1u) * stride +
+                                 element_bytes;
+    if (first_offset > dma->mapped_length ||
+        source_span > (uint64_t)dma->mapped_length - first_offset)
+        return 7;
+
+    const uint64_t gpu_offset = (uint64_t)dma->base_address + first_offset;
+    if (gpu_offset > XBOX_VRAM_SIZE ||
+        source_span > (uint64_t)XBOX_VRAM_SIZE - gpu_offset)
+        return 8;
+
+    uint8_t* output = (uint8_t*)destination;
+    for (uint32_t vertex = 0; vertex < vertex_count; ++vertex) {
+        const uint64_t source_offset = gpu_offset + (uint64_t)vertex * stride;
+        memcpy(output + (size_t)vertex * element_bytes,
+               g_vram + (size_t)source_offset, element_bytes);
+    }
+    return 0;
+}
+
 static int dispatch_puller_method(uint32_t channel, uint32_t subchannel,
                                   uint32_t method, uint32_t parameter)
 {
