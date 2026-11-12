@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vector>
 #include <cstdio>
+#include <cwchar>
 #include "fatx.h"
 
 static void Put32(std::vector<BYTE>& b, size_t offset, uint32_t value) {
