@@ -95,6 +95,13 @@ __declspec(dllexport) int __cdecl XboxNV2A_ResolveDMAHandle(
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAPushBuffer(
     uint32_t channel, uint32_t handle, uint32_t get, uint32_t put,
     uint32_t* new_get, uint32_t* methods_submitted);
+/* Fetch packed vertex elements from the bound NV097 VERTEX_A/B DMA context. */
+__declspec(dllexport) int __cdecl XboxNV2A_ReadVertexArray(
+    uint32_t channel, uint32_t subchannel, uint32_t array_index,
+    uint32_t first_vertex, uint32_t vertex_count,
+    void* destination, uint32_t destination_capacity,
+    uint32_t* stride_out, uint32_t* element_bytes_out);
+
 /* Retrieve a resolved context-DMA object bound by NV097 methods 0x180..0x1fc. */
 __declspec(dllexport) int __cdecl XboxNV2A_GetDMAContext(
     uint32_t channel, uint32_t subchannel, uint32_t context_method,
