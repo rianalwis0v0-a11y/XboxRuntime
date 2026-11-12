@@ -790,6 +790,52 @@ extern "C" int __cdecl K_RtlVsprintf(char* output, const char* format, va_list a
     if (!output || !format) return -1;
     return vsprintf(output, format, args);
 }
+
+extern "C" BOOL __stdcall K_KeIsExecutingDpc() { return FALSE; }
+extern "C" BOOL __stdcall K_KeTestAlertThread(ULONG) { return FALSE; }
+extern "C" LONG __stdcall K_KeSetEventBoostPriority(void* event, LONG increment, BOOL wait) {
+    return K_KeSetEvent(event, increment, wait);
+}
+extern "C" ULONG __stdcall K_RtlWalkFrameChain(void** frames, ULONG count, ULONG) {
+    if (!frames || !count) return 0;
+    return ULONG(CaptureStackBackTrace(1, count, frames, nullptr));
+}
+extern "C" ULONG __stdcall K_RtlCaptureStackBackTrace(ULONG skip, ULONG count, void** frames, ULONG* hash) {
+    if (!frames || !count) return 0;
+    return ULONG(CaptureStackBackTrace(skip + 1, count, frames, hash));
+}
+extern "C" void __stdcall K_RtlGetCallersAddress(void** caller, void** callersCaller) {
+    void* frames[2]{};
+    CaptureStackBackTrace(1, 2, frames, nullptr);
+    if (caller) *caller = frames[0];
+    if (callersCaller) *callersCaller = frames[1];
+}
+extern "C" void __stdcall K_RtlAssert(const char* expression, const char* file, ULONG line, const char* message) {
+    char buffer[512]{};
+    sprintf_s(buffer, "[XboxRuntime] ASSERT: %s (%s:%lu) %s\\n",
+              expression ? expression : "?", file ? file : "?", line, message ? message : "");
+    OutputDebugStringA(buffer);
+    DebugBreak();
+}
+extern "C" void __stdcall K_RtlRip(const char* message, const char* file, ULONG line) {
+    char buffer[512]{};
+    sprintf_s(buffer, "[XboxRuntime] RIP: %s (%s:%lu)\\n",
+              message ? message : "", file ? file : "?", line);
+    OutputDebugStringA(buffer);
+    DebugBreak();
+}
+extern "C" void __stdcall K_KeBugCheck(ULONG code) { ExitProcess(code); }
+extern "C" void __stdcall K_KeBugCheckEx(ULONG code, ULONG, ULONG, ULONG, ULONG) { ExitProcess(code); }
+extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { ExitProcess(0); }
+extern "C" BOOL __stdcall K_HalIsResetOrShutdownPending() { return FALSE; }
+extern "C" void __stdcall K_HalInitiateShutdown() { ExitProcess(0); }
+extern "C" ULONG __stdcall K_DbgPrompt(const char* prompt, char* response, ULONG length) {
+    if (prompt) OutputDebugStringA(prompt);
+    if (response && length) response[0] = 0;
+    return 0;
+}
+extern "C" void __stdcall K_DbgLoadImageSymbols(const char*, void*, ULONG) {}
+extern "C" void __stdcall K_DbgUnLoadImageSymbols(const char*, void*, ULONG) {}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; stopping guest.\n",ordinal);OutputDebugStringA(b);ExitProcess(0xC000001D);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -866,6 +912,36 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je mm_alloc_system
         cmp eax, 172
         je mm_free_system
+                cmp eax, 7
+        je dbg_load_symbols
+        cmp eax, 10
+        je dbg_prompt
+        cmp eax, 11
+        je dbg_unload_symbols
+        cmp eax, 92
+        je ke_alert_resume
+        cmp eax, 95
+        je ke_bugcheck
+        cmp eax, 96
+        je ke_bugcheck_ex
+        cmp eax, 121
+        je ke_is_dpc
+        cmp eax, 155
+        je ke_test_alert
+        cmp eax, 146
+        je ke_set_event_boost
+        cmp eax, 266
+        je rtl_capture_stack
+        cmp eax, 288
+        je rtl_callers_address
+        cmp eax, 319
+        je rtl_walk_frame
+        cmp eax, 352
+        je rtl_rip
+        cmp eax, 358
+        je hal_reset_pending
+        cmp eax, 360
+        je hal_shutdown
                 cmp eax, 124
         je ke_query_base_priority
                 cmp eax, 12
@@ -1124,6 +1200,20 @@ extern "C" __declspec(naked) void KernelDispatch(){
     interlocked_flush_slist: jmp K_InterlockedFlushSList
     interlocked_pop_slist: jmp K_InterlockedPopEntrySList
     interlocked_push_slist: jmp K_InterlockedPushEntrySList
+    dbg_load_symbols: jmp K_DbgLoadImageSymbols
+    dbg_prompt: jmp K_DbgPrompt
+    dbg_unload_symbols: jmp K_DbgUnLoadImageSymbols
+    ke_bugcheck: jmp K_KeBugCheck
+    ke_bugcheck_ex: jmp K_KeBugCheckEx
+    ke_is_dpc: jmp K_KeIsExecutingDpc
+    ke_test_alert: jmp K_KeTestAlertThread
+    ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
+    rtl_callers_address: jmp K_RtlGetCallersAddress
+    rtl_walk_frame: jmp K_RtlWalkFrameChain
+    rtl_rip: jmp K_RtlRip
+    hal_reset_pending: jmp K_HalIsResetOrShutdownPending
+    hal_shutdown: jmp K_HalInitiateShutdown
     ex_acquire_rw_exclusive: jmp K_ExAcquireReadWriteLockExclusive
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
