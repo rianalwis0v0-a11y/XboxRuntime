@@ -46,6 +46,8 @@ struct SurfaceInfo {
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
     uint32_t color_pitch, zeta_pitch, color_offset, zeta_offset;
 };
+using DecodeTextureFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,
+    const void*,uint32_t,void*,uint32_t,uint32_t*);
 using DecodeSurfaceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
                                        uint32_t, uint32_t, SurfaceInfo*);
 
@@ -100,6 +102,7 @@ int main() {
     auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
     auto buildVertexStream = reinterpret_cast<BuildVertexStreamFn>(Need(module, "XboxNV2A_BuildVertexStream"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
+    auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeSurface = reinterpret_cast<DecodeSurfaceFn>(Need(module, "XboxNV2A_DecodeSurface"));
 
 
@@ -140,6 +143,27 @@ int main() {
         std::cerr << "FAIL: NV097 linear surface decode / VRAM bounds\\n";
         FreeLibrary(module);
         return 1;
+    }
+
+    {
+        const uint8_t argb[8] = { 0x33,0x22,0x11,0xFF, 0x66,0x55,0x44,0x80 };
+        uint8_t rgba[8]{}; uint32_t pitch=0;
+        if (decodeTexture(0x0600u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)!=0 ||
+            pitch!=8 || rgba[0]!=0x11 || rgba[1]!=0x22 || rgba[2]!=0x33 || rgba[3]!=0xFF ||
+            rgba[4]!=0x44 || rgba[5]!=0x55 || rgba[6]!=0x66 || rgba[7]!=0x80) {
+            std::cerr << "FAIL: A8R8G8B8 texture decode\n"; return 1;
+        }
+        const uint8_t dxt1[8] = { 0x00,0xF8,0xE0,0x07,0,0,0,0 };
+        uint8_t block[4*4*4]{}; 
+        if (decodeTexture(0x0C00u,4,4,0,dxt1,sizeof(dxt1),block,sizeof(block),&pitch)!=0 ||
+            pitch!=16 || block[0]!=255 || block[1]!=0 || block[2]!=0 || block[3]!=255) {
+            std::cerr << "FAIL: DXT1 texture decode\n"; return 1;
+        }
+        if (decodeTexture(0x0600u,2,1,0,argb,sizeof(argb),rgba,4,&pitch)==0 ||
+            decodeTexture(0x0600u,2,1,0,argb,4,rgba,sizeof(rgba),&pitch)==0 ||
+            decodeTexture(0x9900u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)==0) {
+            std::cerr << "FAIL: texture decode bounds/format validation\n"; return 1;
+        }
     }
 
     if (start() != 0) {
