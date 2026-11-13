@@ -273,7 +273,7 @@ if(_parallel_patched LESS 0)
      * Snapshot all three sources when MAC and ILU execute in the same slot. */
     for (i = 0; i < program->length; i++) {
         const NV2AVshInstruction *inst = &program->insns[i];
-        sb_append(&sb, "\\n    /* Instruction %d */\\n", i);
+        sb_append(&sb, "\n    /* Instruction %d */\n", i);
 
         if (inst->mac_op != NV2A_VSH_MAC_NOP &&
             inst->ilu_op != NV2A_VSH_ILU_NOP) {
@@ -284,7 +284,7 @@ if(_parallel_patched LESS 0)
                 NV2AVshSrcOperand *snapshot = &parallel_inst.mac_src[source];
                 sb_append(&sb, "    float4 _vsh_src%d = ", snapshot_index);
                 emit_source(&sb, &inst->mac_src[source], 0);
-                sb_append(&sb, ";\\n");
+                sb_append(&sb, ";\n");
                 snapshot->reg_type = NV2A_VSH_REG_SNAPSHOT;
                 snapshot->reg_index = snapshot_index;
                 snapshot->negate = 0;
