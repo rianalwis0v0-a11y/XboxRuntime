@@ -53,6 +53,11 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## I/O invalid-device dispatch
+
+- Ordinal 74, `IoInvalidDeviceRequest`, returns `STATUS_INVALID_DEVICE_REQUEST` (0xC0000010), the documented fallback status for an unsupported device request.
+- The diagnostic XBE verifies the exact NTSTATUS.
+
 ## CPU context capture
 
 - Ordinal 265, `RtlCaptureContext`, captures the current native x86 guest-thread context into the caller-provided x86 `CONTEXT` structure.
