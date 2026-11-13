@@ -1,4 +1,4 @@
-name: Windows x86 build and smoke tests
+name: Windows x64 host and x86 guest build/tests
 
 on:
   pull_request:
@@ -20,9 +20,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Configure 32-bit Windows build
-        run: cmake -S . -B build -A Win32
-      - name: Build all runtime modules and guest
+      - name: Configure 64-bit host and nested 32-bit guest
+        run: cmake -S . -B build -A x64
+      - name: Build x64 runtime modules and x86 guest
         run: cmake --build build --config Release --parallel
       - name: Run native x86 diagnostic XBE
         shell: pwsh
