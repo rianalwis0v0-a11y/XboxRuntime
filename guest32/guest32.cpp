@@ -60,7 +60,7 @@ int wmain(int argc, wchar_t** argv) {
 
     HANDLE mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, mappingName);
     if (!mapping) return GetLastError();
-    void* image = MapViewOfFileEx(mapping, FILE_MAP_ALL_ACCESS, 0, 0,
+    void* image = MapViewOfFileEx(mapping, FILE_MAP_ALL_ACCESS | FILE_MAP_EXECUTE, 0, 0,
                                   size, reinterpret_cast<void*>(uintptr_t(base)));
     if (image != reinterpret_cast<void*>(uintptr_t(base))) {
         const DWORD error = GetLastError();
