@@ -85,3 +85,53 @@ ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|
 The kernel export audit remains a separate check: a mapped ordinal is not
 proof of correct API semantics. The guest32 CI job runs both the export audit
 and the networking/registry smoke tests.
+
+
+## ABI v2 XBE execution backend
+
+The host-side `xbox_kernel.dll` implements the coordinator-approved
+`XBE_EXECUTION_BACKEND_V2` contract from
+`modules/xbe_loader/xbe_backend_api.h`. ABI v1 remains unchanged and is
+explicitly refused by this provider because its startup callback lacks the
+validated image description and mapped view.
+
+The host reserves the exact requested guest base using a pagefile-backed
+section, maps that section at the same numeric base in its own process, and
+starts `xbe_guest32.exe`. The x86 process opens the named section and maps
+the same backing pages at the exact XBE base. Image mapping is performed by
+the loader into the host view; the guest resolves kernel imports and applies
+section protections in its own address space before starting the guest thread.
+The entry point remains a 32-bit guest VA and is never called by the x64 host.
+
+The host/guest control channel is a fixed-width named-pipe protocol in
+`guest32/guest_protocol.h`. Startup carries the complete validated image
+metadata needed by the guest: base, image size, header size, entry point,
+TLS address, and section count. The guest signals readiness only after TLS
+allocation and attach callbacks complete. On unload, the host requests stop;
+if title code is still running, the isolated guest process is terminated before
+the shared image view is released. This prevents freeing code/TLS while the
+guest thread is executing.
+
+TLS setup allocates a per-thread block, copies the image template, adds zero
+fill, writes the allocated TLS index, runs attach callbacks before the entry
+point, runs detach callbacks in reverse order after the entry returns, and
+then frees the block/index. The guest process provides the x86 thread/TEB
+environment; this is not a claim of full Xbox scheduler or IRQL equivalence.
+
+## Guest networking lookup
+
+The guest API registry contains 29 title-facing XNet/XSocket functions. The
+host export `XboxKernelGetGuestApiAddress(name)` asks the running x86 guest
+process for the corresponding 32-bit guest address. Returned addresses are
+valid only in that guest process. This is a name-based lookup, not a kernel
+ordinal table, and unknown names return zero.
+
+The lookup makes verified call-site redirection possible without passing
+host pointers into the guest. It does **not** patch statically linked XNet
+routines automatically. The loader still needs a per-title verified
+interception strategy and call-site tests before arbitrary XBE networking can
+be claimed.
+
+Current build/test automation compiles the x64 kernel provider, main runtime
+module, x86 guest process, and both network/registry smoke tests. A successful
+compile does not prove a real XBE starts or connects to Insignia.
