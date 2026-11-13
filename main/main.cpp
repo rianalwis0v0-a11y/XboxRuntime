@@ -242,6 +242,17 @@ namespace XboxRuntime
         std::wstring dashboard =
             runtimeDirectory + L"\\dashboard.xbe";
 
+        Module* kernel = nullptr;
+        for (auto& module : modules)
+            if (std::wstring(module.name) == L"xbox_kernel.dll") kernel = &module;
+        using SetTitlePath = int (__cdecl*)(const wchar_t*);
+        auto setTitlePath = kernel ? reinterpret_cast<SetTitlePath>(
+            GetProcAddress(kernel->handle, "XboxKernelSetGuestTitlePath")) : nullptr;
+        if (!setTitlePath || setTitlePath(dashboard.c_str()) != 0) {
+            Log(L"Could not pass dashboard path to guest kernel.");
+            return false;
+        }
+
         Log(L"Loading dashboard.xbe");
 
         return loadXbe(dashboard.c_str()) == 0;
