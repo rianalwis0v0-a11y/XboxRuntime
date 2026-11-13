@@ -247,8 +247,8 @@ int main()
     append_method(setup, 0x1E98u, 0u);                         // no context writes
     append_method(setup, 0x1E9Cu, 0u);                         // program load slot 0
     const uint32_t program[8] = {
-        0u, (1u << 21), (2u << 26), (0xFu << 12) | (1u << 11),
-        0u, (1u << 21), (3u << 26), (0xFu << 12) | (1u << 11) | (3u << 3) | 1u
+        0u, (1u << 21) | 0x1Bu, (2u << 26), (0xFu << 12) | (1u << 11),
+        0u, (1u << 21) | 0x1Bu, (3u << 26), (0xFu << 12) | (1u << 11) | (3u << 3) | 1u
     };
     for (uint32_t word : program)
         append_method(setup, 0x0B00u, word);                   // auto-increment program words
