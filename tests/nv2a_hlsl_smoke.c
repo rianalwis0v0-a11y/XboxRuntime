@@ -129,7 +129,7 @@ int main(void)
         const int length = d3d8_vsh_generate_hlsl(&program, hlsl, (int)sizeof(hlsl));
         if (length <= 0 || length >= (int)sizeof(hlsl)) return 50;
         const char* snapshot = strstr(hlsl, "float4 _vsh_src2 = R1;");
-        const char* mac_write = strstr(hlsl, "R1 = (c[17])");
+        const char* mac_write = strstr(hlsl, "R1 = (_vsh_src0)");
         const char* ilu_read = strstr(hlsl, "1.0 / _vsh_src2.x");
         if (!snapshot || !mac_write || !ilu_read ||
             !(snapshot < mac_write && mac_write < ilu_read)) {
