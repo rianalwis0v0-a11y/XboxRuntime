@@ -151,17 +151,37 @@ namespace XboxRuntime
             return false;
         }
 
-        using GetBackend = int (__cdecl*)(XBE_EXECUTION_BACKEND*);
-        using RegisterBackend = int (__cdecl*)(const XBE_EXECUTION_BACKEND*);
+        using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
+        using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
+        auto getBackendV2 = reinterpret_cast<GetBackendV2>(
+            GetProcAddress(kernelHandle, "XBE_GetExecutionBackendV2"));
+        auto registerBackendV2 = reinterpret_cast<RegisterBackendV2>(
+            GetProcAddress(loaderHandle, "XBE_RegisterExecutionBackendV2"));
 
-        auto getBackend = reinterpret_cast<GetBackend>(
-            GetProcAddress(kernelHandle, "XBE_GetExecutionBackend")
-        );
-        auto registerBackend = reinterpret_cast<RegisterBackend>(
-            GetProcAddress(loaderHandle, "XBE_RegisterExecutionBackend")
-        );
+        if (getBackendV2 && registerBackendV2)
+        {
+            XBE_EXECUTION_BACKEND_V2 backend{};
+            backend.size = sizeof(backend);
+            backend.version = XBE_EXECUTION_BACKEND_V2_VERSION;
+            if (getBackendV2(&backend) == 0 &&
+                registerBackendV2(&backend) == 0)
+            {
+                Log(L"Kernel guest execution backend ABI v2 registered.");
+                return true;
+            }
+            Log(L"ABI v2 provider was found but registration failed.");
+            return false;
+        }
 
-        if (!getBackend || !registerBackend)
+        // Compatibility path for kernels that still expose only the frozen
+        // v1 contract. This path cannot pass the mapped image to startGuest.
+        using GetBackendV1 = int (__cdecl*)(XBE_EXECUTION_BACKEND*);
+        using RegisterBackendV1 = int (__cdecl*)(const XBE_EXECUTION_BACKEND*);
+        auto getBackendV1 = reinterpret_cast<GetBackendV1>(
+            GetProcAddress(kernelHandle, "XBE_GetExecutionBackend"));
+        auto registerBackendV1 = reinterpret_cast<RegisterBackendV1>(
+            GetProcAddress(loaderHandle, "XBE_RegisterExecutionBackend"));
+        if (!getBackendV1 || !registerBackendV1)
         {
             Log(L"Kernel XBE backend provider or loader registration export is missing.");
             return false;
@@ -170,15 +190,14 @@ namespace XboxRuntime
         XBE_EXECUTION_BACKEND backend{};
         backend.size = sizeof(backend);
         backend.version = XBE_EXECUTION_BACKEND_VERSION;
-
-        if (getBackend(&backend) != 0 ||
-            registerBackend(&backend) != 0)
+        if (getBackendV1(&backend) != 0 ||
+            registerBackendV1(&backend) != 0)
         {
             Log(L"Could not connect the kernel guest execution backend.");
             return false;
         }
 
-        Log(L"Kernel guest execution backend registered.");
+        Log(L"Kernel guest execution backend ABI v1 registered (compatibility mode).");
         return true;
     }
 
