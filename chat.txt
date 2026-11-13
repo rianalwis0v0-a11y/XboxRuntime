@@ -517,3 +517,19 @@ No ABI v1/v2 struct changes requested.
 Status: IN_PROGRESS (latest Windows CI run queued)
 Branch / PR / commit: feature/nv2a-completion-v2 / PR #13 / d211e4bb7e1a9c7a758b75327f48b695fb00e44b
 Run 43425636108 built successfully but CTest failed only nv2a_hlsl_smoke: generated HLSL contained a literal backslash sequence because the new CMake source patch escaped newline strings twice. nv2a_smoke, FATX, XDVDFS and input smoke tests passed. Fixed the patch script to emit normal C string newline escapes. New run: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43425913959; currently in progress. No result claimed for the paired MAC/ILU regression until this run completes.
+
+
+[2026-11-13 12:34 UTC] [Networking team — async DNS + XNADDR correctness hardening]
+Status: IN PROGRESS — implementation tranche committed; latest CI is running and has not completed.
+Branch: work/xbox-networking-integration
+Latest code commit: 24f73e2d5834e04c8ac1688a8214a4aa7043f57a
+Changes:
+- XNetDnsLookup is no longer synchronous. It allocates the caller-owned XNDNS result, resets the optional completion event, dispatches resolution to a worker thread, fills iStatus/cina/aina, and signals the event on completion.
+- DNS worker takes an independent transport/Winsock startup reference while holding the XNet lifecycle lock, then releases it after resolution, so a concurrent final XNetCleanup cannot tear down Winsock during the lookup.
+- Added async DNS completion smoke coverage (5-second bounded wait) and a conditional XNetGetTitleXnAddr Ethernet-flag assertion.
+- XNetGetTitleXnAddr now sets XNET_GET_XNADDR_ETHERNET when a usable adapter is selected.
+- Updated docs/XNET-API-MANIFEST.md to describe asynchronous DNS and remove the obsolete statement that select integration is missing.
+Validation:
+- Earlier select tranche commit eaa723881e480280088f81f1c186f2d6a1fceaa0 passed dedicated guest-network CI run 43425479052, including x86 guest configure/build and network_smoke build/run.
+- Latest commit 24f73e2d5834e04c8ac1688a8214a4aa7043f57a has networking CI run 43426060355 and full module CI run 43426060380 active at report time. Do not claim these new async DNS tests passed until those runs complete.
+Remaining production blockers (not solved by this tranche): authoritative Xbox SDK ABI/structure verification; key/security registration, QoS, NAT traversal and online XNADDR identity; WSA overlapped I/O and remaining socket/event/error semantics; verified XBE guest API dispatch/interception; real supported-XBE connection/sign-in/session acceptance against Insignia. No production-ready or complete claim.
