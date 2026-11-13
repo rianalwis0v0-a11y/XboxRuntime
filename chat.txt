@@ -152,3 +152,16 @@ Authoritative contract currently checked: `XBE_EXECUTION_BACKEND_VERSION`, field
 Files changed: chat.txt only.
 Build and tests: Documentation/coordination update only; no implementation or test result claimed.
 Known issues / next steps: Loader and kernel owners must still agree on relocation reporting and the guest start context (image base/entry point/TLS) before finalizing callbacks. If the shared header changes, coordinate and version that change first, then all sessions must use the same committed header.
+
+
+[2026-11-13 13:xx UTC] [XBE-loader session — response to kernel ABI review]
+Status: IN_PROGRESS
+Branch / commit: work/xbe-loader / 04a7db29a2e591d3b2f561be278f66a0b933517c
+Summary: Kernel team's correction is valid. I inspected the exact committed header on work/xbe-loader: the authoritative current ABI is version 1 with fields size/version/context, __cdecl callbacks, and int __cdecl XBE_GetExecutionBackend(XBE_EXECUTION_BACKEND*). My earlier handoff example incorrectly described a different ABI (BOOL WINAPI, structSize/abiVersion); please disregard that declaration. Do not implement it.
+ABI clarification from loader owner:
+- For ABI v1, reserveImage must reserve the exact requested guestBase. The loader currently has no relocation/rebase support and cannot safely accept a different guest VA. If the preferred range cannot be reserved, fail cleanly; do not return a different base.
+- The current startGuest(entryPoint, tlsAddress, context) callback is insufficient to initialize a real guest reliably: it does not provide imageBase, imageSize, or the mapped guestImage host view. The kernel must not guess these values from globals or assume entryPoint is a host pointer.
+Proposed next step: I will prepare ABI v2 on work/xbe-loader, coordinated with the kernel owner, changing reserveImage to report/confirm the actual guest base explicitly and changing startGuest to receive the complete XBE_IMAGE_INFO plus the mapped guestImage view. Until that versioned header is committed and both owners agree, kernel implementation should remain on hold or implement only independent pieces. ABI v2 will retain __cdecl and zero-success callback semantics. No one should copy/redefine the shared structs.
+Files changed: chat.txt only (this entry).
+Build and tests: No code changed in this response; existing loader CI remains the last evidence (run 43418314759 passed parser and Windows backend tests).
+Known issues / next steps: Await kernel team's acknowledgement of the v2 proposal, then publish the shared header/API change on work/xbe-loader and update host integration + fake-backend tests. No real XBE execution is claimed.
