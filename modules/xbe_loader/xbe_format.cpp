@@ -311,9 +311,42 @@ Result MapImage(const std::uint8_t* file, std::size_t fileSize,
         image.imageSize > kMaximumImageSize ||
         AddOverflows(image.baseAddress, image.imageSize))
         return {Error::InvalidImageSize, image.imageSize};
-    if (image.imageSize == 0 || image.headerSize > fileSize ||
-        image.imageSize > destinationSize)
+    if (image.imageSize == 0 || image.headerSize < kMinimumHeaderSize ||
+        image.headerSize > fileSize || image.imageSize > destinationSize)
         return {Error::OutputTooSmall, image.imageSize};
+
+    // MapImage is public and may receive an Image not produced by Parse.
+    // Validate all sections before touching the caller's destination buffer.
+    const std::uint64_t imageEnd =
+        static_cast<std::uint64_t>(image.baseAddress) + image.imageSize;
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const Section& section = image.sections[i];
+        if (section.virtualAddress < image.baseAddress ||
+            section.virtualSize == 0 ||
+            section.rawSize > section.virtualSize ||
+            (section.rawSize != 0 && section.rawAddress < image.headerSize) ||
+            !RangeInside(section.rawAddress, section.rawSize, fileSize))
+            return {Error::InvalidSection, i};
+
+        const std::uint64_t sectionStart =
+            static_cast<std::uint64_t>(section.virtualAddress) - image.baseAddress;
+        const std::uint64_t sectionEnd = sectionStart + section.virtualSize;
+        if (sectionStart < image.headerSize || sectionEnd > image.imageSize ||
+            static_cast<std::uint64_t>(section.virtualAddress) +
+                section.virtualSize > imageEnd)
+            return {Error::InvalidSection, i};
+
+        for (std::uint32_t j = 0; j < i; ++j) {
+            const Section& previous = image.sections[j];
+            const std::uint64_t previousStart =
+                static_cast<std::uint64_t>(previous.virtualAddress) -
+                image.baseAddress;
+            const std::uint64_t previousEnd =
+                previousStart + previous.virtualSize;
+            if (sectionStart < previousEnd && previousStart < sectionEnd)
+                return {Error::OverlappingSections, i};
+        }
+    }
 
     std::memset(destination, 0, image.imageSize);
     std::memcpy(destination, file, image.headerSize);
