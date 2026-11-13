@@ -44,7 +44,7 @@ Source repository: https://github.com/Cxbx-Reloaded/Cxbx-Reloaded
 
 ## Initial implementation order
 
-1. Compare Cxbx XBE header/section validation and image mapping with modules/xbe_loader and guest32. Preserve the existing launch protocol and original XBE execution.
+1. **XBE loader — first adaptation committed:** guest32/guest32.cpp now follows Cxbx's XBE metadata-loading flow for header, certificate, section table, section names, library-version and TLS ranges; maps raw sections and zero-fills virtual tails; selects the retail/debug entry-point XOR from the kernel thunk; validates executable entry-point membership; and applies bounded section page protections. The named-pipe guest launch/release protocol is unchanged. This code is marked GPL-2.0-or-later and attributed in third_party/cxbx-reloaded/README.md. The Cxbx UI, crypto, and VM manager were not copied.
 2. Port kernel exports in small ordinal groups into guest32/kernel_compat.cpp, with ABI tests and no fake success handlers.
 3. Port input state conversion.
 4. Port DirectSound functionality after checking each method's implementation and host API dependencies.
@@ -53,4 +53,4 @@ Source repository: https://github.com/Cxbx-Reloaded/Cxbx-Reloaded
 
 ## Status
 
-This preparation PR adds the upstream GPL text and porting/licensing plan only. It does not claim that Cxbx code has already been integrated or that any game boots.
+This PR now includes an initial Cxbx-derived XBE loader adaptation in addition to the licence and porting plan. The Windows build and diagnostic XBE tests have not yet been run for this commit; no game boot or compatibility improvement is claimed until CI passes.
