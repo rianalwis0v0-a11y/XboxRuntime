@@ -84,3 +84,25 @@ The first guest-side transport foundation is now present in `guest32/network_com
 A `network_smoke` CTest target checks Winsock startup, resolving `localhost`, creating TCP/UDP sockets, and closing them.
 
 **Important limitation:** this is a transport backend, not yet the Xbox XNet/XSocket ABI. The XBE loader currently resolves the Xbox kernel thunk table only; it does not yet parse non-kernel import libraries and bind XNet/XSocket imports to these functions. Therefore this commit does not make Insignia sign-in or multiplayer work yet. The next required step is implementing the XBE non-kernel import resolver and the correct Xbox XNet/XSocket ABI/structure mappings, then running a real title against Insignia.
+
+
+## Insignia-first DNS resolution (guest transport)
+
+The guest transport resolver now sends an IPv4 DNS A query for fully qualified
+hostnames to Insignia's documented primary resolver, `46.101.64.175`, before
+falling back to the Windows resolver. This avoids relying on an ISP's possibly
+intercepted DNS path for Xbox service hostnames. Loopback, `.local`, and
+single-label names stay on the normal resolver. Replies are checked for the
+expected transaction ID, source server, response flag, and successful RCODE;
+only an IPv4 A record is accepted.
+
+This does **not** redirect arbitrary HTTP requests to the Insignia website, and
+it does not forward ICMP ping packets. DNS changes only the IP address returned
+for a hostname; subsequent TCP/UDP traffic must still be implemented by the
+guest networking APIs. The resolver is currently used by the internal
+`XboxNetResolveIPv4` / socket-connect bridge, not by every statically linked
+XNet routine in retail titles. Full title integration still depends on the
+verified XNet/XSocket interception and ABI work above.
+
+Build/runtime status: implementation committed, but no Windows/MSVC build or
+live DNS query test has been run in this environment.
