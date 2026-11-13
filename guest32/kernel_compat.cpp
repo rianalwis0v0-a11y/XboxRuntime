@@ -187,6 +187,37 @@ void* DataFor(uint32_t ordinal){
 extern "C" void* __stdcall K_ExAllocatePool(uint32_t n){return HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,n?n:1);}
 extern "C" void* __stdcall K_ExAllocatePoolWithTag(uint32_t n,uint32_t){return K_ExAllocatePool(n);}
 extern "C" void __stdcall K_ExFreePool(void*p){if(p)HeapFree(GetProcessHeap(),0,p);}
+
+extern "C" LARGE_INTEGER __stdcall K_ExInterlockedAddLargeInteger(
+    LARGE_INTEGER* addend, LARGE_INTEGER increment, volatile LONG* lock) {
+    LARGE_INTEGER previous{};
+    if (!addend || !lock) return previous;
+    GuestAcquireSpinLock(lock);
+    previous = *addend;
+    addend->QuadPart += increment.QuadPart;
+    GuestReleaseSpinLock(lock);
+    return previous;
+}
+
+extern "C" void __fastcall K_ExInterlockedAddLargeStatistic(
+    LARGE_INTEGER* addend, ULONG increment) {
+    if (!addend) return;
+    volatile LONGLONG* target = &addend->QuadPart;
+    LONGLONG observed = *target;
+    for (;;) {
+        const LONGLONG desired = observed + static_cast<LONGLONG>(increment);
+        const LONGLONG actual = InterlockedCompareExchange64(target, desired, observed);
+        if (actual == observed) return;
+        observed = actual;
+    }
+}
+
+extern "C" LONGLONG __fastcall K_ExInterlockedCompareExchange64(
+    volatile LONGLONG* destination, const LONGLONG* exchange, const LONGLONG* comparand) {
+    if (!destination || !exchange || !comparand) return 0;
+    return InterlockedCompareExchange64(destination, *exchange, *comparand);
+}
+
 extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
 extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
 extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
@@ -1458,6 +1489,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je pool_alloc_tag
         cmp eax, 17
         je pool_free
+        cmp eax, 19
+        je ex_interlocked_add_large_integer
+        cmp eax, 20
+        je ex_interlocked_add_large_statistic
+        cmp eax, 21
+        je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
         cmp eax, 45
@@ -1852,6 +1889,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     pool_alloc: jmp K_ExAllocatePool
     pool_alloc_tag: jmp K_ExAllocatePoolWithTag
     pool_free: jmp K_ExFreePool
+    ex_interlocked_add_large_integer: jmp K_ExInterlockedAddLargeInteger
+    ex_interlocked_add_large_statistic: jmp K_ExInterlockedAddLargeStatistic
+    ex_interlocked_compare_exchange64: jmp K_ExInterlockedCompareExchange64
     pool_size: jmp K_ExQueryPoolBlockSize
     smbus_read: jmp K_HalReadSMBusValue
     smbus_write: jmp K_HalWriteSMBusValue
