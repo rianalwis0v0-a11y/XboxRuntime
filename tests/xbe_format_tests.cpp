@@ -76,6 +76,27 @@ int main() {
     assert(debugImage.debugImage);
     assert(debugImage.entryPoint == 0x11020);
     assert(debugImage.kernelThunkAddress == 0);
+    assert(!debugImage.chihiroImage);
+
+    // Cxbx identifies Chihiro from the encoded entry-point high nibble and
+    // uses the Chihiro-specific XOR pair for both entry point and thunk.
+    auto chihiroFile = file;
+    Put32(chihiroFile, 0x128, 0x00011030 ^ kChihiroEntryXor);
+    Put32(chihiroFile, 0x158, kChihiroThunkXor); // decoded null thunk table
+    Image chihiroImage{};
+    result = Parse(chihiroFile.data(), chihiroFile.size(), &chihiroImage);
+    assert(result);
+    assert(chihiroImage.chihiroImage);
+    assert(!chihiroImage.debugImage);
+    assert(chihiroImage.entryPoint == 0x11030);
+    assert(chihiroImage.kernelThunkAddress == 0);
+
+    // The encoded thunk selects the image type. A debug-encoded entry point
+    // in a retail-marked image must not cause the parser to guess debug mode.
+    auto mismatchedType = file;
+    Put32(mismatchedType, 0x128, 0x00011020 ^ kDebugEntryXor);
+    assert(Parse(mismatchedType.data(), mismatchedType.size(), &image).error ==
+           Error::InvalidEntryPoint);
 
     auto invalidTls = file;
     Put32(invalidTls, 0x12C, 0x00012FF0);
