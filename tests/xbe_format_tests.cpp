@@ -34,7 +34,7 @@ static std::vector<std::uint8_t> MakeValidXbe(std::uint32_t sectionCount = 1) {
     for (std::uint32_t i = 0; i < sectionCount; ++i) {
         const std::size_t s = 0x348 + i * kSectionHeaderSize;
         Put32(file, s + 0x00, 0x04); // executable
-        Put32(file, s + 0x04, 0x00011000 + i * 0x1000);
+        Put32(file, s + 0x04, 0x00011000 + i * 0x800);
         Put32(file, s + 0x08, 0x1000);
         Put32(file, s + 0x0C, 0x400 + i * 0x200);
         Put32(file, s + 0x10, 0x200);
