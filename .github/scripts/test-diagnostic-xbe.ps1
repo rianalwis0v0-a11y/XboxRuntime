@@ -29,7 +29,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -297,6 +297,36 @@ EmitCheckNonZero
 EmitPushMemory $contiguousVa
 EmitCallImport 171
 EmitIncrement $passedVa
+
+# 64-bit interlocked operations: atomic add and compare/exchange.
+$largeIntegerVa = [uint32]($reportVa + 0x4E0)
+$exchangeVa = [uint32]($reportVa + 0x4F0)
+$comparandVa = [uint32]($reportVa + 0x4F8)
+$destinationVa = [uint32]($reportVa + 0x500)
+EmitMovMemoryImmediate $largeIntegerVa 10
+EmitMovMemoryImmediate ([uint32]($largeIntegerVa + 4)) 0
+EmitByte 0xB9; Emit32 $largeIntegerVa
+EmitByte 0xBA; Emit32 5
+EmitCallImport 20
+EmitLoadEax $largeIntegerVa
+EmitCheckEqual 15
+EmitLoadEax ([uint32]($largeIntegerVa + 4))
+EmitCheckEqual 0
+EmitMovMemoryImmediate $destinationVa 15
+EmitMovMemoryImmediate ([uint32]($destinationVa + 4)) 0
+EmitMovMemoryImmediate $exchangeVa 99
+EmitMovMemoryImmediate ([uint32]($exchangeVa + 4)) 0
+EmitMovMemoryImmediate $comparandVa 15
+EmitMovMemoryImmediate ([uint32]($comparandVa + 4)) 0
+EmitByte 0xB9; Emit32 $destinationVa
+EmitByte 0xBA; Emit32 $exchangeVa
+EmitPush $comparandVa
+EmitCallImport 21
+EmitCheckEqual 15
+EmitLoadEax $destinationVa
+EmitCheckEqual 99
+EmitLoadEax ([uint32]($destinationVa + 4))
+EmitCheckEqual 0
 
 # Interlocked primitive and byte/character conversion helpers.
 EmitMovMemoryImmediate $interlockedVa 0
