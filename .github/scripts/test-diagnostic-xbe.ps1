@@ -677,7 +677,8 @@ EmitCheckEqual 0
 # Arm the timer for a short relative due time; APC callbacks are deliberately null.
 $timerDueVa = [uint32]($reportVa + 0x580)
 $timerPreviousVa = [uint32]($reportVa + 0x590)
-EmitMovMemoryImmediate $timerDueVa 0xFFFFD8F0
+EmitMovMemoryImmediate $timerDueVa 4294957296
+EmitMovMemoryImmediate ([uint32]($timerDueVa + 4)) 4294967295
 EmitMovMemoryImmediate $timerPreviousVa 0
 EmitPush $timerPreviousVa
 EmitPush 0
