@@ -329,9 +329,13 @@ extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t 
 }
 extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
-extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h,BOOL alertable,const LARGE_INTEGER*timeout){
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=WaitForSingleObject(h,ms);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, const LARGE_INTEGER* timeout) {
+    if (!h || h == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    const DWORD result = WaitForSingleObjectEx(h, KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) return 0;
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
+    return LONG(0xC0000008u);
 }
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
 
@@ -670,16 +674,27 @@ extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out,void*,LONG initial,LON
 extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
     if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count,const HANDLE* handles,ULONG waitType,BOOL alertable,const LARGE_INTEGER* timeout,void*){
-    if(!handles||!count||count>MAXIMUM_WAIT_OBJECTS||waitType>1)return LONG(0xC000000Du);
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=WaitForMultipleObjects(count,handles,waitType==0,ms);if(r>=WAIT_OBJECT_0&&r<WAIT_OBJECT_0+count)return 0;
-    if(r>=WAIT_ABANDONED_0&&r<WAIT_ABANDONED_0+count)return LONG(0x80);
-    return r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* handles, ULONG waitType, BOOL alertable, const LARGE_INTEGER* timeout, void*) {
+    if (!handles || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
+    for (ULONG i = 0; i < count; ++i)
+        if (!handles[i] || handles[i] == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    const DWORD result = WaitForMultipleObjectsEx(count, handles, waitType == 0,
+                                                   KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count)
+        return waitType == 0 ? LONG(result - WAIT_OBJECT_0) : 0;
+    if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + count) return LONG(0x80);
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
+    return LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal,HANDLE wait,BOOL alertable,const LARGE_INTEGER* timeout){
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=SignalObjectAndWait(signal,wait,ms,FALSE);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE wait, BOOL alertable, const LARGE_INTEGER* timeout) {
+    if (!signal || !wait || signal == INVALID_HANDLE_VALUE || wait == INVALID_HANDLE_VALUE)
+        return LONG(0xC0000008u);
+    const DWORD result = SignalObjectAndWait(signal, wait, KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) return 0;
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
+    return LONG(0xC0000008u);
 }
 extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG type) {
     if (!base || !*base) return LONG(0xC000000Du);
