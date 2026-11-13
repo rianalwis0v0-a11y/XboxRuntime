@@ -13,6 +13,7 @@ int __cdecl XboxNetSocketConnectAddress(uint32_t handle, const void* sockaddrIn,
 int __cdecl XboxNetSocketBindAddress(uint32_t handle, const void* sockaddrIn, uint32_t length);
 int __cdecl XboxNetSocketShutdown(uint32_t handle, int how);
 int __cdecl XboxNetSocketGetName(uint32_t handle, void* address, uint32_t* length);
+int __cdecl XboxNetSocketGetPeerName(uint32_t handle, void* address, uint32_t* length);
 int __cdecl XboxNetSocketSetOption(uint32_t handle, int level, int option, const char* value, int length);
 int __cdecl XboxNetSocketGetOption(uint32_t handle, int level, int option, char* value, int* length);
 int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port);
