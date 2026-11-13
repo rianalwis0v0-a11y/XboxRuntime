@@ -109,6 +109,16 @@ int main() {
     Put32(legacyCertificate, 0x178, 0x0D0); // XBE certificate revision 1
     assert(Parse(legacyCertificate.data(), legacyCertificate.size(), &image));
 
+    auto v4Certificate = file;
+    Put32(v4Certificate, 0x108, 0x600);
+    Put32(v4Certificate, 0x118, 0x10178);
+    Put32(v4Certificate, 0x120, 0x10364);
+    Put32(v4Certificate, 0x178, 0x1EC);
+    Put32(v4Certificate, 0x364 + 0x0C, 0x600);
+    std::memset(v4Certificate.data() + 0x600, 0xA5, 0x200);
+    Image v4Image{};
+    assert(Parse(v4Certificate.data(), v4Certificate.size(), &v4Image));
+
     auto shortCertificate = file;
     Put32(shortCertificate, 0x178, 4);
     assert(Parse(shortCertificate.data(), shortCertificate.size(), &image).error ==
