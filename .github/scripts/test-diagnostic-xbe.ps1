@@ -946,7 +946,8 @@ EmitCheckEqual 0x001E001C
 EmitLoadEax ([uint32]($directoryUnicodeVa + 4))
 EmitCheckEqual $directoryPathVa
 EmitLoadEax $directoryPathVa
-EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x00
+EmitByte 0x25; Emit32 0x0000FFFF
+EmitStoreEax $directoryUnicodeValueVa
 EmitCheckEqual 92
 EmitPush 1
 EmitPush 7
