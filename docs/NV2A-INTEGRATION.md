@@ -306,13 +306,21 @@ vertex/pixel shader microcode.
 
 `XboxNV2A_DecodeTextureRGBA8` converts supported NV097 texture payloads to
 tightly packed RGBA8 with checked source pitch, source length, destination
-capacity, and integer-size bounds. Supported formats are Y8, A8, A1R5G5B5,
-X1R5G5B5, A4R4G4B4, R5G6B5, A8R8G8B8, X8R8G8B8, and DXT1, DXT3, and DXT5 (including clipped edge blocks). This is the CPU format-conversion stage only: guest texture DMA
-address resolution, mip chains, palette formats, sampler state,
-texture object caching, and binding to D3D8 texture stages remain to be wired.
+capacity, and integer-size bounds. Supported formats include Y8/A8, A1R5G5B5, X1R5G5B5, A4R4G4B4, R5G6B5,
+A8R8G8B8/X8R8G8B8, DXT1/3/5 (including clipped edge blocks), G8B8, A8Y8,
+AY8, Y16, and the A8B8G8R8/B8G8R8A8/R8G8B8A8 byte-order variants. The decoder
+is used by the direct, swizzled, pitched-linear, mip-chain, DMA-backed live
+stage, and I8 palette paths described below. YUV, R6G5B5, depth-texture
+formats, cubemaps, and 3D textures remain unsupported.
 
 
-Texture sampler filter methods (`NV097_SET_TEXTURE_FILTER`, per 0x40-byte stage) now map the NV2A minification and magnification selectors to D3D8 point/linear filters and the mip selector to none/point/linear. The supported NV2A convolution selector uses linear filtering as an explicit fallback. Invalid selector combinations are rejected; the mapping is exported as `XboxNV2A_MapTextureFilter` and covered by host smoke tests. This maps sampler state only: mip-level texture allocation and upload are still not implemented.
+Texture sampler filter methods (NV097_SET_TEXTURE_FILTER, per 0x40-byte stage)
+map the NV2A minification and magnification selectors to D3D8 point/linear
+filters and the mip selector to none/point/linear. The supported NV2A
+convolution selector uses linear filtering as an explicit fallback. Invalid
+selector combinations are rejected; the mapping is exported as
+XboxNV2A_MapTextureFilter and covered by host smoke tests. Mip-level allocation
+and upload are performed by the live texture-stage path below.
 
 Texture sampler address methods are now translated per stage for U/V wrapping:
 wrap, mirror, clamp, border, and mirror-once map to the matching D3D8
@@ -324,7 +332,8 @@ modes and unavailable device state are not silently reported as handled.
 
 `XboxNV2A_DecodeSwizzledTextureRGBA8` handles the common power-of-two
 Morton/Z-order texture layout for uncompressed Y8, A8, A1R5G5B5, X1R5G5B5,
-A4R4G4B4, R5G6B5, A8R8G8B8, and X8R8G8B8 data. It validates dimensions,
+A4R4G4B4, R5G6B5, A8R8G8B8/X8R8G8B8, A8Y8, G8B8, R8B8, Y16, and the
+A8B8G8R8/B8G8R8A8/R8G8B8A8 byte-order variants. It validates dimensions,
 source length, destination capacity, and allocation size before unswizzling
 through the pinned D3D8 compatibility helper and passing the linear result to
 the existing RGBA8 decoder. Linear-image and DXT block formats are explicitly
@@ -358,8 +367,9 @@ to the current channel/subchannel, validates the texture offset against that
 object's mapped local-VRAM span, and decodes the mip chain without accepting
 guest pointers. The smoke test binds a real RAMHT-resolved DMA_A object through
 the NV4 pusher, decodes a 2x2-to-1x1 swizzled chain from its VRAM span, and
-checks unbound-context and out-of-range failures. D3D8 texture allocation,
-upload, cache invalidation, and stage binding remain outstanding.
+checks unbound-context and out-of-range failures. The live stage path allocates
+and uploads D3D8 textures and binds them per stage; cache coherence for guest
+or DMA writes that bypass the bridge VRAM-write API remains incomplete.
 
 
 ## Additional alpha, depth and cull enables
@@ -373,13 +383,11 @@ is disabled. Host tests verify the state IDs and enable values.
 
 ## Linear-image texture formats
 
-The CPU decoder now also handles common NV097 linear-image formats:
+The CPU decoder handles common NV097 linear-image formats including
 LIN_A1R5G5B5, LIN_R5G6B5, LIN_A8R8G8B8, LIN_Y8, LIN_X1R5G5B5,
-LIN_A4R4G4B4, LIN_X8R8G8B8 and LIN_A8. These use row-major source data and
-can be decoded as a single level; swizzled formats continue through the
-Morton decoder, while DXT formats use the block decoder. Host tests cover
-linear ARGB and luminance input. Padded linear-image pitch and multi-level
-linear images are not yet supported by the mip-chain entry point.
+LIN_A4R4G4B4, LIN_X8R8G8B8, LIN_A8, G8B8, AY8, A8Y8, Y16, and the
+A8B8G8R8/B8G8R8A8/R8G8B8A8 variants. These use row-major source data and
+source pitch; linear-image mip-chain requests remain limited to one level.
 
 
 ## Indexed vertex expansion
