@@ -782,6 +782,21 @@ int main() {
         return 1;
     }
 
+    /* The actual MMIO DMA_PUT write must kick the same wrapped pusher
+     * and publish DMA_GET after both sides of the ring have executed. */
+    if (write(0x3200u, 1u, 4u) != 0 ||
+        write(0x3204u, channel | (1u << 8), 4u) != 0 ||
+        write(0x3220u, 1u, 4u) != 0 ||
+        write(0x322Cu, 0x10u, 4u) != 0 ||
+        write(0x3244u, 16u, 4u) != 0 ||
+        write(0x3240u, 12u, 4u) != 0 ||
+        read(0x3244u, 4u) != 12u ||
+        read(0x401D90u, 4u) != 0xFF99AABBu) {
+        std::cerr << "FAIL: PFIFO MMIO DMA_PUT did not execute wrapped ring\\n";
+        stop();
+        return 1;
+    }
+
     /* PFIFO can resolve CACHE1_DMA_INSTANCE directly, without a RAMHT handle. */
     if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
         submitDmaInstance(channel, 0x100u, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
