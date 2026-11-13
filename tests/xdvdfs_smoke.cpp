@@ -66,12 +66,12 @@ int main() {
     XDVDFS_FILE_INFO entries[2]{};
     if (XDVDFS_ListDirectory("", entries, 1, &required) != 7 || required != 2) return 8;
     if (XDVDFS_ListDirectory("", entries, 2, &required) != 0 || required != 2) return 9;
-    if (std::strcmp(entries[0].name, "folder") != 0 ||
-        std::strcmp(entries[1].name, "test.txt") != 0) return 10;
+    if (std::strcmp(entries[0].name, "FOLDER") != 0 ||
+        std::strcmp(entries[1].name, "TEST.TXT") != 0) return 10;
     if (!(entries[0].attributes & XDVDFS_ATTR_DIRECTORY)) return 11;
 
     if (XDVDFS_ListDirectory("folder", entries, 2, &required) != 0 ||
-        required != 1 || std::strcmp(entries[0].name, "inner.txt") != 0) return 12;
+        required != 1 || std::strcmp(entries[0].name, "INNER.TXT") != 0) return 12;
     if (XDVDFS_ListDirectory("test.txt", entries, 2, &required) != 4) return 13;
 
     char data[8]{};
