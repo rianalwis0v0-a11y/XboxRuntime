@@ -721,8 +721,8 @@ int main() {
     maxCallDepthStream[32] = 0x00020000u;
     if (writeVram(0x1000u, maxCallDepthStream.data(),
                   (uint32_t)(maxCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, 8u, &dmaGet, &dmaMethods) != 0 ||
-        dmaGet != 8u || dmaMethods != 0u) {
+        submitDmaPush(channel, dmaHandle, 0u, 4u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 4u || dmaMethods != 0u) {
         std::cerr << "FAIL: NV2A DMA CALL stack rejected the supported 16-level depth\\n";
         stop();
         return 1;
@@ -743,7 +743,7 @@ int main() {
     if (getStats(&beforeDepthOverflow) != 0 ||
         writeVram(0x1000u, overflowCallDepthStream.data(),
                   (uint32_t)(overflowCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, 8u, &dmaGet, &dmaMethods) == 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 4u, &dmaGet, &dmaMethods) == 0 ||
         getStats(&afterDepthOverflow) != 0 || dmaMethods != 0u ||
         beforeDepthOverflow.methods_handled != afterDepthOverflow.methods_handled ||
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
