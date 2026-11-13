@@ -463,6 +463,49 @@ LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestI
 }
 extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
 extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+struct GuestFileNetworkOpenInformation {
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    LARGE_INTEGER AllocationSize, EndOfFile;
+    ULONG FileAttributes;
+};
+static LARGE_INTEGER FileTimeToLarge(const FILETIME& value) {
+    ULARGE_INTEGER v{};
+    v.LowPart = value.dwLowDateTime;
+    v.HighPart = value.dwHighDateTime;
+    LARGE_INTEGER result{};
+    result.QuadPart = static_cast<LONGLONG>(v.QuadPart);
+    return result;
+}
+extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
+    GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* out) {
+    if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
+        return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
+    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+    if (path.empty()) return LONG(0xC0000033u);
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) {
+        const DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
+            return LONG(0xC0000034u);
+        if (error == ERROR_ACCESS_DENIED) return LONG(0xC0000022u);
+        return LONG(0xC0000001u);
+    }
+    GuestFileNetworkOpenInformation value{};
+    value.CreationTime = FileTimeToLarge(data.ftCreationTime);
+    value.LastAccessTime = FileTimeToLarge(data.ftLastAccessTime);
+    value.LastWriteTime = FileTimeToLarge(data.ftLastWriteTime);
+    value.ChangeTime = value.LastWriteTime;
+    ULARGE_INTEGER size{};
+    size.HighPart = data.nFileSizeHigh;
+    size.LowPart = data.nFileSizeLow;
+    value.EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+    value.AllocationSize = value.EndOfFile;
+    value.FileAttributes = data.dwFileAttributes;
+    *out = value;
+    return 0;
+}
+
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
@@ -1759,6 +1802,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_yield
         cmp eax, 218
         je nt_query_volume_information_file
+        cmp eax, 210
+        je nt_query_full_attributes_file
         cmp eax, 211
         je nt_query_information_file
         cmp eax, 226
@@ -2044,6 +2089,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
+    nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
