@@ -100,6 +100,12 @@ These implementations are newly routed, but still need guest-side behavioural co
 - The diagnostic XBE checks all four information classes against its mounted test volume, including sector geometry, disk device type, and non-empty filesystem metadata.
 - Windows does not expose the original Xbox volume creation timestamp through these APIs; the returned creation-time field is zero. This is a documented compatibility limitation, not full Xbox volume emulation.
 
+## Object-manager symbolic links
+
+- Ordinals 67 and 69, `IoCreateSymbolicLink` and `IoDeleteSymbolicLink`, maintain a case-insensitive in-memory namespace of link names and target device names. Duplicate creation returns `STATUS_OBJECT_NAME_COLLISION`; deleting a missing link returns `STATUS_OBJECT_NAME_NOT_FOUND`.
+- Ordinals 203 and 215, `NtOpenSymbolicLinkObject` and `NtQuerySymbolicLinkObject`, open synthetic kernel handles and copy the stored target into the caller's `UNICODE_STRING`, including the required-length and buffer-too-small behavior. `NtClose` releases the synthetic handle.
+- This is a process-local object namespace, not a full NT Object Manager: symbolic-link resolution is not yet integrated into file/device path translation, and namespace persistence/security descriptors are not emulated. The diagnostic XBE covers create/open/query/close/delete.
+
 ## Still incomplete
 
 Many catalogued APIs remain unsupported, including substantial parts of the I/O manager, object manager, device/interrupt queues, physical hardware access, crypto, and kernel debugging/memory diagnostics. These need real implementations and behavioural tests before they can be advertised as supported. A mapped ordinal is not equivalent to a working game-facing API.
