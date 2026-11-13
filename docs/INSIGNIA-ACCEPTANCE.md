@@ -121,7 +121,7 @@ implementations. The current tranche includes:
   Lookup currently completes synchronously and signals the supplied WSA event.
   It uses the guest resolver, which tries Insignia DNS first for fully qualified
   names.
-- Address conversion helpers and an Ethernet-link status placeholder.
+- Address conversion helpers, host-adapter link status, and LAN-only `XNetGetTitleXnAddr` reporting (it does not invent an online XNADDR).
 - Core `XSocket` create/close, bind/connect/listen/accept, shutdown, nonblocking,
   send/receive, sendto/recvfrom, socket options, local/peer address queries, and
   byte-order helpers. Guest-visible socket values are 32-bit tokens, not raw
