@@ -1,0 +1,57 @@
+name: Windows x64 host and x86 guest build/tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - integration/cxbx-reloaded-gpl-port
+      - feature/audio-runtime-module
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source and pinned submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure 64-bit host and nested 32-bit guest
+        run: cmake -S . -B build -A x64
+      - name: Build x64 runtime modules and x86 guest
+        run: cmake --build build --config Release --parallel
+      - name: Audit Xbox kernel export routing
+        run: python tools/audit_kernel_exports.py --check
+      # The diagnostic XBE is embedded in a synthetic XDVDFS image and exercises CD-ROM reads.
+      - name: Run native x86 diagnostic XBE
+        shell: pwsh
+        run: .\\.github\\scripts\\test-diagnostic-xbe.ps1
+      - name: Stage and verify runtime deployment layout
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP "XboxRuntime"
+          cmake --install build --config Release --prefix $package
+          $required = @(
+            "boot.exe",
+            "system\\main.dll",
+            "system\\nv2a.dll",
+            "system\\fatx.dll",
+            "system\\input.dll",
+            "system\\audio.dll",
+            "system\\xdvdfs.dll",
+            "system\\xbe_loader.dll",
+            "system\\insignia_dns.dll",
+            "system\\xbe_guest32.exe"
+          )
+          foreach ($relative in $required) {
+            $path = Join-Path $package $relative
+            if (!(Test-Path $path -PathType Leaf)) {
+              throw "Runtime package is missing required file: $relative"
+            }
+          }
+      - name: Run smoke tests
+        run: ctest --test-dir build -C Release --output-on-failure
