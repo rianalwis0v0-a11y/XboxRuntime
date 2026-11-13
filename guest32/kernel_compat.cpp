@@ -692,6 +692,50 @@ static LONG FileStatusFromWin32(DWORD e) {
 extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                        void* out, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
+    GuestDvdFile dvdFile{};
+    if (FindDvdFile(h, dvdFile)) {
+        ULONG required = 0;
+        switch (infoClass) {
+        case 4: required = sizeof(GuestFileBasicInformation); break;
+        case 5: required = sizeof(GuestFileStandardInformation); break;
+        case 6: required = sizeof(GuestFileInternalInformation); break;
+        case 9: required = sizeof(ULONG); break;
+        case 14: required = sizeof(GuestFilePositionInformation); break;
+        default: return LONG(0xC0000003u);
+        }
+        if (length < required) return LONG(0xC0000004u);
+        std::memset(out, 0, length);
+        if (infoClass == 4) {
+            static_cast<GuestFileBasicInformation*>(out)->FileAttributes =
+                FILE_ATTRIBUTE_READONLY;
+        } else if (infoClass == 5) {
+            auto* p = static_cast<GuestFileStandardInformation*>(out);
+            p->EndOfFile.QuadPart = dvdFile.size;
+            p->AllocationSize.QuadPart =
+                (static_cast<LONGLONG>(dvdFile.size) + 2047) & ~LONGLONG(2047);
+            p->NumberOfLinks = 1;
+        } else if (infoClass == 6) {
+            static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
+                (static_cast<ULONGLONG>(dvdFile.startSector) << 32) | dvdFile.size;
+        } else if (infoClass == 9) {
+            const int chars = MultiByteToWideChar(CP_ACP, 0, dvdFile.path.data(),
+                static_cast<int>(dvdFile.path.size()), nullptr, 0);
+            if (chars <= 0) return LONG(0xC0000001u);
+            const ULONG bytes = static_cast<ULONG>(chars * sizeof(WCHAR));
+            if (length < sizeof(ULONG) + bytes) return LONG(0xC0000004u);
+            auto* p = static_cast<GuestFileNameInformation*>(out);
+            p->FileNameLength = bytes;
+            MultiByteToWideChar(CP_ACP, 0, dvdFile.path.data(),
+                static_cast<int>(dvdFile.path.size()), p->FileName, chars);
+            required = sizeof(ULONG) + bytes;
+        } else {
+            static_cast<GuestFilePositionInformation*>(out)->CurrentByteOffset.QuadPart =
+                static_cast<LONGLONG>(dvdFile.position);
+        }
+        if (io) { io->Status = 0; io->Information = required; }
+        return 0;
+    }
+
     ULONG required = 0;
     switch (infoClass) {
     case 4: required = sizeof(GuestFileBasicInformation); break;
@@ -743,6 +787,25 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
 extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                      void* in, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        auto dvd = g_dvdFiles.find(h);
+        if (dvd != g_dvdFiles.end()) {
+            if (infoClass == 14) {
+                if (length < sizeof(GuestFilePositionInformation))
+                    return LONG(0xC0000004u);
+                const LONGLONG position =
+                    static_cast<GuestFilePositionInformation*>(in)->CurrentByteOffset.QuadPart;
+                if (position < 0) return LONG(0xC000000Du);
+                dvd->second.position = static_cast<uint64_t>(position);
+                if (io) { io->Status = 0; io->Information = 0; }
+                return 0;
+            }
+            constexpr LONG kMediaWriteProtected = LONG(0xC00000A2u);
+            if (io) { io->Status = kMediaWriteProtected; io->Information = 0; }
+            return kMediaWriteProtected;
+        }
+    }
     BOOL ok=FALSE;
     if(infoClass==4) {
         if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
@@ -876,7 +939,17 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        auto dvd = g_dvdFiles.find(h);
+        if (dvd != g_dvdFiles.end()) {
+            g_dvdFiles.erase(dvd);
+            return CloseHandle(h) ? 0 : LONG(0xC0000008u);
+        }
+    }
+    return CloseHandle(h) ? 0 : LONG(0xC0000008u);
+}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
