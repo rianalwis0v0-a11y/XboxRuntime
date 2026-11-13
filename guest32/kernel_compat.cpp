@@ -314,6 +314,27 @@ DWORD WINAPI GuestThreadThunk(void* raw) {
     return result;
 }
 
+DWORD g_guestExceptionCode = 0;
+DWORD g_guestExceptionEip = 0;
+DWORD g_guestExceptionAddress = 0;
+DWORD g_guestFaultAddress = 0;
+
+int GuestExceptionFilter(EXCEPTION_POINTERS* info) {
+    if (info && info->ExceptionRecord && info->ContextRecord) {
+        g_guestExceptionCode = info->ExceptionRecord->ExceptionCode;
+        g_guestExceptionEip = info->ContextRecord->Eip;
+        g_guestExceptionAddress = static_cast<DWORD>(
+            reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress));
+        g_guestFaultAddress = 0;
+        if (g_guestExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+            info->ExceptionRecord->NumberParameters >= 2) {
+            g_guestFaultAddress = static_cast<DWORD>(
+                info->ExceptionRecord->ExceptionInformation[1]);
+        }
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 void* StubFor(uint32_t ordinal){
     if(!g_stubPage||g_stubCount>=kThunkMax)return nullptr;
     uint8_t* p=static_cast<uint8_t*>(g_stubPage)+g_stubCount*10;
@@ -2959,17 +2980,32 @@ bool XboxKernelResolveImports(const XboxKernelState& image){
 }
 DWORD WINAPI XboxKernelStartXbe(void*){
     if (!g_entry) return ERROR_INVALID_ADDRESS;
-    if (!ConfigureGuestTls()) return ERROR_INVALID_ADDRESS;
 
     using Entry = void(__cdecl*)();
     DWORD result = 0;
+    bool tlsReady = false;
     __try {
-        reinterpret_cast<Entry>(uintptr_t(g_entry))();
+        if (!ConfigureGuestTls()) {
+            result = ERROR_INVALID_ADDRESS;
+        } else {
+            tlsReady = true;
+            reinterpret_cast<Entry>(uintptr_t(g_entry))();
+        }
     }
-    __except(EXCEPTION_EXECUTE_HANDLER) {
-        OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");
-        result = GetExceptionCode();
+    __except(GuestExceptionFilter(GetExceptionInformation())) {
+        result = g_guestExceptionCode ? g_guestExceptionCode : GetExceptionCode();
+        std::fprintf(stderr,
+            "[XboxKernel] guest exception=0x%08lX EIP=0x%08lX address=0x%08lX fault=0x%08lX\\n",
+            g_guestExceptionCode, g_guestExceptionEip,
+            g_guestExceptionAddress, g_guestFaultAddress);
     }
-    CleanupGuestTlsForCurrentThread(DLL_PROCESS_DETACH);
+    if (tlsReady) {
+        __try {
+            CleanupGuestTlsForCurrentThread(DLL_PROCESS_DETACH);
+        }
+        __except(GuestExceptionFilter(GetExceptionInformation())) {
+            if (!result) result = g_guestExceptionCode ? g_guestExceptionCode : GetExceptionCode();
+        }
+    }
     return result;
 }
