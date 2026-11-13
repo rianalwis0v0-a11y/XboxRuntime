@@ -36,6 +36,7 @@ ULONG g_fileCacheSize = 1024 * 1024;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
 std::mutex g_eepromMutex;
+std::mutex g_fileIoMutex;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
@@ -475,15 +476,66 @@ extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (error == ERROR_DIRECTORY) return LONG(0xC0000103u);
     return LONG(0xC0000001u);
 }
-extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
-    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
-    DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
-    if(io){io->Status=read?0:LONG(0xC0000011u);io->Information=read;}if(event)SetEvent(event);return read?0:LONG(0xC0000011u);
+extern "C" LONG __stdcall K_NtReadFile(
+    HANDLE h, HANDLE event, void*, void*, GuestIoStatusBlock* io,
+    void* buffer, uint32_t length, const LARGE_INTEGER* offset, uint32_t*) {
+    constexpr LONG kInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG kInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG kUnsuccessful = LONG(0xC0000001u);
+    constexpr LONG kEndOfFile = LONG(0xC0000011u);
+    if (!io || (length && !buffer)) return kInvalidParameter;
+    io->Status = kUnsuccessful;
+    io->Information = 0;
+    if (!h || h == INVALID_HANDLE_VALUE) {
+        io->Status = kInvalidHandle;
+        return kInvalidHandle;
+    }
+
+    DWORD read = 0;
+    {
+        // NtReadFile's optional byte offset must be applied atomically with
+        // the read. Handles are synchronous, so SetFilePointerEx + ReadFile
+        // without this lock races other guest threads sharing the handle.
+        std::lock_guard<std::mutex> guard(g_fileIoMutex);
+        if (offset && !SetFilePointerEx(h, *offset, nullptr, FILE_BEGIN))
+            return kUnsuccessful;
+        if (!ReadFile(h, buffer, length, &read, nullptr))
+            return kUnsuccessful;
+    }
+
+    io->Status = read ? 0 : kEndOfFile;
+    io->Information = read;
+    if (event) SetEvent(event);
+    return io->Status;
 }
-extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
-    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
-    DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
-    if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
+extern "C" LONG __stdcall K_NtWriteFile(
+    HANDLE h, HANDLE event, void*, void*, GuestIoStatusBlock* io,
+    const void* buffer, uint32_t length, const LARGE_INTEGER* offset, uint32_t*) {
+    constexpr LONG kInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG kInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG kUnsuccessful = LONG(0xC0000001u);
+    if (!io || (length && !buffer)) return kInvalidParameter;
+    io->Status = kUnsuccessful;
+    io->Information = 0;
+    if (!h || h == INVALID_HANDLE_VALUE) {
+        io->Status = kInvalidHandle;
+        return kInvalidHandle;
+    }
+
+    DWORD written = 0;
+    {
+        // Keep the explicit offset and write indivisible for shared handles.
+        std::lock_guard<std::mutex> guard(g_fileIoMutex);
+        if (offset && !SetFilePointerEx(h, *offset, nullptr, FILE_BEGIN))
+            return kUnsuccessful;
+        if (!WriteFile(h, buffer, length, &written, nullptr))
+            return kUnsuccessful;
+    }
+
+    io->Status = 0;
+    io->Information = written;
+    if (event) SetEvent(event);
+    return 0;
 }
 extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
 
