@@ -120,3 +120,113 @@ extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
     // do not claim an Xbox Live sign-in or online address exists.
     return 0x00000001u;
 }
+
+
+// XSocket handles are guest 32-bit tokens. They are deliberately not host
+// SOCKET values, because the host runtime may be a separate 64-bit process.
+extern "C" SOCKET WINAPI XSocketCreate(int af, int type, int protocol) {
+    if (af != AF_INET) return INVALID_SOCKET;
+    if (type == SOCK_STREAM) {
+        if (protocol != 0 && protocol != IPPROTO_TCP) return INVALID_SOCKET;
+        const uint32_t handle = XboxNetSocketCreate(1);
+        return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
+    }
+    if (type == SOCK_DGRAM) {
+        if (protocol != 0 && protocol != IPPROTO_UDP && protocol != 254) return INVALID_SOCKET;
+        const uint32_t handle = XboxNetSocketCreate(2);
+        return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
+    }
+    return INVALID_SOCKET;
+}
+
+extern "C" int WINAPI XSocketClose(SOCKET socket) {
+    if (socket == INVALID_SOCKET || socket == 0) return SOCKET_ERROR;
+    return XboxNetSocketClose(static_cast<uint32_t>(socket)) == 0 ? 0 : SOCKET_ERROR;
+}
+
+extern "C" int WINAPI XSocketBind(SOCKET socket, const sockaddr* address, int addressLength) {
+    if (socket == INVALID_SOCKET || !address || addressLength < static_cast<int>(sizeof(sockaddr_in)) ||
+        address->sa_family != AF_INET) return SOCKET_ERROR;
+    return XboxNetSocketBindAddress(static_cast<uint32_t>(socket), address,
+        static_cast<uint32_t>(addressLength));
+}
+
+extern "C" int WINAPI XSocketConnect(SOCKET socket, const sockaddr* address, int addressLength) {
+    if (socket == INVALID_SOCKET || !address || addressLength < static_cast<int>(sizeof(sockaddr_in)) ||
+        address->sa_family != AF_INET) return SOCKET_ERROR;
+    return XboxNetSocketConnectAddress(static_cast<uint32_t>(socket), address,
+        static_cast<uint32_t>(addressLength));
+}
+
+extern "C" int WINAPI XSocketListen(SOCKET socket, int backlog) {
+    if (socket == INVALID_SOCKET) return SOCKET_ERROR;
+    return XboxNetSocketListen(static_cast<uint32_t>(socket), backlog);
+}
+
+extern "C" SOCKET WINAPI XSocketAccept(SOCKET socket, sockaddr* address, int* addressLength) {
+    if (socket == INVALID_SOCKET) return INVALID_SOCKET;
+    uint32_t length = addressLength && *addressLength > 0
+        ? static_cast<uint32_t>(*addressLength) : 0;
+    const uint32_t accepted = XboxNetSocketAccept(static_cast<uint32_t>(socket),
+        address, addressLength ? &length : nullptr);
+    if (!accepted) return INVALID_SOCKET;
+    if (addressLength && address) *addressLength = static_cast<int>(length);
+    return static_cast<SOCKET>(accepted);
+}
+
+extern "C" int WINAPI XSocketShutdown(SOCKET socket, int how) {
+    if (socket == INVALID_SOCKET) return SOCKET_ERROR;
+    return XboxNetSocketShutdown(static_cast<uint32_t>(socket), how);
+}
+
+extern "C" int WINAPI XSocketIOCTLSocket(SOCKET socket, long command, u_long* argument) {
+    if (socket == INVALID_SOCKET || !argument || command != FIONBIO) return SOCKET_ERROR;
+    return XboxNetSocketSetNonBlocking(static_cast<uint32_t>(socket), *argument != 0);
+}
+
+extern "C" int WINAPI XSocketSend(SOCKET socket, const char* buffer, int length, int flags) {
+    if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
+    (void)flags;
+    return XboxNetSocketSend(static_cast<uint32_t>(socket), buffer, static_cast<uint32_t>(length));
+}
+
+extern "C" int WINAPI XSocketRecv(SOCKET socket, char* buffer, int length, int flags) {
+    if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
+    (void)flags;
+    return XboxNetSocketReceive(static_cast<uint32_t>(socket), buffer, static_cast<uint32_t>(length));
+}
+
+extern "C" int WINAPI XSocketSendTo(SOCKET socket, const char* buffer, int length, int flags,
+    const sockaddr* to, int toLength) {
+    if (socket == INVALID_SOCKET || length < 0 || (!buffer && length) || !to ||
+        toLength < static_cast<int>(sizeof(sockaddr_in)) || to->sa_family != AF_INET)
+        return SOCKET_ERROR;
+    const sockaddr_in* target = reinterpret_cast<const sockaddr_in*>(to);
+    (void)flags;
+    return XboxNetSocketSendTo(static_cast<uint32_t>(socket), buffer,
+        static_cast<uint32_t>(length), target->sin_addr.s_addr, ntohs(target->sin_port));
+}
+
+extern "C" int WINAPI XSocketRecvFrom(SOCKET socket, char* buffer, int length, int flags,
+    sockaddr* from, int* fromLength) {
+    if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
+    uint32_t address = 0;
+    uint16_t port = 0;
+    (void)flags;
+    const int result = XboxNetSocketReceiveFrom(static_cast<uint32_t>(socket), buffer,
+        static_cast<uint32_t>(length), &address, &port);
+    if (result >= 0 && from && fromLength && *fromLength >= static_cast<int>(sizeof(sockaddr_in))) {
+        sockaddr_in output{};
+        output.sin_family = AF_INET;
+        output.sin_addr.s_addr = address;
+        output.sin_port = htons(port);
+        std::memcpy(from, &output, sizeof(output));
+        *fromLength = sizeof(output);
+    }
+    return result;
+}
+
+extern "C" u_long WINAPI XSocketHTONL(u_long value) { return htonl(value); }
+extern "C" u_long WINAPI XSocketNTOHL(u_long value) { return ntohl(value); }
+extern "C" u_short WINAPI XSocketHTONS(u_short value) { return htons(value); }
+extern "C" u_short WINAPI XSocketNTOHS(u_short value) { return ntohs(value); }
