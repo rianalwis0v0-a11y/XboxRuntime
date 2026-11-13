@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <winsock2.h>
 
 // Internal guest32 networking bridge. Handles are 32-bit guest tokens, never
 // raw Winsock SOCKET values. All functions use the x86 guest calling ABI.
@@ -25,6 +26,8 @@ int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capac
 int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t length, uint32_t ipv4NetworkOrder, uint16_t port, int flags);
 int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4NetworkOrder, uint16_t* port, int flags);
 int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled);
+// fd_set values contain guest socket tokens, not native SOCKET values.
+int __cdecl XboxNetSocketSelect(int nfds, fd_set* readfds, fd_set* writefds, fd_set* exceptfds, const timeval* timeout);
 int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds);
 int __cdecl XboxNetSocketClose(uint32_t handle);
 }
