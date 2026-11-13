@@ -259,6 +259,15 @@ int main()
         stop(); FreeLibrary(module); device->lpVtbl->Release(device);
         d3d->lpVtbl->Release(d3d); DestroyWindow(hwnd); return 1;
     }
+    IDirect3DSurface8* bound_surface = nullptr;
+    const HRESULT get_rt_result = device->lpVtbl->GetRenderTarget(device, &bound_surface);
+    if (FAILED(get_rt_result) || !bound_surface) {
+        std::fprintf(stderr, "FAIL: NV2A surface was not bound as the D3D8 render target hr=0x%08lX\\n",
+                     (unsigned long)get_rt_result);
+        stop(); FreeLibrary(module); device->lpVtbl->Release(device);
+        d3d->lpVtbl->Release(d3d); DestroyWindow(hwnd); return 1;
+    }
+    bound_surface->lpVtbl->Release(bound_surface);
 
     std::filesystem::create_directories("nv2a_bridge_frames");
     std::vector<uint8_t> pixels((size_t)kWidth * kHeight * 4u);
