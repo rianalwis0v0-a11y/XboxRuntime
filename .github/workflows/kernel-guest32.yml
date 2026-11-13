@@ -1,4 +1,4 @@
-name: Kernel guest32 build and networking tests
+name: Kernel host and guest32 build/tests
 
 on:
   push:
@@ -10,11 +10,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: kernel-guest32-${{ github.ref }}
+  group: kernel-backend-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  guest32:
+  kernel:
     runs-on: windows-latest
     steps:
       - name: Check out repository
@@ -28,11 +28,42 @@ jobs:
       - name: Audit kernel export catalogue
         run: python tools/audit_kernel_exports.py --check
 
+      - name: Configure host kernel backend
+        run: cmake -S modules/xbox_kernel -B build-kernel-host -A x64
+
+      - name: Build host kernel backend
+        run: cmake --build build-kernel-host --config Release --target xbox_kernel
+
+      - name: Configure main runtime module
+        run: cmake -S main -B build-main -A x64
+
+      - name: Build main runtime module
+        run: cmake --build build-main --config Release --target main
+
       - name: Configure x86 guest
         run: cmake -S guest32 -B build-guest32 -A Win32
 
-      - name: Build x86 guest and network smoke test
-        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke
+      - name: Build x86 guest and networking tests
+        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke
 
-      - name: Run networking smoke test
-        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R network_smoke
+      - name: Run x86 networking and guest API tests
+        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke"
+
+      - name: Verify backend exports
+        shell: pwsh
+        run: |
+          $exports = dumpbin /exports "build-kernel-host/out/xbox_kernel.dll"
+          $exports | Out-Host
+          if ($exports -notmatch "XBE_GetExecutionBackendV2") { throw "ABI v2 backend export missing" }
+
+      - name: Stage guest process beside host kernel
+        shell: pwsh
+        run: Copy-Item "build-guest32/out/xbe_guest32.exe" "build-kernel-host/out/xbe_guest32.exe" -Force
+
+      - name: Verify backend pair
+        shell: pwsh
+        run: |
+          foreach ($file in @("build-kernel-host/out/xbox_kernel.dll", "build-kernel-host/out/xbe_guest32.exe", "build-main/out/main.dll")) {
+            if (!(Test-Path $file)) { throw "Expected output missing: $file" }
+            Get-Item $file | Format-List FullName,Length
+          }
