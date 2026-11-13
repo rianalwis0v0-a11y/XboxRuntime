@@ -27,7 +27,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 | `XNetDnsLookup` | `int WINAPI (const char*, WSAEVENT, XNDNS**)` | Queues a worker-thread lookup, returns an owned `XNDNS` result, then signals the supplied event when `iStatus`/`cina` are ready. Caller must wait for completion before reading or releasing the result. |
 | `XNetDnsRelease` | `int WINAPI (XNDNS*)` | 0; frees result allocated by this implementation. |
 | `XNetRandom` | `int WINAPI (BYTE*, UINT)` | Uses Windows system-preferred BCrypt RNG; 0 on success, WSA error on failure. |
-| `XNetInAddrToString` | `int WINAPI (IN_ADDR, char*, int)` | 0 on success; WSA-style error on invalid/short output buffer. |
+| `XNetInAddrToString` | `int WINAPI (IN_ADDR, char*, int)` | Uses `InetNtopA` to write a thread-safe IPv4 string into the caller buffer; returns a Winsock error on invalid/short output buffer. |
 | `XNetXnAddrToInAddr` | `int WINAPI (const XNADDR*, const XNKID*, IN_ADDR*)` | Returns `WSAEOPNOTSUPP` until online key/address registration is implemented; never fabricates a mapping. |
 | `XNetServerToInAddr` | `int WINAPI (IN_ADDR, DWORD, IN_ADDR*)` | Returns `WSAEOPNOTSUPP` until service-ID resolution is implemented. |
 | `XNetInAddrToXnAddr` | `int WINAPI (const IN_ADDR, XNADDR*, XNKID*)` | Returns `WSAEOPNOTSUPP` until registered online address/key state exists. |
@@ -40,7 +40,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 | `XSocketBind` | `int WINAPI (SOCKET, const sockaddr*, int)` | Winsock-style 0 / `SOCKET_ERROR`; IPv4 only. |
 | `XSocketConnect` | `int WINAPI (SOCKET, const sockaddr*, int)` | Winsock-style 0 / `SOCKET_ERROR`; IPv4 only. |
 | `XSocketListen` | `int WINAPI (SOCKET, int backlog)` | Winsock-style result. |
-| `XSocketAccept` | `SOCKET WINAPI (SOCKET, sockaddr*, int*)` | New opaque token or `INVALID_SOCKET`. |
+| `XSocketAccept` | `SOCKET WINAPI (SOCKET, sockaddr*, int*)` | New opaque token or `INVALID_SOCKET`; validates the optional address/length pair. |
 | `XSocketShutdown` | `int WINAPI (SOCKET, int how)` | Winsock-style result. |
 | `XSocketIOCTLSocket` | `int WINAPI (SOCKET, long, u_long*)` | Currently supports `FIONBIO` only. |
 | `XSocketSetSockOpt` | `int WINAPI (SOCKET, int, int, const char*, int)` | Forwards supported options to host Winsock. |
@@ -50,7 +50,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 | `XSocketSend` | `int WINAPI (SOCKET, const char*, int, int flags)` | Bytes sent or `SOCKET_ERROR`. |
 | `XSocketRecv` | `int WINAPI (SOCKET, char*, int, int flags)` | Bytes received or `SOCKET_ERROR`. |
 | `XSocketSendTo` | `int WINAPI (SOCKET, const char*, int, int, const sockaddr*, int)` | Bytes sent or `SOCKET_ERROR`; IPv4 destination only. |
-| `XSocketRecvFrom` | `int WINAPI (SOCKET, char*, int, int, sockaddr*, int*)` | Bytes received or `SOCKET_ERROR`; IPv4 source endpoint when output buffer is supplied. |
+| `XSocketRecvFrom` | `int WINAPI (SOCKET, char*, int, int, sockaddr*, int*)` | Bytes received or `SOCKET_ERROR`; validates source-address/length arguments and writes the IPv4 source endpoint when requested. |
 | `XSocketHTONL` / `XSocketNTOHL` | `u_long WINAPI (u_long)` | Host/network 32-bit byte-order conversion. |
 | `XSocketHTONS` / `XSocketNTOHS` | `u_short WINAPI (u_short)` | Host/network 16-bit byte-order conversion. |
 
