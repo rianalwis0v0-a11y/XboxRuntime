@@ -30,6 +30,8 @@ if(_src_patched LESS 0)
  * shared indices live in DWORD1, source muxes/registers in DWORD2/3,
  * and destination masks/output routing/final flag in DWORD3.
  */
+
+/* ================================================================
 ]=])
     _replace_range(_vsh_src "/* NV2A Instruction Bit Field Extraction" "/* ================================================================\n * Module State" _layout_note _vsh_src)
 
