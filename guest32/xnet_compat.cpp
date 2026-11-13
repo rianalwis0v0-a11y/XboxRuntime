@@ -173,11 +173,15 @@ extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
 }
 
 extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
-    if (!output) return 0;
+    if (!output) return XNET_GET_XNADDR_NONE;
     std::memset(output, 0, sizeof(*output));
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        if (!g_xnetUsers) return XNET_GET_XNADDR_NONE;
+    }
     std::vector<BYTE> storage;
     auto* adapter = FindUsableIPv4Adapter(storage);
-    if (!adapter) return 0;
+    if (!adapter) return XNET_GET_XNADDR_NONE;
     for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
         if (unicast->Address.lpSockaddr && unicast->Address.lpSockaddr->sa_family == AF_INET) {
             const auto* ip = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
@@ -195,7 +199,7 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
 extern "C" DWORD WINAPI XNetGetDebugXnAddr(XNADDR* output) {
     if (output) std::memset(output, 0, sizeof(*output));
     // Debug XNADDR is devkit-specific and must not be synthesized on retail hosts.
-    return 0;
+    return XNET_GET_XNADDR_NONE;
 }
 
 // XSocket handles are guest 32-bit tokens. They are deliberately not host
