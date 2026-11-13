@@ -57,7 +57,7 @@ function EmitCallImport([int]$ordinal) {
 function EmitCheckEqual([uint32]$expected) {
     $script:checkIndex++
     EmitByte 0x3D; Emit32 $expected
-    EmitByte 0x75; EmitByte 6
+    EmitByte 0x75; EmitByte 8
     EmitIncrement $script:passedAddress
     EmitByte 0xEB; EmitByte 25
     EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
@@ -68,7 +68,7 @@ function EmitCheckEqual([uint32]$expected) {
 function EmitCheckNonZero {
     $script:checkIndex++
     EmitByte 0x85; EmitByte 0xC0
-    EmitByte 0x74; EmitByte 6
+    EmitByte 0x74; EmitByte 8
     EmitIncrement $script:passedAddress
     EmitByte 0xEB; EmitByte 25
     EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
