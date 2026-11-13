@@ -450,6 +450,79 @@ extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
 struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
+static bool DvdRelativePath(const GuestUnicodeString* name, std::string& relative) {
+    if (!name || !name->Buffer || (name->Length & 1u)) return false;
+    const std::wstring value(name->Buffer, name->Length / sizeof(WCHAR));
+    constexpr wchar_t devicePrefix[] = L"\\Device\\Cdrom0";
+    size_t start = std::wstring::npos;
+    if (value.size() >= _countof(devicePrefix) - 1 &&
+        _wcsnicmp(value.c_str(), devicePrefix, _countof(devicePrefix) - 1) == 0) {
+        start = _countof(devicePrefix) - 1;
+    } else if (value.size() >= 2 &&
+        (value[0] == L'D' || value[0] == L'd') && value[1] == L':') {
+        start = 2;
+    } else {
+        return false;
+    }
+
+    while (start < value.size() && (value[start] == L'\\' || value[start] == L'/'))
+        ++start;
+    const std::wstring tail = value.substr(start);
+    if (tail.empty()) {
+        relative.clear();
+        return true;
+    }
+    const int needed = WideCharToMultiByte(CP_ACP, 0, tail.data(),
+        static_cast<int>(tail.size()), nullptr, 0, nullptr, nullptr);
+    if (needed <= 0) return false;
+    relative.resize(static_cast<size_t>(needed));
+    return WideCharToMultiByte(CP_ACP, 0, tail.data(),
+        static_cast<int>(tail.size()), relative.data(), needed, nullptr, nullptr) == needed;
+}
+
+static bool FindDvdFile(HANDLE handle, GuestDvdFile& file) {
+    std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+    const auto found = g_dvdFiles.find(handle);
+    if (found == g_dvdFiles.end()) return false;
+    file = found->second;
+    return true;
+}
+
+static LONG OpenDvdFile(HANDLE* output, const std::string& path,
+    uint32_t access, uint32_t disposition, GuestIoStatusBlock* io) {
+    constexpr LONG statusDeviceNotReady = LONG(0xC00000A3u);
+    constexpr LONG statusMediaWriteProtected = LONG(0xC00000A2u);
+    constexpr LONG statusObjectNameNotFound = LONG(0xC0000034u);
+    constexpr LONG statusFileIsADirectory = LONG(0xC00000BAu);
+    constexpr LONG statusInsufficientResources = LONG(0xC000009Au);
+    if (!output) return LONG(0xC000000Du);
+    if (!g_dvdReady) return statusDeviceNotReady;
+    if ((access & 0x40000000u) || (access & 0x2u) || disposition != 1u)
+        return statusMediaWriteProtected;
+    if (path.empty()) return statusFileIsADirectory;
+
+    XDVDFS_FILE_INFO info{};
+    if (XDVDFS_GetFileInfo(path.c_str(), &info) != 0)
+        return statusObjectNameNotFound;
+    if (info.attributes & XDVDFS_ATTR_DIRECTORY)
+        return statusFileIsADirectory;
+
+    HANDLE handle = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!handle) return statusInsufficientResources;
+    GuestDvdFile file{};
+    file.path = path;
+    file.size = info.size;
+    file.startSector = info.startSector;
+    file.attributes = info.attributes;
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        g_dvdFiles.emplace(handle, std::move(file));
+    }
+    *output = handle;
+    if (io) { io->Status = 0; io->Information = 1; }
+    return 0;
+}
+
 std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     if(!name||!name->Buffer||!name->Length)return {};
     std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
@@ -467,6 +540,9 @@ DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x4
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
 LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
     if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    std::string dvdPath;
+    if (DvdRelativePath(oa->ObjectName, dvdPath))
+        return OpenDvdFile(out, dvdPath, access, disposition, io);
     std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
     DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
     if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
