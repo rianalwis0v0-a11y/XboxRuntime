@@ -2268,6 +2268,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_volume_information_file
         cmp eax, 211
         je nt_query_information_file
+        cmp eax, 207
+        je nt_query_directory_file
         cmp eax, 226
         je nt_set_information_file
         cmp eax, 190
@@ -2552,6 +2554,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_yield: jmp K_NtYieldExecution
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
     nt_query_information_file: jmp K_NtQueryInformationFile
+    nt_query_directory_file: jmp K_NtQueryDirectoryFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
     nt_delete_file: jmp K_NtDeleteFile
