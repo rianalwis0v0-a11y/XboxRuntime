@@ -768,6 +768,21 @@ int main() {
         return 1;
     }
 
+    /* GET > PUT is valid after the producer wraps the ring. The packet
+     * executes at +16, then an explicit JUMP returns GET to PUT at +8. */
+    const uint32_t dmaWrappedStream[] = {
+        0u, 0u,
+        (1u << 18) | 0x1D90u, 0xFF778899u,
+        0x00000009u
+    };
+    if (writeVram(0x1000u, dmaWrappedStream, sizeof(dmaWrappedStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 16u, 8u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 8u || dmaMethods != 1u) {
+        std::cerr << "FAIL: NV2A PFIFO wrapped GET/PUT with jump-back\\n";
+        stop();
+        return 1;
+    }
+
     /* PFIFO can resolve CACHE1_DMA_INSTANCE directly, without a RAMHT handle. */
     if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
         submitDmaInstance(channel, 0x100u, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
