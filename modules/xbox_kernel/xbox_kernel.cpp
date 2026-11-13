@@ -117,7 +117,7 @@ void ResetContextHandles(BackendContext& context) {
     context.started = false;
     context.process = {};
 }
-void StopGuestLocked(BackendContext& context) {
+void StopGuestProcessLocked(BackendContext& context) {
     if (context.process.hProcess &&
         WaitForSingleObject(context.process.hProcess, 0) == WAIT_TIMEOUT) {
         if (context.pipe != INVALID_HANDLE_VALUE) {
@@ -206,7 +206,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     }
     BOOL connected = ConnectNamedPipe(context.pipe, nullptr);
     if (!connected && GetLastError() != ERROR_PIPE_CONNECTED) {
-        StopGuestLocked(context);
+        StopGuestProcessLocked(context);
         return 9;
     }
 
@@ -216,7 +216,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         hello.version != XBOX_GUEST_PROTOCOL_VERSION ||
         hello.status != ERROR_SUCCESS ||
         hello.imageBase != guestBase || hello.imageSize != imageSize) {
-        StopGuestLocked(context);
+        StopGuestProcessLocked(context);
         return 10;
     }
     *guestImage = context.hostView;
@@ -225,7 +225,8 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
 void __cdecl ReleaseImage(std::uint8_t* guestImage, void*) {
     std::lock_guard<std::mutex> lock(g_mutex);
     if (guestImage && guestImage != g_context.hostView) return;
-    StopGuestLocked(g_context);
+    StopGuestProcessLocked(g_context);
+    ResetContextHandles(g_context);
 }
 int __cdecl ResolveImports(std::uint8_t* guestImage,
                            const XBE_IMAGE_INFO* info, void*) {
@@ -273,7 +274,7 @@ int __cdecl StartGuest(const XBE_IMAGE_INFO* info,
 }
 void __cdecl StopGuest(void*) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    StopGuestLocked(g_context);
+    StopGuestProcessLocked(g_context);
 }
 }
 
@@ -283,7 +284,8 @@ extern "C" int __cdecl ModuleStart() {
 }
 extern "C" void __cdecl ModuleStop() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    StopGuestLocked(g_context);
+    StopGuestProcessLocked(g_context);
+    ResetContextHandles(g_context);
     Log(L"Guest x86 kernel backend stopped.");
 }
 extern "C" int __cdecl XBE_GetExecutionBackendV2(XBE_EXECUTION_BACKEND_V2* backend) {
