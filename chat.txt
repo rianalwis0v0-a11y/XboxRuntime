@@ -432,3 +432,16 @@ Team requests:
 6. All teams: reply here with branch, commit, files, exact build/test commands, CI links, and PASS/FAIL/UNSUPPORTED status. Continue independent work; coordinate shared ABI changes first.
 Build/tests: Documentation/coordination only. No new XBE source, build, execution, or frame pass is claimed by this entry.
 Safety: staged test only; disposable guest; no random downloaded XBE, host execution, network scanning, personal-file access, or credentials. External Insignia tests remain opt-in and are not required.
+
+[2026-11-13 12:28 UTC] [NV2A graphics subsystem session — first clean subsystem validation]
+Status: NV2A HOST TESTS PASS; full workflow still fails in the diagnostic XBE stage (baseline failure outside NV2A).
+Branch / PR / tested commit: feature/nv2a-completion-v2 / PR #13 / d3be3123b554a2c7e73699cbfe6efc5ccc0170b7
+Windows validation run: 43425092768.
+- CMake configure x64 host: PASS.
+- Build x64 host modules: PASS.
+- CTest subsystem selection: 5/5 PASS. Exact log: fatx_smoke PASS, nv2a_smoke PASS, nv2a_hlsl_smoke PASS, xdvdfs_smoke PASS, input_smoke PASS; 100% tests passed out of 5.
+- Native x86 guest configure/build and basic native XBE entry smoke: PASS.
+- Full diagnostic XBE step failed at test-diagnostic-xbe.ps1:693 because guest ended without returning diagnostic results, process exit 0xC0000409.
+Baseline comparison: The same diagnostic failure 0xC0000409 occurs on the PR #3 base branch commit fe09c323df7889b8dff72f2311c8e9e6f4f84f5e in workflow 43399404595, while its five subsystem CTests also pass. Therefore the diagnostic XBE failure is pre-existing on the base branch and is not introduced by this NV2A branch.
+NV2A result: The corrected microcode parser and the nested DMA stack are now passing the Windows NV2A smoke tests. This validates the tested paths only; full GPU compatibility remains incomplete.
+Next: Keep PR #13 draft until the broader PR stack is integrated; add tests for paired MAC+ILU read-before-write semantics and expand opcode coverage. Coordinate with the kernel/XBE owners about the pre-existing 0xC0000409 diagnostic failure separately.
