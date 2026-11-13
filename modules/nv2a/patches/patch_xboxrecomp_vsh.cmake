@@ -4,38 +4,38 @@ if(NOT WIN32)
     return()
 endif()
 
-set(_d3d_dir "\${CMAKE_CURRENT_LIST_DIR}/../../../third_party/xboxrecomp/src/d3d")
-set(_vsh_c "\${_d3d_dir}/d3d8_vsh.c")
-set(_vsh_h "\${_d3d_dir}/d3d8_vsh.h")
-if(NOT EXISTS "\${_vsh_c}" OR NOT EXISTS "\${_vsh_h}")
+set(_d3d_dir "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/xboxrecomp/src/d3d")
+set(_vsh_c "${_d3d_dir}/d3d8_vsh.c")
+set(_vsh_h "${_d3d_dir}/d3d8_vsh.h")
+if(NOT EXISTS "${_vsh_c}" OR NOT EXISTS "${_vsh_h}")
     message(FATAL_ERROR "Pinned xboxrecomp D3D8 VSH sources are missing")
 endif()
 
-file(READ "\${_vsh_h}" _header)
+file(READ "${_vsh_h}" _header)
 if(NOT _header MATCHES "output_write_mask")
     string(REPLACE
         "uint8_t           write_mask;  /* Bitmask: bit3=x, bit2=y, bit1=z, bit0=w */"
         "uint8_t           write_mask;  /* Temporary-register write mask */\n    uint8_t           output_write_mask; /* Separate NV2A output-register mask */"
-        _header "\${_header}")
+        _header "${_header}")
     if(NOT _header MATCHES "output_write_mask")
         message(FATAL_ERROR "Could not patch NV2A VSH destination structure")
     endif()
-    file(WRITE "\${_vsh_h}" "\${_header}")
+    file(WRITE "${_vsh_h}" "${_header}")
 endif()
 
-file(READ "\${_vsh_c}" _source)
+file(READ "${_vsh_c}" _source)
 if(NOT _source MATCHES "XBOXRUNTIME_NV2A_VSH_PATCH")
     set(_start_marker "static void parse_source(")
     set(_end_marker "/* ================================================================\n * HLSL Code Generator")
-    string(FIND "\${_source}" "\${_start_marker}" _start)
-    string(FIND "\${_source}" "\${_end_marker}" _end)
+    string(FIND "${_source}" "${_start_marker}" _start)
+    string(FIND "${_source}" "${_end_marker}" _end)
     if(_start LESS 0 OR _end LESS 0 OR _end LESS _start)
         message(FATAL_ERROR "Could not locate upstream NV2A VSH parser for patching")
     endif()
-    string(SUBSTRING "\${_source}" 0 \${_start} _before)
-    string(LENGTH "\${_source}" _source_len)
-    math(EXPR _after_len "\${_source_len} - \${_end}")
-    string(SUBSTRING "\${_source}" \${_end} \${_after_len} _after)
+    string(SUBSTRING "${_source}" 0 ${_start} _before)
+    string(LENGTH "${_source}" _source_len)
+    math(EXPR _after_len "${_source_len} - ${_end}")
+    string(SUBSTRING "${_source}" ${_end} ${_after_len} _after)
 
     set(_replacement [=[
 /* XBOXRUNTIME_NV2A_VSH_PATCH: decode the actual four-DWORD NV2A instruction. */
@@ -215,11 +215,11 @@ void d3d8_vsh_parse(const DWORD *microcode, int num_insns,
 
 ]=])
 
-    set(_patched "\${_before}\${_replacement}\${_after}")
-    file(WRITE "\${_vsh_c}" "\${_patched}")
+    set(_patched "${_before}${_replacement}${_after}")
+    file(WRITE "${_vsh_c}" "${_patched}")
 endif()
 
-file(READ "\${_vsh_c}" _source)
+file(READ "${_vsh_c}" _source)
 if(NOT _source MATCHES "dst->output_write_mask")
     set(_old_output [=[
     /* Write to output register if specified */
@@ -247,9 +247,9 @@ if(NOT _source MATCHES "dst->output_write_mask")
         }
     }
 ]=])
-    string(REPLACE "\${_old_output}" "\${_new_output}" _source "\${_source}")
+    string(REPLACE "${_old_output}" "${_new_output}" _source "${_source}")
     if(NOT _source MATCHES "dst->output_write_mask")
         message(FATAL_ERROR "Could not patch NV2A output write mask handling")
     endif()
-    file(WRITE "\${_vsh_c}" "\${_source}")
+    file(WRITE "${_vsh_c}" "${_source}")
 endif()
