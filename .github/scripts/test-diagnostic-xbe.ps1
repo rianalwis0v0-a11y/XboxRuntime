@@ -1012,6 +1012,11 @@ $b = [byte[]]::new(0x8000)
 function Put32([int]$offset,[uint32]$value) { [BitConverter]::GetBytes($value).CopyTo($b,$offset) }
 [Text.Encoding]::ASCII.GetBytes("XBEH").CopyTo($b,0)
 Put32 0x104 $base
+Put32 0x65B0 0xFFFFFFFF
+Put32 0x65B4 0xFFFFFFFF
+Put32 0x65B8 0xFFFFFFFF
+Put32 0x65BC 0xFFFFFFFF
+Put32 0x65C0 0xFFFFFFFF
 Put32 0x108 0x1000
 Put32 0x10C 0x8000
 Put32 0x110 0x178
