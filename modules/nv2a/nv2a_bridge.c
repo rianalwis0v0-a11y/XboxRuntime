@@ -2387,7 +2387,10 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     int subroutine_active = 0;
     uint32_t subroutine_return = 0;
 
-    if ((get & 3u) || (put & 3u) || get > put || put > mapped_length)
+    /* GET may be above PUT when the producer has wrapped the ring.
+     * A valid stream must explicitly jump back to PUT before it can finish. */
+    if ((get & 3u) || (put & 3u) ||
+        get > mapped_length || put > mapped_length)
         return 1;
 
     while (get != put) {
@@ -2509,7 +2512,8 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     if (!dma) return 1;
     if (dma->dma_class != 0x02u && dma->dma_class != 0x3Du)
         return 8;
-    if (get > put || put > dma->mapped_length || (get & 3u) || (put & 3u))
+    if (get > dma->mapped_length || put > dma->mapped_length ||
+        (get & 3u) || (put & 3u))
         return 9;
 
     uint32_t checked_get = get, checked_methods = 0;
