@@ -66,28 +66,75 @@ extern "C" int WINAPI XNetCleanup() {
     return 0;
 }
 
+namespace {
+struct DnsLookupWork {
+    char* hostname;
+    XNDNS* result;
+    WSAEVENT eventHandle;
+};
+
+DWORD WINAPI CompleteDnsLookup(void* parameter) {
+    auto* work = static_cast<DnsLookupWork*>(parameter);
+    uint32_t address = 0;
+    if (XboxNetResolveIPv4(work->hostname, &address) == 0) {
+        work->result->iStatus = 0;
+        work->result->cina = 1;
+        work->result->aina[0].s_addr = address;
+    } else {
+        work->result->iStatus = WSAHOST_NOT_FOUND;
+        work->result->cina = 0;
+    }
+    if (work->eventHandle) WSASetEvent(work->eventHandle);
+    HeapFree(GetProcessHeap(), 0, work->hostname);
+    HeapFree(GetProcessHeap(), 0, work);
+    XboxNetCleanup(); // Keep Winsock alive until the resolver has finished.
+    return 0;
+}
+}
+
 extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** output) {
     if (!hostname || !*hostname || !output) return WSAEINVAL;
     *output = nullptr;
+    const size_t hostnameLength = std::strlen(hostname);
+    if (hostnameLength > 255) return WSAEINVAL;
     {
         std::lock_guard<std::mutex> lock(g_xnetMutex);
         if (!g_xnetUsers) return WSANOTINITIALISED;
     }
+    if (eventHandle && !WSAResetEvent(eventHandle)) return WSAGetLastError();
 
     XNDNS* result = static_cast<XNDNS*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(XNDNS)));
-    if (!result) return WSAENOBUFS;
-
-    uint32_t address = 0;
-    if (XboxNetResolveIPv4(hostname, &address) == 0) {
-        result->iStatus = 0;
-        result->cina = 1;
-        result->aina[0].s_addr = address;
-    } else {
-        result->iStatus = WSAHOST_NOT_FOUND;
-        result->cina = 0;
+    auto* work = static_cast<DnsLookupWork*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DnsLookupWork)));
+    char* nameCopy = static_cast<char*>(HeapAlloc(GetProcessHeap(), 0, hostnameLength + 1));
+    if (!result || !work || !nameCopy) {
+        if (result) HeapFree(GetProcessHeap(), 0, result);
+        if (work) HeapFree(GetProcessHeap(), 0, work);
+        if (nameCopy) HeapFree(GetProcessHeap(), 0, nameCopy);
+        return WSAENOBUFS;
     }
+    std::memcpy(nameCopy, hostname, hostnameLength + 1);
+
+    // Hold an independent Winsock reference so XNetCleanup cannot tear down
+    // the resolver underneath this asynchronous operation.
+    if (XboxNetStartup() != 0) {
+        HeapFree(GetProcessHeap(), 0, result);
+        HeapFree(GetProcessHeap(), 0, work);
+        HeapFree(GetProcessHeap(), 0, nameCopy);
+        return WSANOTINITIALISED;
+    }
+    work->hostname = nameCopy;
+    work->result = result;
+    work->eventHandle = eventHandle;
+    HANDLE thread = CreateThread(nullptr, 0, CompleteDnsLookup, work, 0, nullptr);
+    if (!thread) {
+        XboxNetCleanup();
+        HeapFree(GetProcessHeap(), 0, result);
+        HeapFree(GetProcessHeap(), 0, work);
+        HeapFree(GetProcessHeap(), 0, nameCopy);
+        return WSAENOBUFS;
+    }
+    CloseHandle(thread);
     *output = result;
-    if (eventHandle) WSASetEvent(eventHandle);
     return 0;
 }
 
@@ -189,7 +236,8 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
         }
     }
     if (adapter->PhysicalAddressLength >= sizeof(output->abEnet)) std::memcpy(output->abEnet, adapter->PhysicalAddress, sizeof(output->abEnet));
-    DWORD flags = adapter->Dhcpv4Enabled ? XNET_GET_XNADDR_DHCP : XNET_GET_XNADDR_STATIC;
+    DWORD flags = XNET_GET_XNADDR_ETHERNET |
+        (adapter->Dhcpv4Enabled ? XNET_GET_XNADDR_DHCP : XNET_GET_XNADDR_STATIC);
     if (adapter->FirstGatewayAddress) flags |= XNET_GET_XNADDR_GATEWAY;
     if (adapter->FirstDnsServerAddress) flags |= XNET_GET_XNADDR_DNS;
     return flags;
