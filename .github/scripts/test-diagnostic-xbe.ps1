@@ -858,7 +858,7 @@ EmitPush 1
 EmitPush 7
 EmitPush 0
 EmitPush $directoryObjectAttributesVa
-EmitPush 0x80000000
+EmitPush 2147483648
 EmitPush $directoryHandleVa
 EmitCallImport 202
 EmitCheckEqual 0
@@ -979,7 +979,7 @@ Put32 0x60B4 0
 Put32 0x60B8 0
 $guestPathBytes.CopyTo($b,0x6100)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
-$directoryPath = "\\Device\\Cdrom0"
+$directoryPath = "\Device\Cdrom0"
 $directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
 $directoryPathLength = [uint32]($directoryPath.Length * 2)
 $directoryPathVa = [uint32]($base + 0x6200)
