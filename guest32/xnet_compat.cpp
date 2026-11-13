@@ -163,9 +163,12 @@ extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
     std::vector<BYTE> storage;
     auto* adapter = FindUsableIPv4Adapter(storage);
     if (!adapter) return 0;
-    DWORD status = 0x00000001u;
-    if (adapter->TransmitLinkSpeed >= 100000000ull) status |= 0x00000002u;
-    if (adapter->IfType == IF_TYPE_IEEE80211) status |= 0x00000020u;
+    DWORD status = XNET_ETHERNET_LINK_ACTIVE;
+    if (adapter->TransmitLinkSpeed >= 100000000ull) status |= XNET_ETHERNET_LINK_100MBPS;
+    else if (adapter->TransmitLinkSpeed > 0) status |= XNET_ETHERNET_LINK_10MBPS;
+    if (adapter->IfType == IF_TYPE_IEEE80211) status |= XNET_ETHERNET_LINK_WIRELESS;
+    // IP Helper does not expose duplex mode on this adapter record; leave the
+    // duplex bits clear rather than inventing full/half duplex state.
     return status;
 }
 
@@ -182,9 +185,9 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
         }
     }
     if (adapter->PhysicalAddressLength >= sizeof(output->abEnet)) std::memcpy(output->abEnet, adapter->PhysicalAddress, sizeof(output->abEnet));
-    DWORD flags = adapter->Dhcpv4Enabled ? 0x00000002u : 0x00000001u;
-    if (adapter->FirstGatewayAddress) flags |= 0x00000020u;
-    if (adapter->FirstDnsServerAddress) flags |= 0x00000040u;
+    DWORD flags = adapter->Dhcpv4Enabled ? XNET_GET_XNADDR_DHCP : XNET_GET_XNADDR_STATIC;
+    if (adapter->FirstGatewayAddress) flags |= XNET_GET_XNADDR_GATEWAY;
+    if (adapter->FirstDnsServerAddress) flags |= XNET_GET_XNADDR_DNS;
     return flags;
 }
 
