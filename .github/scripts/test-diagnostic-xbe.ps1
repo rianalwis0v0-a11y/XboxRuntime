@@ -684,6 +684,7 @@ EmitPush 0
 EmitPush 0
 EmitPush 0
 EmitPush 0
+EmitPush 0
 EmitPush $timerDueVa
 EmitPushMemory $nativeObjectHandleVa
 EmitCallImport 229
