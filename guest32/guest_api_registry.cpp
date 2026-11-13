@@ -112,7 +112,7 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(
     for (std::uint32_t descriptorIndex = 0; descriptorIndex < 64;
          ++descriptorIndex) {
         const std::uint64_t descriptorAddress64 =
-            std::uint64_t(directoryAddress) + descriptorIndex * sizeof(ImportDescriptor);
+            std::uint64_t(directoryAddress) + std::uint64_t(descriptorIndex) * sizeof(ImportDescriptor);
         if (descriptorAddress64 > 0xFFFFFFFFull) return false;
         const auto descriptorAddress = static_cast<std::uint32_t>(descriptorAddress64);
         if (!GuestRange(imageBase, imageSize, descriptorAddress,
