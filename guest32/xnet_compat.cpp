@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <vector>
+#include <iphlpapi.h>
 #include <new>
 #include "xnet_compat.h"
 #include "network_compat.h"
@@ -115,10 +117,54 @@ extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
     return 0;
 }
 
+namespace {
+PIP_ADAPTER_ADDRESSES FindUsableIPv4Adapter(std::vector<BYTE>& storage) {
+    ULONG bytes = 0;
+    GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, nullptr, &bytes);
+    if (!bytes) return nullptr;
+    storage.resize(bytes);
+    auto* first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
+    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, first, &bytes) != NO_ERROR) return nullptr;
+    for (auto* adapter = first; adapter; adapter = adapter->Next) {
+        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
+            if (unicast->Address.lpSockaddr && unicast->Address.lpSockaddr->sa_family == AF_INET) {
+                const auto* ip = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
+                if (ip->sin_addr.s_addr != htonl(INADDR_ANY) && ip->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) return adapter;
+            }
+        }
+    }
+    return nullptr;
+}
+}
+
 extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
-    // Report only the host adapter's generic active wired-compatible status;
-    // do not claim an Xbox Live sign-in or online address exists.
-    return 0x00000001u;
+    std::vector<BYTE> storage;
+    auto* adapter = FindUsableIPv4Adapter(storage);
+    if (!adapter) return 0;
+    DWORD status = 0x00000001u;
+    if (adapter->TransmitLinkSpeed >= 100000000ull) status |= 0x00000002u;
+    if (adapter->IfType == IF_TYPE_IEEE80211) status |= 0x00000020u;
+    return status;
+}
+
+extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
+    if (!output) return 0;
+    std::memset(output, 0, sizeof(*output));
+    std::vector<BYTE> storage;
+    auto* adapter = FindUsableIPv4Adapter(storage);
+    if (!adapter) return 0;
+    for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
+        if (unicast->Address.lpSockaddr && unicast->Address.lpSockaddr->sa_family == AF_INET) {
+            const auto* ip = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
+            if (ip->sin_addr.s_addr != htonl(INADDR_ANY) && ip->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) { output->ina = ip->sin_addr; break; }
+        }
+    }
+    if (adapter->PhysicalAddressLength >= sizeof(output->abEnet)) std::memcpy(output->abEnet, adapter->PhysicalAddress, sizeof(output->abEnet));
+    DWORD flags = 0x00000002u;
+    if (adapter->FirstGatewayAddress) flags |= 0x00000020u;
+    if (adapter->FirstDnsServerAddress) flags |= 0x00000040u;
+    return flags;
 }
 
 
