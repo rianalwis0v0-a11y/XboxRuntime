@@ -867,6 +867,7 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     if (filter) {
         if (!filter->Buffer || (filter->Length & 1u)) return statusInvalidParameter;
         wanted.assign(filter->Buffer, filter->Length / sizeof(WCHAR));
+        if (wanted == L"*.*") wanted = L"*";
     }
 
     std::lock_guard<std::mutex> lock(g_dvdFileMutex);
