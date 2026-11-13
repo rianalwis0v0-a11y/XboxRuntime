@@ -337,6 +337,22 @@ extern "C" u_short WINAPI XSocketHTONS(u_short value) { return htons(value); }
 extern "C" u_short WINAPI XSocketNTOHS(u_short value) { return ntohs(value); }
 
 
+extern "C" int WINAPI XboxWSAStartup(WORD versionRequested, LPWSADATA data) {
+    if (!data) return WSAEFAULT;
+    const int startup = XboxNetStartup();
+    if (startup != 0) return WSASYSNOTREADY;
+    std::memset(data, 0, sizeof(*data));
+    data->wVersion = versionRequested;
+    data->wHighVersion = MAKEWORD(2, 2);
+    std::strncpy(data->szDescription, "XboxRuntime Winsock", sizeof(data->szDescription) - 1);
+    std::strncpy(data->szSystemStatus, "Running", sizeof(data->szSystemStatus) - 1);
+    return 0;
+}
+
+extern "C" int WINAPI XboxWSACleanup() {
+    return XboxNetCleanup() == 0 ? 0 : SOCKET_ERROR;
+}
+
 extern "C" WSAEVENT WINAPI XboxWSACreateEvent() { return WSACreateEvent(); }
 extern "C" BOOL WINAPI XboxWSACloseEvent(WSAEVENT eventHandle) { return WSACloseEvent(eventHandle); }
 extern "C" BOOL WINAPI XboxWSASetEvent(WSAEVENT eventHandle) { return WSASetEvent(eventHandle); }
