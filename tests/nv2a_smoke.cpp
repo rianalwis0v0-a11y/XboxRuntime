@@ -994,7 +994,7 @@ int main() {
             linearStageSizes) != 0 ||
         linearStageOffsets[0] != 0u || linearStageSizes[0] != 16u ||
         linearStagePixels[0] != 1u || linearStagePixels[8] != 7u ||
-        writeVram(0x500u, linearRgStage, sizeof(linearRgStage)) != 0 ||
+        writeVram(0x1500u, linearRgStage, sizeof(linearRgStage)) != 0 ||
         submit(0u, 0x1B04u, 1u | (2u << 4) | (0x17u << 8) | (1u << 16)) != 0 ||
         submit(0u, 0x1B10u, (4u << 16)) != 0 ||
         getTextureInfo(channel, 0u, 0u, &linearStageInfo) != 0 ||
