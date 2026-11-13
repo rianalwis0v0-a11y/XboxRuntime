@@ -24,5 +24,28 @@ jobs:
         run: cmake -S . -B build -A Win32
       - name: Build all runtime modules and guest
         run: cmake --build build --config Release --parallel
+      - name: Stage and verify runtime deployment layout
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP "XboxRuntime"
+          cmake --install build --config Release --prefix $package
+          $required = @(
+            "boot.exe",
+            "system\\main.dll",
+            "system\\nv2a.dll",
+            "system\\fatx.dll",
+            "system\\input.dll",
+            "system\\audio.dll",
+            "system\\xdvdfs.dll",
+            "system\\xbe_loader.dll",
+            "system\\insignia_dns.dll",
+            "system\\xbe_guest32.exe"
+          )
+          foreach ($relative in $required) {
+            $path = Join-Path $package $relative
+            if (!(Test-Path $path -PathType Leaf)) {
+              throw "Runtime package is missing required file: $relative"
+            }
+          }
       - name: Run smoke tests
         run: ctest --test-dir build -C Release --output-on-failure
