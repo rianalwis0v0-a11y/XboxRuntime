@@ -24,7 +24,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 |---|---|---|
 | `XNetStartup` | `int WINAPI (const XNetStartupParams*)` | 0 on startup success; otherwise Winsock error. Reference-counted Winsock 2.2 startup. |
 | `XNetCleanup` | `int WINAPI ()` | 0; decrements startup reference count and cleans up transport at zero. |
-| `XNetDnsLookup` | `int WINAPI (const char*, WSAEVENT, XNDNS**)` | 0 when request is processed; result status is in `XNDNS.iStatus`. **Currently synchronous**, then signals the event; not yet true asynchronous completion. |
+| `XNetDnsLookup` | `int WINAPI (const char*, WSAEVENT, XNDNS**)` | Queues a worker-thread lookup, returns an owned `XNDNS` result, then signals the supplied event when `iStatus`/`cina` are ready. Caller must wait for completion before reading or releasing the result. |
 | `XNetDnsRelease` | `int WINAPI (XNDNS*)` | 0; frees result allocated by this implementation. |
 | `XNetRandom` | `int WINAPI (BYTE*, UINT)` | Uses Windows system-preferred BCrypt RNG; 0 on success, WSA error on failure. |
 | `XNetInAddrToString` | `int WINAPI (IN_ADDR, char*, int)` | 0 on success; WSA-style error on invalid/short output buffer. |
@@ -119,7 +119,7 @@ The following `__cdecl` functions are implementation-private guest32 helpers. Th
 - XNet QoS, key creation/registration, security associations, NAT traversal and online identity negotiation.
 - XNet/XOnline sign-in/session services.
 - VDP voice protocol (protocol 254 is rejected rather than emulated as ordinary UDP).
-- Full system-link/broadcast semantics, overlapped I/O and select integration.
+- Full system-link/broadcast semantics and overlapped I/O.
 - Complete WSA error-state compatibility and full Xbox-specific socket option translation.
 - Verified title-call interception for statically linked XNet code.
 - Real Insignia sign-in or supported-title end-to-end connectivity.
@@ -128,6 +128,6 @@ The following `__cdecl` functions are implementation-private guest32 helpers. Th
 
 1. Compare every declaration, structure packing/size, constant and return convention against an authoritative Xbox-compatible SDK header.
 2. Build the x86 guest and `network_smoke` with MSVC; run the smoke test and record exact output.
-3. Add per-function ABI tests, including invalid pointers/lengths, event semantics, socket options, nonblocking I/O, select edge cases, overlapped behavior and close-vs-operation races.
+3. Add per-function ABI tests, including invalid pointers/lengths, asynchronous DNS event ordering and cleanup races, socket options, nonblocking I/O, select edge cases, overlapped behavior and close-vs-operation races.
 4. Agree with kernel/loader on a guest API registration format and prove one verified call path from a real XBE.
 5. Design static XNet interception separately; do not patch guessed signatures or claim that these compiled functions automatically redirect retail calls.
