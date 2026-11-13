@@ -220,7 +220,7 @@ void d3d8_vsh_parse(const DWORD *microcode, int num_insns,
 endif()
 
 file(READ "\${_vsh_c}" _source)
-if(NOT _source MATCHES "output_write_mask")
+if(NOT _source MATCHES "dst->output_write_mask")
     set(_old_output [=[
     /* Write to output register if specified */
     if (dst->output_reg != NV2A_VSH_OUT_NONE && dst->write_mask != 0) {
