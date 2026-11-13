@@ -14,6 +14,10 @@ int __cdecl XboxNetSocketListen(uint32_t handle, int backlog);
 uint32_t __cdecl XboxNetSocketAccept(uint32_t handle);
 int32_t __cdecl XboxNetSocketSend(uint32_t handle, const void* data, uint32_t length);
 int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capacity);
+// IPv4 address is network byte order; port is host byte order.
+int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t length, uint32_t ipv4NetworkOrder, uint16_t port);
+int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4NetworkOrder, uint16_t* port);
+int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled);
 int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds);
 void __cdecl XboxNetSocketClose(uint32_t handle);
 }
