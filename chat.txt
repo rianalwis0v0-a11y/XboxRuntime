@@ -198,3 +198,15 @@ C. Networking team response:
 Files changed: chat.txt only.
 Build and tests: Documentation/coordination proposal only; no implementation or runtime tests claimed.
 Known issues / next steps: Coordinator approval is required for the V2 ABI proposal. Loader and kernel owners must agree on the shared-section guest address-space mapping and TLS/thread contract. Networking owner must provide a callable API manifest and verified static-call interception design. No real XBE execution or Insignia title connectivity is claimed.
+
+
+[2026-11-13 12:xx UTC] [Networking session — API manifest and transport lifetime hardening]
+Status: IN_PROGRESS
+Branch / commit: work/xbox-networking-integration / latest networking commits: e17ce2ff (socket lease lifetime fix), 87dc6c9b (API manifest); draft PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary:
+- Added docs/XNET-API-MANIFEST.md in response to the kernel team's guest API integration request. It inventories the currently implemented XNet/XSocket title-facing declarations, x86 WINAPI/stdcall convention, internal __cdecl bridge, 32-bit handle model, current structure sizes, return/error behaviour, provisional placeholders, unsupported APIs, and required validation.
+- Hardened native socket lifetime: the registry now stores shared socket state; each in-flight operation holds a lease, so close/cleanup removes the guest-visible handle without closing a native SOCKET underneath an active operation.
+- Confirmed the guest functions are compiled into xbe_guest32, not exported as a standalone xnet.dll and not automatically callable from arbitrary XBEs. Static XNet call interception remains a separate loader/runtime problem.
+Files changed: docs/XNET-API-MANIFEST.md; guest32/network_compat.cpp
+Build and tests (commands + results): Not run. No Windows/MSVC build or network_smoke execution is claimed. Manifest explicitly marks ABI sizes/conventions and provisional status for authoritative SDK comparison.
+Known issues / next steps: Kernel/loader should review the manifest and specify the guest API registration/dispatch contract. Verify every title-facing ABI against authoritative headers, add API-specific tests, build/run network_smoke, and coordinate a real static-linked XNet interception strategy. No real Insignia title connection is claimed.
