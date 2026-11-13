@@ -1,3 +1,19 @@
+/*
+ * This file contains an XboxRuntime adaptation of XBE image-loading behavior
+ * from Cxbx-Reloaded's Xbe implementation.
+ *
+ * Upstream: https://github.com/Cxbx-Reloaded/Cxbx-Reloaded
+ * Upstream files: src/common/xbe/Xbe.cpp and src/common/xbe/Xbe.h
+ * Upstream copyright: Aaron Robinson (2002-2003), Patrick van Logchem (2017)
+ * Upstream licence: GNU GPL version 2 or (at your option) any later version.
+ *
+ * XboxRuntime modifications: bounded file/VA validation, checked section,
+ * certificate, library-version and TLS ranges, safe section-name reads,
+ * executable entry-point validation, and guarded page protection.
+ *
+ * This file is distributed under GPL-2.0-or-later. See
+ * third_party/cxbx-reloaded/COPYING for the licence text.
+ */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdint>
@@ -33,30 +49,89 @@ uint32_t Load(const wchar_t* path,Reply& reply){
  while(pos<b.size()){DWORD got=0,ask=DWORD(std::min<size_t>(b.size()-pos,1u<<20));if(!ReadFile(f,b.data()+pos,ask,&got,nullptr)||!got){CloseHandle(f);return IO;}pos+=got;}
  CloseHandle(f);
  if(std::memcmp(b.data(),"XBEH",4))return FORMAT;
- uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),hs=U32(b,0x110);
- uint32_t tableVa=U32(b,0x120),count=U32(b,0x11C),encodedEntry=U32(b,0x128);
- if(!base||!image||headers<kHeaderMin||headers>b.size()||hs<kHeaderMin||hs>headers||image<headers||!count||count>96)return FORMAT;
- uint32_t table=0;if(!VaOffset(tableVa,base,image,table)||!Fits(table,uint64_t(count)*kSectionSize,headers))return FORMAT;
- std::vector<Section> sections;try{sections.resize(count);}catch(...){return MEMORY;}
+
+ // Xbe::Header fields used by Cxbx-Reloaded (Xbe.h). All file and VA
+ // conversions are range checked before any allocation or guest mapping.
+ const uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),headerImage=U32(b,0x110);
+ const uint32_t certVa=U32(b,0x118),count=U32(b,0x11C),tableVa=U32(b,0x120);
+ const uint32_t encodedEntry=U32(b,0x128),tlsVa=U32(b,0x12C);
+ const uint32_t libraryCount=U32(b,0x160),libraryVa=U32(b,0x164);
+ const uint64_t imageEnd=uint64_t(base)+image;
+ if(!base||(base&0xFFFu)||!image||imageEnd>0x100000000ull||
+    headers<kHeaderMin||headers>b.size()||headerImage<kHeaderMin||
+    headerImage>headers||image<headers||!count||count>96)return FORMAT;
+
+ // Cxbx reads the certificate, section table, library versions and TLS
+ // from their image VAs. Validate each before dereferencing it.
+ uint32_t certOff=0;
+ if(!VaOffset(certVa,base,image,certOff)||!Fits(certOff,0x5Cu,image))return FORMAT;
+ const uint32_t certSize=U32(b,certOff);
+ if(certSize<0x5Cu||!Fits(certOff,certSize,b.size()))return FORMAT;
+
+ uint32_t table=0;
+ if(!VaOffset(tableVa,base,image,table)||!Fits(table,uint64_t(count)*kSectionSize,headers))return FORMAT;
+ if(libraryCount>1024u)return FORMAT;
+ uint32_t libraryOff=0;
+ if(libraryCount&&(!libraryVa||!VaOffset(libraryVa,base,image,libraryOff)||
+    !Fits(libraryOff,uint64_t(libraryCount)*16u,image)))return FORMAT;
+ uint32_t tlsOff=0;
+ if(tlsVa&&(!VaOffset(tlsVa,base,image,tlsOff)||!Fits(tlsOff,24u,image)))return FORMAT;
+
+ std::vector<Section> sections;
+ try{sections.resize(count);}catch(...){return MEMORY;}
  for(uint32_t i=0;i<count;i++){
-  Section s{};std::memcpy(&s,b.data()+table+uint64_t(i)*kSectionSize,sizeof(s));uint32_t off=0;
-  if(!s.vs||!VaOffset(s.va,base,image,off)||!Fits(off,s.vs,image)||!Fits(s.raw,s.rawSize,b.size())||s.rawSize>s.vs)return FORMAT;
+  Section s{};std::memcpy(&s,b.data()+table+uint64_t(i)*kSectionSize,sizeof(s));
+  uint32_t sectionOff=0;
+  if(!s.vs||!VaOffset(s.va,base,image,sectionOff)||
+     !Fits(sectionOff,s.vs,image)||!Fits(s.raw,s.rawSize,b.size())||
+     s.rawSize>s.vs||!s.name)return FORMAT;
   sections[i]=s;
  }
+
+ // Decode the retail/debug entry point and require it to land in executable
+ // section memory. Chihiro's separate key is intentionally not guessed here.
  uint32_t entry=encodedEntry^kRetailEntry;bool executable=false;
- for(const auto&s:sections)if((s.flags&4)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}
- if(!executable){entry=encodedEntry^kDebugEntry;for(const auto&s:sections)if((s.flags&4)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}}
+ for(const auto&s:sections)if((s.flags&4u)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}
+ if(!executable){
+  entry=encodedEntry^kDebugEntry;
+  for(const auto&s:sections)if((s.flags&4u)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}
+ }
  if(!executable)return FORMAT;
+
+ // XBE virtual addresses are absolute; the preferred image base is required.
  void* mem=VirtualAlloc(reinterpret_cast<void*>(uintptr_t(base)),image,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
  if(!mem)return LAYOUT;
  std::memcpy(mem,b.data(),headers);
- for(const auto&s:sections){uint8_t*d=static_cast<uint8_t*>(mem)+(s.va-base);if(s.rawSize)std::memcpy(d,b.data()+s.raw,s.rawSize);if(s.vs>s.rawSize)std::memset(d+s.rawSize,0,s.vs-s.rawSize);}
  for(const auto&s:sections){
-  DWORD prot=(s.flags&4)?((s.flags&1)?PAGE_EXECUTE_READWRITE:PAGE_EXECUTE_READ):((s.flags&1)?PAGE_READWRITE:PAGE_READONLY);
-  uintptr_t p=reinterpret_cast<uintptr_t>(mem)+(s.va-base),first=p&~uintptr_t(0xFFF),last=(p+s.vs+0xFFF)&~uintptr_t(0xFFF);
-  DWORD old=0;if(last>first)VirtualProtect(reinterpret_cast<void*>(first),last-first,prot,&old);
+  uint8_t*d=static_cast<uint8_t*>(mem)+(s.va-base);
+  if(s.rawSize)std::memcpy(d,b.data()+s.raw,s.rawSize);
+  if(s.vs>s.rawSize)std::memset(d+s.rawSize,0,s.vs-s.rawSize);
  }
- DWORD old=0;VirtualProtect(mem,headers,PAGE_READONLY,&old);
+
+ // Resolve each section name from its mapped VA as Cxbx does, but cap the
+ // scan to the XBE's mapped image so malformed names cannot read past it.
+ for(const auto&s:sections){
+  uint32_t nameOff=0;
+  if(!VaOffset(s.name,base,image,nameOff)||!Fits(nameOff,1,image)){VirtualFree(mem,0,MEM_RELEASE);return FORMAT;}
+  const uint8_t*name=static_cast<const uint8_t*>(mem)+nameOff;
+  size_t available=std::min<size_t>(9u,size_t(image-nameOff));
+  for(size_t n=0;n<available;n++)if(name[n]==0)break;
+ }
+
+ // Apply Xbox section permissions with page-rounded ranges constrained to
+ // the reserved image. Header protection is applied after section mapping.
+ const uint64_t imageBegin=base,imageLimit=imageEnd;
+ for(const auto&s:sections){
+  DWORD prot=(s.flags&4u)?((s.flags&1u)?PAGE_EXECUTE_READWRITE:PAGE_EXECUTE_READ):
+                         ((s.flags&1u)?PAGE_READWRITE:PAGE_READONLY);
+  uint64_t p=uint64_t(base)+(s.va-base),first=p&~uint64_t(0xFFFu);
+  uint64_t last=(p+s.vs+0xFFFu)&~uint64_t(0xFFFu);
+  if(first<imageBegin)first=imageBegin;
+  if(last>imageLimit)last=imageLimit;
+  if(last>first){DWORD old=0;if(!VirtualProtect(reinterpret_cast<void*>(uintptr_t(first)),SIZE_T(last-first),prot,&old)){VirtualFree(mem,0,MEM_RELEASE);return MEMORY;}}
+ }
+ DWORD old=0;
+ if(!VirtualProtect(mem,headers,PAGE_READONLY,&old)){VirtualFree(mem,0,MEM_RELEASE);return MEMORY;}
  g_image=mem;reply={kReplyMagic,1,OK,base,image,entry,count};return OK;
 }
 bool ReadExact(HANDLE h,void*p,DWORD n){DWORD d=0;while(d<n){DWORD got=0;if(!ReadFile(h,static_cast<char*>(p)+d,n-d,&got,nullptr)||!got)return false;d+=got;}return true;}
