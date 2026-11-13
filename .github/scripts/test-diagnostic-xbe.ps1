@@ -198,7 +198,8 @@ EmitCheckEqual 0
 EmitLoadEax ([uint32]($fullAttributesVa + 40))
 EmitCheckEqual 8
 EmitLoadEax ([uint32]($fullAttributesVa + 48))
-EmitCheckEqual 0x20
+# Optical-disc files are read-only and archived.
+EmitCheckEqual 0x21
 
 EmitPush $objectAttributesVa
 EmitPush ([uint32]2147483648)
