@@ -161,7 +161,47 @@ int main() {
         return 17;
     }
 
+
+    // Validate select() translates guest tokens instead of exposing native handles.
+    const SOCKET selectReceiver = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    const SOCKET selectSender = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (selectReceiver == INVALID_SOCKET || selectSender == INVALID_SOCKET) {
+        if (selectReceiver != INVALID_SOCKET) XSocketClose(selectReceiver);
+        if (selectSender != INVALID_SOCKET) XSocketClose(selectSender);
+        XNetCleanup();
+        return 23;
+    }
+    sockaddr_in selectAddress{};
+    selectAddress.sin_family = AF_INET;
+    selectAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (XSocketBind(selectReceiver, reinterpret_cast<sockaddr*>(&selectAddress),
+            sizeof(selectAddress)) != 0) {
+        XSocketClose(selectReceiver); XSocketClose(selectSender); XNetCleanup(); return 24;
+    }
+    int selectAddressLength = sizeof(selectAddress);
+    if (XSocketGetSockName(selectReceiver, reinterpret_cast<sockaddr*>(&selectAddress),
+            &selectAddressLength) != 0 ||
+        XSocketSendTo(selectSender, "s", 2, 0, reinterpret_cast<sockaddr*>(&selectAddress),
+            sizeof(selectAddress)) != 2) {
+        XSocketClose(selectReceiver); XSocketClose(selectSender); XNetCleanup(); return 25;
+    }
+    fd_set readable{};
+    FD_ZERO(&readable);
+    FD_SET(selectReceiver, &readable);
+    timeval selectTimeout{2, 0};
+    if (XSocketSelect(0, &readable, nullptr, nullptr, &selectTimeout) != 1 ||
+        readable.fd_count != 1 || readable.fd_array[0] != selectReceiver) {
+        XSocketClose(selectReceiver); XSocketClose(selectSender); XNetCleanup(); return 26;
+    }
+    char selectPayload[4]{};
+    if (XSocketRecv(selectReceiver, selectPayload, sizeof(selectPayload), 0) != 2 ||
+        std::memcmp(selectPayload, "s", 2) != 0) {
+        XSocketClose(selectReceiver); XSocketClose(selectSender); XNetCleanup(); return 27;
+    }
+    XSocketClose(selectReceiver);
+    XSocketClose(selectSender);
+
     XNetCleanup();
-    std::puts("network_smoke: XNet startup/DNS event, XSocket UDP/TCP loopback, byte-order helpers passed");
+    std::puts("network_smoke: XNet startup/DNS event, XSocket UDP/TCP/select loopback, byte-order helpers passed");
     return 0;
 }
