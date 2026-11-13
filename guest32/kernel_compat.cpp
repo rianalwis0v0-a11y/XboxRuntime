@@ -2576,6 +2576,7 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
 }
 
 bool XboxKernelProtectImage() {
+    SetLastError(ERROR_BAD_EXE_FORMAT);
     if (!g_image || !g_headerSize || !g_sectionCount ||
         !InImage(g_base + 0x120, 4))
         return false;
@@ -2612,12 +2613,18 @@ bool XboxKernelProtectImage() {
         if (boundedLast > boundedFirst) {
             DWORD oldProtection = 0;
             if (!VirtualProtect(reinterpret_cast<void*>(uintptr_t(boundedFirst)),
-                SIZE_T(boundedLast - boundedFirst), protection, &oldProtection))
+                SIZE_T(boundedLast - boundedFirst), protection, &oldProtection)) {
+                SetLastError(GetLastError() | 0x00010000u);
                 return false;
+            }
         }
     }
     DWORD oldProtection = 0;
-    return VirtualProtect(g_image, g_headerSize, PAGE_READONLY, &oldProtection) != FALSE;
+    if (!VirtualProtect(g_image, g_headerSize, PAGE_READONLY, &oldProtection)) {
+        SetLastError(GetLastError() | 0x00020000u);
+        return false;
+    }
+    return true;
 }
 
 void XboxKernelSetStartupEvent(HANDLE eventHandle) {
