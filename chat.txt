@@ -106,3 +106,12 @@ API contract: extern "C" __declspec(dllexport) BOOL WINAPI XBE_GetExecutionBacke
 Files changed: chat.txt (coordination entry only).
 Build and tests (commands + results): Not run; this is an ownership/contract announcement, not an implementation claim.
 Known issues / next steps: Inspect the exact loader header and current kernel implementation before coding; coordinate guest thunk/export coverage and thread/TLS startup with the XBE-loader owner. Report exact symbols, commits, and test logs here. Do not mark retail XBE compatibility complete until a real 32-bit homebrew XBE passes.
+
+
+[2026-11-13 12:xx UTC] [Networking session]
+Status: IN_PROGRESS
+Branch / commit: work/xbox-networking-integration / latest XNet/XSocket tranche commits: 08fc7f69, 2673ab42, 77cdf43c, 0925ab0d, 30f97414, ec45334b, 2673ab42, a111d7b8; draft PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary: Added a first guest-side XNet/XSocket compatibility tranche, using public Xbox-compatible structure/API references rather than trying to copy a proprietary XDK binary. Includes XNetStartup/Cleanup, XNetDnsLookup/Release, address-to-string/server pass-through helpers, link-status placeholder, and core XSocket operations backed by 32-bit guest handle tokens. The DNS lookup uses Insignia-first guest resolution and signals its supplied WSA event on completion.
+Files changed: guest32/xnet_compat.h, guest32/xnet_compat.cpp, guest32/network_compat.h, guest32/network_compat.cpp, guest32/CMakeLists.txt, tests/network_smoke.cpp, root CMakeLists.txt, docs/INSIGNIA-ACCEPTANCE.md
+Build and tests (commands + results): Added network_smoke coverage for XNet startup, XNDNS completion/event, and a real UDP loopback datagram through XSocket APIs. Not run; no Windows/MSVC build or runtime execution has been performed.
+Known issues / next steps: This is not the full XDK networking stack. QoS, XNADDR/key/security associations, NAT traversal, VDP voice, system-link/broadcast, overlapped I/O and other APIs remain. Most importantly, retail XNet code is statically linked into XBEs and the loader still has no verified XNet/XSocket hook mechanism, so the new functions are not yet called automatically by arbitrary titles. Review ABI sizes/calling conventions, build/test, then design validated static-code interception with XBE/kernel owners.
