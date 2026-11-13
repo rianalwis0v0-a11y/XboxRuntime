@@ -8,15 +8,23 @@ if(NOT EXISTS "${_d3d_header}" OR NOT EXISTS "${_d3d_source}")
 endif()
 
 file(READ "${_d3d_header}" _header)
-if(NOT _header MATCHES "xbox_SetD3DDevice")
-    string(REPLACE
-        [=[IDirect3DDevice8 *xbox_GetD3DDevice(void);]=]
-        [=[IDirect3DDevice8 *xbox_GetD3DDevice(void);
+if(NOT _header MATCHES "xbox_SetD3D11Device")
+    if(_header MATCHES "xbox_SetD3DDevice")
+        string(REPLACE
+            [=[void xbox_SetD3DDevice(IDirect3DDevice8 *device);]=]
+            [=[void xbox_SetD3DDevice(IDirect3DDevice8 *device);
+void xbox_SetD3D11Device(void *device, void *context);]=]
+            _header "${_header}")
+    else()
+        string(REPLACE
+            [=[IDirect3DDevice8 *xbox_GetD3DDevice(void);]=]
+            [=[IDirect3DDevice8 *xbox_GetD3DDevice(void);
 void xbox_SetD3DDevice(IDirect3DDevice8 *device);
 void xbox_SetD3D11Device(void *device, void *context);]=]
-        _header "${_header}")
-    if(NOT _header MATCHES "xbox_SetD3DDevice")
-        message(FATAL_ERROR "Could not add the D3D8 external-device setter declaration")
+            _header "${_header}")
+    endif()
+    if(NOT _header MATCHES "xbox_SetD3D11Device")
+        message(FATAL_ERROR "Could not add the D3D8/D3D11 external-device setter declarations")
     endif()
     file(WRITE "${_d3d_header}" "${_header}")
 endif()
