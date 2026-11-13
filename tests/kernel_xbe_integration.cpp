@@ -1,8 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "../modules/xbe_loader/xbe_backend_api.h"
-#include "../modules/xbe_loader/xbe_format.h"
+#include "../loader-src/modules/xbe_loader/xbe_backend_api.h"
+#include "../loader-src/modules/xbe_loader/xbe_format.h"
 
 #include <cstdint>
 #include <cstdio>
