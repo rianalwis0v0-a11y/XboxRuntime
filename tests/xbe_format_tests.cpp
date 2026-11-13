@@ -129,6 +129,19 @@ int main() {
     assert(Parse(invalidTls.data(), invalidTls.size(), &image).error ==
            Error::InvalidSection);
 
+    // The 24-byte TLS directory must fit wholly inside one mapped range.
+    auto tlsDirectoryCrossesSectionEnd = file;
+    Put32(tlsDirectoryCrossesSectionEnd, 0x12C, 0x00011FF0);
+    assert(Parse(tlsDirectoryCrossesSectionEnd.data(),
+                 tlsDirectoryCrossesSectionEnd.size(), &image).error ==
+           Error::InvalidSection);
+
+    // Reject TLS directory arithmetic that would wrap 32-bit guest addresses.
+    auto overflowingTlsDirectory = file;
+    Put32(overflowingTlsDirectory, 0x12C, 0xFFFFFFF0);
+    assert(Parse(overflowingTlsDirectory.data(), overflowingTlsDirectory.size(),
+                 &image).error == Error::InvalidSection);
+
     Image forged = image;
     forged.headerSize = forged.imageSize + 1;
     std::vector<std::uint8_t> forgedTarget(forged.imageSize, 0);
