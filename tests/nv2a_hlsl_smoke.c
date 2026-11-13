@@ -62,6 +62,17 @@ static int compile_program(const char* name, const DWORD* words, int instruction
     return 0;
 }
 
+
+static void make_input_shader(DWORD instruction[4], NV2AVshMacOp mac,
+                              NV2AVshIluOp ilu, int output_from_ilu)
+{
+    instruction[0] = 0u;
+    instruction[1] = ((DWORD)mac << 21) | ((DWORD)ilu << 25) | 0x1Bu;
+    instruction[2] = (2u << 26) | (0x1Bu << 17) | (2u << 11) | (0x1Bu << 2);
+    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) |
+                     (output_from_ilu ? (1u << 2) : 0u) | 1u;
+}
+
 int main(void)
 {
     /* Real MAC MOV: v0 -> oPos, all four components, then FINAL. */
@@ -139,6 +150,46 @@ int main(void)
         }
     }
 
-    puts("PASS: NV2A MOV, ADD, constant, and paired MAC/ILU shader translation");
+
+    /* Exercise additional MAC and ILU opcodes through the same real parser. */
+    {
+        struct OpcodeCase {
+            const char* name;
+            NV2AVshMacOp mac;
+            NV2AVshIluOp ilu;
+            int output_from_ilu;
+            const char* expected;
+        };
+        static const struct OpcodeCase cases[] = {
+            { "nv2a_mac_mul", NV2A_VSH_MAC_MUL, NV2A_VSH_ILU_NOP, 0, "v0 * v0" },
+            { "nv2a_mac_mad", NV2A_VSH_MAC_MAD, NV2A_VSH_ILU_NOP, 0, "v0 * v0 + v0" },
+            { "nv2a_mac_dp3", NV2A_VSH_MAC_DP3, NV2A_VSH_ILU_NOP, 0, "dot(v0.xyz, v0.xyz)" },
+            { "nv2a_mac_dph", NV2A_VSH_MAC_DPH, NV2A_VSH_ILU_NOP, 0, "dot(float4(v0.xyz, 1.0), v0)" },
+            { "nv2a_mac_dp4", NV2A_VSH_MAC_DP4, NV2A_VSH_ILU_NOP, 0, "dot(v0, v0)" },
+            { "nv2a_mac_dst", NV2A_VSH_MAC_DST, NV2A_VSH_ILU_NOP, 0, "v0.y * v0.y" },
+            { "nv2a_mac_min", NV2A_VSH_MAC_MIN, NV2A_VSH_ILU_NOP, 0, "min(v0, v0)" },
+            { "nv2a_mac_max", NV2A_VSH_MAC_MAX, NV2A_VSH_ILU_NOP, 0, "max(v0, v0)" },
+            { "nv2a_mac_slt", NV2A_VSH_MAC_SLT, NV2A_VSH_ILU_NOP, 0, "step(v0, v0)" },
+            { "nv2a_mac_sge", NV2A_VSH_MAC_SGE, NV2A_VSH_ILU_NOP, 0, "step(v0, v0)" },
+            { "nv2a_ilu_mov", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_MOV, 1, "oPos = (v0)" },
+            { "nv2a_ilu_rcp", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_RCP, 1, "1.0 / v0.x" },
+            { "nv2a_ilu_rcc", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_RCC, 1, "clamp(1.0 / v0.x" },
+            { "nv2a_ilu_rsq", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_RSQ, 1, "rsqrt(abs(v0.x))" },
+            { "nv2a_ilu_exp", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_EXP, 1, "exp2(v0.x)" },
+            { "nv2a_ilu_log", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_LOG, 1, "log2(max(abs(v0.x)" },
+            { "nv2a_ilu_lit", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_LIT, 1, "float4(1.0, max(v0.x, 0.0)" }
+        };
+        unsigned i;
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+            DWORD instruction[4];
+            make_input_shader(instruction, cases[i].mac, cases[i].ilu,
+                              cases[i].output_from_ilu);
+            const int result = compile_program(cases[i].name, instruction, 1,
+                                               cases[i].expected, 1u);
+            if (result) return 60 + (int)i * 10 + result;
+        }
+    }
+
+    puts("PASS: NV2A vertex shader parser and MAC/ILU opcode compilation matrix");
     return 0;
 }
