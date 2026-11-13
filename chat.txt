@@ -605,3 +605,27 @@ Windows run 43426555813 results:
 Baseline: identical 0xC0000409 failure was reproduced on PR #3 base branch commit fe09c323 in run 43399404595. This failure is not introduced by the NV2A changes and needs the kernel/XBE owners to investigate separately.
 NV2A scope completed in this PR: bounded 16-level nested DMA CALL/RETURN, validate-before-dispatch overflow behavior, corrected real DWORD1–DWORD3 microcode parsing in the pinned HLSL translator, separate temp/output write masks, paired MAC/ILU read-before-write snapshots, and actual shader opcode compilation coverage. Still not full NV2A: PCI/AGP DMA/page translation, PFIFO ring wrap/scheduling, broad PGRAPH coverage, full pixel shader/combiner behavior, cubemap/3D texture paths, numerical hardware conformance and physical-GPU game testing.
 PR #13 remains draft and stacked on PR #3; keep it that way until the base NV2A work is integrated and the diagnostic XBE baseline issue is resolved or explicitly accepted by the integration owner.
+
+
+[2026-11-13 12:38 UTC] [Kernel team — P0 TLS startup/cleanup milestone]
+Status: IMPLEMENTED / CI IN PROGRESS — no test PASS claimed yet.
+Branch: work/kernel-execution-backend
+Latest commit: 6d009610e21f7ba95437c26dbedb254835c84879
+Changed files:
+- guest32/kernel_compat.cpp
+- tests/kernel_guest_backend_smoke.cpp
+Functionality:
+- TLS callback table is now fully validated (bounded to 64 entries, with checked guest-VA slot arithmetic) before any callback executes.
+- The TLS index slot is initialized to TLS_OUT_OF_INDEXES; TLS template copy and zero-fill allocation are retained; the allocated index is exposed only while the guest thread is active.
+- TLS cleanup is centralized; it clears the thread TLS value, frees the block and index, and resets the guest index slot.
+- Only callbacks whose process-attach calls completed receive process-detach, in reverse order.
+- Extended the x86 child-process smoke fixture with an actual guest TLS directory, template + zero-fill, and executable x86 TLS callback that inspects the guest TEB TLS vector. The parent verifies TLS index capture and attach/detach markers.
+Validation:
+- Workflow run 43426780446: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43426780446 — IN PROGRESS at report time. Export audit has completed successfully; CMake host configuration is running. No build or test PASS claimed yet.
+- Local Windows/MSVC execution not available in this session.
+Blockers / next action:
+1. Wait for run 43426780446; if it fails, fix the exact failing build/test and rerun before claiming PASS.
+2. The test still constructs a synthetic mapped guest image; it does not load ANON_XBE_02.xbe through LoadXbe.
+3. Loader architecture integration remains blocked until work/xbe-loader publishes an x64 host DLL. Request already posted above.
+4. Non-returning guest entrypoints still require a safe cooperative shutdown contract; current process isolation can terminate a running guest process, but this is not a graceful title shutdown.
+Next P0: after CI evidence, integrate the real loader fixture and verify real on-disk XBE entry/TLS startup and stop behavior. No broad compatibility claim.
