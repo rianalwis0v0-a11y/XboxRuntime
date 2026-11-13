@@ -6,6 +6,8 @@
 #include <iterator>
 #include <cstring>
 #include <cwchar>
+#include <cwctype>
+#include <string>
 
 namespace {
 template <typename Function>
@@ -152,8 +154,10 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(
 
             const char* functionName = reinterpret_cast<const char*>(
                 static_cast<std::uintptr_t>(importNameAddress + 2u));
-            const std::uint32_t maxName =
-                imageBase + imageSize - (importNameAddress + 2u);
+            const std::uint64_t maxName64 =
+                (std::uint64_t(imageBase) + imageSize) - (std::uint64_t(importNameAddress) + 2u);
+            if (maxName64 > 0xFFFFFFFFull) return false;
+            const std::uint32_t maxName = static_cast<std::uint32_t>(maxName64);
             const void* terminator = std::memchr(functionName, 0, maxName);
             if (!terminator) return false;
             const std::uint32_t address = XboxGuestApiLookup(functionName);
