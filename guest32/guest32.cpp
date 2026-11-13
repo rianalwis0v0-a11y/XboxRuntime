@@ -105,8 +105,15 @@ int wmain(int argc, wchar_t** argv) {
                     message.nonKernelImportDirectoryAddress,
                     message.kernelThunkAddress
                 };
-                status = (XboxKernelResolveImports(state) &&
-                          XboxKernelProtectImage()) ? ERROR_SUCCESS : ERROR_BAD_EXE_FORMAT;
+                if (!XboxKernelResolveImports(state)) {
+                    status = ERROR_INVALID_DATA;
+                    OutputDebugStringW(L"[XboxKernel] Guest import resolution failed.\\n");
+                } else if (!XboxKernelProtectImage()) {
+                    status = ERROR_NOACCESS;
+                    OutputDebugStringW(L"[XboxKernel] Guest image protection failed.\\n");
+                } else {
+                    status = ERROR_SUCCESS;
+                }
                 importsResolved = status == ERROR_SUCCESS;
             }
             const auto reply = Reply(message.command, status);
