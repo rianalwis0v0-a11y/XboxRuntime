@@ -935,9 +935,10 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
                 const ULONG eaSize = 0;
                 write(written + 64, &eaSize, sizeof(eaSize));
             } else if (infoClass == 3) {
+                const ULONG eaSize = 0;
                 const UCHAR shortNameLength = 0;
                 const UCHAR reserved = 0;
-                write(written + 64, &eaSize, sizeof(ULONG));
+                write(written + 64, &eaSize, sizeof(eaSize));
                 write(written + 68, &shortNameLength, sizeof(shortNameLength));
                 write(written + 69, &reserved, sizeof(reserved));
             }
