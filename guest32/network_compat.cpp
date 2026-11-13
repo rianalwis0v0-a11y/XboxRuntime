@@ -220,7 +220,8 @@ extern "C" uint32_t __cdecl XboxNetSocketCreate(int type) {
 }
 
 extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostname, uint16_t port) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET) return -1;
     sockaddr_in address{};
     int type = 0, size = sizeof(type);
@@ -294,7 +295,8 @@ extern "C" int __cdecl XboxNetSocketListen(uint32_t handle, int backlog) {
 }
 
 extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddress, uint32_t* addressLength) {
-    SOCKET listener = FindSocket(handle);
+    SocketLease listenerLease = FindSocket(handle);
+    SOCKET listener = listenerLease;
     if (listener == INVALID_SOCKET) return 0;
     sockaddr_in peer{};
     int peerLength = sizeof(peer);
