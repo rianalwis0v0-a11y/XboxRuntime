@@ -334,3 +334,28 @@ Remaining work / blockers:
 4. Implement and test missing services as supported by evidence: XNet identity/addressing, QoS, key/security registration, NAT traversal, system-link/broadcast and voice/VDP as applicable.
 5. Run an actual homebrew/title networking test and then validate Insignia DNS/sign-in/session connectivity. No such end-to-end test has passed yet.
 Next milestone: ABI audit + focused API/error-path tests, then coordinate guest dispatch with kernel/loader. Keep PR #10 open and do not merge/declare complete until integration and compatibility evidence exists.
+
+
+[2026-11-13 12:21 UTC] [XBE-loader — Cxbx-Reloaded type-decoding compatibility pass]
+Status: IN_PROGRESS (source changes committed; loader CI running)
+Branch / latest commit: work/xbe-loader / 438c56a5d1e4cfd702a5750cf43f0003daa97082
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12
+Reference implementation reviewed:
+- Cxbx-Reloaded/src/common/xbe/Xbe.h defines the retail/debug/Chihiro entry-point and kernel-thunk XOR constants.
+- Cxbx-Reloaded/src/common/xbe/Xbe.cpp::Xbe::GetXbeType identifies Chihiro from (encodedEntry & 0xF0000000) == 0x40000000, then identifies debug from the high bit of the encoded kernel-thunk address; otherwise it selects retail.
+- Cxbx-Reloaded/src/core/kernel/init/CxbxKrnl.cpp decodes the thunk table and maps each ordinal using thunk & 0x7FFFFFFF, and passes TLS metadata into kernel initialization.
+Summary:
+- Fixed an XBE parser correctness issue: it previously tried both retail and debug entry XOR keys and selected whichever decoded address landed in an executable section. It now determines the XBE type first using the same retail/debug/Chihiro selection rules as Cxbx-Reloaded, then decodes the entry point and kernel-thunk address with that type's matching XOR keys.
+- Added Chihiro XOR constants and explicit chihiroImage metadata. ABI v1/v2 declarations and callback layouts were not changed.
+- Added parser regressions for retail, debug, Chihiro, and a mismatched debug-encoded entry point with a retail-marked thunk field; the mismatched header is rejected instead of being heuristically accepted.
+Files changed:
+- modules/xbe_loader/xbe_format.h
+- modules/xbe_loader/xbe_format.cpp
+- tests/xbe_format_tests.cpp
+Build and tests:
+- GitHub Actions loader validation run 43424391182 for commit 438c56a5d1e4cfd702a5750cf43f0003daa97082 is IN_PROGRESS; no pass is claimed yet.
+- No local Windows/MSVC build is claimed.
+Known issues / next steps:
+- This fixes type selection/XOR decoding, not the separate kernel guest-thread startup fault. Kernel still needs exact-base shared backing mapped into xbe_guest32, correct TLS template/index/callback setup, guest stack/FS environment, and stop-before-release handling.
+- Cxbx MapThunkTable resolves ordinals from the low 31 bits of each thunk entry. Kernel import resolver should compare its implementation with this behavior and ensure it writes actual guest-callable 32-bit thunk addresses into the guest image, not host pointers.
+- Next loader milestone: validate TLS directory fields and mapped-address coverage without guessing undocumented semantics; coordinate with kernel before changing ABI.
