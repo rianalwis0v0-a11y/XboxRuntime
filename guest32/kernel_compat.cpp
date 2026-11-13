@@ -29,7 +29,8 @@ namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
-static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0,g_headerSize=0,g_sectionCount=0;\nstatic HANDLE g_startupEvent=nullptr;
+static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0,g_headerSize=0,g_sectionCount=0;
+static HANDLE g_startupEvent=nullptr;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
