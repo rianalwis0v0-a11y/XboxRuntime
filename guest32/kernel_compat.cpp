@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <utility>
 #include <memory>
+#include <new>
 #include <atomic>
 #include "kernel_compat.h"
 #include "xdvdfs.h"
@@ -73,6 +74,8 @@ SRWLOCK* GetGuestRwLock(void* address, bool create) {
     return result;
 }
 thread_local ULONG g_guestIrql = 0;
+bool InitializeGuestTlsForCurrentThread(DWORD reason);
+void CleanupGuestTlsForCurrentThread(DWORD reason);
 thread_local bool g_insideDpc = false;
 struct GuestDpcInfo {
     using Routine = void (__stdcall*)(void*, void*, void*, void*);
@@ -92,9 +95,12 @@ DWORD WINAPI GuestDpcWorker(void* raw) {
     std::unique_ptr<GuestDpcWork> work(static_cast<GuestDpcWork*>(raw));
     GuestDpcInfo* info = work->info;
     if (info && info->pending.exchange(false)) {
-        g_insideDpc = true;
-        info->routine(work->dpc, info->context, work->arg1, work->arg2);
-        g_insideDpc = false;
+        if (InitializeGuestTlsForCurrentThread(DLL_THREAD_ATTACH)) {
+            g_insideDpc = true;
+            info->routine(work->dpc, info->context, work->arg1, work->arg2);
+            g_insideDpc = false;
+            CleanupGuestTlsForCurrentThread(DLL_THREAD_DETACH);
+        }
     }
     return 0;
 }
@@ -183,6 +189,131 @@ extern "C" uint32_t __stdcall K_HalWriteSMBusValue(uint8_t address, uint8_t comm
 }
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
+struct GuestTlsDirectory {
+    uint32_t start, end, index, callbacks, zeroFill, characteristics;
+};
+struct GuestTlsState {
+    DWORD index = TLS_OUT_OF_INDEXES;
+    uint32_t start = 0, end = 0, callbacks = 0, zeroFill = 0;
+    bool active = false;
+};
+GuestTlsState g_guestTls;
+
+bool InvokeGuestTlsCallbacks(DWORD reason) {
+    if (!g_guestTls.callbacks) return true;
+    auto callbacks = reinterpret_cast<const uint32_t*>(uintptr_t(g_guestTls.callbacks));
+    for (uint32_t i = 0; i < 64; ++i) {
+        const uint64_t slot = uint64_t(g_guestTls.callbacks) + uint64_t(i) * 4;
+        if (!InImage(uint32_t(slot), 4)) return false;
+        const uint32_t callback = callbacks[i];
+        if (!callback) return true;
+        if (!InImage(callback, 1)) return false;
+        using Callback = void (NTAPI*)(void*, DWORD, void*);
+        reinterpret_cast<Callback>(uintptr_t(callback))(g_image, reason, nullptr);
+    }
+    return false;
+}
+
+bool InitializeGuestTlsForCurrentThread(DWORD reason) {
+    if (!g_guestTls.active) return true;
+    if (TlsGetValue(g_guestTls.index)) return true;
+
+    const uint32_t templateBytes = g_guestTls.end - g_guestTls.start;
+    const uint64_t total = uint64_t(templateBytes) + g_guestTls.zeroFill;
+    if (total > 0x1000000ull) return false;
+
+    void* block = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                            SIZE_T(total ? total : 1));
+    if (!block) return false;
+    if (templateBytes)
+        std::memcpy(block, reinterpret_cast<const void*>(uintptr_t(g_guestTls.start)),
+                    templateBytes);
+    if (!TlsSetValue(g_guestTls.index, block)) {
+        HeapFree(GetProcessHeap(), 0, block);
+        return false;
+    }
+    if (!InvokeGuestTlsCallbacks(reason)) {
+        TlsSetValue(g_guestTls.index, nullptr);
+        HeapFree(GetProcessHeap(), 0, block);
+        return false;
+    }
+    return true;
+}
+
+void CleanupGuestTlsForCurrentThread(DWORD reason) {
+    if (!g_guestTls.active) return;
+    void* block = TlsGetValue(g_guestTls.index);
+    if (!block) return;
+    InvokeGuestTlsCallbacks(reason);
+    TlsSetValue(g_guestTls.index, nullptr);
+    HeapFree(GetProcessHeap(), 0, block);
+}
+
+bool ConfigureGuestTls() {
+    if (!g_tls) return true;
+    if (!InImage(g_tls, sizeof(GuestTlsDirectory)) ||
+        g_guestTls.active) return false;
+
+    const auto* directory =
+        reinterpret_cast<const GuestTlsDirectory*>(uintptr_t(g_tls));
+    if (directory->end < directory->start ||
+        (directory->end != directory->start &&
+         !InImage(directory->start, directory->end - directory->start)) ||
+        !InImage(directory->index, 4) ||
+        (directory->callbacks && !InImage(directory->callbacks, 4)))
+        return false;
+
+    g_guestTls.start = directory->start;
+    g_guestTls.end = directory->end;
+    g_guestTls.callbacks = directory->callbacks;
+    g_guestTls.zeroFill = directory->zeroFill;
+    if (uint64_t(g_guestTls.end - g_guestTls.start) + g_guestTls.zeroFill > 0x1000000ull)
+        return false;
+
+    // Validate the complete callback list before any guest callback runs.
+    if (g_guestTls.callbacks) {
+        const auto* callbacks =
+            reinterpret_cast<const uint32_t*>(uintptr_t(g_guestTls.callbacks));
+        bool terminated = false;
+        for (uint32_t i = 0; i < 64; ++i) {
+            const uint64_t slot = uint64_t(g_guestTls.callbacks) + uint64_t(i) * 4;
+            if (!InImage(uint32_t(slot), 4)) return false;
+            if (!callbacks[i]) { terminated = true; break; }
+            if (!InImage(callbacks[i], 1)) return false;
+        }
+        if (!terminated) return false;
+    }
+
+    g_guestTls.index = TlsAlloc();
+    if (g_guestTls.index == TLS_OUT_OF_INDEXES) return false;
+    g_guestTls.active = true;
+    *reinterpret_cast<uint32_t*>(uintptr_t(directory->index)) = g_guestTls.index;
+    if (!InitializeGuestTlsForCurrentThread(DLL_PROCESS_ATTACH)) {
+        g_guestTls.active = false;
+        TlsFree(g_guestTls.index);
+        g_guestTls.index = TLS_OUT_OF_INDEXES;
+        return false;
+    }
+    return true;
+}
+
+struct GuestThreadStart {
+    LPTHREAD_START_ROUTINE start;
+    void* context;
+};
+DWORD WINAPI GuestThreadThunk(void* raw) {
+    GuestThreadStart* launch = static_cast<GuestThreadStart*>(raw);
+    if (!launch) return ERROR_INVALID_PARAMETER;
+    LPTHREAD_START_ROUTINE start = launch->start;
+    void* context = launch->context;
+    delete launch;
+    if (!InitializeGuestTlsForCurrentThread(DLL_THREAD_ATTACH))
+        return ERROR_NOT_ENOUGH_MEMORY;
+    const DWORD result = start(context);
+    CleanupGuestTlsForCurrentThread(DLL_THREAD_DETACH);
+    return result;
+}
+
 void* StubFor(uint32_t ordinal){
     if(!g_stubPage||g_stubCount>=kThunkMax)return nullptr;
     uint8_t* p=static_cast<uint8_t*>(g_stubPage)+g_stubCount*10;
@@ -1706,9 +1837,14 @@ extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, vo
     if (!threadHandle || !start) return LONG(0xC000000Du);
     if (process && process != GetCurrentProcess() && process != reinterpret_cast<HANDLE>(intptr_t(-1)))
         return LONG(0xC000000Du);
+    auto* launch = new (std::nothrow) GuestThreadStart{start, context};
+    if (!launch) return LONG(0xC0000017u);
     DWORD threadId = 0;
-    HANDLE thread = CreateThread(nullptr, 0, start, context, 0, &threadId);
-    if (!thread) return LONG(0xC0000017u);
+    HANDLE thread = CreateThread(nullptr, 0, GuestThreadThunk, launch, 0, &threadId);
+    if (!thread) {
+        delete launch;
+        return LONG(0xC0000017u);
+    }
     *threadHandle = thread;
     if (clientId) {
         clientId->UniqueProcess = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(GetCurrentProcessId()));
@@ -2821,34 +2957,18 @@ bool XboxKernelResolveImports(const XboxKernelState& image){
     return false;
 }
 DWORD WINAPI XboxKernelStartXbe(void*){
-    if(!g_entry)return ERROR_INVALID_ADDRESS;
-    DWORD tlsIndex=TLS_OUT_OF_INDEXES;void* tlsBlock=nullptr;
-    if(g_tls){
-        struct TlsDirectory { uint32_t start,end,index,callbacks,zeroFill,characteristics; };
-        if(!InImage(g_tls,sizeof(TlsDirectory)))return ERROR_INVALID_ADDRESS;
-        auto*t=reinterpret_cast<TlsDirectory*>(uintptr_t(g_tls));
-        if(t->end<t->start||!InImage(t->start,t->end-t->start)||!InImage(t->index,4))return ERROR_INVALID_ADDRESS;
-        tlsIndex=TlsAlloc();if(tlsIndex==TLS_OUT_OF_INDEXES)return ERROR_NOT_ENOUGH_MEMORY;
-        uint64_t total=uint64_t(t->end-t->start)+t->zeroFill;
-        if(total>0x1000000){TlsFree(tlsIndex);return ERROR_INVALID_DATA;}
-        tlsBlock=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,size_t(total?total:1));
-        if(!tlsBlock){TlsFree(tlsIndex);return ERROR_NOT_ENOUGH_MEMORY;}
-        if(t->end>t->start)std::memcpy(tlsBlock,reinterpret_cast<void*>(uintptr_t(t->start)),t->end-t->start);
-        *reinterpret_cast<uint32_t*>(uintptr_t(t->index))=tlsIndex;
-        if(!TlsSetValue(tlsIndex,tlsBlock)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return GetLastError();}
-        if(t->callbacks){
-            if(!InImage(t->callbacks,4)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return ERROR_INVALID_ADDRESS;}
-            auto callbacks=reinterpret_cast<uint32_t*>(uintptr_t(t->callbacks));
-            for(uint32_t i=0;i<64&&InImage(t->callbacks+i*4,4)&&callbacks[i];++i){
-                using Callback=void (NTAPI*)(void*,DWORD,void*);
-                reinterpret_cast<Callback>(uintptr_t(callbacks[i]))(g_image,DLL_PROCESS_ATTACH,nullptr);
-            }
-        }
+    if (!g_entry) return ERROR_INVALID_ADDRESS;
+    if (!ConfigureGuestTls()) return ERROR_INVALID_ADDRESS;
+
+    using Entry = void(__cdecl*)();
+    DWORD result = 0;
+    __try {
+        reinterpret_cast<Entry>(uintptr_t(g_entry))();
     }
-    using Entry=void(__cdecl*)();
-    DWORD result=0;
-    __try { reinterpret_cast<Entry>(uintptr_t(g_entry))(); }
-    __except(EXCEPTION_EXECUTE_HANDLER){OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");result=GetExceptionCode();}
-    if(tlsIndex!=TLS_OUT_OF_INDEXES){TlsSetValue(tlsIndex,nullptr);if(tlsBlock)HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);}
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+        OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");
+        result = GetExceptionCode();
+    }
+    CleanupGuestTlsForCurrentThread(DLL_PROCESS_DETACH);
     return result;
 }
