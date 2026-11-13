@@ -33,6 +33,8 @@ C:\XboxRuntime\
 
 The boot program loads `system\main.dll`; the main runtime loads its subsystem DLLs from the same `system` directory. The XBE loader starts `xbe_guest32.exe` beside itself, so that executable must remain in `system` too.
 
+The boot picker accepts extracted `.xbe` files and raw `.iso` / `.xiso` disc images. For a disc image, the guest mounts XDVDFS, loads `default.xbe` from the image root, and routes read-only `\\Device\\Cdrom0` / `D:` file opens, reads, metadata queries, and directory enumeration through that mounted image. XDVDFS writes are rejected as media write-protected. Hard-disk FATX mounting is not yet connected to guest device paths.
+
 The XBE loader stores the persistent EEPROM image at `system\eeprom.bin`. A newly created all-`FF` EEPROM is intentionally unprovisioned; it is not a fabricated Xbox identity and cannot be used to register with Insignia.
 
 The startup animation and sound are optional assets under `assets\startup.avi` and `assets\startup.wav`. The project does not bundle a copyrighted Xbox dashboard or game image. Supply only XBE files and media that you are legally entitled to use.
