@@ -311,8 +311,8 @@ extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = ipv4;
     address.sin_port = htons(port);
-    return ::sendto(socket, static_cast<const char*>(data), static_cast<int>(length), 0,
-        reinterpret_cast<sockaddr*>(&address), sizeof(address), flags);
+    return ::sendto(socket, static_cast<const char*>(data), static_cast<int>(length), flags,
+        reinterpret_cast<sockaddr*>(&address), sizeof(address));
 }
 
 extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4, uint16_t* port, int flags) {
@@ -320,8 +320,8 @@ extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data,
     if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
     sockaddr_in address{};
     int addressLength = sizeof(address);
-    int received = ::recvfrom(socket, static_cast<char*>(data), static_cast<int>(capacity), 0,
-        reinterpret_cast<sockaddr*>(&address), &addressLength, flags);
+    int received = ::recvfrom(socket, static_cast<char*>(data), static_cast<int>(capacity), flags,
+        reinterpret_cast<sockaddr*>(&address), &addressLength);
     if (received >= 0) {
         if (ipv4) *ipv4 = address.sin_addr.s_addr;
         if (port) *port = ntohs(address.sin_port);
