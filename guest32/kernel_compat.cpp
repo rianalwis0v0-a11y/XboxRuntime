@@ -2674,68 +2674,97 @@ void XboxKernelShutdownTitle() {
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
+
     DWORD tlsIndex = TLS_OUT_OF_INDEXES;
     void* tlsBlock = nullptr;
+    uint32_t* tlsIndexSlot = nullptr;
     uint32_t* callbacks = nullptr;
     uint32_t callbackCount = 0;
+    uint32_t attachedCallbacks = 0;
+
     struct TlsDirectory {
         uint32_t start, end, index, callbacks, zeroFill, characteristics;
     };
+
+    auto releaseTls = [&]() {
+        if (tlsIndex != TLS_OUT_OF_INDEXES) {
+            TlsSetValue(tlsIndex, nullptr);
+            if (tlsBlock) HeapFree(GetProcessHeap(), 0, tlsBlock);
+            TlsFree(tlsIndex);
+            tlsIndex = TLS_OUT_OF_INDEXES;
+            tlsBlock = nullptr;
+        }
+        if (tlsIndexSlot) *tlsIndexSlot = TLS_OUT_OF_INDEXES;
+    };
+
     if (g_tls) {
         if (!InImage(g_tls, sizeof(TlsDirectory))) return ERROR_INVALID_ADDRESS;
         auto* tls = reinterpret_cast<TlsDirectory*>(uintptr_t(g_tls));
         if (tls->end < tls->start ||
             !InImage(tls->start, tls->end - tls->start) ||
-            !InImage(tls->index, 4))
+            !InImage(tls->index, sizeof(uint32_t)))
             return ERROR_INVALID_ADDRESS;
-        const uint64_t total = uint64_t(tls->end - tls->start) + tls->zeroFill;
+
+        tlsIndexSlot = reinterpret_cast<uint32_t*>(uintptr_t(tls->index));
+        *tlsIndexSlot = TLS_OUT_OF_INDEXES;
+
+        // Validate the complete callback array before running any user code.
+        // This prevents a malformed later entry from leaving earlier callbacks
+        // attached while TLS resources are being torn down.
+        if (tls->callbacks) {
+            if (!InImage(tls->callbacks, sizeof(uint32_t)))
+                return ERROR_INVALID_ADDRESS;
+            callbacks = reinterpret_cast<uint32_t*>(uintptr_t(tls->callbacks));
+            bool terminated = false;
+            for (uint32_t i = 0; i < 64; ++i) {
+                const uint64_t slot = uint64_t(tls->callbacks) + uint64_t(i) * 4u;
+                if (slot > UINT32_MAX ||
+                    !InImage(static_cast<uint32_t>(slot), sizeof(uint32_t)))
+                    return ERROR_INVALID_ADDRESS;
+                const uint32_t callback = callbacks[i];
+                if (!callback) {
+                    callbackCount = i;
+                    terminated = true;
+                    break;
+                }
+                if (!InImage(callback, 1)) return ERROR_INVALID_ADDRESS;
+            }
+            if (!terminated) return ERROR_INVALID_ADDRESS;
+        }
+
+        const uint64_t templateSize = uint64_t(tls->end) - tls->start;
+        const uint64_t total = templateSize + tls->zeroFill;
         if (total > 0x1000000u) return ERROR_INVALID_DATA;
+
         tlsIndex = TlsAlloc();
         if (tlsIndex == TLS_OUT_OF_INDEXES) return ERROR_NOT_ENOUGH_MEMORY;
         tlsBlock = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
                              size_t(total ? total : 1));
         if (!tlsBlock) {
-            TlsFree(tlsIndex);
+            releaseTls();
             return ERROR_NOT_ENOUGH_MEMORY;
         }
-        if (tls->end > tls->start)
+        if (templateSize)
             std::memcpy(tlsBlock, reinterpret_cast<void*>(uintptr_t(tls->start)),
-                        tls->end - tls->start);
-        *reinterpret_cast<uint32_t*>(uintptr_t(tls->index)) = tlsIndex;
+                        size_t(templateSize));
         if (!TlsSetValue(tlsIndex, tlsBlock)) {
-            HeapFree(GetProcessHeap(), 0, tlsBlock);
-            TlsFree(tlsIndex);
-            return GetLastError();
+            const DWORD error = GetLastError();
+            releaseTls();
+            return error;
         }
-        if (tls->callbacks) {
-            if (!InImage(tls->callbacks, 4)) {
-                TlsSetValue(tlsIndex, nullptr);
-                HeapFree(GetProcessHeap(), 0, tlsBlock);
-                TlsFree(tlsIndex);
-                return ERROR_INVALID_ADDRESS;
-            }
-            callbacks = reinterpret_cast<uint32_t*>(uintptr_t(tls->callbacks));
-            bool terminated = false;
-            for (; callbackCount < 64; ++callbackCount) {
-                if (!InImage(tls->callbacks + callbackCount * 4u, 4)) break;
-                const uint32_t callback = callbacks[callbackCount];
-                if (!callback) { terminated = true; break; }
-                if (!InImage(callback, 1)) break;
-                using Callback = void (NTAPI*)(void*, DWORD, void*);
-                reinterpret_cast<Callback>(uintptr_t(callback))(
-                    g_image, DLL_PROCESS_ATTACH, nullptr);
-            }
-            if (!terminated) {
-                TlsSetValue(tlsIndex, nullptr);
-                HeapFree(GetProcessHeap(), 0, tlsBlock);
-                TlsFree(tlsIndex);
-                return ERROR_INVALID_ADDRESS;
-            }
+        *tlsIndexSlot = tlsIndex;
+
+        using Callback = void (NTAPI*)(void*, DWORD, void*);
+        for (; attachedCallbacks < callbackCount; ++attachedCallbacks) {
+            reinterpret_cast<Callback>(uintptr_t(callbacks[attachedCallbacks]))(
+                g_image, DLL_PROCESS_ATTACH, nullptr);
         }
     }
 
-    // The guest process signals readiness only after TLS has been initialized.
+    // The guest process signals readiness only after TLS and process-attach
+    // callbacks have completed.
     if (g_startupEvent) SetEvent(g_startupEvent);
+
     DWORD result = 0;
     using Entry = void (__cdecl*)();
     __try {
@@ -2745,17 +2774,13 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
         result = GetExceptionCode();
     }
 
-    // Detach callbacks run in reverse order before the thread TLS block is freed.
-    while (callbackCount) {
-        const uint32_t callback = callbacks[--callbackCount];
+    // Detach only callbacks whose attach invocation completed, in reverse order.
+    while (attachedCallbacks) {
+        const uint32_t callback = callbacks[--attachedCallbacks];
         using Callback = void (NTAPI*)(void*, DWORD, void*);
         reinterpret_cast<Callback>(uintptr_t(callback))(
             g_image, DLL_PROCESS_DETACH, nullptr);
     }
-    if (tlsIndex != TLS_OUT_OF_INDEXES) {
-        TlsSetValue(tlsIndex, nullptr);
-        if (tlsBlock) HeapFree(GetProcessHeap(), 0, tlsBlock);
-        TlsFree(tlsIndex);
-    }
+    releaseTls();
     return result;
 }
