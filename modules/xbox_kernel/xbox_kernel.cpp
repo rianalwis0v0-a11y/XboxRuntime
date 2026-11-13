@@ -264,8 +264,9 @@ int __cdecl ResolveImports(std::uint8_t* guestImage,
     if (!WriteExact(context.pipe, &message, sizeof(message)) ||
         !ReadExact(context.pipe, &reply, sizeof(reply)) ||
         reply.magic != XBOX_GUEST_PROTOCOL_MAGIC ||
-        reply.command != XboxGuestResolveImports || reply.status != ERROR_SUCCESS)
+        reply.command != XboxGuestResolveImports)
         return 3;
+    if (reply.status != ERROR_SUCCESS) return static_cast<int>(reply.status);
     context.importsResolved = true;
     return 0;
 }
