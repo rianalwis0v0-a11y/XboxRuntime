@@ -123,14 +123,14 @@ channel switching and puller scheduling.
 resolves a readable DMA object through RAMHT and processes its NV4-style command
 stream. GET/PUT are byte offsets within that object. The implementation handles
 incrementing and non-incrementing method packets, legacy and NV1A jump commands,
-single-level CALL/RETURN, and the reference-counter method. It validates
+nested CALL/RETURN (up to 16 stack levels), and the reference-counter method. It validates
 all reads and control-flow targets against the mapped DMA span, bounds execution
 to one million command/data words, and performs a validation pass before GPU
 dispatch so malformed streams do not partially execute.
 
 The puller currently binds only the graphics engine. It does not enable the later-generation NOP method on NV2A. Object-bind method 0 and
 the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
-unimplemented puller special methods, nested calls, PCI/AGP DMA, DMA page
+unimplemented puller special methods, calls deeper than 16 levels, PCI/AGP DMA, DMA page
 translation, interrupts, scheduling/channel switching, and IB mode remain
 unsupported. This is a functional NV4-style software pusher path, not a full
 hardware PFIFO implementation.
@@ -482,3 +482,8 @@ non-normal arrays) before the normal unpacker expands it to three floats.
 ## GPU vertex-shader translation smoke coverage
 
 The NV2A HLSL smoke test exercises real microcode rather than only a terminated empty/NOP slot. It verifies an input-register MOV (v0 to oPos), a two-source input ADD (v5 + v5 to oPos), and a constant-register MOV (c[17] to oPos). It checks parsed input-register metadata and the expected emitted HLSL, then compiles each generated shader with the Direct3D HLSL compiler targeting shader model 5.0. This proves those three translation cases produce valid GPU shader bytecode; it does not claim complete instruction-set coverage or a physical-GPU draw test. Runtime vertex instructions remain translated to D3D11 HLSL and execute in the D3D11 shader pipeline; CPU-side work in the NV2A bridge is register/constant and vertex-attribute staging, not a CPU vertex-shader interpreter.
+
+
+## Bounded nested DMA CALL/RETURN
+
+The NV4-style DMA pusher now maintains a 16-entry return-address stack instead of a single saved return address. Nested helper routines unwind in LIFO order. The validation pass and dispatch pass use the same bounded stack logic, so excessive nesting is rejected before any PGRAPH methods are dispatched. The smoke test covers a two-level nested routine that binds three DMA contexts, the maximum supported depth of 16, rejection of depth 17 with the PFIFO CALL_ACTIVE error, invalid call targets, and RETURN without an active call. This remains a bounded software pusher; it does not add DMA ring wraparound, nested-depth beyond 16, PCI/AGP DMA or full PFIFO scheduling.
