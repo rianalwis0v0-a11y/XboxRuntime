@@ -188,6 +188,21 @@ extern "C" void* __stdcall K_ExAllocatePool(uint32_t n){return HeapAlloc(GetProc
 extern "C" void* __stdcall K_ExAllocatePoolWithTag(uint32_t n,uint32_t){return K_ExAllocatePool(n);}
 extern "C" void __stdcall K_ExFreePool(void*p){if(p)HeapFree(GetProcessHeap(),0,p);}
 
+
+
+extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
+extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
+extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
+
+struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
+static void GuestAcquireSpinLock(volatile LONG* lock) {
+    while (InterlockedExchange(lock, 1) != 0) YieldProcessor();
+}
+static void GuestReleaseSpinLock(volatile LONG* lock) {
+    MemoryBarrier();
+    InterlockedExchange(lock, 0);
+}
+
 extern "C" LARGE_INTEGER __stdcall K_ExInterlockedAddLargeInteger(
     LARGE_INTEGER* addend, LARGE_INTEGER increment, volatile LONG* lock) {
     LARGE_INTEGER previous{};
@@ -216,19 +231,6 @@ extern "C" LONGLONG __fastcall K_ExInterlockedCompareExchange64(
     volatile LONGLONG* destination, const LONGLONG* exchange, const LONGLONG* comparand) {
     if (!destination || !exchange || !comparand) return 0;
     return InterlockedCompareExchange64(destination, *exchange, *comparand);
-}
-
-extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
-extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
-extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
-
-struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
-static void GuestAcquireSpinLock(volatile LONG* lock) {
-    while (InterlockedExchange(lock, 1) != 0) YieldProcessor();
-}
-static void GuestReleaseSpinLock(volatile LONG* lock) {
-    MemoryBarrier();
-    InterlockedExchange(lock, 0);
 }
 
 // Xbox KDEVICE_QUEUE/KDEVICE_QUEUE_ENTRY are 32-bit guest structures.
