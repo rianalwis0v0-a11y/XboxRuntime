@@ -65,6 +65,13 @@ static int compile_program(const DWORD* instructions, unsigned count,
         return 6;
     }
 
+    if (strstr(label, "paired snapshot") &&
+        (!strstr(hlsl, "R_pre[0] = R0;") ||
+         !strstr(hlsl, "R1 = (R_pre[0]);"))) {
+        fprintf(stderr, "FAIL: %s did not preserve pre-issue MAC/ILU register values\\n", label);
+        return 10;
+    }
+
     const int length = d3d8_vsh_generate_hlsl(
         &program, hlsl, (int)sizeof(hlsl));
     if (length <= 0 || length >= (int)sizeof(hlsl)) {
@@ -105,7 +112,7 @@ static int compile_program(const DWORD* instructions, unsigned count,
 
 int main(void)
 {
-    DWORD instruction[4] = {0, 0, 0, 0};
+    DWORD instruction[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     /* Keep the one-slot NOP case as the smallest parser/compiler sanity check. */
     instruction[3] = 1u;
@@ -143,6 +150,18 @@ int main(void)
                      (1u << 2) | 1u;
     if (compile_program(instruction, 1u, "NV2A ILU LIT C") != 0)
         return 5;
+
+    /* Paired MAC/ILU must both read R0 before MAC overwrites it. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (1u << 21);             /* MAC MOV v0 -> R0 */
+    instruction[2] = (2u << 26);            /* A mux=input */
+    instruction[3] = (0xFu << 24);          /* MAC mask, destination R0 */
+    instruction[5] = (1u << 21) | (1u << 25); /* MAC MOV + ILU MOV */
+    instruction[6] = (2u << 26);            /* MAC source A = v0 */
+    instruction[7] = (0xFu << 24) | (0xFu << 16) |
+                     (1u << 28) | 1u;        /* ILU source C = old R0; FINAL */
+    if (compile_program(instruction, 2u, "NV2A paired snapshot") != 0)
+        return 6;
 
     /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
     memset(instruction, 0, sizeof(instruction));
