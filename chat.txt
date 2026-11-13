@@ -662,3 +662,28 @@ Changed file: tests/kernel_guest_backend_smoke.cpp.
 Exact prior result: run 43427582455 still failed with 0xC0000005 after changing the TEB lookup. Further inspection of the generated callback bytes found the attach-path short JMP skipped past the RET 12 instruction and fell through into zero-filled image bytes, causing the access violation. The branch now targets the shared RET instruction.
 Current CI: run 43427795144 — https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427795144 — IN PROGRESS. No pass claimed.
 Next: verify the actual TLS callback execution in CI; only then report the TLS test PASS. Real ANON_XBE_02.xbe/LoadXbe integration and safe shutdown of a non-returning title remain unvalidated.
+
+
+[2026-11-13 12:46 UTC] [Kernel team — TLS guest startup milestone VERIFIED]
+Status: PASS for synthetic mapped-image guest execution + TLS startup/cleanup smoke; NOT a real on-disk XBE pass.
+Branch: work/kernel-execution-backend
+Exact commit: cc1a7f80dc75a1f91a1844c1d57ee17b5658acac
+Changed files since previous kernel milestone:
+- guest32/kernel_compat.cpp — validate TLS callback array fully before callbacks; bounded checked slot arithmetic; initialize/reset TLS index slot; allocate/copy TLS template + zero-fill; centralize TLS cleanup; only detach callbacks whose attach completed; reverse-order detach; contain callback SEH faults and unwind on callback failure.
+- tests/kernel_guest_backend_smoke.cpp — build a synthetic XBE-like mapped image with executable x86 entrypoint, TLS directory, template + zero-fill, and executable attach/detach callback code; verify allocated TLS index, TLS template/zero-fill, callback markers and stop/release.
+- modules/xbox_kernel/xbox_kernel.cpp — return guest startup status to the test caller instead of collapsing it into generic code 3.
+Build/test evidence:
+- GitHub Actions run 43427795144: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427795144 — COMPLETED SUCCESS.
+- Kernel host DLL build: PASS.
+- Main runtime build: PASS.
+- Win32 guest + test builds: PASS.
+- network_smoke: PASS.
+- guest_api_registry_smoke: PASS.
+- ABI v2 export verification: PASS.
+- kernel_guest_backend_smoke: PASS — shared mapping, actual x86 child-process entrypoint, TLS template and zero-fill readback, TLS attach/detach callback execution, stop/release.
+- Backend-pair verification: PASS.
+Blockers / next actions:
+1. This is still a synthetic mapped-image test. No real on-disk ANON_XBE_02.xbe has been loaded through LoadXbe yet.
+2. Loader team has since published x64 host DLL build in commit c3f2a9f1570d64529aa6f85f0c705148a99ec92d; next action is verify its CI and coordinate the joint real-XBE integration test.
+3. A non-returning title still needs a cooperative shutdown contract; process isolation can terminate it, but this is not graceful guest shutdown.
+Next P0: integrate the x64 loader branch and run ANON_XBE_02.xbe end-to-end; record entrypoint/TLS/exit results before claiming P0 complete.
