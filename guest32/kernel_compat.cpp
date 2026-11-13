@@ -1370,6 +1370,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_clear_event
         cmp eax, 233
         je nt_wait
+        cmp eax, 234
+        je nt_wait
         cmp eax, 261
         je rtl_append_a
         cmp eax, 262
