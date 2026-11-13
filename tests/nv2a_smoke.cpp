@@ -144,7 +144,7 @@ int main() {
         /* MAC MOV from c[17], with instruction-wide relative addressing enabled. */
         std::memset(words, 0, sizeof(words));
         words[1] = (1u << 21) | (17u << 13);
-        words[2] = (3u << 26);
+        words[2] = (1u << 26);
         words[3] = (1u << 1) | 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.uses_relative_constants != 1 ||
@@ -156,8 +156,8 @@ int main() {
         /* ADD is A+C, not A+B. An unused B mux must not pollute metadata. */
         std::memset(words, 0, sizeof(words));
         words[1] = (3u << 21) | (5u << 9);
-        words[2] = (1u << 26); /* A mux=temp; B is unused */
-        words[3] = (2u << 28) | 1u; /* C mux=input */
+        words[2] = 0u; /* A mux=temp; B is unused */
+        words[3] = (1u << 28) | 1u; /* C mux=input */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.input_mask != (1u << 5) ||
             info.constant_mask[0] || info.constant_mask[1] ||
@@ -169,8 +169,8 @@ int main() {
         /* ADD's C operand can independently select a physical constant. */
         std::memset(words, 0, sizeof(words));
         words[1] = (3u << 21) | (7u << 13) | (1u << 9);
-        words[2] = (2u << 26);
-        words[3] = (3u << 28) | 1u; /* C mux=constant */
+        words[2] = (1u << 26);
+        words[3] = (2u << 28) | 1u; /* C mux=constant */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.input_mask & (1u << 1)) ||
             !(info.constant_mask[0] & (UINT64_C(1) << 7))) {
@@ -181,7 +181,7 @@ int main() {
         /* MAD consumes A+B+C: B contributes v2 while C contributes c9. */
         std::memset(words, 0, sizeof(words));
         words[1] = (4u << 21) | (9u << 13) | (2u << 9);
-        words[2] = (1u << 26) | (2u << 11); /* A=temp, B=input */
+        words[2] = (1u << 11); /* A=temp, B=input */
         words[3] = (3u << 28) | 1u; /* C=constant */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.input_mask != (1u << 2) ||
@@ -202,7 +202,7 @@ int main() {
         }
         std::memset(words, 0, sizeof(words));
         words[1] = (7u << 25) | (3u << 13);
-        words[3] = (3u << 28) | 1u; /* C mux=constant */
+        words[3] = (2u << 28) | 1u; /* C mux=constant */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.constant_mask[0] & (UINT64_C(1) << 3))) {
             std::cerr << "FAIL: NV2A LIT constant-C validation\\n";
@@ -212,7 +212,7 @@ int main() {
         /* Mux 0 is reserved/unknown and must not be accepted as a constant. */
         std::memset(words, 0, sizeof(words));
         words[1] = (1u << 21); /* MAC MOV */
-        words[2] = 0u;          /* A mux=0 */
+        words[2] = (3u << 26); /* A mux=3 is reserved */
         words[3] = 1u;
         if (validateVertexProgram(words, 1, &info) != 4) {
             std::cerr << "FAIL: invalid NV2A source mux was accepted\\n";
@@ -222,7 +222,7 @@ int main() {
         /* BFC0/BFC1 are valid outputs; slots 1 and 2 remain reserved. */
         std::memset(words, 0, sizeof(words));
         words[1] = (1u << 21); /* MAC MOV selects the output mux. */
-        words[2] = (1u << 26); /* A mux=temp. */
+        words[2] = 0u; /* A mux=temp. */
         words[3] = (1u << 11) | (1u << 12) | (7u << 3) | 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.output_mask & (1u << 7))) {
