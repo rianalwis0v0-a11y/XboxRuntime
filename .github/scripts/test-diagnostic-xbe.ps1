@@ -930,9 +930,9 @@ EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
 # Open the title directory and enumerate a real fixture entry.
-$directoryUnicodeVa = [uint32]($base + 0x61C0)
-$directoryObjectAttributesVa = [uint32]($base + 0x61D0)
-$directoryPathVa = [uint32]($base + 0x6200)
+$directoryUnicodeVa = [uint32]($base + 0x6500)
+$directoryObjectAttributesVa = [uint32]($base + 0x6510)
+$directoryPathVa = [uint32]($base + 0x6540)
 $directoryHandleVa = [uint32]($reportVa + 0x7B0)
 $directoryInfoVa = [uint32]($reportVa + 0x700)
 $directoryIoVa = [uint32]($reportVa + 0x7A0)
@@ -1077,15 +1077,15 @@ $directoryPath = "\Device\Cdrom0"
 $directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
 $directoryPathLength = [uint32]($directoryPath.Length * 2)
 $directoryPathVa = [uint32]($base + 0x6200)
-Put32 0x61C0 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
-Put32 0x61C4 $directoryPathVa
-Put32 0x61D0 24
-Put32 0x61D4 0
-Put32 0x61D8 $directoryUnicodeVa
-Put32 0x61DC 0
-Put32 0x61E0 0
-Put32 0x61E4 0
-$directoryPathBytes.CopyTo($b,0x6200)
+Put32 0x6500 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
+Put32 0x6504 $directoryPathVa
+Put32 0x6510 24
+Put32 0x6514 0
+Put32 0x6518 $directoryUnicodeVa
+Put32 0x651C 0
+Put32 0x6520 0
+Put32 0x6524 0
+$directoryPathBytes.CopyTo($b,0x6540)
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
