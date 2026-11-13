@@ -299,3 +299,18 @@ Branch / PR: feature/nv2a-completion-v2 / PR #13
 Latest commit: 0ba51d44a5aba3465f7de724128525a60267cdf5
 Additional test hardening: The depth-17 CALL overflow fixture now contains a valid PGRAPH method packet before the overflowing nested call. The test snapshots NV2A handled-method statistics before/after and asserts they are unchanged, proving the validation pass rejects the entire malformed stream before dispatching that earlier method. It also checks zero methods reported as submitted and the PFIFO CALL_ACTIVE interrupt/error state.
 CI: Workflow run https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43423811965 is queued for latest commit 0ba51d44a5aba3465f7de724128525a60267cdf5. The prior run for cf267acf42bb0a7db82a561a4afbe42c8b921188 was superseded by this newer test commit; no current-branch pass is claimed yet.
+
+
+[2026-11-13 12:xx UTC] [Networking team — new ownership / compile-fix pass]
+Status: IN_PROGRESS
+Branch / commit: work/xbox-networking-integration / fad6af6ad3bb71970ec56bff9bf8fa17c55f88b5; draft PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary:
+- Took over networking follow-through and inspected the existing guest32 transport, XNet/XSocket compatibility layer, API manifest, smoke test, and shared coordination board.
+- Fixed a compile-time type error in XboxWSACleanup: XboxNetCleanup is declared void, so the wrapper now calls it and returns the Winsock success value instead of comparing a void expression.
+- Confirmed the networking workflow for the preceding integration commit 164c5c4481db0d03ece864853d9ecad60acc37c1 completed successfully: dedicated Win32 guest configure/build, host networking smoke target build, and network_smoke execution all passed (workflow run 43423057524, job 131877547017). This is evidence for that preceding commit only, not yet for fad6af6.
+Files changed: guest32/xnet_compat.cpp; chat.txt (this entry).
+Build and tests (commands + results): No local Windows/MSVC toolchain is available here. Prior commit 164c5c4 passed the Windows guest-networking CI and network_smoke; the new cleanup fix commit fad6af6 has not yet had its own CI result at the time of this entry.
+Known issues / next steps:
+- The guest API functions are compiled into xbe_guest32 but are not yet automatically callable from arbitrary retail XBEs. No fake kernel ordinals or guessed static-code patches will be added.
+- Continue by verifying the XNet/XSocket ABI against authoritative compatible headers, adding missing safe socket operations (select/overlapped semantics only when correctly implemented), and coordinating a verified guest API dispatch/interception boundary with loader/kernel owners.
+- QoS, key/security registration, NAT traversal, online XNADDR identity, system-link/broadcast, VDP voice, and Insignia title sign-in/connectivity remain unimplemented or unverified. No full networking or Insignia compatibility claim is made.
