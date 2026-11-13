@@ -574,20 +574,20 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
 
     WCHAR finalPath[MAX_PATH * 4]{};
     const DWORD pathLength = GetFinalPathNameByHandleW(
-        h, finalPath, static_cast<DWORD>(std::size(finalPath)), FILE_NAME_NORMALIZED);
+        h, finalPath, static_cast<DWORD>(_countof(finalPath)), FILE_NAME_NORMALIZED);
     if (!pathLength || pathLength >= std::size(finalPath))
         return FileStatusFromWin32(GetLastError());
 
     WCHAR volumeRoot[MAX_PATH * 4]{};
-    if (!GetVolumePathNameW(finalPath, volumeRoot, static_cast<DWORD>(std::size(volumeRoot))))
+    if (!GetVolumePathNameW(finalPath, volumeRoot, static_cast<DWORD>(_countof(volumeRoot))))
         return FileStatusFromWin32(GetLastError());
 
     WCHAR volumeLabel[MAX_PATH]{};
     WCHAR fileSystemName[MAX_PATH]{};
     DWORD serial = 0, maximumComponent = 0, fileSystemFlags = 0;
-    if (!GetVolumeInformationW(volumeRoot, volumeLabel, static_cast<DWORD>(std::size(volumeLabel)),
+    if (!GetVolumeInformationW(volumeRoot, volumeLabel, static_cast<DWORD>(_countof(volumeLabel)),
                                &serial, &maximumComponent, &fileSystemFlags,
-                               fileSystemName, static_cast<DWORD>(std::size(fileSystemName))))
+                               fileSystemName, static_cast<DWORD>(_countof(fileSystemName))))
         return FileStatusFromWin32(GetLastError());
 
     auto writeField = [out](ULONG offset, const void* value, ULONG bytes) {
@@ -603,7 +603,7 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
         LARGE_INTEGER creationTime{};
         const ULONG labelLength = labelBytes;
         const BOOLEAN supportsObjects = FALSE;
-        std::memset(out, 0, length);
+        std::memset(out, 0, labelOffset + copiedBytes);
         writeField(0, &creationTime, sizeof(creationTime));
         writeField(8, &serial, sizeof(serial));
         writeField(12, &labelLength, sizeof(labelLength));
@@ -623,8 +623,8 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
         if (!GetDiskFreeSpaceW(volumeRoot, &sectorsPerCluster, &bytesPerSector,
                                &freeClusters, &totalClusters))
             return FileStatusFromWin32(GetLastError());
-        const LARGE_INTEGER total{static_cast<LONGLONG>(totalClusters)};
-        const LARGE_INTEGER available{static_cast<LONGLONG>(freeClusters)};
+        LARGE_INTEGER total{}; total.QuadPart = static_cast<LONGLONG>(totalClusters);
+        LARGE_INTEGER available{}; available.QuadPart = static_cast<LONGLONG>(freeClusters);
         std::memset(out, 0, required);
         writeField(0, &total, sizeof(total));
         writeField(8, &available, sizeof(available));
@@ -648,7 +648,7 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
         if (length < nameOffset) return statusInfoLengthMismatch;
         const ULONG nameBytes = static_cast<ULONG>(wcslen(fileSystemName) * sizeof(WCHAR));
         const ULONG copiedBytes = std::min(nameBytes, length - nameOffset) & ~ULONG(1);
-        std::memset(out, 0, length);
+        std::memset(out, 0, nameOffset + copiedBytes);
         writeField(0, &fileSystemFlags, sizeof(fileSystemFlags));
         writeField(4, &maximumComponent, sizeof(maximumComponent));
         writeField(8, &nameBytes, sizeof(nameBytes));
