@@ -5,6 +5,7 @@
 
 #include "main.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -30,12 +31,13 @@ namespace XboxRuntime
         { L"nv2a.dll" },
         { L"fatx.dll" },
         { L"input.dll" },
+        { L"audio.dll" },
         { L"xdvdfs.dll" },
         { L"xbe_loader.dll" }
     };
 
-    static std::wstring systemDirectory;
     static std::wstring runtimeDirectory;
+    static std::wstring moduleDirectory;
 
     static bool running = false;
 
@@ -48,17 +50,7 @@ namespace XboxRuntime
 
     static bool FindDirectories()
     {
-        wchar_t systemPath[32768]{};
-
-        UINT length = GetSystemDirectoryW(
-            systemPath,
-            static_cast<UINT>(_countof(systemPath))
-        );
-
-        if (!length || length >= _countof(systemPath))
-            return false;
-
-        systemDirectory.assign(systemPath, length);
+        UINT length = 0;
 
         wchar_t windowsPath[32768]{};
 
@@ -81,13 +73,25 @@ namespace XboxRuntime
         runtimeDirectory =
             windowsDirectory.substr(0, separator) +
             L"\\XboxRuntime";
+        // Runtime DLLs and xbe_guest32.exe are deployed together here.
+        // Loading them from Windows\\System32 prevented the host from
+        // finding the build's actual runtime modules and guest executable.
+        moduleDirectory = runtimeDirectory + L"\\system";
+
+        DWORD attributes = GetFileAttributesW(moduleDirectory.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        {
+            Log(L"XboxRuntime\\system directory is missing.");
+            return false;
+        }
 
         return true;
     }
 
     static std::wstring ModulePath(const wchar_t* name)
     {
-        return systemDirectory + L"\\" + name;
+        return moduleDirectory + L"\\" + name;
     }
 
     static bool LoadModule(Module& module)
@@ -246,10 +250,10 @@ namespace XboxRuntime
         OPENFILENAMEW dialog{};
         dialog.lStructSize = sizeof(dialog);
         dialog.lpstrFilter =
-            L"Xbox executable files (*.xbe)\0*.xbe\0All files (*.*)\0*.*\0\0";
+            L"Xbox executables and disc images (*.xbe;*.iso;*.xiso)\0*.xbe;*.iso;*.xiso\0All files (*.*)\0*.*\0\0";
         dialog.lpstrFile = path.data();
         dialog.nMaxFile = static_cast<DWORD>(path.size());
-        dialog.lpstrTitle = L"Select an Xbox XBE";
+        dialog.lpstrTitle = L"Select an Xbox XBE or disc image";
         dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
                        OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
 
