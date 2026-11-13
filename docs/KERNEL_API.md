@@ -53,6 +53,11 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## CPU context capture
+
+- Ordinal 265, `RtlCaptureContext`, captures the current native x86 guest-thread context into the caller-provided x86 `CONTEXT` structure.
+- The diagnostic XBE checks that captured EIP and ESP are populated. This captures the actual host thread context at the kernel-call boundary; it does not reconstruct an earlier Xbox exception frame.
+
 ## Timer arming
 
 - Ordinal 229, `NtSetTimerEx`, forwards timer scheduling to the host NT `NtSetTimer` routine after validating the handle, due time, and period.
