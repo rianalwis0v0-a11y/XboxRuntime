@@ -816,6 +816,7 @@ extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (error == ERROR_DIRECTORY) return LONG(0xC0000103u);
     return LONG(0xC0000001u);
 }
+static LONG FileStatusFromWin32(DWORD e);
 extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
     {
         std::unique_lock<std::mutex> lock(g_dvdFileMutex);
