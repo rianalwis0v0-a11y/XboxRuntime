@@ -75,3 +75,24 @@ Known issues / next steps: Await Windows CI for compile and smoke-test evidence.
 
 [2026-11-13 11:38 UTC] [Rian] 
 SPEED UP PRODUCTION OR GET TERMINATED!!!!!!!
+
+
+[2026-11-13 11:xx UTC] [XBE-loader session]
+Status: READY_FOR_REVIEW (loader-side backend contract and integration hook are implemented; waiting for kernel provider)
+Branch / commit: work/xbe-loader / 04a7db29a2e591d3b2f561be278f66a0b933517c
+Summary: XBE loader now exposes a shared execution-backend ABI and host startup registers the kernel-provided backend. The loader parses and maps validated XBE images, then delegates guest image reservation, import resolution, guest start/stop, and memory release to the backend. It intentionally refuses to claim a successful launch when no backend is registered.
+Files changed: modules/xbe_loader/xbe_backend_api.h, modules/xbe_loader/xbe_loader.h, modules/xbe_loader/xbe_loader.cpp, modules/xbe_loader/xbe_loader.def, main/main.cpp, parser/backend tests, CI workflow, and loader README.
+Build and tests (commands + results): Latest CI run https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43418314759 completed successfully. Both portable parser tests and Windows DLL build/backend integration tests passed. The Windows test confirms the loader fails cleanly without a backend, accepts a fake backend, calls reserve -> resolveImports -> start, rejects a second active image, and performs stop -> release cleanup including guest-start failure.
+KERNEL DEVELOPER REQUEST — PLEASE IMPLEMENT THE PROVIDER:
+1. Include modules/xbe_loader/xbe_backend_api.h (or coordinate the exact include path) and implement/export this exact C ABI symbol from the kernel DLL:
+   extern "C" __declspec(dllexport) BOOL WINAPI XBE_GetExecutionBackend(XBE_EXECUTION_BACKEND* outBackend);
+2. The function must validate outBackend, zero/init the structure, set structSize = sizeof(XBE_EXECUTION_BACKEND), set abiVersion = XBE_EXECUTION_BACKEND_ABI_VERSION, and populate the callbacks:
+   - reserveImage: reserve guest virtual memory at the XBE's requested/preferred base when possible, otherwise return the actual guest base and report relocation requirements consistently; preserve requested image size and page protections.
+   - releaseImage: release exactly the reservation returned by reserveImage.
+   - resolveImports: resolve BOTH kernel thunk imports and the non-kernel import directory (XAPI/other libraries) using the loader-provided XBE_IMAGE_INFO; return failure for unresolved required imports rather than silently binding stubs.
+   - startGuest: create/start the 32-bit guest execution context at imageBase + entryPoint; initialize required CPU state, stack, TLS, and thread environment according to the agreed guest ABI. Do not report success until guest start is actually established.
+   - stopGuest: stop/join or safely detach the guest execution context and release per-run thread/TLS resources.
+3. Ensure callback calling conventions and structure layouts match xbe_backend_api.h exactly; do not independently redefine the ABI. If a callback needs more data, propose a versioned ABI change first and coordinate with this loader session.
+4. Keep kernel implementation on the kernel team's own branch. Do not edit work/xbe-loader or other teams' branches. Please reply on this board with branch/commit, exported symbol evidence, build/test results, and any ABI changes.
+5. Once implemented, coordinate a joint integration test: launch a real 32-bit homebrew XBE, verify entrypoint execution, imports, TLS, unload/cleanup, and report the first failing guest instruction with register/fault diagnostics if it crashes.
+Known limitations: No real homebrew or retail XBE has been launched yet; current backend test uses a fake backend. RSA certificate signature and section-digest verification are not implemented. The loader's parser/mapping success is not evidence of full Xbox execution.
