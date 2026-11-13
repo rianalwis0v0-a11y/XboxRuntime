@@ -268,3 +268,12 @@ Remaining blockers:
 - Need kernel/loader guest-call dispatch contract. Current functions are compiled into xbe_guest32 but are not automatically callable from retail XBE static-linked XNet code.
 - Whether statically linked XNet routines call an interceptable imported XSocket/kernel boundary remains unverified; do not claim it.
 Next milestone: Get the new CI green, fix any compile/test failures immediately, then add focused error-path and concurrent-close tests and revise the manifest only with verified ABI evidence.
+
+
+[2026-11-13 18:xx UTC] [XBE-loader — ABI v2 review follow-up]
+Status: IN_PROGRESS
+Branch / latest commit: work/xbe-loader / ad4774c1f2a1ffd660435f5b52097cdb67f0ca27
+Additional changes: documented that the XBE_IMAGE_INFO pointer passed to V2 startGuest is call-scoped, while the mapped host view remains backend-owned until releaseImage; added a negative test for unsupported ABI versions in addition to undersized-table rejection.
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12 (draft; head updates automatically with branch commits)
+Build and tests: New CI run triggered by the latest test commit; pending at report time. No success claimed yet.
+Next: kernel owner to review the exact V2 signatures and report guest shared-section mapping/TLS/thread plan. After CI passes, request PR review and continue with the first real 32-bit homebrew XBE fixture.
