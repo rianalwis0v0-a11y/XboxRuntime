@@ -218,9 +218,11 @@ EmitPush $fileInfoVa
 EmitPush $ioStatusVa
 EmitPushMemory $fileHandleVa
 EmitCallImport 211
+EmitMovMemoryImmediate $progressVa 51
 EmitCheckEqual 0
 EmitLoadEax ([uint32]($fileInfoVa + 8))
 EmitCheckEqual 8
+EmitMovMemoryImmediate $progressVa 52
 
 # Set the file pointer to zero, then query FILE_POSITION_INFORMATION.
 EmitMovMemoryImmediate $fileInfoVa 0
@@ -231,6 +233,7 @@ EmitPush $fileInfoVa
 EmitPush $ioStatusVa
 EmitPushMemory $fileHandleVa
 EmitCallImport 226
+EmitMovMemoryImmediate $progressVa 53
 EmitCheckEqual 0
 EmitPush 14
 EmitPush 8
@@ -238,9 +241,11 @@ EmitPush $fileInfoVa
 EmitPush $ioStatusVa
 EmitPushMemory $fileHandleVa
 EmitCallImport 211
+EmitMovMemoryImmediate $progressVa 54
 EmitCheckEqual 0
 EmitLoadEax $fileInfoVa
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 55
 
 EmitMovMemoryImmediate $progressVa 60
 # Query the mounted volume's volume, size, device, and filesystem metadata.
