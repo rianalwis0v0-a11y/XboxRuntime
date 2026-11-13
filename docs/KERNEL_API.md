@@ -8,7 +8,7 @@ The public ordinal catalogue is `tools/kernel_exports.json`. The dispatcher and 
 
 ## Coverage accounting
 
-The catalogue contains 371 export entries. In the current integration snapshot, 209 ordinals have function routes and 34 have data-export addresses: 243/371 are mapped, with 128 still unmapped. The dispatch audit counts an ordinal as mapped when it has a function route or a data-export address. This is dispatch coverage only; it does not prove correct Xbox semantics, structure layouts, timing, IRQL behaviour, or side effects.
+The catalogue contains 371 export entries. In the current integration snapshot, 210 ordinals have function routes and 34 have data-export addresses: 244/371 are mapped, with 127 still unmapped. The dispatch audit counts an ordinal as mapped when it has a function route or a data-export address. This is dispatch coverage only; it does not prove correct Xbox semantics, structure layouts, timing, IRQL behaviour, or side effects.
 
 Unknown/unimplemented ordinals go to `K_Unsupported`, which raises a guest exception. This is fail-fast behaviour, not a successful stub. Do not count it as API support.
 
