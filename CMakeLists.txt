@@ -79,3 +79,14 @@ target_include_directories(input_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modu
 target_compile_features(input_smoke PRIVATE cxx_std_17)
 target_compile_definitions(input_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME input_smoke COMMAND input_smoke)
+
+# Verify the guest32 Winsock bridge's startup, DNS, and socket lifecycle.
+add_executable(network_smoke
+    tests/network_smoke.cpp
+    guest32/network_compat.cpp
+)
+target_include_directories(network_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/guest32")
+target_compile_features(network_smoke PRIVATE cxx_std_17)
+target_compile_definitions(network_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(network_smoke PRIVATE ws2_32)
+add_test(NAME network_smoke COMMAND network_smoke)
