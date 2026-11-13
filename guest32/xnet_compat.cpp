@@ -97,10 +97,6 @@ extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, 
     *output = nullptr;
     const size_t hostnameLength = std::strlen(hostname);
     if (hostnameLength > 255) return WSAEINVAL;
-    {
-        std::lock_guard<std::mutex> lock(g_xnetMutex);
-        if (!g_xnetUsers) return WSANOTINITIALISED;
-    }
     if (eventHandle && !WSAResetEvent(eventHandle)) return WSAGetLastError();
 
     XNDNS* result = static_cast<XNDNS*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(XNDNS)));
@@ -114,13 +110,17 @@ extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, 
     }
     std::memcpy(nameCopy, hostname, hostnameLength + 1);
 
-    // Hold an independent Winsock reference so XNetCleanup cannot tear down
-    // the resolver underneath this asynchronous operation.
-    if (XboxNetStartup() != 0) {
-        HeapFree(GetProcessHeap(), 0, result);
-        HeapFree(GetProcessHeap(), 0, work);
-        HeapFree(GetProcessHeap(), 0, nameCopy);
-        return WSANOTINITIALISED;
+    // Acquire the operation's Winsock reference while holding the XNet
+    // lifecycle lock, so a concurrent final XNetCleanup cannot slip between
+    // the initialized check and this reference acquisition.
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        if (!g_xnetUsers || XboxNetStartup() != 0) {
+            HeapFree(GetProcessHeap(), 0, result);
+            HeapFree(GetProcessHeap(), 0, work);
+            HeapFree(GetProcessHeap(), 0, nameCopy);
+            return WSANOTINITIALISED;
+        }
     }
     work->hostname = nameCopy;
     work->result = result;
