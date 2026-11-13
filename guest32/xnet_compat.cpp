@@ -264,6 +264,11 @@ extern "C" int WINAPI XSocketIOCTLSocket(SOCKET socket, long command, u_long* ar
     return XboxNetSocketSetNonBlocking(static_cast<uint32_t>(socket), *argument != 0);
 }
 
+extern "C" int WINAPI XSocketSelect(int nfds, fd_set* readfds, fd_set* writefds,
+    fd_set* exceptfds, const timeval* timeout) {
+    return XboxNetSocketSelect(nfds, readfds, writefds, exceptfds, timeout);
+}
+
 extern "C" int WINAPI XSocketSetSockOpt(SOCKET socket, int level, int option, const char* value, int length) {
     if (socket == INVALID_SOCKET || (!value && length) || length < 0) return SOCKET_ERROR;
     return XboxNetSocketSetOption(static_cast<uint32_t>(socket), level, option, value, length);
