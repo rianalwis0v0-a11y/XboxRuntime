@@ -221,6 +221,37 @@ dispatch. DMA fetch caching, push-buffer interrupts/error recovery, channel
 scheduling, and full PFIFO timing/flow semantics are still not implemented.
 
 
+## Programmable NV2A vertex shader translation
+
+The bridge validates NV2A vertex microcode and translates it to HLSL for the
+D3D11 backend; it does not interpret vertices on the CPU. The pinned
+xboxrecomp D3D8 VSH parser is patched at CMake configure time to decode the
+actual four-DWORD NV2A instruction layout: A/B/C source muxes, register
+indices, swizzles and negate bits, MAC/ILU opcodes, temporary destinations,
+the output-unit mux, and the independent temporary/output write masks.
+Source mux values are 1=temporary, 2=vertex input, and 3=constant; zero is
+reserved.
+
+The translator preserves the NV2A paired-issue rule. Before each instruction,
+the generated HLSL snapshots R0-R12 and A0; both MAC and ILU source expressions
+read that pre-instruction state, even though the generated HLSL assignments
+are emitted sequentially. Relative constant reads use the A0 snapshot too.
+This prevents one execution unit from accidentally observing the other unit's
+same-instruction writes.
+
+The nv2a_hlsl_smoke test compiles generated VS 5.0 HLSL and checks MOV, ADD A+C,
+MAD A+B+C, ILU LIT C, constant sources, source swizzles/negation, output
+routing, paired MAC/ILU reads, and relative-constant addressing. The separate
+nv2a_render_capture test executes an NV2A MOV v0 -> oPos shader through a
+D3D11 device and captures ten offscreen frames under
+build/out/nv2a_frames/. This is a shader-path rendering test scene, not
+evidence that a retail XBE has rendered successfully.
+
+Context-write vertex programs that target the writable-constant bank remain
+unsupported and are rejected rather than misinterpreted as ordinary vertex
+shaders. Full XBE-to-NV2A game rendering is still an outstanding integration
+milestone.
+
 ## Per-subchannel context-DMA bindings
 
 NV097 object methods in the 0x180..0x1fc range are now retained as resolved
