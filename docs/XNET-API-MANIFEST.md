@@ -72,6 +72,8 @@ The host adapter query reports only properties it can observe. Duplex flags are 
 ## WSA helper aliases
 
 The Xbox socket API list also includes Winsock helpers such as event operations, last-error access and `inet_addr`. To avoid colliding with the host process's imported `ws2_32` symbols, the current guest target implements prefixed aliases that the future guest API registry can map by original symbol identity:
+- `WSAStartup` → `XboxWSAStartup` (shares the guest transport Winsock reference count)
+- `WSACleanup` → `XboxWSACleanup`
 - `WSACreateEvent` → `XboxWSACreateEvent`
 - `WSACloseEvent` → `XboxWSACloseEvent`
 - `WSASetEvent` → `XboxWSASetEvent`
@@ -81,7 +83,7 @@ The Xbox socket API list also includes Winsock helpers such as event operations,
 - `WSASetLastError` → `XboxWSASetLastError`
 - `inet_addr` → `XboxWSAInetAddr`
 
-These wrappers use the guest process's own Winsock event/error facilities. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. `select`, overlapped I/O (`WSARecv`/`WSASend`), and several helpers remain unsupported.
+These wrappers use the guest process's own Winsock startup, event and error facilities. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. `select`, overlapped I/O (`WSARecv`/`WSASend`), and several helpers remain unsupported.
 
 ## Internal transport bridge (not title ABI)
 
