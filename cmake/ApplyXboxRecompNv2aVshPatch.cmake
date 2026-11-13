@@ -237,6 +237,79 @@ static void emit_dest_assign(StrBuf *sb, const NV2AVshDstOperand *dst,
     file(WRITE "${_vsh_c}" "${_vsh_src}")
 endif()
 
+file(READ "${_vsh_c}" _vsh_src)
+string(FIND "${_vsh_src}" "XBOXRUNTIME_NV2A_VSH_PARALLEL_SOURCE_PATCH" _parallel_patched)
+if(_parallel_patched LESS 0)
+    set(_parallel_source_block [=[
+    switch (src->reg_type) {
+    case NV2A_VSH_REG_TEMP:
+        if (src->reg_index == 12)
+            sb_append(sb, "R12");
+        else
+            sb_append(sb, "R%d", src->reg_index);
+        break;
+    case NV2A_VSH_REG_INPUT:
+        sb_append(sb, "v%d", src->reg_index);
+        break;
+    case NV2A_VSH_REG_CONST:
+        if (src->rel_addr)
+            sb_append(sb, "c[a0 + %d]", src->reg_index);
+        else
+            sb_append(sb, "c[%d]", src->reg_index);
+        break;
+    case NV2A_VSH_REG_SNAPSHOT:
+        sb_append(sb, "_vsh_src%d", src->reg_index);
+        break;
+    default:
+        sb_append(sb, "float4(0,0,0,0)");
+        break;
+    }
+]=])
+    _replace_range(_vsh_src "    switch (src->reg_type) {" "    if (scalar)" _parallel_source_block _vsh_src)
+
+    set(_parallel_loop_block [=[
+    /* XBOXRUNTIME_NV2A_VSH_PARALLEL_SOURCE_PATCH
+     * Both NV2A units read A/B/C before either unit writes its destination.
+     * Snapshot all three sources when MAC and ILU execute in the same slot. */
+    for (i = 0; i < program->length; i++) {
+        const NV2AVshInstruction *inst = &program->insns[i];
+        sb_append(&sb, "\\n    /* Instruction %d */\\n", i);
+
+        if (inst->mac_op != NV2A_VSH_MAC_NOP &&
+            inst->ilu_op != NV2A_VSH_ILU_NOP) {
+            NV2AVshInstruction parallel_inst = *inst;
+            int source;
+            for (source = 0; source < 3; ++source) {
+                const int snapshot_index = i * 3 + source;
+                NV2AVshSrcOperand *snapshot = &parallel_inst.mac_src[source];
+                sb_append(&sb, "    float4 _vsh_src%d = ", snapshot_index);
+                emit_source(&sb, &inst->mac_src[source], 0);
+                sb_append(&sb, ";\\n");
+                snapshot->reg_type = NV2A_VSH_REG_SNAPSHOT;
+                snapshot->reg_index = snapshot_index;
+                snapshot->negate = 0;
+                snapshot->rel_addr = 0;
+                snapshot->swizzle.x = 0;
+                snapshot->swizzle.y = 1;
+                snapshot->swizzle.z = 2;
+                snapshot->swizzle.w = 3;
+            }
+            parallel_inst.ilu_src = parallel_inst.mac_src[2];
+            emit_mac_op(&sb, &parallel_inst);
+            emit_ilu_op(&sb, &parallel_inst);
+        } else {
+            if (inst->mac_op != NV2A_VSH_MAC_NOP)
+                emit_mac_op(&sb, inst);
+            if (inst->ilu_op != NV2A_VSH_ILU_NOP)
+                emit_ilu_op(&sb, inst);
+        }
+    }
+
+]=])
+    _replace_range(_vsh_src "    for (i = 0; i < program->length; i++) {" "    /* Undo the R12 alias */" _parallel_loop_block _vsh_src)
+    file(WRITE "${_vsh_c}" "${_vsh_src}")
+endif()
+
 file(READ "${_vsh_h}" _vsh_hdr)
 string(FIND "${_vsh_hdr}" "XBOXRUNTIME_NV2A_VSH_OUTPUT_MASK_PATCH" _hdr_patched)
 if(_hdr_patched LESS 0)
@@ -258,6 +331,31 @@ typedef struct NV2AVshDstOperand {
 } NV2AVshDstOperand; /* XBOXRUNTIME_NV2A_VSH_OUTPUT_MASK_PATCH */
 ]=])
     set(_vsh_hdr "${_hdr_prefix}${_new_dst}${_hdr_suffix}")
+    file(WRITE "${_vsh_h}" "${_vsh_hdr}")
+endif()
+
+file(READ "${_vsh_h}" _vsh_hdr)
+string(FIND "${_vsh_hdr}" "XBOXRUNTIME_NV2A_VSH_SNAPSHOT_REG_PATCH" _snapshot_enum_patched)
+if(_snapshot_enum_patched LESS 0)
+    string(FIND "${_vsh_hdr}" "typedef enum NV2AVshRegType {" _reg_start)
+    string(FIND "${_vsh_hdr}" "} NV2AVshRegType;" _reg_end)
+    if(_reg_start LESS 0 OR _reg_end LESS _reg_start)
+        message(FATAL_ERROR "Could not locate NV2AVshRegType in pinned xboxrecomp header")
+    endif()
+    string(LENGTH "} NV2AVshRegType;" _reg_end_len)
+    math(EXPR _reg_after_end "${_reg_end} + ${_reg_end_len}")
+    string(SUBSTRING "${_vsh_hdr}" 0 ${_reg_start} _reg_prefix)
+    string(SUBSTRING "${_vsh_hdr}" ${_reg_after_end} -1 _reg_suffix)
+    set(_new_reg [=[
+typedef enum NV2AVshRegType {
+    NV2A_VSH_REG_TEMP     = 0,  /* R0-R11 (R12 = oPos alias) */
+    NV2A_VSH_REG_INPUT    = 1,  /* v0-v15 */
+    NV2A_VSH_REG_CONST    = 2,  /* c0-c191 (may be indexed via a0) */
+    NV2A_VSH_REG_SNAPSHOT = 3,  /* Per-instruction read-before-write snapshot */
+    NV2A_VSH_REG_COUNT    = 4,
+} NV2AVshRegType; /* XBOXRUNTIME_NV2A_VSH_SNAPSHOT_REG_PATCH */
+]=])
+    set(_vsh_hdr "${_reg_prefix}${_new_reg}${_reg_suffix}")
     file(WRITE "${_vsh_h}" "${_vsh_hdr}")
 endif()
 
