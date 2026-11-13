@@ -104,7 +104,7 @@ int main() {
     Put32(validTls, 0x12C, 0x00011000);
     Put32(validTls, 0x400, 0x00011020); // DataStart
     Put32(validTls, 0x404, 0x00011040); // DataEnd
-    Put32(validTls, 0x408, 0x00011040); // TLS index slot (zero-fill)
+    Put32(validTls, 0x408, 0x00011200); // TLS index slot (zero-fill)
     Put32(validTls, 0x40C, 0);          // no callback array
     Put32(validTls, 0x410, 0x10);       // zero-fill bytes
     Put32(validTls, 0x414, 0);          // characteristics
