@@ -13,6 +13,7 @@
 using ModuleStart = int (__cdecl*)();
 using ModuleStop = void (__cdecl*)();
 using RegisterBackend = int (__cdecl*)(const XBE_EXECUTION_BACKEND*);
+using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
 
@@ -22,6 +23,7 @@ static bool g_guestStarted = false;
 static bool g_guestStopped = false;
 static bool g_released = false;
 static bool g_failStart = false;
+static bool g_v2GuestStarted = false;
 static int g_sequence = 0;
 static int g_reserveOrder = 0;
 static int g_resolveOrder = 0;
@@ -73,6 +75,17 @@ static int __cdecl StartGuest(std::uint32_t entry, std::uint32_t tls, void*) {
 static void __cdecl StopGuest(void*) {
     g_guestStopped = true;
     g_stopOrder = ++g_sequence;
+}
+
+static int __cdecl StartGuestV2(const XBE_IMAGE_INFO* info,
+                                std::uint8_t* image, void*) {
+    if (!info || !image || info->baseAddress != 0x10000 ||
+        info->imageSize != 0x2000 || info->entryPoint != 0x11010 ||
+        info->tlsAddress != 0 || image[0x1000] != 0xA5)
+        return 1;
+    g_v2GuestStarted = true;
+    g_startOrder = ++g_sequence;
+    return 0;
 }
 
 static bool WriteXbe(const wchar_t* path) {
@@ -153,6 +166,32 @@ int wmain() {
     assert(load(path) == 10);
     assert(g_guestStopped && g_released);
     assert(g_stopOrder < g_releaseOrder);
+
+    // Restart the module and exercise the independently versioned v2 ABI.
+    stop();
+    assert(start() == 0);
+    auto registerBackendV2 = reinterpret_cast<RegisterBackendV2>(
+        GetProcAddress(dll, "XBE_RegisterExecutionBackendV2"));
+    assert(registerBackendV2 != nullptr);
+
+    XBE_EXECUTION_BACKEND_V2 backendV2{};
+    backendV2.size = sizeof(backendV2);
+    backendV2.version = XBE_EXECUTION_BACKEND_V2_VERSION;
+    backendV2.reserveImage = ReserveImage;
+    backendV2.releaseImage = ReleaseImage;
+    backendV2.resolveImports = ResolveImports;
+    backendV2.startGuest = StartGuestV2;
+    backendV2.stopGuest = StopGuest;
+    assert(registerBackendV2(&backendV2) == 0);
+    assert(g_v2GuestStarted == false);
+    assert(load(path) == 0);
+    assert(g_v2GuestStarted && g_importsResolved);
+    unload();
+    assert(g_guestStopped && g_released);
+
+    XBE_EXECUTION_BACKEND_V2 undersized = backendV2;
+    undersized.size = sizeof(undersized) - 1;
+    assert(registerBackendV2(&undersized) == 1);
 
     stop();
     FreeLibrary(dll);
