@@ -15,6 +15,12 @@ typedef struct XBE_IMAGE_INFO {
     std::uint32_t baseAddress;
     std::uint32_t imageSize;
     std::uint32_t headerSize;
+    std::uint32_t certificateAddress;
+    std::uint32_t nonKernelImportDirectoryAddress;
+    std::uint32_t libraryVersionCount;
+    std::uint32_t libraryVersionsAddress;
+    std::uint32_t kernelLibraryVersionAddress;
+    std::uint32_t xapiLibraryVersionAddress;
     std::uint32_t entryPoint;
     std::uint32_t tlsAddress;
     std::uint32_t kernelThunkAddress;
