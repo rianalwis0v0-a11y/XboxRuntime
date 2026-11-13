@@ -88,7 +88,7 @@ bool IsXnetLibrary(std::uint32_t base, std::uint32_t size,
         if (c > 0x7Fu) return false;
         ascii[n] = static_cast<wchar_t>(std::towupper(c));
     }
-    if (n + 1 == std::size(ascii) || name[n] != L'\\0') return false;
+    if (n + 1 == std::size(ascii) || name[n] != L'\0') return false;
     const std::wstring value(ascii);
     return value == L"XNET" || value == L"XNET.DLL";
 }
