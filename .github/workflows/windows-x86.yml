@@ -24,6 +24,9 @@ jobs:
         run: cmake -S . -B build -A Win32
       - name: Build all runtime modules and guest
         run: cmake --build build --config Release --parallel
+      - name: Run native x86 diagnostic XBE
+        shell: pwsh
+        run: .\\.github\\scripts\\test-diagnostic-xbe.ps1
       - name: Stage and verify runtime deployment layout
         shell: pwsh
         run: |
