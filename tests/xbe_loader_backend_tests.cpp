@@ -21,6 +21,12 @@ static bool g_importsResolved = false;
 static bool g_guestStarted = false;
 static bool g_guestStopped = false;
 static bool g_released = false;
+static int g_sequence = 0;
+static int g_reserveOrder = 0;
+static int g_resolveOrder = 0;
+static int g_startOrder = 0;
+static int g_stopOrder = 0;
+static int g_releaseOrder = 0;
 
 static void Put32(std::vector<std::uint8_t>& bytes, std::size_t offset,
                   std::uint32_t value) {
@@ -36,12 +42,14 @@ static int __cdecl ReserveImage(std::uint32_t base, std::uint32_t size,
     *image = new (std::nothrow) std::uint8_t[size];
     if (!*image) return 2;
     g_reserved = true;
+    g_reserveOrder = ++g_sequence;
     return 0;
 }
 
 static void __cdecl ReleaseImage(std::uint8_t* image, void*) {
     delete[] image;
     g_released = true;
+    g_releaseOrder = ++g_sequence;
 }
 
 static int __cdecl ResolveImports(std::uint8_t* image,
@@ -50,17 +58,20 @@ static int __cdecl ResolveImports(std::uint8_t* image,
         info->sectionCount != 1 || image[0x1000] != 0xA5)
         return 1;
     g_importsResolved = true;
+    g_resolveOrder = ++g_sequence;
     return 0;
 }
 
 static int __cdecl StartGuest(std::uint32_t entry, std::uint32_t tls, void*) {
     if (entry != 0x11010 || tls != 0) return 1;
     g_guestStarted = true;
+    g_startOrder = ++g_sequence;
     return 0;
 }
 
 static void __cdecl StopGuest(void*) {
     g_guestStopped = true;
+    g_stopOrder = ++g_sequence;
 }
 
 static bool WriteXbe(const wchar_t* path) {
@@ -130,6 +141,10 @@ int wmain() {
     unload();
     unload(); // idempotent shutdown
     assert(g_guestStopped && g_released);
+    assert(g_reserveOrder < g_resolveOrder &&
+           g_resolveOrder < g_startOrder &&
+           g_startOrder < g_stopOrder &&
+           g_stopOrder < g_releaseOrder);
 
     stop();
     FreeLibrary(dll);
