@@ -715,34 +715,37 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
         case 14: required = sizeof(GuestFilePositionInformation); break;
         default: return LONG(0xC0000003u);
         }
-        if (length < required) return LONG(0xC0000004u);
-        std::memset(out, 0, length);
-        if (infoClass == 4) {
-            static_cast<GuestFileBasicInformation*>(out)->FileAttributes =
-                FILE_ATTRIBUTE_READONLY;
-        } else if (infoClass == 5) {
-            auto* p = static_cast<GuestFileStandardInformation*>(out);
-            p->EndOfFile.QuadPart = dvdFile.size;
-            p->AllocationSize.QuadPart =
-                (static_cast<LONGLONG>(dvdFile.size) + 2047) & ~LONGLONG(2047);
-            p->NumberOfLinks = 1;
-        } else if (infoClass == 6) {
-            static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
-                (static_cast<ULONGLONG>(dvdFile.startSector) << 32) | dvdFile.size;
-        } else if (infoClass == 9) {
+        if (infoClass == 9) {
             const int chars = MultiByteToWideChar(CP_ACP, 0, dvdFile.path.data(),
                 static_cast<int>(dvdFile.path.size()), nullptr, 0);
             if (chars <= 0) return LONG(0xC0000001u);
             const ULONG bytes = static_cast<ULONG>(chars * sizeof(WCHAR));
-            if (length < sizeof(ULONG) + bytes) return LONG(0xC0000004u);
+            required = sizeof(ULONG) + bytes;
+            if (length < required) return LONG(0xC0000004u);
+            std::memset(out, 0, required);
             auto* p = static_cast<GuestFileNameInformation*>(out);
             p->FileNameLength = bytes;
             MultiByteToWideChar(CP_ACP, 0, dvdFile.path.data(),
                 static_cast<int>(dvdFile.path.size()), p->FileName, chars);
-            required = sizeof(ULONG) + bytes;
         } else {
-            static_cast<GuestFilePositionInformation*>(out)->CurrentByteOffset.QuadPart =
-                static_cast<LONGLONG>(dvdFile.position);
+            if (length < required) return LONG(0xC0000004u);
+            std::memset(out, 0, required);
+            if (infoClass == 4) {
+                static_cast<GuestFileBasicInformation*>(out)->FileAttributes =
+                    FILE_ATTRIBUTE_READONLY;
+            } else if (infoClass == 5) {
+                auto* p = static_cast<GuestFileStandardInformation*>(out);
+                p->EndOfFile.QuadPart = dvdFile.size;
+                p->AllocationSize.QuadPart =
+                    (static_cast<LONGLONG>(dvdFile.size) + 2047) & ~LONGLONG(2047);
+                p->NumberOfLinks = 1;
+            } else if (infoClass == 6) {
+                static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
+                    (static_cast<ULONGLONG>(dvdFile.startSector) << 32) | dvdFile.size;
+            } else {
+                static_cast<GuestFilePositionInformation*>(out)->CurrentByteOffset.QuadPart =
+                    static_cast<LONGLONG>(dvdFile.position);
+            }
         }
         if (io) { io->Status = 0; io->Information = required; }
         return 0;
