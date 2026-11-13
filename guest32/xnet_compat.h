@@ -22,6 +22,7 @@ struct XNetStartupParams {
     BYTE cfgQosSrvMaxSimultaneousResponses;
     BYTE cfgQosPairWaitTimeInSeconds;
 };
+struct XNKID { BYTE ab[8]; };
 struct XNADDR {
     IN_ADDR ina;
     IN_ADDR inaOnline;
@@ -37,6 +38,7 @@ struct XNDNS {
 #pragma pack(pop)
 
 static_assert(sizeof(XNetStartupParams) == 13, "XNetStartupParams ABI size");
+static_assert(sizeof(XNKID) == 8, "XNKID ABI size");
 static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
 static_assert(sizeof(XNDNS) == 40, "XNDNS ABI size");
 
@@ -45,11 +47,15 @@ int WINAPI XNetStartup(const XNetStartupParams* params);
 int WINAPI XNetCleanup();
 int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** result);
 int WINAPI XNetDnsRelease(XNDNS* result);
+int WINAPI XNetRandom(BYTE* buffer, UINT length);
 int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity);
+int WINAPI XNetXnAddrToInAddr(const XNADDR* address, const XNKID* keyId, IN_ADDR* output);
 int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output);
-int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
+int WINAPI XNetInAddrToXnAddr(const IN_ADDR address, XNADDR* output, XNKID* keyId);
+int WINAPI XNetUnregisterInAddr(const IN_ADDR address);
 DWORD WINAPI XNetGetEthernetLinkStatus();
 DWORD WINAPI XNetGetTitleXnAddr(XNADDR* address);
+DWORD WINAPI XNetGetDebugXnAddr(XNADDR* address);
 }
 
 extern "C" {
@@ -73,4 +79,18 @@ u_long WINAPI XSocketHTONL(u_long value);
 u_long WINAPI XSocketNTOHL(u_long value);
 u_short WINAPI XSocketHTONS(u_short value);
 u_short WINAPI XSocketNTOHS(u_short value);
+}
+
+// Prefixed guest aliases for the Xbox SOCKAPILIST WSA helpers. The guest API
+// registry maps the original symbol names to these addresses, avoiding symbol
+// collisions with the host process's ws2_32 imports.
+extern "C" {
+WSAEVENT WINAPI XboxWSACreateEvent();
+BOOL WINAPI XboxWSACloseEvent(WSAEVENT eventHandle);
+BOOL WINAPI XboxWSASetEvent(WSAEVENT eventHandle);
+BOOL WINAPI XboxWSAResetEvent(WSAEVENT eventHandle);
+DWORD WINAPI XboxWSAWaitForMultipleEvents(DWORD count, const WSAEVENT* events, BOOL waitAll, DWORD timeout, BOOL alertable);
+int WINAPI XboxWSAGetLastError();
+void WINAPI XboxWSASetLastError(int error);
+ULONG WINAPI XboxWSAInetAddr(const char* address);
 }
