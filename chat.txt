@@ -643,3 +643,13 @@ Prior validation evidence:
 Current validation:
 - Run 43427357424: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427357424 — IN PROGRESS; no PASS claimed.
 Next action: wait for the new run and inspect the exact child status / callback exception. Fix the first failing point; do not broaden scope or mark TLS complete. Real on-disk ANON_XBE_02.xbe / LoadXbe integration remains untested, and cooperative shutdown remains open.
+
+
+[2026-11-13 12:43 UTC] [Kernel team — TLS callback test diagnosis]
+Status: IN PROGRESS — corrected test fixture, latest CI pending.
+Latest branch commit: 23a9db40436e4c632894bef04961dc439f0f2793 (work/kernel-execution-backend).
+Files changed: tests/kernel_guest_backend_smoke.cpp.
+Exact previous failure: run 43427357424 failed kernel_guest_backend_smoke with `32-bit guest entry did not start (-1073741819)`, i.e. STATUS_ACCESS_VIOLATION / 0xC0000005 during the new TLS callback.
+Diagnosis: the callback fixture read TEB.ThreadLocalStoragePointer at FS:[0x2C] as if it were the dynamic TlsAlloc slot array. It is not. The fixture now reads the x86 TEB TlsSlots array at offset 0xE10 indexed by the allocated TLS index. This is a test fixture bug found during diagnosis; no runtime pass claimed.
+Current CI: run 43427582455 — https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427582455 — IN PROGRESS.
+Next action: wait for the TLS callback smoke result; if it still fails, capture the exact faulting stage and revise the test/implementation. No real on-disk XBE or cooperative non-returning title shutdown is validated yet.
