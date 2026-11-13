@@ -178,7 +178,7 @@ extern "C" SOCKET WINAPI XSocketCreate(int af, int type, int protocol) {
         return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
     }
     if (type == SOCK_DGRAM) {
-        if (protocol != 0 && protocol != IPPROTO_UDP && protocol != 254) return INVALID_SOCKET;
+        if (protocol != 0 && protocol != IPPROTO_UDP) return INVALID_SOCKET;
         const uint32_t handle = XboxNetSocketCreate(2);
         return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
     }
