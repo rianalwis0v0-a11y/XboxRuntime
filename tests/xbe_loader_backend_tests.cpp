@@ -193,6 +193,10 @@ int wmain() {
     undersized.size = sizeof(undersized) - 1;
     assert(registerBackendV2(&undersized) == 1);
 
+    XBE_EXECUTION_BACKEND_V2 wrongVersion = backendV2;
+    wrongVersion.version = XBE_EXECUTION_BACKEND_V2_VERSION + 1;
+    assert(registerBackendV2(&wrongVersion) == 1);
+
     stop();
     FreeLibrary(dll);
     DeleteFileW(path);
