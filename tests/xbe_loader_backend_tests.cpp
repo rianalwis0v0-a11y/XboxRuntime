@@ -112,6 +112,7 @@ int wmain() {
         GetProcAddress(dll, "UnloadXbe"));
     assert(start && stop && registerBackend && load && unload);
     assert(start() == 0);
+    assert(load(path) == 4); // no backend must never be reported as a launch
 
     XBE_EXECUTION_BACKEND backend{};
     backend.size = sizeof(backend);
@@ -125,7 +126,9 @@ int wmain() {
 
     assert(load(path) == 0);
     assert(g_reserved && g_importsResolved && g_guestStarted);
+    assert(load(path) == 3); // reject a second image while one is active
     unload();
+    unload(); // idempotent shutdown
     assert(g_guestStopped && g_released);
 
     stop();
