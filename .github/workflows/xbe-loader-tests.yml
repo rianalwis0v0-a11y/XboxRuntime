@@ -9,6 +9,7 @@ on:
       - "modules/xbe_loader/**"
       - "tests/xbe_format_tests.cpp"
       - "tests/xbe_loader_backend_tests.cpp"
+      - "tests/xbe_loader_file_tests.cpp"
       - "main/main.cpp"
       - ".github/workflows/xbe-loader-tests.yml"
 
@@ -25,10 +26,43 @@ jobs:
       - name: Run parser tests
         run: ./xbe_format_tests
 
+  nxdk-homebrew-xbe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out reviewed NXDK source
+        uses: actions/checkout@v4
+        with:
+          repository: XboxDev/nxdk
+          ref: fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e
+          path: nxdk
+          submodules: recursive
+      - name: Install NXDK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm lld pkgconf bison flex cmake
+      - name: Build NXDK hello homebrew XBE
+        run: |
+          eval "$(./nxdk/bin/activate -s)"
+          make -C nxdk/samples/hello -j2
+          test -s nxdk/samples/hello/bin/default.xbe
+      - name: Upload generated XBE fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdk-hello-xbe
+          path: nxdk/samples/hello/bin/default.xbe
+          if-no-files-found: error
+
   windows-x64-host-dll-build:
+    needs: nxdk-homebrew-xbe
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Download NXDK-built XBE fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: nxdk-hello-xbe
+          path: nxdk-fixture
       - name: Build x64 host loader DLL and exports
         shell: cmd
         run: |
@@ -46,3 +80,6 @@ jobs:
           cl /nologo /std:c++17 /EHsc /W4 /WX /Fe:xbe_loader_backend_tests.exe tests\xbe_loader_backend_tests.cpp
           if errorlevel 1 exit /b 1
           xbe_loader_backend_tests.exe
+          cl /nologo /std:c++17 /EHsc /W4 /WX /Fe:xbe_loader_file_tests.exe tests\\xbe_loader_file_tests.cpp
+          if errorlevel 1 exit /b 1
+          xbe_loader_file_tests.exe nxdk-fixture\\default.xbe
