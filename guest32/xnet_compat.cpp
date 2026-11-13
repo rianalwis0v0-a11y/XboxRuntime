@@ -9,6 +9,7 @@
 #include <vector>
 #include <iphlpapi.h>
 #include <new>
+#include <bcrypt.h>
 #include "xnet_compat.h"
 #include "network_compat.h"
 
@@ -105,16 +106,36 @@ extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capa
     return 0;
 }
 
-extern "C" int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD, IN_ADDR* output) {
-    if (!output) return WSAEFAULT;
-    *output = address;
-    return 0;
+extern "C" int WINAPI XNetRandom(BYTE* buffer, UINT length) {
+    if (!buffer && length) return WSAEFAULT;
+    if (!length) return 0;
+    return BCRYPT_SUCCESS(BCryptGenRandom(nullptr, buffer, length,
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ? 0 : WSAENOBUFS;
 }
 
-extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
+extern "C" int WINAPI XNetXnAddrToInAddr(const XNADDR* address,
+    const XNKID* keyId, IN_ADDR* output) {
+    if (!address || !keyId || !output) return WSAEFAULT;
+    // Online XNADDR resolution requires XNet key registration/security state.
+    // Never fabricate an IP address when that state is unavailable.
+    return WSAEOPNOTSUPP;
+}
+
+extern "C" int WINAPI XNetServerToInAddr(IN_ADDR, DWORD, IN_ADDR* output) {
     if (!output) return WSAEFAULT;
-    *output = address;
-    return 0;
+    // Service-ID address resolution is not implemented yet.
+    return WSAEOPNOTSUPP;
+}
+
+extern "C" int WINAPI XNetInAddrToXnAddr(const IN_ADDR, XNADDR* output,
+    XNKID* keyId) {
+    if (!output || !keyId) return WSAEFAULT;
+    // Reverse mapping requires registered online address/key state.
+    return WSAEOPNOTSUPP;
+}
+
+extern "C" int WINAPI XNetUnregisterInAddr(const IN_ADDR) {
+    return WSAEOPNOTSUPP;
 }
 
 namespace {
@@ -167,6 +188,12 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
     return flags;
 }
 
+
+extern "C" DWORD WINAPI XNetGetDebugXnAddr(XNADDR* output) {
+    if (output) std::memset(output, 0, sizeof(*output));
+    // Debug XNADDR is devkit-specific and must not be synthesized on retail hosts.
+    return 0;
+}
 
 // XSocket handles are guest 32-bit tokens. They are deliberately not host
 // SOCKET values, because the host runtime may be a separate 64-bit process.
@@ -301,3 +328,15 @@ extern "C" u_long WINAPI XSocketHTONL(u_long value) { return htonl(value); }
 extern "C" u_long WINAPI XSocketNTOHL(u_long value) { return ntohl(value); }
 extern "C" u_short WINAPI XSocketHTONS(u_short value) { return htons(value); }
 extern "C" u_short WINAPI XSocketNTOHS(u_short value) { return ntohs(value); }
+
+
+extern "C" WSAEVENT WINAPI XboxWSACreateEvent() { return WSACreateEvent(); }
+extern "C" BOOL WINAPI XboxWSACloseEvent(WSAEVENT eventHandle) { return WSACloseEvent(eventHandle); }
+extern "C" BOOL WINAPI XboxWSASetEvent(WSAEVENT eventHandle) { return WSASetEvent(eventHandle); }
+extern "C" BOOL WINAPI XboxWSAResetEvent(WSAEVENT eventHandle) { return WSAResetEvent(eventHandle); }
+extern "C" DWORD WINAPI XboxWSAWaitForMultipleEvents(DWORD count, const WSAEVENT* events, BOOL waitAll, DWORD timeout, BOOL alertable) {
+    return WSAWaitForMultipleEvents(count, events, waitAll, timeout, alertable);
+}
+extern "C" int WINAPI XboxWSAGetLastError() { return WSAGetLastError(); }
+extern "C" void WINAPI XboxWSASetLastError(int error) { WSASetLastError(error); }
+extern "C" ULONG WINAPI XboxWSAInetAddr(const char* address) { return address ? inet_addr(address) : INADDR_NONE; }
