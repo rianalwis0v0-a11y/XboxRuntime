@@ -13,7 +13,7 @@
 namespace {
 std::mutex g_xnetMutex;
 unsigned g_xnetUsers = 0;
-XboxXNetStartupParams g_startupParams{};
+XNetStartupParams g_startupParams{};
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -22,9 +22,9 @@ void Log(const wchar_t* message) {
 }
 }
 
-extern "C" int WINAPI XboxXNetStartup(const XboxXNetStartupParams* params) {
+extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
-    if (params && params->cfgSizeOfStruct != sizeof(XboxXNetStartupParams))
+    if (params && params->cfgSizeOfStruct != sizeof(XNetStartupParams))
         return WSAEINVAL;
     if (g_xnetUsers) {
         ++g_xnetUsers;
@@ -52,7 +52,7 @@ extern "C" int WINAPI XboxXNetStartup(const XboxXNetStartupParams* params) {
     return 0;
 }
 
-extern "C" int WINAPI XboxXNetCleanup() {
+extern "C" int WINAPI XNetCleanup() {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
     if (!g_xnetUsers) return 0;
     if (--g_xnetUsers == 0) {
@@ -63,7 +63,7 @@ extern "C" int WINAPI XboxXNetCleanup() {
     return 0;
 }
 
-extern "C" int WINAPI XboxXNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XboxXnDns** output) {
+extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** output) {
     if (!hostname || !*hostname || !output) return WSAEINVAL;
     *output = nullptr;
     {
@@ -71,7 +71,7 @@ extern "C" int WINAPI XboxXNetDnsLookup(const char* hostname, WSAEVENT eventHand
         if (!g_xnetUsers) return WSANOTINITIALISED;
     }
 
-    XboxXnDns* result = static_cast<XboxXnDns*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(XboxXnDns)));
+    XNDNS* result = static_cast<XNDNS*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(XNDNS)));
     if (!result) return WSAENOBUFS;
 
     uint32_t address = 0;
@@ -88,12 +88,12 @@ extern "C" int WINAPI XboxXNetDnsLookup(const char* hostname, WSAEVENT eventHand
     return 0;
 }
 
-extern "C" int WINAPI XboxXNetDnsRelease(XboxXnDns* result) {
+extern "C" int WINAPI XNetDnsRelease(XNDNS* result) {
     if (result) HeapFree(GetProcessHeap(), 0, result);
     return 0;
 }
 
-extern "C" int WINAPI XboxXNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
+extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
     if (!buffer || capacity <= 0) return WSAEFAULT;
     const char* text = inet_ntoa(address);
     if (!text) return WSAEINVAL;
@@ -103,19 +103,19 @@ extern "C" int WINAPI XboxXNetInAddrToString(IN_ADDR address, char* buffer, int 
     return 0;
 }
 
-extern "C" int WINAPI XboxXNetServerToInAddr(IN_ADDR address, DWORD, IN_ADDR* output) {
+extern "C" int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD, IN_ADDR* output) {
     if (!output) return WSAEFAULT;
     *output = address;
     return 0;
 }
 
-extern "C" int WINAPI XboxXNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
+extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
     if (!output) return WSAEFAULT;
     *output = address;
     return 0;
 }
 
-extern "C" DWORD WINAPI XboxXNetGetEthernetLinkStatus() {
+extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
     // Report only the host adapter's generic active wired-compatible status;
     // do not claim an Xbox Live sign-in or online address exists.
     return 0x00000001u;
