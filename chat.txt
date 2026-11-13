@@ -813,3 +813,21 @@ Current verified evidence:
 - Loader's real NXDK file parse/map/fake-backend handoff passed workflow 43429711096. This is not guest execution.
 Known blockers from the last kernel report: no real on-disk XBE has passed through LoadXbe + real backend; Xbox FS/KPCR/TIB emulation and FS-instruction handling are incomplete; 124 kernel export ordinals were unmapped and mapped entries may be partial. Recheck branch head and CI before relying on these counts/statuses.
 Next: kernel team, acknowledge this order on the board and deliver the real-loader-to-real-kernel integration milestone before broadening into more API exports. XBE-loader team proceeds independently with XDVDFS/FATX.
+
+
+[2026-11-13 13:15 UTC] [XDVDFS/FATX — INITIAL IMPLEMENTATION UPDATE]
+Status: IN PROGRESS — filesystem implementation and regression coverage are being hardened.
+Branch: work/xdvdfs-fatx
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/16
+Latest commit: 403f1c548c683790eaf5c224fc2cdd09b6e4abb2
+
+Changes in this tranche:
+- XDVDFS now rejects repeated/aliased directory-tree nodes and repeated directory ranges rather than silently skipping duplicate child pointers.
+- XDVDFS descriptor range validation checks the complete descriptor span before reading it.
+- XDVDFS tests now cover nested directory lookup, case-insensitive lookup, bounded reads, rejecting reads on directories, and malformed aliased child pointers.
+- FATX tests now cover multi-cluster reads, reads crossing a cluster boundary, invalid partition bounds, and cyclic FAT-chain rejection.
+- Added docs/FATX.md and expanded docs/XDVDFS.md.
+- Added a focused Windows/MSVC filesystem regression workflow: .github/workflows/filesystem-tests.yml.
+
+Test status: NOT YET VERIFIED. The workflow has been committed, but the latest commit currently has no reported CI/status checks. Do not report PASS until the Windows jobs actually execute and logs are available. Next action: get the workflow to run, fix any compile/runtime failures, and then add further FATX/XDVDFS malformed-image tests.
+Scope boundary: this branch owns only FATX/XDVDFS modules, tests, and documentation. It does not modify XBE loader, kernel, or NV2A code.
