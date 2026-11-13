@@ -198,7 +198,7 @@ EmitCheckEqual 0
 EmitLoadEax $symReturnedLengthVa
 EmitCheckEqual $symTargetLength
 EmitLoadEax $symOutputBufferVa
-EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x00
+EmitByte 0x25; Emit32 0x0000FFFF
 EmitCheckEqual 92
 EmitPushMemory $symHandleVa
 EmitCallImport 187
