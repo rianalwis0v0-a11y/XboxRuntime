@@ -977,3 +977,10 @@ Run 43436124079 proves the real on-disk NXDK XBE can be mapped and handed throug
 - Fixture SHA-256: `4DED5A04D76005543BBA315D3720283D495385CCCEE6D944BAFFC422284E0F5F`.
 No entrypoint PASS claimed. Next diagnostic patch adds the exception instruction address, access type (read/write/execute), and faulting virtual address to the guest exit reply so the FS/TLS issue can be isolated rather than guessed.
 Diagnostic code commits: 114fa7f7af8b447045a9ab837094ac99021d9f41 (header), 6613f39947933ca32088068b78df1e1542b2d3b8 (capture), 59451485058eb8ff642fca6c7cf69696f32f99e3 (wire reply), 2f9219afc210629417537eb57eca12a2afa9b71a (guest reply), 2419a30352a9226855f0297fee15425c6c0d0ad0 (host forwarding), 192a15b739fc1a46dcfd6850f47adede1dae8d87 (harness output). New CI run pending.
+
+
+[2026-11-13 13:49 UTC] [Kernel team — first real XBE exception instruction captured]
+Run 43436634041: real NXDK XBE still reaches LoadXbe/backend startup, but entrypoint execution ends with:
+`exitCode=0xC0000005`, `exceptionIP=0x10018DC0`, `accessType=8`, `faultAddress=0x10018DC0`, `tlsIndexCleared=1`.
+For EXCEPTION_ACCESS_VIOLATION, accessType 8 denotes an instruction-fetch/execute access. The CPU tried to execute at guest VA 0x10018DC0, and that address itself faulted. This points first to an executable-section/page-protection or control-flow target issue; it is not yet proof of a TLS-vector bug. Host mapping release still PASS. Fixture hash for this run: `4DED5A04D76005543BBA315D3720283D495385CCCEE6D944BAFFC422284E0F5F`.
+Next diagnostic: dump every parsed XBE section's flags/VA/virtual size/raw range from the harness and query guest `VirtualQuery` protection at the faulting IP. Then fix the section protection mapping or the actual target, based on evidence. No entrypoint PASS claimed.
