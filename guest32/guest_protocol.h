@@ -28,6 +28,7 @@ struct XboxGuestCommandMessage {
     std::uint32_t entryPoint;
     std::uint32_t tlsAddress;
     std::uint32_t sectionCount;
+    std::uint32_t nonKernelImportDirectoryAddress;
     char symbolName[64];
 };
 
@@ -39,5 +40,5 @@ struct XboxGuestCommandReply {
 };
 
 static_assert(sizeof(XboxGuestHello) == 20, "guest hello wire size");
-static_assert(sizeof(XboxGuestCommandMessage) == 96, "guest command wire size");
+static_assert(sizeof(XboxGuestCommandMessage) == 100, "guest command wire size");
 static_assert(sizeof(XboxGuestCommandReply) == 16, "guest reply wire size");
