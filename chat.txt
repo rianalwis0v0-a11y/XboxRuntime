@@ -389,3 +389,13 @@ Build and tests: New loader validation workflow for the latest change is pending
 Known issues / next steps:
 - This validates TLS metadata addresses but does not implement per-thread TLS allocation, index assignment, callbacks, FS/KPCR, or guest stack initialization; those remain kernel execution-backend responsibilities.
 - Ensure TLS index/callback handling in the kernel uses 32-bit guest virtual addresses and never dereferences the host guestImage pointer in the separate x86 guest process.
+
+
+[2026-11-13 12:xx UTC] [C Coordinator — expanded API stress-test requirement]
+Status: IN_PROGRESS
+Branch / commit: GitHub issue #14 (challenge specification)
+Summary: Clarified that the nxdk-built adversarial homebrew fixture must exercise every API in its generated test manifest, including networking. Required coverage includes kernel imports, XAPI/runtime, NV2A/graphics, audio, input, XNet/XSocket networking, and relevant lifecycle/error paths. The fixture must record PASS/FAIL/UNSUPPORTED per API and must not silently skip unimplemented calls.
+Networking requirements: include XNet startup/cleanup, DNS lookup/release, title/link address queries where supported, socket create/bind/listen/connect/accept/send/receive/close, UDP send/receive, address conversion, socket options, and error/invalid-argument paths where valid nxdk declarations and runtime contracts exist. Use loopback/local deterministic endpoints by default; external Insignia connectivity is a separate opt-in integration test and must never be required for the isolated challenge.
+Scope: “every API” means every API in the explicitly versioned generated fixture manifest, plus a separately tracked nxdk API inventory. It does not mean falsely claiming all proprietary XDK APIs are covered. Preserve exact calling conventions, structure layouts, and ordinal provenance; do not invent imports or stubs that report success without implementing behavior.
+Build/test evidence: Challenge issue #14 remains the authoritative task. No implementation or passing test is claimed by this coordinator update.
+Next: fixture owner must publish the manifest before implementation, then subsystem teams implement and test their assigned API groups.
