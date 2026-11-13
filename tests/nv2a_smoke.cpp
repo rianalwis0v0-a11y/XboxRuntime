@@ -156,7 +156,7 @@ int main() {
         /* ADD is A+C, not A+B. An unused B mux must not pollute metadata. */
         std::memset(words, 0, sizeof(words));
         words[1] = (3u << 21) | (5u << 9);
-        words[2] = (2u << 26);
+        words[2] = (1u << 26); /* A mux=temp; B is unused */
         words[3] = (2u << 28) | 1u; /* C mux=input */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.input_mask != (1u << 5) ||
@@ -175,6 +175,18 @@ int main() {
             !(info.input_mask & (1u << 1)) ||
             !(info.constant_mask[0] & (UINT64_C(1) << 7))) {
             std::cerr << "FAIL: NV2A ADD constant-C metadata\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* MAD consumes A+B+C: B contributes v2 while C contributes c9. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (4u << 21) | (9u << 13) | (2u << 9);
+        words[2] = (1u << 26) | (2u << 11); /* A=temp, B=input */
+        words[3] = (3u << 28) | 1u; /* C=constant */
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            info.input_mask != (1u << 2) ||
+            !(info.constant_mask[0] & (UINT64_C(1) << 9))) {
+            std::cerr << "FAIL: NV2A MAD A+B+C metadata\\n";
             FreeLibrary(module); return 1;
         }
 
