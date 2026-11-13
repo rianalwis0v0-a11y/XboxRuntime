@@ -9,6 +9,7 @@ struct XboxKernelState {
     uint32_t entryPoint;
     uint32_t sectionCount;
     uint32_t tlsAddress;
+    uint32_t nonKernelImportDirectoryAddress;
 };
 bool XboxKernelInitializeEeprom(const wchar_t* path);
 void XboxKernelFlushEeprom();
