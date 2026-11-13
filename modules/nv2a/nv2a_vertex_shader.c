@@ -32,7 +32,7 @@ __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
   const uint32_t *w=words+i*4;
   unsigned mac=field(w[1],21,4),ilu=field(w[1],25,3);
   unsigned mm=field(w[3],24,4),im=field(w[3],16,4),om=field(w[3],12,4);
-  unsigned dst=field(w[3],20,4),outreg=field(w[3],3,8);
+  unsigned dst=field(w[3],20,4),outreg=field(w[3],3,8),outmux=field(w[3],2,1);
   if(mac>13||ilu>7)return 2;
   /* The NV2A is a paired-issue machine: ADD reads A+C, while MUL and
    * the other two-input MAC operations read A+B. MAD and ILU also read C.
@@ -50,7 +50,8 @@ __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
   /* When MAC and ILU target R1 in one slot, NV2A suppresses the MAC write. */
   if(om){
    /* NV2A result slots 1 and 2 are reserved; BFC0/BFC1 (7/8) are valid. */
-   if(!field(w[3],11,1)||outreg>12||outreg==1||outreg==2)return 8;
+   if(!field(w[3],11,1)||outreg>12||outreg==1||outreg==2||
+      (outmux==0u&&mac==0u)||(outmux==1u&&ilu==0u))return 8;
    m.output_mask|=(uint16_t)(1u<<outreg);
   }
   m.instruction_count=i+1;
