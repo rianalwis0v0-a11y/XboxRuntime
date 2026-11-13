@@ -17,6 +17,7 @@ add_subdirectory(modules/insignia_dns)
 add_subdirectory(modules/xbe_loader)
 add_subdirectory(modules/fatx)
 add_subdirectory(modules/input)
+add_subdirectory(modules/audio)
 add_subdirectory(modules/xdvdfs)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
@@ -79,3 +80,15 @@ target_include_directories(input_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modu
 target_compile_features(input_smoke PRIVATE cxx_std_17)
 target_compile_definitions(input_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME input_smoke COMMAND input_smoke)
+
+# Validate the audio module ABI and invalid-input handling without requiring
+# a physical audio device in the CI runner.
+add_executable(audio_smoke
+    tests/audio_smoke.cpp
+    modules/audio/audio.cpp
+)
+target_include_directories(audio_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modules/audio")
+target_compile_features(audio_smoke PRIVATE cxx_std_17)
+target_compile_definitions(audio_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(audio_smoke PRIVATE winmm)
+add_test(NAME audio_smoke COMMAND audio_smoke)
