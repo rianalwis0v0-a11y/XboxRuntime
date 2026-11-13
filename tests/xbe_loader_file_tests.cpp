@@ -84,7 +84,7 @@ static void __cdecl StopGuest(void* opaque) {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::fwprintf(stderr, L"usage: xbe_loader_file_tests.exe <sample.xbe>\n");
+        std::fprintf(stderr, "usage: xbe_loader_file_tests.exe <sample.xbe>\n");
         return 2;
     }
 
