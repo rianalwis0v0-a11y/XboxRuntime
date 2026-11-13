@@ -156,12 +156,13 @@ int main() {
     emit8(0xEB); const std::size_t skipDetach = used; emit8(0);
     const std::size_t detach = used;
     emitStore(guestBase + detachMarkerOffset, 1u);
+    const std::size_t returnOffset = used;
     emit8(0xC2); emit8(0x0C); emit8(0x00);                       // ret 12
     if (!patchBranch(toDetach, detach) ||
         !patchBranch(badTemplate, failure) ||
         !patchBranch(badZeroFill, failure) ||
         !patchBranch(skipFailure, attach) ||
-        !patchBranch(skipDetach, used))
+        !patchBranch(skipDetach, returnOffset))
         return Fail("TLS callback test stub branch overflow", 4, &backend, image, stop);
     std::memcpy(image + 0x2100, callback, used);
 
