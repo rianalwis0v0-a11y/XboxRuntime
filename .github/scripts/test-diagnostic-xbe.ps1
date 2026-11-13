@@ -1100,6 +1100,7 @@ Put32 0x651C 0
 Put32 0x6520 0
 Put32 0x6524 0
 $directoryPathBytes.CopyTo($b,0x6540)
+Write-Host ("Directory fixture: pathLen={0}, unicodeVa=0x{1:X8}, pathVa=0x{2:X8}, raw={3}" -f $directoryPathLength,$directoryUnicodeVa,$directoryPathVa,[BitConverter]::ToString($b,0x6500,8))
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
