@@ -15,7 +15,7 @@ static int compile_program(const DWORD* instructions, unsigned count,
     memset(&program, 0, sizeof(program));
     d3d8_vsh_parse(instructions, count, &program);
 
-    if (strstr(label, "input-to-oPos") &&
+    if (strstr(label, "MOV input-to-oPos") &&
         (program.length != 1 ||
          program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
          program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_INPUT ||
@@ -25,6 +25,17 @@ static int compile_program(const DWORD* instructions, unsigned count,
          program.insns[0].mac_dst.output_write_mask != 0xFu)) {
         fprintf(stderr, "FAIL: %s microcode decode did not preserve the real NV2A fields\\n", label);
         return 5;
+    }
+    if (strstr(label, "ADD input-to-oPos") &&
+        (program.length != 1 ||
+         program.insns[0].mac_op != NV2A_VSH_MAC_ADD ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[0].mac_src[2].reg_type != NV2A_VSH_REG_INPUT ||
+         program.inputs_read != (1u << 5) ||
+         program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].mac_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s ADD A+C decode is incorrect\\n", label);
+        return 7;
     }
     if (strstr(label, "constant-to-oPos") &&
         (program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
