@@ -9,6 +9,13 @@ int main() {
     params.cfgSizeOfStruct = sizeof(params);
     if (XNetStartup(&params) != 0) return 1;
 
+    WSADATA guestWsaData{};
+    if (XboxWSAStartup(MAKEWORD(2, 2), &guestWsaData) != 0 ||
+        guestWsaData.wHighVersion != MAKEWORD(2, 2) || XboxWSACleanup() != 0) {
+        XNetCleanup();
+        return 22;
+    }
+
     BYTE randomBytes[32]{};
     if (XNetRandom(randomBytes, sizeof(randomBytes)) != 0) { XNetCleanup(); return 18; }
     XNADDR testAddress{};
