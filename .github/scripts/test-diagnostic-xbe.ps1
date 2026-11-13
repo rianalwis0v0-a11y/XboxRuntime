@@ -165,7 +165,7 @@ EmitCallImport 50
 EmitCheckEqual 0
 
 EmitMovMemoryImmediate $progressVa 26
-# Symbolic links: create, open, query, close, and delete a named object.
+# Symbolic links: create, open, unlink, query through the live handle, and close.
 $symNameVa = [uint32]($base + 0x6300)
 $symTargetVa = [uint32]($base + 0x6310)
 $symObjectAttributesVa = [uint32]($base + 0x6320)
@@ -190,6 +190,10 @@ EmitPush 1
 EmitPush $symHandleVa
 EmitCallImport 203
 EmitCheckEqual 0
+# Unlink while the handle remains open; the referenced target must still be queryable.
+EmitPush $symNameVa
+EmitCallImport 69
+EmitCheckEqual 0
 EmitPush $symReturnedLengthVa
 EmitPush $symOutputVa
 EmitPushMemory $symHandleVa
@@ -202,9 +206,6 @@ EmitByte 0x25; Emit32 0x0000FFFF
 EmitCheckEqual 92
 EmitPushMemory $symHandleVa
 EmitCallImport 187
-EmitCheckEqual 0
-EmitPush $symNameVa
-EmitCallImport 69
 EmitCheckEqual 0
 
 EmitMovMemoryImmediate $progressVa 30
