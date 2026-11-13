@@ -14,7 +14,7 @@ using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
 using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
-using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
+using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
@@ -57,6 +57,12 @@ int wmain(int argc, wchar_t** argv) {
                 "TLS=0x%08X sections=%u\n",
                 image.baseAddress, image.imageSize, image.entryPoint,
                 image.tlsAddress, image.sectionCount);
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const auto& section = image.sections[i];
+        std::printf("Section %u: flags=0x%08X VA=0x%08X virtual=0x%08X raw=0x%08X rawSize=0x%08X\n",
+                    i, section.flags, section.virtualAddress, section.virtualSize,
+                    section.rawAddress, section.rawSize);
+    }
     if (!image.tlsAddress || !image.sectionCount ||
         image.entryPoint < image.baseAddress ||
         static_cast<std::uint64_t>(image.entryPoint) >=
@@ -148,17 +154,23 @@ int wmain(int argc, wchar_t** argv) {
         std::uint32_t exceptionInstruction = 0;
         std::uint32_t accessType = 0xFFFFFFFFu;
         std::uint32_t faultAddress = 0;
+        std::uint32_t faultProtection = 0;
+        std::uint32_t faultState = 0;
         const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
-            &exceptionInstruction, &accessType, &faultAddress);
+            &exceptionInstruction, &accessType, &faultAddress,
+            &faultProtection, &faultState);
         std::printf("Guest exit: wait=%d exitCode=0x%08X tlsIndexCleared=%u "
-                    "exceptionIP=0x%08X accessType=%u faultAddress=0x%08X\n",
+                    "exceptionIP=0x%08X accessType=%u faultAddress=0x%08X "
+                    "faultProtect=0x%08X faultState=0x%08X\n",
                     waitResult, exitCode, tlsCleared, exceptionInstruction,
-                    accessType, faultAddress);
+                    accessType, faultAddress, faultProtection, faultState);
         if (waitResult != ERROR_SUCCESS || exitCode != ERROR_SUCCESS ||
             tlsCleared != 1) {
             std::fprintf(stderr, "FAIL: guest did not return cleanly or TLS cleanup failed "
-                "(exceptionIP=0x%08X accessType=%u faultAddress=0x%08X)\n",
-                exceptionInstruction, accessType, faultAddress);
+                "(exceptionIP=0x%08X accessType=%u faultAddress=0x%08X "
+                "faultProtect=0x%08X faultState=0x%08X)\n",
+                exceptionInstruction, accessType, faultAddress,
+                faultProtection, faultState);
             result = 13;
         } else {
             std::puts("PASS: real guest entrypoint returned and TLS index slot was cleared.");
