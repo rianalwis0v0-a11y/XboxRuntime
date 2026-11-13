@@ -2551,7 +2551,7 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
     if (!DecodeVa(encoded, kRetailThunk, thunk) &&
         !DecodeVa(encoded, kDebugThunk, thunk)) {
         // An absent kernel thunk table is valid only when the header field is zero.
-        return encoded == 0;
+        return encoded == 0 || encoded == kRetailThunk || encoded == kDebugThunk;
     }
 
     g_stubPage = VirtualAlloc(nullptr, 0x2000, MEM_RESERVE | MEM_COMMIT,
