@@ -217,6 +217,24 @@ extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostnam
     return ::connect(socket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 ? 0 : -1;
 }
 
+extern "C" int __cdecl XboxNetSocketConnectAddress(uint32_t handle, const void* rawAddress, uint32_t length) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || !rawAddress || length < sizeof(sockaddr_in)) return -1;
+    return ::connect(socket, static_cast<const sockaddr*>(rawAddress), static_cast<int>(length));
+}
+
+extern "C" int __cdecl XboxNetSocketBindAddress(uint32_t handle, const void* rawAddress, uint32_t length) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || !rawAddress || length < sizeof(sockaddr_in)) return -1;
+    return ::bind(socket, static_cast<const sockaddr*>(rawAddress), static_cast<int>(length));
+}
+
+extern "C" int __cdecl XboxNetSocketShutdown(uint32_t handle, int how) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET) return -1;
+    return ::shutdown(socket, how);
+}
+
 extern "C" int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET) return -1;
@@ -294,14 +312,14 @@ extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t millise
         reinterpret_cast<const char*>(&timeout), sizeof(timeout)) == 0 ? 0 : -1;
 }
 
-extern "C" void __cdecl XboxNetSocketClose(uint32_t handle) {
+extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
     SOCKET socket = INVALID_SOCKET;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         auto it = g_sockets.find(handle);
-        if (it == g_sockets.end()) return;
+        if (it == g_sockets.end()) return -1;
         socket = it->second;
         g_sockets.erase(it);
     }
-    closesocket(socket);
+    return closesocket(socket) == 0 ? 0 : -1;
 }
