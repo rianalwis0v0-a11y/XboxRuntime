@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "main.h"
+#include "../modules/xbe_loader/xbe_backend_api.h"
 
 #include <string>
 #include <vector>
@@ -130,6 +131,56 @@ namespace XboxRuntime
         return true;
     }
 
+    static bool RegisterXbeExecutionBackend()
+    {
+        HMODULE kernelHandle = nullptr;
+        HMODULE loaderHandle = nullptr;
+
+        for (const auto& module : modules)
+        {
+            if (wcscmp(module.name, L"xbox_kernel.dll") == 0)
+                kernelHandle = module.handle;
+            else if (wcscmp(module.name, L"xbe_loader.dll") == 0)
+                loaderHandle = module.handle;
+        }
+
+        if (!kernelHandle || !loaderHandle)
+        {
+            Log(L"Kernel or XBE loader module is unavailable.");
+            return false;
+        }
+
+        using GetBackend = int (__cdecl*)(XBE_EXECUTION_BACKEND*);
+        using RegisterBackend = int (__cdecl*)(const XBE_EXECUTION_BACKEND*);
+
+        auto getBackend = reinterpret_cast<GetBackend>(
+            GetProcAddress(kernelHandle, "XBE_GetExecutionBackend")
+        );
+        auto registerBackend = reinterpret_cast<RegisterBackend>(
+            GetProcAddress(loaderHandle, "XBE_RegisterExecutionBackend")
+        );
+
+        if (!getBackend || !registerBackend)
+        {
+            Log(L"Kernel XBE backend provider or loader registration export is missing.");
+            return false;
+        }
+
+        XBE_EXECUTION_BACKEND backend{};
+        backend.size = sizeof(backend);
+        backend.version = XBE_EXECUTION_BACKEND_VERSION;
+
+        if (getBackend(&backend) != 0 ||
+            registerBackend(&backend) != 0)
+        {
+            Log(L"Could not connect the kernel guest execution backend.");
+            return false;
+        }
+
+        Log(L"Kernel guest execution backend registered.");
+        return true;
+    }
+
     static void StopModules()
     {
         for (auto it = modules.rbegin();
@@ -227,10 +278,16 @@ extern "C" int __cdecl MainStart()
     if (!StartModules())
         return 2;
 
-    if (!StartDashboard())
+    if (!RegisterXbeExecutionBackend())
     {
         StopModules();
         return 3;
+    }
+
+    if (!StartDashboard())
+    {
+        StopModules();
+        return 4;
     }
 
     running = true;
