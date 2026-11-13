@@ -39,7 +39,7 @@ std::uint32_t NumberArgument(int argc, wchar_t** argv, const wchar_t* name) {
     if (!value || !*value) return 0;
     wchar_t* end = nullptr;
     const unsigned long parsed = wcstoul(value, &end, 0);
-    return (end && *end == L'\\0' && parsed <= 0xFFFFFFFFul)
+    return (end && *end == L'\0' && parsed <= 0xFFFFFFFFul)
         ? static_cast<std::uint32_t>(parsed) : 0;
 }
 XboxGuestCommandReply Reply(std::uint32_t command, std::uint32_t status) {
