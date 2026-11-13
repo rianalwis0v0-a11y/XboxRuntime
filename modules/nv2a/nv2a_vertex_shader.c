@@ -34,11 +34,20 @@ __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
   unsigned mm=field(w[3],24,4),im=field(w[3],16,4),om=field(w[3],12,4);
   unsigned dst=field(w[3],20,4),outreg=field(w[3],3,8);
   if(mac>13||ilu>7)return 2;
+  /* The NV2A is a paired-issue machine: ADD reads A+C, while MUL and
+   * the other two-input MAC operations read A+B. MAD and ILU also read C.
+   * Do not decode an unused source: its mux bits may contain arbitrary data. */
   if(mac&&!decode_source(w,0,&m))return 4;
-  if(mac>=2&&mac<=12&&!decode_source(w,1,&m))return 5;
-  if((ilu!=0||mac==4)&&!decode_source(w,2,&m))return 6;
-  if(mac&&mm&&dst>12)return 7;
-  if(ilu&&im&&mac&&dst==1){} /* Paired ILU owns R1; MAC R1 write is suppressed. */
+  switch(mac){
+  case 2: case 5: case 6: case 7: case 8:
+  case 9: case 10: case 11: case 12:
+   if(!decode_source(w,1,&m))return 5;
+   break;
+  default: break;
+  }
+  if((mac==3||mac==4||ilu!=0)&&!decode_source(w,2,&m))return 6;
+  if(((mac&&mm)||(ilu&&im))&&dst>12)return 7;
+  /* When MAC and ILU target R1 in one slot, NV2A suppresses the MAC write. */
   if(om){
    /* NV2A result slots 1 and 2 are reserved; BFC0/BFC1 (7/8) are valid. */
    if(!field(w[3],11,1)||outreg>12||outreg==1||outreg==2)return 8;
