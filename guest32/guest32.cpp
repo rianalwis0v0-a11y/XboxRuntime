@@ -5,6 +5,7 @@
 #include <string>
 #include "kernel_compat.h"
 #include "guest_protocol.h"
+#include "guest_api_registry.h"
 
 namespace {
 bool ReadExact(HANDLE handle, void* output, DWORD bytes) {
@@ -42,8 +43,8 @@ std::uint32_t NumberArgument(int argc, wchar_t** argv, const wchar_t* name) {
     return (end && *end == L'\0' && parsed <= 0xFFFFFFFFul)
         ? static_cast<std::uint32_t>(parsed) : 0;
 }
-XboxGuestCommandReply Reply(std::uint32_t command, std::uint32_t status) {
-    return { XBOX_GUEST_PROTOCOL_MAGIC, command, status };
+XboxGuestCommandReply Reply(std::uint32_t command, std::uint32_t status, std::uint32_t value = 0) {
+    return { XBOX_GUEST_PROTOCOL_MAGIC, command, status, value };
 }
 }
 
@@ -144,6 +145,11 @@ int wmain(int argc, wchar_t** argv) {
             const auto reply = Reply(message.command, status);
             ok = WriteExact(pipe, &reply, sizeof(reply));
             if (status == ERROR_TIMEOUT) ExitProcess(status);
+        } else if (message.command == XboxGuestLookupApi) {
+            const std::uint32_t address = XboxGuestApiLookup(message.symbolName);
+            const auto reply = Reply(message.command,
+                address ? ERROR_SUCCESS : ERROR_PROC_NOT_FOUND, address);
+            ok = WriteExact(pipe, &reply, sizeof(reply));
         } else if (message.command == XboxGuestStop) {
             const bool threadRunning = guestThread &&
                 WaitForSingleObject(guestThread, 0) == WAIT_TIMEOUT;
