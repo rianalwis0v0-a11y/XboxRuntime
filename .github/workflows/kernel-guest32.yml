@@ -32,6 +32,13 @@ jobs:
           sudo apt-get install -y llvm lld pkgconf bison flex cmake
       - name: Build a returnable NXDK homebrew XBE with TLS
         run: |
+          # CXBE defaults to base 0x10000. Windows rejects that low mapping
+          # in the 32-bit guest process (ERROR_INVALID_ADDRESS 487); use a
+          # matching PE/XBE base of 0x10000000 for this real integration fixture.
+          sed -i 's/-base:0x00010000/-base:0x10000000/' nxdk/bin/nxdk-link
+          sed -i 's/m_Header.dwBaseAddr = 0x00010000;/m_Header.dwBaseAddr = 0x10000000;/' nxdk/tools/cxbe/Xbe.cpp
+          grep -q -- '-base:0x10000000' nxdk/bin/nxdk-link
+          grep -q 'm_Header.dwBaseAddr = 0x10000000;' nxdk/tools/cxbe/Xbe.cpp
           cat > nxdk/samples/hello/main.c <<'EOF'
           __declspec(thread) static volatile unsigned int kernel_smoke_tls = 0x58424532u;
           int main(void) {
