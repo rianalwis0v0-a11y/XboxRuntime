@@ -34,7 +34,7 @@ struct XBE_EXECUTION_BACKEND {
     int (__cdecl* reserveImage)(std::uint32_t guestBase, std::uint32_t imageSize,
                                 std::uint8_t** guestImage, void* context);
     void (__cdecl* releaseImage)(std::uint8_t* guestImage, void* context);
-    int (__cdecl* resolveKernelImports)(std::uint8_t* guestImage,
+    int (__cdecl* resolveImports)(std::uint8_t* guestImage,
                                         const XBE_IMAGE_INFO* imageInfo,
                                         void* context);
     int (__cdecl* startGuest)(std::uint32_t entryPoint,
