@@ -8,7 +8,6 @@ enum XboxGuestCommand : std::uint32_t {
     XboxGuestResolveImports = 1u,
     XboxGuestStart = 2u,
     XboxGuestStop = 3u,
-    XboxGuestLookupApi = 4u
 };
 
 struct XboxGuestHello {
@@ -30,16 +29,14 @@ struct XboxGuestCommandMessage {
     std::uint32_t sectionCount;
     std::uint32_t nonKernelImportDirectoryAddress;
     std::uint32_t kernelThunkAddress;
-    char symbolName[64];
 };
 
 struct XboxGuestCommandReply {
     std::uint32_t magic;
     std::uint32_t command;
     std::uint32_t status;
-    std::uint32_t value;
 };
 
 static_assert(sizeof(XboxGuestHello) == 20, "guest hello wire size");
-static_assert(sizeof(XboxGuestCommandMessage) == 104, "guest command wire size");
-static_assert(sizeof(XboxGuestCommandReply) == 16, "guest reply wire size");
+static_assert(sizeof(XboxGuestCommandMessage) == 40, "guest command wire size");
+static_assert(sizeof(XboxGuestCommandReply) == 12, "guest reply wire size");
