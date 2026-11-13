@@ -4,12 +4,11 @@
 
 #include <windows.h>
 #include <cstdint>
+#include "xbe_backend_api.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "xbe_backend_api.h"
 
 __declspec(dllexport) int __cdecl ModuleStart();
 __declspec(dllexport) void __cdecl ModuleStop();
