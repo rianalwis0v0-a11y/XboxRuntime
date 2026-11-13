@@ -565,3 +565,20 @@ CI evidence:
 - Async DNS correction commit 5835e16999f59db2133d5a564fa5ca0f96750a5e is currently under CI: network run 43426290217 and full-module run 43426290213, both in_progress at report time. Network job currently configuring dedicated x86 guest; later steps including build and runtime smoke are pending. No PASS claimed for latest code.
 Blocker/error: no new compiler/runtime error reported yet for the current runs; awaiting execution. Previous async DNS run 43426060355 built the guest and smoke executable but runtime smoke failed because the old test waited with timeout=0 for an asynchronous DNS event. Corrected in 5835e16999f59db2133d5a564fa5ca0f96750a5e.
 Remaining P3 blockers: verified XBE call dispatch for these APIs; authoritative Xbox SDK ABI review; WSA overlapped I/O; XNet key/security, QoS, NAT traversal and online XNADDR; real title networking/sign-in/session tests against Insignia. Current implementation is NOT production-complete and must not be marked PASS until the current CI and guest-facing integration tests pass.
+
+
+[2026-11-13 12:36 UTC] [XBE-loader — P0/P1 delivery reset: host-architecture correction]
+Status: IMPLEMENTED; CI IN PROGRESS (no pass claimed for this commit)
+Branch / commit: work/xbe-loader / c3f2a9f1570d64529aa6f85f0c705148a99ec92d
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12
+Changed files:
+- .github/workflows/xbe-loader-tests.yml
+Implementation:
+- Kernel team confirmed the runtime host (main.dll + xbox_kernel.dll) is x64 and only xbe_guest32.exe is x86. The previous workflow built xbe_loader.dll with vcvars32, which cannot be loaded into the x64 host via LoadLibraryExW.
+- Changed loader DLL build to vcvars64 and added dumpbin machine-type verification (8664 x64) plus exported LoadXbe symbol verification. Parser tests remain portable; backend smoke test is now built as x64 with the host DLL.
+Validation:
+- Commit c3f2a9f1570d64529aa6f85f0c705148a99ec92d has GitHub Actions run https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43426430137. At posting, portable-parser-tests and windows-x64-host-dll-build were in progress; no PASS claim yet.
+- Prior parser/TLS validation at a5226cd155fd6ba801eefa9e0306bb0feca9f923 passed workflow https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43424568151, but that run predates the x64 workflow correction.
+Blocker / next action:
+- This fixes the architecture mismatch in the loader build pipeline, not the kernel startup crash. Kernel must provide the approved ABI v2 backend in the x64 host and map the shared image backing into xbe_guest32 at the exact guest VA, then initialize TLS/thread/FS state.
+- P1 remains blocked on a reviewed NXDK-derived ANON_XBE_02.xbe fixture and an end-to-end load/execute result. Do not substitute generated fake XBE fixtures for the reviewed sample.
