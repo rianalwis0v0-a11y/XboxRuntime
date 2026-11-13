@@ -29,7 +29,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320,210)
+$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320,210,229)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -673,6 +673,22 @@ EmitPushMemory $nativeObjectHandleVa
 EmitCallImport 216
 EmitCheckEqual 0
 EmitByte 0x0F; EmitByte 0xB6; EmitByte 0x05; Emit32 ([uint32]($nativeObjectInfoVa + 8))
+EmitCheckEqual 0
+# Arm the timer for a short relative due time; APC callbacks are deliberately null.
+$timerDueVa = [uint32]($reportVa + 0x580)
+$timerPreviousVa = [uint32]($reportVa + 0x590)
+EmitMovMemoryImmediate $timerDueVa 0xFFFFD8F0
+EmitMovMemoryImmediate $timerPreviousVa 0
+EmitPush $timerPreviousVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $timerDueVa
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 229
+EmitCheckEqual 0
+EmitLoadEax $timerPreviousVa
 EmitCheckEqual 0
 EmitPushMemory $nativeObjectHandleVa
 EmitCallImport 187
