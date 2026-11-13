@@ -46,6 +46,12 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## Filesystem volume information
+
+- Ordinal 218: `NtQueryVolumeInformationFile` supports `FileFsVolumeInformation`, `FileFsSizeInformation`, `FileFsDeviceInformation`, and `FileFsAttributeInformation` for host-backed files. It obtains volume labels, serial numbers, allocation-unit counts, sector geometry, device type, filesystem flags, and filesystem names from the Windows volume APIs.
+- The diagnostic XBE checks all four information classes against its mounted test volume, including sector geometry, disk device type, and non-empty filesystem metadata.
+- Windows does not expose the original Xbox volume creation timestamp through these APIs; the returned creation-time field is zero. This is a documented compatibility limitation, not full Xbox volume emulation.
+
 ## Still incomplete
 
 Many catalogued APIs remain unsupported, including substantial parts of the I/O manager, object manager, device/interrupt queues, physical hardware access, crypto, and kernel debugging/memory diagnostics. These need real implementations and behavioural tests before they can be advertised as supported. A mapped ordinal is not equivalent to a working game-facing API.
