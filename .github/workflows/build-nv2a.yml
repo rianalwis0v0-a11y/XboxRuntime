@@ -32,10 +32,38 @@ jobs:
         run: cmake -S . -B build -A x64 -DXBOXRECOMP_BUILD_TESTS=OFF
 
       - name: Build x64 host modules
-        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke nv2a_hlsl_smoke input input_smoke xdvdfs xdvdfs_smoke
+        run: cmake --build build --config Release --target boot main nv2a insignia_dns xbe_loader fatx fatx_smoke nv2a_smoke nv2a_hlsl_smoke nv2a_render_capture nv2a_bridge_render_capture input input_smoke xdvdfs xdvdfs_smoke
 
       - name: Test FATX, NV2A, controller input, and XDVDFS host subsystems
-        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|nv2a_hlsl_smoke|input_smoke|xdvdfs_smoke"
+        run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|nv2a_hlsl_smoke|nv2a_render_capture|nv2a_bridge_render_capture|input_smoke|xdvdfs_smoke"
+
+      - name: Report NV2A direct and bridge frame counts
+        shell: pwsh
+        run: |
+          $direct = @(Get-ChildItem "build/out/nv2a_frames/*.bmp" -ErrorAction SilentlyContinue)
+          $bridge = @(Get-ChildItem "build/out/nv2a_bridge_frames/*.bmp" -ErrorAction SilentlyContinue)
+          Write-Host "Direct D3D11 frames: $($direct.Count)"
+          Write-Host "NV2A DLL bridge frames: $($bridge.Count)"
+          if ($direct.Count -ne 10) { throw "Expected 10 direct D3D11 frames" }
+          if ($bridge.Count -ne 10) { throw "Expected 10 NV2A bridge frames" }
+
+      - name: Upload direct ten-frame shader preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nv2a-10-frame-render-preview
+          path: build/out/nv2a_frames/*.bmp
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload NV2A DLL bridge ten-frame preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nv2a-bridge-10-frame-render-preview
+          path: build/out/nv2a_bridge_frames/*.bmp
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Configure native x86 guest process
         run: cmake -S guest32 -B build-guest32 -A Win32

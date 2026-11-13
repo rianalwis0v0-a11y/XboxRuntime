@@ -153,18 +153,44 @@ int main() {
             FreeLibrary(module); return 1;
         }
 
-        /* ADD consumes both A and B; input register index is shared in word 1. */
+        /* ADD is A+C, not A+B. An unused B mux must not pollute metadata. */
         std::memset(words, 0, sizeof(words));
         words[1] = (3u << 21) | (5u << 9);
-        words[2] = (2u << 26) | (2u << 11);
-        words[3] = 1u;
+        words[2] = (1u << 26); /* A mux=temp; B is unused */
+        words[3] = (2u << 28) | 1u; /* C mux=input */
         if (validateVertexProgram(words, 1, &info) != 0 ||
-            !(info.input_mask & (1u << 5))) {
-            std::cerr << "FAIL: NV2A ADD source-B/input decoding\\n";
+            info.input_mask != (1u << 5) ||
+            info.constant_mask[0] || info.constant_mask[1] ||
+            info.constant_mask[2]) {
+            std::cerr << "FAIL: NV2A ADD A+C source decoding\\n";
             FreeLibrary(module); return 1;
         }
 
-        /* Mux zero is also a constant source; ARL/EXP/LOG/LIT are executable. */
+        /* ADD's C operand can independently select a physical constant. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (3u << 21) | (7u << 13) | (1u << 9);
+        words[2] = (2u << 26);
+        words[3] = (3u << 28) | 1u; /* C mux=constant */
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            !(info.input_mask & (1u << 1)) ||
+            !(info.constant_mask[0] & (UINT64_C(1) << 7))) {
+            std::cerr << "FAIL: NV2A ADD constant-C metadata\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* MAD consumes A+B+C: B contributes v2 while C contributes c9. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (4u << 21) | (9u << 13) | (2u << 9);
+        words[2] = (1u << 26) | (2u << 11); /* A=temp, B=input */
+        words[3] = (3u << 28) | 1u; /* C=constant */
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            info.input_mask != (1u << 2) ||
+            !(info.constant_mask[0] & (UINT64_C(1) << 9))) {
+            std::cerr << "FAIL: NV2A MAD A+B+C metadata\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* ARL reads only A; ILU LIT reads only C. */
         std::memset(words, 0, sizeof(words));
         words[1] = (13u << 21) | (1u << 9);
         words[2] = (2u << 26);
@@ -176,22 +202,35 @@ int main() {
         }
         std::memset(words, 0, sizeof(words));
         words[1] = (7u << 25) | (3u << 13);
-        words[2] = (3u << 28);
-        words[3] = 1u;
+        words[3] = (3u << 28) | 1u; /* C mux=constant */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.constant_mask[0] & (UINT64_C(1) << 3))) {
-            std::cerr << "FAIL: NV2A LIT / mux-zero constant validation\\n";
+            std::cerr << "FAIL: NV2A LIT constant-C validation\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* Mux 0 is reserved/unknown and must not be accepted. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (1u << 21); /* MAC MOV */
+        words[2] = 0u; /* A mux=0 is reserved */
+        words[3] = 1u;
+        if (validateVertexProgram(words, 1, &info) != 4) {
+            std::cerr << "FAIL: invalid NV2A source mux was accepted\\n";
             FreeLibrary(module); return 1;
         }
 
         /* BFC0/BFC1 are valid outputs; slots 1 and 2 remain reserved. */
         std::memset(words, 0, sizeof(words));
+        words[1] = (1u << 21); /* MAC MOV selects the output mux. */
+        words[2] = (1u << 26); /* A mux=temp. */
         words[3] = (1u << 11) | (1u << 12) | (7u << 3) | 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.output_mask & (1u << 7))) {
             std::cerr << "FAIL: NV2A BFC0 output register validation\\n";
             FreeLibrary(module); return 1;
         }
+        words[1] = (1u << 21);
+        words[2] = (1u << 26);
         words[3] = (1u << 11) | (1u << 12) | (1u << 3) | 1u;
         if (validateVertexProgram(words, 1, &info) != 8) {
             std::cerr << "FAIL: reserved NV2A output register accepted\\n";
@@ -327,6 +366,43 @@ int main() {
             decodeTexture(0x9900u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)==0) {
             std::cerr << "FAIL: texture decode bounds/format validation\n"; return 1;
         }
+
+        /* Additional NV2A two-channel and linear-image formats. */
+        const uint8_t rg[2] = {0x12, 0x34};
+        const uint8_t ay[2] = {0x56, 0x78};
+        const uint8_t ay8[1] = {0x9A};
+        const uint8_t y16[2] = {0xBC, 0xDE};
+        const uint8_t rgba_bytes[4] = {0x10, 0x20, 0x30, 0x40};
+        const uint8_t depth16[2] = {0x34, 0x12};
+        const uint8_t depth24[4] = {0x5A, 0x34, 0x12, 0xAB};
+        const uint8_t halfOne[2] = {0x00, 0x3C}; /* IEEE-754 binary16 1.0 */
+        if (decodeTexture(0x2E00u,1,1,0,depth24,sizeof(depth24),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0xAB || rgba[1]!=255 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeTexture(0x2F00u,1,1,0,depth24,sizeof(depth24),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0xAB || rgba[1]!=255 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeTexture(0x3000u,1,1,0,depth16,sizeof(depth16),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeTexture(0x3100u,1,1,0,halfOne,sizeof(halfOne),rgba,4,&pitch)!=0 ||
+            rgba[0]!=255 || rgba[1]!=0 || rgba[2]!=255 || rgba[3]!=0) {
+            std::cerr << "FAIL: NV2A depth texture formats\\n"; return 1;
+        }
+
+        if (decodeTexture(0x1700u,1,1,0,rg,sizeof(rg),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0x34 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
+            decodeTexture(0x1B00u,1,1,0,ay8,sizeof(ay8),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x9A || rgba[1]!=0x9A || rgba[2]!=0x9A || rgba[3]!=0x9A ||
+            decodeTexture(0x2000u,1,1,0,ay,sizeof(ay),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x56 || rgba[1]!=0x56 || rgba[2]!=0x56 || rgba[3]!=0x78 ||
+            decodeTexture(0x3500u,1,1,0,y16,sizeof(y16),rgba,4,&pitch)!=0 ||
+            rgba[0]!=255 || rgba[1]!=0xDE || rgba[2]!=0xBC || rgba[3]!=255 ||
+            decodeTexture(0x3F00u,1,1,0,rgba_bytes,sizeof(rgba_bytes),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x10 || rgba[1]!=0x20 || rgba[2]!=0x30 || rgba[3]!=0x40 ||
+            decodeTexture(0x4000u,1,1,0,rgba_bytes,sizeof(rgba_bytes),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x20 || rgba[1]!=0x30 || rgba[2]!=0x40 || rgba[3]!=0x10 ||
+            decodeTexture(0x4100u,1,1,0,rgba_bytes,sizeof(rgba_bytes),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x40 || rgba[1]!=0x30 || rgba[2]!=0x20 || rgba[3]!=0x10) {
+            std::cerr << "FAIL: additional linear NV2A texture formats\\n"; return 1;
+        }
     }
 
 
@@ -356,6 +432,32 @@ int main() {
 
 
     {
+        const uint8_t rg[2] = {0x12, 0x34};
+        const uint8_t ay[2] = {0x56, 0x78};
+        const uint8_t rgba_bytes[4] = {0x10, 0x20, 0x30, 0x40};
+        uint8_t rgba[4]{};
+        uint32_t pitch = 0;
+        const uint8_t depth16[2] = {0x34, 0x12};
+        if (decodeSwizzledTexture(0x2C00u,1,1,depth16,sizeof(depth16),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeSwizzledTexture(0x1A00u,1,1,ay,sizeof(ay),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x56 || rgba[1]!=0x56 || rgba[2]!=0x56 || rgba[3]!=0x78 ||
+            decodeSwizzledTexture(0x2800u,1,1,rg,sizeof(rg),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0x34 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
+            decodeSwizzledTexture(0x2900u,1,1,rg,sizeof(rg),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x34 || rgba[1]!=0x12 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
+            decodeSwizzledTexture(0x3A00u,1,1,rgba_bytes,sizeof(rgba_bytes),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x10 || rgba[1]!=0x20 || rgba[2]!=0x30 || rgba[3]!=0x40 ||
+            decodeSwizzledTexture(0x3B00u,1,1,rgba_bytes,sizeof(rgba_bytes),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x20 || rgba[1]!=0x30 || rgba[2]!=0x40 || rgba[3]!=0x10 ||
+            decodeSwizzledTexture(0x3C00u,1,1,rgba_bytes,sizeof(rgba_bytes),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x40 || rgba[1]!=0x30 || rgba[2]!=0x20 || rgba[3]!=0x10) {
+            std::cerr << "FAIL: additional swizzled NV2A texture formats\\n";
+            return 1;
+        }
+    }
+
+    {
         const uint8_t linearMipSource[4] = {0x33,0x22,0x11,0xFF};
         uint8_t linearMipOutput[4]{};
         uint32_t linearMipOffset[1]{}, linearMipSize[1]{};
@@ -364,6 +466,36 @@ int main() {
             linearMipOffset[0]!=0u || linearMipSize[0]!=4u ||
             linearMipOutput[0]!=0x11 || linearMipOutput[3]!=0xFF) {
             std::cerr << "FAIL: linear-image mip-chain decode\\n"; return 1;
+        }
+
+        const uint8_t depthMip[2] = {0x34, 0x12};
+        uint8_t depthMipOutput[4]{};
+        uint32_t depthMipOffsets[1]{}, depthMipSizes[1]{};
+        if (decodeMipChain(0x3000u,1,1,1,depthMip,sizeof(depthMip),
+                depthMipOutput,sizeof(depthMipOutput),depthMipOffsets,depthMipSizes)!=0 ||
+            depthMipOutput[0]!=0x12 || depthMipOutput[1]!=0 ||
+            depthMipOutput[2]!=0 || depthMipOutput[3]!=0 ||
+            decodeMipChain(0x2C00u,1,1,1,depthMip,sizeof(depthMip),
+                depthMipOutput,sizeof(depthMipOutput),depthMipOffsets,depthMipSizes)!=0 ||
+            depthMipOutput[0]!=0x12 || depthMipOutput[1]!=0 ||
+            depthMipOutput[2]!=0 || depthMipOutput[3]!=0) {
+            std::cerr << "FAIL: NV2A depth texture mip paths\\n";
+            return 1;
+        }
+
+        const uint8_t twoChannelMip[2] = {0x12, 0x34};
+        uint8_t twoChannelOutput[4]{};
+        uint32_t twoChannelOffsets[1]{}, twoChannelSizes[1]{};
+        if (decodeMipChain(0x1700u,1,1,1,twoChannelMip,sizeof(twoChannelMip),
+                twoChannelOutput,sizeof(twoChannelOutput),twoChannelOffsets,twoChannelSizes)!=0 ||
+            twoChannelOffsets[0]!=0u || twoChannelSizes[0]!=4u ||
+            twoChannelOutput[0]!=0x12 || twoChannelOutput[1]!=0x34 ||
+            twoChannelOutput[2]!=0x12 || twoChannelOutput[3]!=0x34 ||
+            decodeMipChain(0x2800u,1,1,1,twoChannelMip,sizeof(twoChannelMip),
+                twoChannelOutput,sizeof(twoChannelOutput),twoChannelOffsets,twoChannelSizes)!=0 ||
+            twoChannelOutput[0]!=0x12 || twoChannelOutput[1]!=0x34) {
+            std::cerr << "FAIL: additional NV2A texture mip-chain formats\\n";
+            return 1;
         }
 
         const uint8_t mipSource[20] = {
@@ -729,6 +861,41 @@ int main() {
         return 1;
     }
 
+    /* GET > PUT is valid after the producer wraps the ring. The packet
+     * executes at +16, then an explicit JUMP returns GET to PUT at +8. */
+    const uint32_t dmaWrappedStream[] = {
+        (1u << 18) | 0x1D90u, 0xFF99AABBu, 0x0000000Du, 0u,
+        (1u << 18) | 0x1D90u, 0xFF778899u, 0x00000001u
+    };
+    if (writeVram(0x1000u, dmaWrappedStream, sizeof(dmaWrappedStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 16u, 12u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 12u || dmaMethods != 2u) {
+        std::cerr << "FAIL: NV2A PFIFO wrapped GET/PUT with jump-back\\n";
+        stop();
+        return 1;
+    }
+
+    /* The actual MMIO DMA_PUT write must kick the same wrapped pusher
+     * and publish DMA_GET after both sides of the ring have executed. */
+    const int push0Write = write(0x3200u, 1u, 4u);
+    const int push1Write = write(0x3204u, channel | (1u << 8), 4u);
+    const int dmaPushWrite = write(0x3220u, 1u, 4u);
+    const int dmaInstanceWrite = write(0x322Cu, 0x10u, 4u);
+    const int dmaGetWrite = write(0x3244u, 16u, 4u);
+    const int dmaPutWrite = write(0x3240u, 12u, 4u);
+    const uint64_t mmioGet = read(0x3244u, 4u);
+    if (push0Write != 0 || push1Write != 0 || dmaPushWrite != 0 ||
+        dmaInstanceWrite != 0 || dmaGetWrite != 0 || dmaPutWrite != 0 ||
+        mmioGet != 12u) {
+        std::cerr << "FAIL: PFIFO MMIO DMA_PUT wrap"
+                  << " writes=" << push0Write << "," << push1Write << ","
+                  << dmaPushWrite << "," << dmaInstanceWrite << ","
+                  << dmaGetWrite << "," << dmaPutWrite
+                  << " GET=0x" << std::hex << mmioGet << std::dec << "\\n";
+        stop();
+        return 1;
+    }
+
     /* PFIFO can resolve CACHE1_DMA_INSTANCE directly, without a RAMHT handle. */
     if (writeVram(0x1000u, dmaCallStream, sizeof(dmaCallStream)) != 0 ||
         submitDmaInstance(channel, 0x100u, 0u, 20u, &dmaGet, &dmaMethods) != 0 ||
@@ -838,6 +1005,9 @@ int main() {
     }
 
     /* Linear stage dimensions and row pitch come from IMAGE_RECT/CONTROL1. */
+    const uint8_t linearRgStage[8] = {
+        0x10,0x20, 0x30,0x40, 0x50,0x60, 0x70,0x80
+    };
     const uint32_t linearStageFormat = 1u | (2u << 4) | (0x12u << 8) | (1u << 16);
     TextureInfo linearStageInfo{};
     uint8_t linearStagePixels[16]{};
@@ -856,8 +1026,17 @@ int main() {
             linearStageSizes) != 0 ||
         linearStageOffsets[0] != 0u || linearStageSizes[0] != 16u ||
         linearStagePixels[0] != 1u || linearStagePixels[8] != 7u ||
+        writeVram(0x1500u, linearRgStage, sizeof(linearRgStage)) != 0 ||
         submit(0u, 0x1B04u, 1u | (2u << 4) | (0x17u << 8) | (1u << 16)) != 0 ||
-        getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0 ||
+        submit(0u, 0x1B10u, (4u << 16)) != 0 ||
+        getTextureInfo(channel, 0u, 0u, &linearStageInfo) != 0 ||
+        !linearStageInfo.linear || linearStageInfo.source_pitch != 4u ||
+        decodeTextureStage(channel, 0u, 0u, linearStagePixels,
+            sizeof(linearStagePixels), linearStageOffsets,
+            linearStageSizes) != 0 ||
+        linearStagePixels[0] != 0x10u || linearStagePixels[1] != 0x20u ||
+        linearStagePixels[2] != 0x10u || linearStagePixels[3] != 0x20u ||
+        linearStagePixels[12] != 0x70u || linearStagePixels[13] != 0x80u ||
         submit(0u, 0x1B04u, textureFormat | (1u << 2)) != 0 ||
         getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0 ||
         submit(0u, 0x1B04u, textureFormat | (1u << 3)) != 0 ||

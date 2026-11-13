@@ -15,12 +15,95 @@ static int compile_program(const DWORD* instructions, unsigned count,
     memset(&program, 0, sizeof(program));
     d3d8_vsh_parse(instructions, count, &program);
 
+    if (strstr(label, "MOV input-to-oPos") &&
+        (program.length != 1 ||
+         program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[0].mac_src[0].reg_index != 0 ||
+         program.inputs_read != 1u ||
+         program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].mac_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s microcode decode did not preserve the real NV2A fields\\n", label);
+        return 5;
+    }
+    if (strstr(label, "ADD input-to-oPos") &&
+        (program.length != 1 ||
+         program.insns[0].mac_op != NV2A_VSH_MAC_ADD ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[0].mac_src[2].reg_type != NV2A_VSH_REG_INPUT ||
+         program.inputs_read != (1u << 5) ||
+         program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].mac_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s ADD A+C decode is incorrect\\n", label);
+        return 7;
+    }
+    if (strstr(label, "MAD A+B+C") &&
+        (program.insns[0].mac_op != NV2A_VSH_MAC_MAD ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_TEMP ||
+         program.insns[0].mac_src[1].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[0].mac_src[1].negate != 1 ||
+         program.insns[0].mac_src[1].swizzle.x != 3 ||
+         program.insns[0].mac_src[1].swizzle.y != 2 ||
+         program.insns[0].mac_src[1].swizzle.z != 1 ||
+         program.insns[0].mac_src[1].swizzle.w != 0 ||
+         program.insns[0].mac_src[2].reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].mac_src[2].swizzle.x != 0 ||
+         program.insns[0].mac_src[2].swizzle.y != 1 ||
+         program.insns[0].mac_src[2].swizzle.z != 2 ||
+         program.insns[0].mac_src[2].swizzle.w != 3 ||
+         program.inputs_read != (1u << 2) ||
+         program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].mac_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s MAD A+B+C decode is incorrect\\n", label);
+        return 8;
+    }
+    if (strstr(label, "ILU LIT C") &&
+        (program.insns[0].ilu_op != NV2A_VSH_ILU_LIT ||
+         program.insns[0].ilu_src.reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].ilu_src.reg_index != 3 ||
+         program.insns[0].ilu_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].ilu_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s ILU C/output decode is incorrect\\n", label);
+        return 9;
+    }
+    if (strstr(label, "constant-to-oPos") &&
+        (program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].mac_src[0].reg_index != 5)) {
+        fprintf(stderr, "FAIL: %s constant source decode is incorrect\\n", label);
+        return 6;
+    }
+
     const int length = d3d8_vsh_generate_hlsl(
         &program, hlsl, (int)sizeof(hlsl));
     if (length <= 0 || length >= (int)sizeof(hlsl)) {
         fprintf(stderr, "FAIL: %s HLSL generation failed\\n", label);
         return 1;
     }
+    if (strstr(label, "swizzle negate") &&
+        !strstr(hlsl, "(-v0.wzyx)")) {
+        fprintf(stderr, "FAIL: %s lost the A-source negate/swizzle\\n", label);
+        return 12;
+    }
+    if (strstr(label, "MAD A+B+C") &&
+        !strstr(hlsl, "(-v2.wzyx)")) {
+        fprintf(stderr, "FAIL: %s lost the B-source negate/swizzle\\n", label);
+        return 13;
+    }
+    if (strstr(label, "paired snapshot") &&
+        (!strstr(hlsl, "R_pre[0] = R0;") ||
+         !strstr(hlsl, "R1 = (R_pre[0].xxxx);"))) {
+        fprintf(stderr, "FAIL: %s did not preserve pre-issue MAC/ILU register values\\n", label);
+        return 10;
+    }
+
+    if (strstr(label, "relative A0 snapshot") &&
+        (!strstr(hlsl, "a0_pre = a0;") ||
+         !strstr(hlsl, "c[a0_pre + 3]"))) {
+        fprintf(stderr, "FAIL: %s did not preserve the pre-issue address register\\n", label);
+        return 11;
+    }
+
     if (!strstr(hlsl, "SV_POSITION")) {
         fprintf(stderr, "FAIL: %s generated HLSL has no position output\\n",
                 label);
@@ -55,7 +138,7 @@ static int compile_program(const DWORD* instructions, unsigned count,
 
 int main(void)
 {
-    DWORD instruction[4] = {0, 0, 0, 0};
+    DWORD instruction[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     /* Keep the one-slot NOP case as the smallest parser/compiler sanity check. */
     instruction[3] = 1u;
@@ -73,10 +156,58 @@ int main(void)
     /* MAC ADD v5 + v5 -> oPos exercises a two-source arithmetic operation. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (3u << 21) | (5u << 9);
-    instruction[2] = (2u << 26) | (2u << 11);
-    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
+    instruction[2] = (2u << 26);
+    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
         return 3;
+
+    /* MAC MAD R0 * v2 + c9 -> oPos exercises all three source fields. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (4u << 21) | (9u << 13) | (2u << 9);
+    instruction[2] = (1u << 26) | (2u << 11) | (1u << 25) |
+                       (3u << 23) | (2u << 21) | (1u << 19) |
+                       (1u << 6) | (2u << 4) | (3u << 2);
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) | 1u;
+    if (compile_program(instruction, 1u, "NV2A MAD A+B+C") != 0)
+        return 4;
+
+    /* ILU LIT c3 -> oPos exercises the paired ILU output mux. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (7u << 25) | (3u << 13);
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) |
+                     (1u << 2) | 1u;
+    if (compile_program(instruction, 1u, "NV2A ILU LIT C") != 0)
+        return 5;
+
+    /* MAC MOV -v0.wzyx -> oPos tests A-source swizzle and negate fields. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (1u << 21) | (1u << 8) |
+                     (3u << 6) | (2u << 4) | (1u << 2);
+    instruction[2] = (2u << 26);
+    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
+    if (compile_program(instruction, 1u, "NV2A swizzle negate") != 0)
+        return 6;
+
+    /* Paired MAC/ILU must both read R0 before MAC overwrites it. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (1u << 21);             /* MAC MOV v0 -> R0 */
+    instruction[2] = (2u << 26);            /* A mux=input */
+    instruction[3] = (0xFu << 24);          /* MAC mask, destination R0 */
+    instruction[5] = (1u << 21) | (1u << 25); /* MAC MOV + ILU MOV */
+    instruction[6] = (2u << 26);            /* MAC source A = v0 */
+    instruction[7] = (0xFu << 24) | (0xFu << 16) |
+                     (1u << 28) | 1u;        /* ILU source C = old R0; FINAL */
+    if (compile_program(instruction, 2u, "NV2A paired snapshot") != 0)
+        return 6;
+
+    /* ARL updates A0 while the paired ILU reads a relative constant.
+     * The ILU must use the address value from before this instruction. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (13u << 21) | (7u << 25) | (3u << 13) | (1u << 9);
+    instruction[2] = (2u << 26); /* MAC source A = v1 */
+    instruction[3] = (0xFu << 16) | (3u << 28) | (1u << 1) | 1u;
+    if (compile_program(instruction, 1u, "NV2A relative A0 snapshot") != 0)
+        return 7;
 
     /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
     memset(instruction, 0, sizeof(instruction));
@@ -86,6 +217,6 @@ int main(void)
     if (compile_program(instruction, 1u, "NV2A MOV constant-to-oPos") != 0)
         return 4;
 
-    puts("PASS: NV2A NOP, input MOV, input ADD, and constant MOV shader translation");
+    puts("PASS: NV2A NOP, MOV, ADD, MAD, ILU LIT, and constant shader translation");
     return 0;
 }

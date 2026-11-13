@@ -11,6 +11,9 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/CMakeLists.txt
         "xboxrecomp submodule is missing. Clone with: git clone --recurse-submodules <repo-url>")
 endif()
 
+# Correct the pinned D3D8 translator's NV2A microcode decoder before it is compiled.
+include("${CMAKE_CURRENT_SOURCE_DIR}/modules/nv2a/patches/patch_xboxrecomp_vsh.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/modules/nv2a/patches/patch_xboxrecomp_device_share.cmake")
 add_subdirectory(third_party/xboxrecomp)
 add_subdirectory(modules/nv2a)
 add_subdirectory(modules/insignia_dns)
@@ -59,6 +62,53 @@ target_include_directories(nv2a_hlsl_smoke PRIVATE
 target_link_libraries(nv2a_hlsl_smoke PRIVATE xbox_d3d8)
 target_compile_definitions(nv2a_hlsl_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME nv2a_hlsl_smoke COMMAND nv2a_hlsl_smoke)
+
+# Render a ten-frame offscreen sequence through the generated NV2A HLSL shader.
+add_executable(nv2a_render_capture tests/nv2a_render_capture.c)
+target_include_directories(nv2a_render_capture PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/src/d3d"
+)
+target_link_libraries(nv2a_render_capture PRIVATE
+    xbox_d3d8 d3d11 dxgi d3dcompiler
+)
+target_compile_definitions(nv2a_render_capture PRIVATE
+    WIN32_LEAN_AND_MEAN NOMINMAX
+)
+set_target_properties(nv2a_render_capture PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+)
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(nv2a_render_capture PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out"
+    )
+endforeach()
+add_test(NAME nv2a_render_capture COMMAND nv2a_render_capture)
+
+# Exercise the complete NV2A DLL -> D3D8 -> D3D11 bridge and capture ten frames.
+add_executable(nv2a_bridge_render_capture tests/nv2a_bridge_render_capture.cpp)
+target_include_directories(nv2a_bridge_render_capture PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/src/d3d"
+)
+target_compile_features(nv2a_bridge_render_capture PRIVATE cxx_std_17)
+target_compile_definitions(nv2a_bridge_render_capture PRIVATE
+    WIN32_LEAN_AND_MEAN NOMINMAX
+)
+target_link_libraries(nv2a_bridge_render_capture PRIVATE
+    xbox_d3d8 d3d11 dxgi d3dcompiler user32
+)
+set_target_properties(nv2a_bridge_render_capture PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+)
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(nv2a_bridge_render_capture PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out"
+    )
+endforeach()
+add_dependencies(nv2a_bridge_render_capture nv2a)
+add_test(NAME nv2a_bridge_render_capture COMMAND nv2a_bridge_render_capture)
+set_tests_properties(nv2a_bridge_render_capture PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+)
 
 # Exercise XDVDFS descriptor parsing, directory-tree lookup, and bounded file reads.
 add_executable(xdvdfs_smoke

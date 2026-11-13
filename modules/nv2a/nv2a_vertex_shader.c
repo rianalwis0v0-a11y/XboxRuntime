@@ -14,7 +14,7 @@ static int decode_source(const uint32_t *w,unsigned s,XboxNV2A_VERTEX_PROGRAM_IN
  (void)reg; /* The interpreter applies the hardware's temp-register aliasing. */
  if(mux==1){ /* Temp 12 aliases oPos; 13..15 read as R0 on NV2A. */ }
  else if(mux==2)m->input_mask|=(uint16_t)(1u<<field(w[1],9,4));
- else if(mux==0||mux==3){
+ else if(mux==3){
   unsigned c=field(w[1],13,8);
   if(c>=192)return 0;
   m->constant_mask[c>>6]|=(uint64_t)1<<(c&63);
@@ -32,16 +32,26 @@ __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
   const uint32_t *w=words+i*4;
   unsigned mac=field(w[1],21,4),ilu=field(w[1],25,3);
   unsigned mm=field(w[3],24,4),im=field(w[3],16,4),om=field(w[3],12,4);
-  unsigned dst=field(w[3],20,4),outreg=field(w[3],3,8);
+  unsigned dst=field(w[3],20,4),outreg=field(w[3],3,8),outmux=field(w[3],2,1);
   if(mac>13||ilu>7)return 2;
+  /* The NV2A is a paired-issue machine: ADD reads A+C, while MUL and
+   * the other two-input MAC operations read A+B. MAD and ILU also read C.
+   * Do not decode an unused source: its mux bits may contain arbitrary data. */
   if(mac&&!decode_source(w,0,&m))return 4;
-  if(mac>=2&&mac<=12&&!decode_source(w,1,&m))return 5;
-  if((ilu!=0||mac==4)&&!decode_source(w,2,&m))return 6;
-  if(mac&&mm&&dst>12)return 7;
-  if(ilu&&im&&mac&&dst==1){} /* Paired ILU owns R1; MAC R1 write is suppressed. */
+  switch(mac){
+  case 2: case 4: case 5: case 6: case 7: case 8:
+  case 9: case 10: case 11: case 12:
+   if(!decode_source(w,1,&m))return 5;
+   break;
+  default: break;
+  }
+  if((mac==3||mac==4||ilu!=0)&&!decode_source(w,2,&m))return 6;
+  if(((mac&&mm)||(ilu&&im))&&dst>12)return 7;
+  /* When MAC and ILU target R1 in one slot, NV2A suppresses the MAC write. */
   if(om){
    /* NV2A result slots 1 and 2 are reserved; BFC0/BFC1 (7/8) are valid. */
-   if(!field(w[3],11,1)||outreg>12||outreg==1||outreg==2)return 8;
+   if(!field(w[3],11,1)||outreg>12||outreg==1||outreg==2||
+      (outmux==0u&&mac==0u)||(outmux==1u&&ilu==0u))return 8;
    m.output_mask|=(uint16_t)(1u<<outreg);
   }
   m.instruction_count=i+1;

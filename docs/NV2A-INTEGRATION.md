@@ -112,9 +112,9 @@ invalid classes, truncated RAMIN objects and VRAM ranges that exceed the 64 MiB
 aperture. The reported mapped span follows the upstream NV2A DMA helper's
 `limit` contract.
 
-This is the object lookup/mapping layer only. It does not yet implement PCI/AGP
-DMA, page tables, DMA pusher GET/PUT processing, jump/call/return flow, or
-channel switching and puller scheduling.
+This is the object lookup/mapping layer; the NV4-style DMA pusher below consumes
+these validated objects. PCI/AGP DMA, page tables, and channel switching/puller
+scheduling remain unsupported.
 
 
 ## NV4-style DMA pusher
@@ -126,7 +126,10 @@ incrementing and non-incrementing method packets, legacy and NV1A jump commands,
 single-level CALL/RETURN, and the reference-counter method. It validates
 all reads and control-flow targets against the mapped DMA span, bounds execution
 to one million command/data words, and performs a validation pass before GPU
-dispatch so malformed streams do not partially execute.
+dispatch so malformed streams do not partially execute. GET may be greater than
+PUT for a wrapped ring, but the stream must explicitly JUMP back to PUT before
+the bounded walk can finish; falling off the mapped span remains an error. The
+smoke test covers packets on both sides of a wrapped GET/PUT window.
 
 The puller currently binds only the graphics engine. It does not enable the later-generation NOP method on NV2A. Object-bind method 0 and
 the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
@@ -211,10 +214,43 @@ mode, `CACHE1_DMA_PUSH_ACCESS` is enabled, and the guest writes
 GET-to-PUT command stream, and advances `CACHE1_DMA_GET` only after successful
 validation and dispatch. PIO mode and disabled DMA push access are left alone.
 
-This connects the software pusher to the guest-visible PFIFO MMIO path. Ring
-wraparound, DMA fetch caching, push-buffer interrupts/error recovery, channel
+This connects the software pusher to the guest-visible PFIFO MMIO path. Explicit
+JUMP-based ring wraparound is supported and tested through both the direct DMA
+API and a guest-visible DMA_PUT write; DMA_GET advances only after successful
+dispatch. DMA fetch caching, push-buffer interrupts/error recovery, channel
 scheduling, and full PFIFO timing/flow semantics are still not implemented.
 
+
+## Programmable NV2A vertex shader translation
+
+The bridge validates NV2A vertex microcode and translates it to HLSL for the
+D3D11 backend; it does not interpret vertices on the CPU. The pinned
+xboxrecomp D3D8 VSH parser is patched at CMake configure time to decode the
+actual four-DWORD NV2A instruction layout: A/B/C source muxes, register
+indices, swizzles and negate bits, MAC/ILU opcodes, temporary destinations,
+the output-unit mux, and the independent temporary/output write masks.
+Source mux values are 1=temporary, 2=vertex input, and 3=constant; zero is
+reserved.
+
+The translator preserves the NV2A paired-issue rule. Before each instruction,
+the generated HLSL snapshots R0-R12 and A0; both MAC and ILU source expressions
+read that pre-instruction state, even though the generated HLSL assignments
+are emitted sequentially. Relative constant reads use the A0 snapshot too.
+This prevents one execution unit from accidentally observing the other unit's
+same-instruction writes.
+
+The nv2a_hlsl_smoke test compiles generated VS 5.0 HLSL and checks MOV, ADD A+C,
+MAD A+B+C, ILU LIT C, constant sources, source swizzles/negation, output
+routing, paired MAC/ILU reads, and relative-constant addressing. The separate
+nv2a_render_capture test executes an NV2A MOV v0 -> oPos shader through a
+D3D11 device and captures ten offscreen frames under
+build/out/nv2a_frames/. This is a shader-path rendering test scene, not
+evidence that a retail XBE has rendered successfully.
+
+Context-write vertex programs that target the writable-constant bank remain
+unsupported and are rejected rather than misinterpreted as ordinary vertex
+shaders. Full XBE-to-NV2A game rendering is still an outstanding integration
+milestone.
 
 ## Per-subchannel context-DMA bindings
 
@@ -232,9 +268,10 @@ smoke test; the remaining slots share the same validated storage path.
 `SET_CONTEXT_DMA_VERTEX_A` or `VERTEX_B` object. It reads the NV097 array
 offset/format registers, supports UB_D3D, UB_OGL, S1, S32K, and float component
 encodings, honors per-array stride, and checks both DMA-object and VRAM bounds
-before copying packed elements. Compressed vertex format and conversion to a
-host vertex declaration are not included yet; this is the validated guest-data
-fetch stage for a later DRAW_ARRAYS translator.
+before copying packed elements. CMP packed-normal encoding is decoded for the
+three-component normal array; other CMP layouts and conversion to a general host
+vertex declaration remain unsupported. This is the validated guest-data fetch
+stage for the DRAW_ARRAYS translator.
 
 
 ## Host FVF vertex stream generation
@@ -269,13 +306,21 @@ vertex/pixel shader microcode.
 
 `XboxNV2A_DecodeTextureRGBA8` converts supported NV097 texture payloads to
 tightly packed RGBA8 with checked source pitch, source length, destination
-capacity, and integer-size bounds. Supported formats are Y8, A8, A1R5G5B5,
-X1R5G5B5, A4R4G4B4, R5G6B5, A8R8G8B8, X8R8G8B8, and DXT1, DXT3, and DXT5 (including clipped edge blocks). This is the CPU format-conversion stage only: guest texture DMA
-address resolution, mip chains, palette formats, sampler state,
-texture object caching, and binding to D3D8 texture stages remain to be wired.
+capacity, and integer-size bounds. Supported formats include Y8/A8, A1R5G5B5, X1R5G5B5, A4R4G4B4, R5G6B5,
+A8R8G8B8/X8R8G8B8, DXT1/3/5 (including clipped edge blocks), G8B8, A8Y8,
+AY8, Y16, and the A8B8G8R8/B8G8R8A8/R8G8B8A8 byte-order variants. The decoder
+is used by the direct, swizzled, pitched-linear, mip-chain, DMA-backed live
+stage, and I8 palette paths described below. YUV, R6G5B5, depth-texture
+formats, cubemaps, and 3D textures remain unsupported.
 
 
-Texture sampler filter methods (`NV097_SET_TEXTURE_FILTER`, per 0x40-byte stage) now map the NV2A minification and magnification selectors to D3D8 point/linear filters and the mip selector to none/point/linear. The supported NV2A convolution selector uses linear filtering as an explicit fallback. Invalid selector combinations are rejected; the mapping is exported as `XboxNV2A_MapTextureFilter` and covered by host smoke tests. This maps sampler state only: mip-level texture allocation and upload are still not implemented.
+Texture sampler filter methods (NV097_SET_TEXTURE_FILTER, per 0x40-byte stage)
+map the NV2A minification and magnification selectors to D3D8 point/linear
+filters and the mip selector to none/point/linear. The supported NV2A
+convolution selector uses linear filtering as an explicit fallback. Invalid
+selector combinations are rejected; the mapping is exported as
+XboxNV2A_MapTextureFilter and covered by host smoke tests. Mip-level allocation
+and upload are performed by the live texture-stage path below.
 
 Texture sampler address methods are now translated per stage for U/V wrapping:
 wrap, mirror, clamp, border, and mirror-once map to the matching D3D8
@@ -287,7 +332,8 @@ modes and unavailable device state are not silently reported as handled.
 
 `XboxNV2A_DecodeSwizzledTextureRGBA8` handles the common power-of-two
 Morton/Z-order texture layout for uncompressed Y8, A8, A1R5G5B5, X1R5G5B5,
-A4R4G4B4, R5G6B5, A8R8G8B8, and X8R8G8B8 data. It validates dimensions,
+A4R4G4B4, R5G6B5, A8R8G8B8/X8R8G8B8, A8Y8, G8B8, R8B8, Y16, and the
+A8B8G8R8/B8G8R8A8/R8G8B8A8 byte-order variants. It validates dimensions,
 source length, destination capacity, and allocation size before unswizzling
 through the pinned D3D8 compatibility helper and passing the linear result to
 the existing RGBA8 decoder. Linear-image and DXT block formats are explicitly
@@ -321,8 +367,9 @@ to the current channel/subchannel, validates the texture offset against that
 object's mapped local-VRAM span, and decodes the mip chain without accepting
 guest pointers. The smoke test binds a real RAMHT-resolved DMA_A object through
 the NV4 pusher, decodes a 2x2-to-1x1 swizzled chain from its VRAM span, and
-checks unbound-context and out-of-range failures. D3D8 texture allocation,
-upload, cache invalidation, and stage binding remain outstanding.
+checks unbound-context and out-of-range failures. The live stage path allocates
+and uploads D3D8 textures and binds them per stage; cache coherence for guest
+or DMA writes that bypass the bridge VRAM-write API remains incomplete.
 
 
 ## Additional alpha, depth and cull enables
@@ -336,13 +383,11 @@ is disabled. Host tests verify the state IDs and enable values.
 
 ## Linear-image texture formats
 
-The CPU decoder now also handles common NV097 linear-image formats:
+The CPU decoder handles common NV097 linear-image formats including
 LIN_A1R5G5B5, LIN_R5G6B5, LIN_A8R8G8B8, LIN_Y8, LIN_X1R5G5B5,
-LIN_A4R4G4B4, LIN_X8R8G8B8 and LIN_A8. These use row-major source data and
-can be decoded as a single level; swizzled formats continue through the
-Morton decoder, while DXT formats use the block decoder. Host tests cover
-linear ARGB and luminance input. Padded linear-image pitch and multi-level
-linear images are not yet supported by the mip-chain entry point.
+LIN_A4R4G4B4, LIN_X8R8G8B8, LIN_A8, G8B8, AY8, A8Y8, Y16, and the
+A8B8G8R8/B8G8R8A8/R8G8B8A8 variants. These use row-major source data and
+source pitch; linear-image mip-chain requests remain limited to one level.
 
 
 ## Indexed vertex expansion

@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,11 +40,36 @@ static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
 static uint32_t g_nv2a_vsh_constant_word;
 static uint32_t g_nv2a_vsh_context_write;
 static DWORD g_nv2a_vsh_handle;
+static XboxNV2A_VSH_CREATE_SHADER_FN g_vsh_create_shader_callback;
+static XboxNV2A_VSH_DELETE_SHADER_FN g_vsh_delete_shader_callback;
+static XboxNV2A_VSH_SET_CONSTANT_FN g_vsh_set_constant_callback;
 static uint16_t g_nv2a_vsh_input_mask;
 static uint32_t g_nv2a_vsh_program_hash;
 static uint8_t* g_nv2a_gpu_vertex_stream;
 static size_t g_nv2a_gpu_vertex_capacity;
 static int g_nv2a_vsh_dirty = 1;
+static HRESULT nv2a_vsh_create_shader(const DWORD* microcode, int count, DWORD* handle)
+{
+    return g_vsh_create_shader_callback
+        ? g_vsh_create_shader_callback(microcode, count, handle)
+        : d3d8_vsh_create_shader(microcode, count, handle);
+}
+
+static HRESULT nv2a_vsh_delete_shader(DWORD handle)
+{
+    return g_vsh_delete_shader_callback
+        ? g_vsh_delete_shader_callback(handle)
+        : d3d8_vsh_delete_shader(handle);
+}
+
+static void nv2a_vsh_set_constant(int start_reg, const float* data, int count)
+{
+    if (g_vsh_set_constant_callback)
+        g_vsh_set_constant_callback(start_reg, data, count);
+    else
+        d3d8_vsh_set_constant(start_reg, data, count);
+}
+
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
 static uint32_t g_pgraph_custom_draws;
@@ -487,10 +513,13 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         g_gpu->pgraph.regs[method/4u]=parameter;++g_pgraph_custom_methods;return;
     }
     if (method == NV097_DRAW_ARRAYS) {
-        if (draw_nv2a_arrays(channel, subchannel, parameter) == 0) {
+        const int draw_result = draw_nv2a_arrays(channel, subchannel, parameter);
+        if (draw_result == 0) {
             g_gpu->pgraph.regs[method / 4u] = parameter;
             return;
         }
+        fprintf(stderr, "[NV2A-DRAW] DRAW_ARRAYS rejected result=%d channel=%u sub=%u parameter=%08X mode=%u\\n",
+            draw_result, channel, subchannel, parameter, g_primitive_mode[channel][subchannel]);
         pgraph_method(g_gpu, subchannel, method, parameter);
         return;
     }
@@ -506,8 +535,12 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
     }
 
     if ((method == NV097_SET_BEGIN_END && parameter != 0u) ||
-        method == NV097_CLEAR_SURFACE)
-        (void)update_surface_target();
+        method == NV097_CLEAR_SURFACE) {
+        const int surface_result = update_surface_target();
+        if (surface_result != 0)
+            fprintf(stderr, "[NV2A-SURFACE] target update failed=%d method=%04X\\n",
+                surface_result, method);
+    }
     /* These real NV097 offsets collide with incorrect aliases in the
      * pinned translator. Apply them here and do not feed them to that switch. */
     if (method == NV097_SET_ALPHA_TEST_ENABLE ||
@@ -592,7 +625,7 @@ int __cdecl ModuleStart(void)
     g_nv2a_vsh_context_write = 0;
     g_nv2a_vsh_program_hash = 0;
     if (g_nv2a_vsh_handle) {
-        (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+        (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
         g_nv2a_vsh_handle = 0;
     }
     g_nv2a_vsh_dirty = 1;
@@ -617,17 +650,67 @@ void __cdecl ModuleStop(void)
     if (!g_started)
         return;
 
+    if (g_nv2a_vsh_handle) {
+        (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
+        g_nv2a_vsh_handle = 0;
+    }
     pgraph_d3d11_flush();
     sync_surface_to_vram();
     release_texture_cache();
     pgraph_d3d11_shutdown();
     release_surface_targets();
+    xbox_SetD3D11Device(NULL, NULL);
+    xbox_SetD3DDevice(NULL);
+    g_vsh_create_shader_callback = NULL;
+    g_vsh_delete_shader_callback = NULL;
+    g_vsh_set_constant_callback = NULL;
 
     // The upstream NV2A singleton currently has no public destroy/reset API.
     // Keep its backing allocation alive until the host process exits; freeing
     // it here would leave the singleton's VRAM/RAMIN pointers dangling.
     g_started = 0;
     OutputDebugStringW(L"[XboxRuntime:NV2A] Translator stopped. GPU memory retained until process exit.\n");
+}
+
+int __cdecl XboxNV2A_SetD3DDevice(void* device)
+{
+    IDirect3DDevice8* d3d_device = (IDirect3DDevice8*)device;
+    if (device && (!d3d_device->lpVtbl ||
+        !d3d_device->lpVtbl->AddRef || !d3d_device->lpVtbl->Release))
+        return 1;
+    xbox_SetD3DDevice(d3d_device);
+    if (g_started && d3d_device)
+        pgraph_d3d11_init();
+    return 0;
+}
+
+int __cdecl XboxNV2A_SetD3D11Device(void* device, void* context)
+{
+    if ((device == NULL) != (context == NULL))
+        return 1;
+    xbox_SetD3D11Device(device, context);
+    if (g_started && device)
+        pgraph_d3d11_init();
+    return 0;
+}
+
+int __cdecl XboxNV2A_SetD3D8VshCallbacks(
+    XboxNV2A_VSH_CREATE_SHADER_FN create_shader,
+    XboxNV2A_VSH_DELETE_SHADER_FN delete_shader,
+    XboxNV2A_VSH_SET_CONSTANT_FN set_constant)
+{
+    if (!create_shader && !delete_shader && !set_constant) {
+        g_vsh_create_shader_callback = NULL;
+        g_vsh_delete_shader_callback = NULL;
+        g_vsh_set_constant_callback = NULL;
+        return 0;
+    }
+    if (!create_shader || !delete_shader || !set_constant)
+        return 1;
+    g_vsh_create_shader_callback = create_shader;
+    g_vsh_delete_shader_callback = delete_shader;
+    g_vsh_set_constant_callback = set_constant;
+    return 0;
 }
 
 uint64_t __cdecl XboxNV2A_ReadRegister(
@@ -776,6 +859,38 @@ static void decode_dxt_alpha_block(const uint8_t* block, uint8_t* dst,
     }
 }
 
+static uint8_t nv2a_half_to_u8(uint16_t value)
+{
+    const uint32_t sign = (uint32_t)(value & 0x8000u) << 16;
+    uint32_t exponent = (value >> 10) & 0x1Fu;
+    uint32_t mantissa = value & 0x03FFu;
+    uint32_t bits;
+    float converted;
+    if (exponent == 0u) {
+        if (mantissa == 0u) {
+            bits = sign;
+        } else {
+            int shift = 0;
+            while ((mantissa & 0x0400u) == 0u) {
+                mantissa <<= 1;
+                ++shift;
+            }
+            mantissa &= 0x03FFu;
+            bits = sign | ((uint32_t)(113 - shift) << 23) | (mantissa << 13);
+        }
+    } else if (exponent == 31u) {
+        bits = sign | 0x7F800000u | (mantissa << 13);
+    } else {
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    }
+    memcpy(&converted, &bits, sizeof(converted));
+    if (!(converted > 0.0f))
+        return 0u;
+    if (converted >= 1.0f)
+        return 255u;
+    return (uint8_t)(converted * 255.0f + 0.5f);
+}
+
 int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     uint32_t height, uint32_t source_pitch, const void* source,
     uint32_t source_length, void* destination, uint32_t destination_capacity,
@@ -790,11 +905,16 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     uint32_t bytes_per_pixel=0;
     switch(color) {
     case 0x02u: case 0x03u: case 0x04u: case 0x05u:
-    case 0x10u: case 0x11u: case 0x1Cu: case 0x1Du:
+    case 0x10u: case 0x11u: case 0x17u: case 0x1Au: case 0x20u:
+    case 0x1Cu: case 0x1Du: case 0x28u: case 0x29u:
+    case 0x2Cu: case 0x30u: case 0x31u: case 0x32u: case 0x35u:
         bytes_per_pixel=2u; break;
-    case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
+    case 0x2Eu: case 0x2Fu:
         bytes_per_pixel=4u; break;
-    case 0x19u: case 0x00u: case 0x13u: case 0x1Fu:
+    case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
+    case 0x3Au: case 0x3Bu: case 0x3Cu: case 0x3Fu: case 0x40u: case 0x41u:
+        bytes_per_pixel=4u; break;
+    case 0x19u: case 0x00u: case 0x13u: case 0x1Fu: case 0x1Bu:
         bytes_per_pixel=1u; break;
     case 0x0Cu: case 0x0Eu: case 0x0Fu: break; /* DXT1/3/5 */
     default: return 3;
@@ -852,6 +972,29 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
                     q[0]=expand5((v>>10)&31u); q[1]=expand5((v>>5)&31u); q[2]=expand5(v&31u);
                     q[3]=(color==0x02u || color==0x10u)?((v&0x8000u)?255u:0u):255u;
                 }
+            } else if(color==0x17u || color==0x28u) {
+                q[0]=p[0]; q[1]=p[1]; q[2]=p[0]; q[3]=p[1];
+            } else if(color==0x29u) {
+                q[0]=p[1]; q[1]=p[0]; q[2]=p[0]; q[3]=p[1];
+            } else if(color==0x1Au || color==0x20u) {
+                q[0]=q[1]=q[2]=p[0]; q[3]=p[1];
+            } else if(color==0x1Bu) {
+                q[0]=q[1]=q[2]=q[3]=p[0];
+            } else if(color==0x2Cu || color==0x30u) {
+                q[0]=p[1]; q[1]=0u; q[2]=0u; q[3]=0u;
+            } else if(color==0x31u) {
+                q[0]=nv2a_half_to_u8((uint16_t)(p[0] | ((uint16_t)p[1] << 8)));
+                q[1]=0u; q[2]=255u; q[3]=0u;
+            } else if(color==0x2Eu || color==0x2Fu) {
+                q[0]=p[3]; q[1]=255u; q[2]=0u; q[3]=0u;
+            } else if(color==0x32u || color==0x35u) {
+                q[0]=255u; q[1]=p[1]; q[2]=p[0]; q[3]=255u;
+            } else if(color==0x3Au || color==0x3Fu) {
+                q[0]=p[0]; q[1]=p[1]; q[2]=p[2]; q[3]=p[3];
+            } else if(color==0x3Bu || color==0x40u) {
+                q[0]=p[1]; q[1]=p[2]; q[2]=p[3]; q[3]=p[0];
+            } else if(color==0x3Cu || color==0x41u) {
+                q[0]=p[3]; q[1]=p[2]; q[2]=p[1]; q[3]=p[0];
             } else if(color==0x19u || color==0x1Fu) {
                 q[0]=q[1]=q[2]=255u; q[3]=p[0];
             } else { q[0]=q[1]=q[2]=p[0]; q[3]=255u; }
@@ -878,8 +1021,10 @@ int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(uint32_t format,
     switch (color) {
     case 0x00u: case 0x19u: bytes_per_pixel = 1u; break;
     case 0x02u: case 0x03u: case 0x04u: case 0x05u:
+    case 0x1Au: case 0x28u: case 0x29u: case 0x2Cu: case 0x32u:
         bytes_per_pixel = 2u; break;
-    case 0x06u: case 0x07u: bytes_per_pixel = 4u; break;
+    case 0x06u: case 0x07u: case 0x3Au: case 0x3Bu: case 0x3Cu:
+        bytes_per_pixel = 4u; break;
     default:
         /* Linear-image and block-compressed formats use separate paths. */
         return 2;
@@ -920,17 +1065,28 @@ int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(uint32_t format,
     const int dxt1 = color == 0x0Cu;
     const int dxt_other = color == 0x0Eu || color == 0x0Fu;
     const int linear_image = color == 0x10u || color == 0x11u ||
-        color == 0x12u || color == 0x13u || color == 0x1Cu ||
-        color == 0x1Du || color == 0x1Eu || color == 0x1Fu;
+        color == 0x12u || color == 0x13u || color == 0x17u ||
+        color == 0x1Bu || color == 0x1Cu || color == 0x1Du ||
+        color == 0x1Eu || color == 0x1Fu || color == 0x20u ||
+        color == 0x2Eu || color == 0x2Fu || color == 0x30u ||
+        color == 0x31u || color == 0x35u || color == 0x3Fu ||
+        color == 0x40u || color == 0x41u;
     uint32_t bytes_per_pixel = 0;
     if (!dxt1 && !dxt_other) {
         switch (color) {
-        case 0x00u: case 0x19u: case 0x13u: case 0x1Fu:
+        case 0x00u: case 0x19u: case 0x13u: case 0x1Fu: case 0x1Bu:
             bytes_per_pixel = 1u; break;
         case 0x02u: case 0x03u: case 0x04u: case 0x05u:
-        case 0x10u: case 0x11u: case 0x1Cu: case 0x1Du:
+        case 0x10u: case 0x11u: case 0x17u: case 0x1Au:
+        case 0x1Cu: case 0x1Du: case 0x20u: case 0x28u:
+        case 0x29u: case 0x2Cu: case 0x30u: case 0x31u:
+        case 0x32u: case 0x35u:
             bytes_per_pixel = 2u; break;
+        case 0x2Eu: case 0x2Fu:
+            bytes_per_pixel = 4u; break;
         case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
+        case 0x3Au: case 0x3Bu: case 0x3Cu: case 0x3Fu:
+        case 0x40u: case 0x41u:
             bytes_per_pixel = 4u; break;
         default: return 2;
         }
@@ -1175,8 +1331,12 @@ static int nv2a_texture_format_is_supported(uint32_t color)
     switch (color) {
     case 0x00u: case 0x02u: case 0x03u: case 0x04u: case 0x05u:
     case 0x06u: case 0x07u: case 0x0Bu: case 0x0Cu: case 0x0Eu: case 0x0Fu:
-    case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x19u:
-    case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
+    case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x17u:
+    case 0x19u: case 0x1Au: case 0x1Bu: case 0x1Cu: case 0x1Du:
+    case 0x1Eu: case 0x1Fu: case 0x20u: case 0x28u: case 0x29u:
+    case 0x2Cu: case 0x2Eu: case 0x2Fu: case 0x30u: case 0x31u:
+    case 0x32u: case 0x35u: case 0x3Au: case 0x3Bu: case 0x3Cu:
+    case 0x3Fu: case 0x40u: case 0x41u:
         return 1;
     default:
         return 0;
@@ -1186,8 +1346,10 @@ static int nv2a_texture_format_is_supported(uint32_t color)
 static int nv2a_texture_format_is_linear(uint32_t color)
 {
     switch (color) {
-    case 0x10u: case 0x11u: case 0x12u: case 0x13u:
-    case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
+    case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x17u:
+    case 0x1Bu: case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
+    case 0x20u: case 0x2Eu: case 0x2Fu: case 0x30u: case 0x31u:
+    case 0x35u: case 0x3Fu: case 0x40u: case 0x41u:
         return 1;
     default:
         return 0;
@@ -1560,9 +1722,14 @@ static void sync_surface_to_vram(void)
     if (!g_surface_bound)
         return;
 
-    if (g_color_surface &&
-        copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
-        mark_all_textures_dirty();
+    if (g_color_surface) {
+        if (copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
+            mark_all_textures_dirty();
+        else
+            fprintf(stderr, "[NV2A-SURFACE] render-target readback to VRAM failed\\n");
+    } else {
+        fprintf(stderr, "[NV2A-SURFACE] flush has no bound color surface\\n");
+    }
 
     if (g_zeta_surface)
         (void)copy_zeta_surface_to_vram(g_zeta_surface, &g_bound_surface_info);
@@ -1596,7 +1763,13 @@ static int update_surface_target(void)
         g_surface_regs.format, g_surface_regs.pitch,
         g_surface_regs.color_offset, g_surface_regs.zeta_offset,
         g_surface_regs.clip_horizontal, g_surface_regs.clip_vertical, &info);
-    if (result != 0) return 2 + result;
+    if (result != 0) {
+        fprintf(stderr, "[NV2A-SURFACE] decode failed=%d format=%08X pitch=%08X color=%08X clip=%08X/%08X\\n",
+            result, g_surface_regs.format, g_surface_regs.pitch,
+            g_surface_regs.color_offset, g_surface_regs.clip_horizontal,
+            g_surface_regs.clip_vertical);
+        return 2 + result;
+    }
 
     if (g_surface_bound &&
         memcmp(&info, &g_bound_surface_info, sizeof(info)) == 0) {
@@ -1609,8 +1782,11 @@ static int update_surface_target(void)
     HRESULT hr = device->lpVtbl->CreateRenderTarget(
         device, info.width, info.height, (D3DFORMAT)info.color_format,
         D3DMULTISAMPLE_NONE, TRUE, &new_color);
-    if (FAILED(hr) || !new_color)
+    if (FAILED(hr) || !new_color) {
+        fprintf(stderr, "[NV2A-SURFACE] CreateRenderTarget failed hr=0x%08lX size=%ux%u format=%u\\n",
+            (unsigned long)hr, info.width, info.height, (unsigned)info.color_format);
         return 16;
+    }
 
     if (info.zeta_format) {
         if (!device->lpVtbl->CreateDepthStencilSurface) {
@@ -1638,6 +1814,8 @@ static int update_surface_target(void)
         mark_all_textures_dirty();
 
     if (!copy_vram_to_surface(new_color, &info)) {
+        fprintf(stderr, "[NV2A-SURFACE] initial VRAM-to-surface copy failed offset=%08X pitch=%u\\n",
+            info.color_offset, info.color_pitch);
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 20;
@@ -1650,10 +1828,14 @@ static int update_surface_target(void)
 
     hr = device->lpVtbl->SetRenderTarget(device, new_color, new_zeta);
     if (FAILED(hr)) {
+        fprintf(stderr, "[NV2A-SURFACE] SetRenderTarget failed hr=0x%08lX\\n", (unsigned long)hr);
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 21;
     }
+    fprintf(stderr, "[NV2A-SURFACE] bound %ux%u format=%u offset=%08X pitch=%u\\n",
+        info.width, info.height, (unsigned)info.color_format,
+        info.color_offset, info.color_pitch);
 
     IDirect3DSurface8* old_color = g_color_surface;
     IDirect3DSurface8* old_zeta = g_zeta_surface;
@@ -2119,10 +2301,19 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
         if (!instruction_count ||
             !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
             return 0;
-        if (XboxNV2A_ValidateVertexProgram(
-                &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
-                instruction_count, &metadata) != 0)
+        const int validation_result = XboxNV2A_ValidateVertexProgram(
+            &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
+            instruction_count, &metadata);
+        if (validation_result != 0) {
+            fprintf(stderr, "[NV2A-DRAW] vertex program validation failed=%d instructions=%u first=%08X/%08X/%08X/%08X last=%08X\\n",
+                validation_result, instruction_count,
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][1],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][2],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][3],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3]);
             return 0;
+        }
         g_nv2a_vsh_input_mask = metadata.input_mask;
         uint32_t hash = 2166136261u;
         const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
@@ -2134,19 +2325,27 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
             g_nv2a_vsh_dirty = 0;
         } else {
             if (g_nv2a_vsh_handle) {
-                (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+                (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
                 g_nv2a_vsh_handle = 0;
             }
-            if (FAILED(d3d8_vsh_create_shader(
-                    words, (int)instruction_count, &g_nv2a_vsh_handle)))
+            const HRESULT create_result = nv2a_vsh_create_shader(
+                words, (int)instruction_count, &g_nv2a_vsh_handle);
+            if (FAILED(create_result)) {
+                fprintf(stderr, "[NV2A-DRAW] D3D8 VSH create failed hr=0x%08lX instructions=%u\\n",
+                    (unsigned long)create_result, instruction_count);
                 return 0;
+            }
             g_nv2a_vsh_program_hash = hash;
             g_nv2a_vsh_dirty = 0;
         }
     }
     /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
      * compiles it on cache miss, and binds the cached GPU vertex shader. */
-    return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
+    const HRESULT bind_result = device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle);
+    if (FAILED(bind_result))
+        fprintf(stderr, "[NV2A-DRAW] D3D8 programmable shader bind failed hr=0x%08lX handle=%08lX\\n",
+            (unsigned long)bind_result, (unsigned long)g_nv2a_vsh_handle);
+    return SUCCEEDED(bind_result);
 }
 
 /* Match d3d8_vsh.c's ATTR input-layout order exactly. CPU work here is
@@ -2243,7 +2442,7 @@ static void nv2a_flush_vertex_constants(void)
         } while (reg < 192u &&
                  (g_nv2a_vsh_constant_dirty[reg >> 6] &
                   ((uint64_t)1u << (reg & 63u))));
-        d3d8_vsh_set_constant((int)first,
+        nv2a_vsh_set_constant((int)first,
             &g_nv2a_vsh_constants[first][0], (int)(reg - first));
     }
 }
@@ -2254,7 +2453,7 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     const uint32_t mode=g_primitive_mode[channel][subchannel];
     if(!indices||!count||count>NV2A_MAX_BATCH_VERTICES||mode==NV097_SET_BEGIN_END_OP_END)return 1;
     XboxNV2A_VERTEX v[NV2A_MAX_BATCH_VERTICES],x[NV2A_MAX_BATCH_VERTICES * 2u]; uint32_t stride=0,fvf=0;
-    if(XboxNV2A_BuildIndexedVertexStream(channel,subchannel,indices,count,v,sizeof(v),&stride,&fvf)!=0)return 2;
+    if(XboxNV2A_BuildIndexedVertexStream(channel,subchannel,indices,count,v,sizeof(v),&stride,&fvf)!=0){fprintf(stderr,"[NV2A-DRAW] vertex stream build failed channel=%u count=%u\\n",channel,count);return 2;}
     const XboxNV2A_VERTEX* draw=v; uint32_t draw_count=count,pc=0; D3DPRIMITIVETYPE pt=D3DPT_TRIANGLELIST;
     switch(mode){
     case NV097_SET_BEGIN_END_OP_POINTS: pt=D3DPT_POINTLIST;pc=count;break;
@@ -2281,21 +2480,18 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     if ((g_transform_execution_mode & 3u) == 2u) {
         /* Select the FVF so the D3D11 translator builds the matching ATTR
          * input layout, then bind the cached programmable vertex shader. */
-        if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
-            return 6;
+        if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) { fprintf(stderr,"[NV2A-DRAW] FVF bind failed fvf=%08X\\n",fvf); return 6; }
         nv2a_flush_vertex_constants();
-        if (!nv2a_prepare_gpu_vertex_shader(d))
-            return 9;
+        if (!nv2a_prepare_gpu_vertex_shader(d)) { fprintf(stderr,"[NV2A-DRAW] GPU vertex shader preparation failed\\n"); return 9; }
         const uint8_t* packed = NULL;
         if (!nv2a_pack_gpu_vertex_stream(draw, draw_count,
-                g_nv2a_vsh_input_mask, &packed, &draw_stride))
-            return 10;
+                g_nv2a_vsh_input_mask, &packed, &draw_stride)) { fprintf(stderr,"[NV2A-DRAW] GPU vertex stream pack failed input-mask=%04X\\n",g_nv2a_vsh_input_mask); return 10; }
         draw_data = packed;
     } else if (FAILED(d->lpVtbl->SetVertexShader(d,fvf))) {
         return 6;
     }
-    if(bind_nv2a_textures(channel,subchannel,d)!=0)return 8;
-    if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride)))return 7;
+    if(bind_nv2a_textures(channel,subchannel,d)!=0){fprintf(stderr,"[NV2A-DRAW] texture binding failed\\n");return 8;}
+    { HRESULT draw_hr=d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride); if(FAILED(draw_hr)){fprintf(stderr,"[NV2A-DRAW] DrawPrimitiveUP failed hr=0x%08lX primitive=%u count=%u stride=%u\\n",(unsigned long)draw_hr,(unsigned)pt,pc,draw_stride);return 7;} }
     ++g_pgraph_custom_methods;++g_pgraph_custom_draws;g_pgraph_custom_vertices+=count;(void)draw_count;return 0;
 }
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)
@@ -2387,7 +2583,10 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     int subroutine_active = 0;
     uint32_t subroutine_return = 0;
 
-    if ((get & 3u) || (put & 3u) || get > put || put > mapped_length)
+    /* GET may be above PUT when the producer has wrapped the ring.
+     * A valid stream must explicitly jump back to PUT before it can finish. */
+    if ((get & 3u) || (put & 3u) ||
+        get > mapped_length || put > mapped_length)
         return 1;
 
     while (get != put) {
@@ -2509,7 +2708,8 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     if (!dma) return 1;
     if (dma->dma_class != 0x02u && dma->dma_class != 0x3Du)
         return 8;
-    if (get > put || put > dma->mapped_length || (get & 3u) || (put & 3u))
+    if (get > dma->mapped_length || put > dma->mapped_length ||
+        (get & 3u) || (put & 3u))
         return 9;
 
     uint32_t checked_get = get, checked_methods = 0;
