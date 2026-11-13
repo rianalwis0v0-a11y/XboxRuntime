@@ -230,7 +230,8 @@ int main()
 
     std::vector<uint32_t> setup;
     append_method(setup, 0x0000u, kDmaHandle);                 // bind PGRAPH object
-    append_method(setup, 0x0180u, kDmaHandle);                 // bind DMA_A vertex memory
+    append_method(setup, 0x0180u, kDmaHandle);                 // bind DMA_A
+    append_method(setup, 0x019Cu, kDmaHandle);                 // bind DMA_H for vertex arrays
     append_method(setup, 0x1D88u, 0x00000106u);                // linear A8R8G8B8 surface
     append_method(setup, 0x1D8Cu, kSurfacePitch);              // color pitch
     append_method(setup, 0x1D90u, kSurfaceOffset);             // color offset
@@ -281,6 +282,7 @@ int main()
         std::vector<uint32_t> draw;
         append_method(draw, 0x0000u, kDmaHandle);
         append_method(draw, 0x0180u, kDmaHandle);
+        append_method(draw, 0x019Cu, kDmaHandle);
         append_method(draw, 0x17FCu, 5u);                       // triangles
         append_method(draw, 0x1810u, (3u << 24));               // DRAW_ARRAYS(0,3)
         append_method(draw, 0x17FCu, 0u);                       // end
