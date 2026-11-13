@@ -115,7 +115,7 @@ int main(void)
     /* MAC MOV v0 -> oPos exercises a real input read and position write. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (1u << 21) | 0x1Bu;
-    instruction[2] = 3u << 26;
+    instruction[2] = 2u << 26;
     instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MOV input-to-oPos") != 0)
         return 2;
@@ -124,7 +124,7 @@ int main(void)
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (3u << 21) | (5u << 9);
     instruction[2] = (2u << 26);
-    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) | 1u;
+    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
         return 3;
 
@@ -132,14 +132,14 @@ int main(void)
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (4u << 21) | (9u << 13) | (2u << 9);
     instruction[2] = (1u << 26) | (2u << 11);
-    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) | 1u;
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MAD A+B+C") != 0)
         return 4;
 
     /* ILU LIT c3 -> oPos exercises the paired ILU output mux. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (7u << 25) | (3u << 13);
-    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) |
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) |
                      (1u << 2) | 1u;
     if (compile_program(instruction, 1u, "NV2A ILU LIT C") != 0)
         return 5;
@@ -147,7 +147,7 @@ int main(void)
     /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (1u << 21) | (5u << 13) | 0x1Bu;
-    instruction[2] = 2u << 26;
+    instruction[2] = 3u << 26;
     instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MOV constant-to-oPos") != 0)
         return 4;
