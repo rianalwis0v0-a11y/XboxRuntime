@@ -502,7 +502,8 @@ EmitPush $letterVa
 EmitCallImport 268
 EmitCheckEqual 1
 
-$createdUnicodeVa = [uint32]($reportVa + 0x1D0)
+$createdUnicodeVa = [uint32]($reportVa + 0x2A0)
+EmitMovMemoryImmediate ([uint32]($unicodeBufferVa + 2)) 0
 EmitPush $unicodeBufferVa
 EmitPush $createdUnicodeVa
 EmitCallImport 274
