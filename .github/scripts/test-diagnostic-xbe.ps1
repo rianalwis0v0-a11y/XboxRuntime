@@ -922,6 +922,7 @@ EmitPush $directoryObjectAttributesVa
 EmitPush 2147483648
 EmitPush $directoryHandleVa
 EmitCallImport 202
+EmitStoreEax $dvdOpenStatusVa
 EmitCheckEqual 0
 EmitPush 1
 EmitPush 0
@@ -934,13 +935,17 @@ EmitPush 0
 EmitPush 0
 EmitPushMemory $directoryHandleVa
 EmitCallImport 207
+EmitStoreEax $dvdQueryStatusVa
 EmitCheckEqual 0
 EmitLoadEax ([uint32]($directoryInfoVa + 60))
+EmitStoreEax $dvdNameLengthVa
 EmitCheckNonZero
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
+EmitStoreEax $dvdAttributesVa
 EmitCheckNonZero
 EmitPushMemory $directoryHandleVa
 EmitCallImport 187
+EmitStoreEax $dvdCloseStatusVa
 EmitCheckEqual 0
 
 EmitMovMemoryImmediate $progressVa 3
