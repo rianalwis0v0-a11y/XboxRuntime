@@ -8,6 +8,8 @@ on:
     paths:
       - "modules/xbe_loader/**"
       - "tests/xbe_format_tests.cpp"
+      - "tests/xbe_loader_backend_tests.cpp"
+      - "main/main.cpp"
       - ".github/workflows/xbe-loader-tests.yml"
 
 jobs:
