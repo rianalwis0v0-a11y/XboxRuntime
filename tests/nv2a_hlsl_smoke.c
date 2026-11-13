@@ -15,6 +15,25 @@ static int compile_program(const DWORD* instructions, unsigned count,
     memset(&program, 0, sizeof(program));
     d3d8_vsh_parse(instructions, count, &program);
 
+    if (strstr(label, "input-to-oPos") &&
+        (program.length != 1 ||
+         program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[0].mac_src[0].reg_index != 0 ||
+         program.inputs_read != 1u ||
+         program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].mac_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s microcode decode did not preserve the real NV2A fields\\n", label);
+        return 5;
+    }
+    if (strstr(label, "constant-to-oPos") &&
+        (program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].mac_src[0].reg_index != 5)) {
+        fprintf(stderr, "FAIL: %s constant source decode is incorrect\\n", label);
+        return 6;
+    }
+
     const int length = d3d8_vsh_generate_hlsl(
         &program, hlsl, (int)sizeof(hlsl));
     if (length <= 0 || length >= (int)sizeof(hlsl)) {
@@ -73,8 +92,8 @@ int main(void)
     /* MAC ADD v5 + v5 -> oPos exercises a two-source arithmetic operation. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (3u << 21) | (5u << 9);
-    instruction[2] = (2u << 26) | (2u << 11);
-    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
+    instruction[2] = (2u << 26);
+    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
         return 3;
 
