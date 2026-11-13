@@ -203,6 +203,39 @@ EmitLoadEax $readBufferVa
 EmitCheckEqual 0x46545258
 EmitLoadEax ([uint32]($readBufferVa + 4))
 EmitCheckEqual 0x21454C49
+
+# Query FILE_STANDARD_INFORMATION and verify the eight-byte diagnostic file size.
+$fileInfoVa = [uint32]($reportVa + 0x380)
+EmitPush 5
+EmitPush 24
+EmitPush $fileInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 211
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($fileInfoVa + 8))
+EmitCheckEqual 8
+
+# Set the file pointer to zero, then query FILE_POSITION_INFORMATION.
+EmitMovMemoryImmediate $fileInfoVa 0
+EmitMovMemoryImmediate ([uint32]($fileInfoVa + 4)) 0
+EmitPush 14
+EmitPush 8
+EmitPush $fileInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 226
+EmitCheckEqual 0
+EmitPush 14
+EmitPush 8
+EmitPush $fileInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 211
+EmitCheckEqual 0
+EmitLoadEax $fileInfoVa
+EmitCheckEqual 0
+
 EmitPushMemory $fileHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
