@@ -932,9 +932,9 @@ EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
 # Validate the guest OBJECT_ATTRIBUTES and UNICODE_STRING fixture before NtOpenFile.
-$directoryUnicodeVa = [uint32]($base + 0x6500)
-$directoryObjectAttributesVa = [uint32]($base + 0x6510)
-$directoryPathVa = [uint32]($base + 0x6540)
+$directoryUnicodeVa = [uint32]($base + 0x6B00)
+$directoryObjectAttributesVa = [uint32]($base + 0x6B10)
+$directoryPathVa = [uint32]($base + 0x6B40)
 $directoryHandleVa = [uint32]($base + 0x6710)
 $directoryInfoVa = [uint32]($base + 0x6600)
 $directoryIoVa = [uint32]($base + 0x6700)
@@ -1091,16 +1091,16 @@ $directoryPath = "\Device\Cdrom0"
 $directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
 $directoryPathLength = [uint32]($directoryPath.Length * 2)
 $directoryPathVa = [uint32]($base + 0x6540)
-Put32 0x6500 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
-Put32 0x6504 $directoryPathVa
-Put32 0x6510 24
-Put32 0x6514 0
-Put32 0x6518 $directoryUnicodeVa
-Put32 0x651C 0
-Put32 0x6520 0
-Put32 0x6524 0
-$directoryPathBytes.CopyTo($b,0x6540)
-Write-Host ("Directory fixture: pathLen={0}, unicodeVa=0x{1:X8}, pathVa=0x{2:X8}, raw={3}" -f $directoryPathLength,$directoryUnicodeVa,$directoryPathVa,[BitConverter]::ToString($b,0x6500,8))
+Put32 0x6B00 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
+Put32 0x6B04 $directoryPathVa
+Put32 0x6B10 24
+Put32 0x6B14 0
+Put32 0x6B18 $directoryUnicodeVa
+Put32 0x6B1C 0
+Put32 0x6B20 0
+Put32 0x6B24 0
+$directoryPathBytes.CopyTo($b,0x6B40)
+Write-Host ("Directory fixture: pathLen={0}, unicodeVa=0x{1:X8}, pathVa=0x{2:X8}, raw={3}" -f $directoryPathLength,$directoryUnicodeVa,$directoryPathVa,[BitConverter]::ToString($b,0x6B00,8))
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
