@@ -57,6 +57,7 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
     parsed.headerSize = Read32(file + 0x108);
     parsed.imageSize = Read32(file + 0x10C);
     parsed.imageHeaderSize = Read32(file + 0x110);
+    parsed.tlsAddress = Read32(file + 0x12C);
     parsed.certificateAddress = Read32(file + 0x118);
     parsed.sectionCount = Read32(file + 0x11C);
     const std::uint32_t sectionTableAddress = Read32(file + 0x120);
@@ -122,7 +123,7 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
             s.virtualAddress < parsed.baseAddress ||
             AddOverflows(s.virtualAddress, s.virtualSize) ||
             s.virtualAddress + s.virtualSize > parsed.baseAddress + parsed.imageSize ||
-            s.rawAddress < parsed.headerSize ||
+            (s.rawSize != 0 && s.rawAddress < parsed.headerSize) ||
             !RangeInside(s.rawAddress, s.rawSize, fileSize))
             return {Error::InvalidSection, i};
     }
@@ -164,6 +165,12 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
     parsed.entryPoint = parsed.debugImage ? debugEntry : retailEntry;
     parsed.kernelThunkAddress = parsed.debugImage ? debugThunk : retailThunk;
 
+    if (parsed.tlsAddress != 0 &&
+        (parsed.tlsAddress < parsed.baseAddress ||
+         static_cast<std::uint64_t>(parsed.tlsAddress) >=
+             static_cast<std::uint64_t>(parsed.baseAddress) + parsed.imageSize))
+        return {Error::InvalidSection, parsed.tlsAddress};
+
     if (parsed.kernelThunkAddress != 0) {
         if ((parsed.kernelThunkAddress & 3u) != 0 ||
             parsed.kernelThunkAddress < parsed.baseAddress ||
@@ -180,6 +187,9 @@ Result MapImage(const std::uint8_t* file, std::size_t fileSize,
                 const Image& image, std::uint8_t* destination,
                 std::size_t destinationSize) noexcept {
     if (!file || !destination) return {Error::NullArgument, 0};
+    if (image.sectionCount == 0 || image.sectionCount > kMaximumSections ||
+        image.baseAddress == 0 || AddOverflows(image.baseAddress, image.imageSize))
+        return {Error::InvalidImageSize, image.imageSize};
     if (image.imageSize == 0 || image.headerSize > fileSize ||
         image.imageSize > destinationSize)
         return {Error::OutputTooSmall, image.imageSize};
