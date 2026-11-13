@@ -17,6 +17,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <string>
@@ -219,8 +220,11 @@ int wmain(int argc,wchar_t**argv){
  if(xbeThread){
   WaitForSingleObject(xbeThread,INFINITE);
   DWORD guestExit=0;
-  if(!GetExitCodeThread(xbeThread,&guestExit)||guestExit!=0){
-   OutputDebugStringW(L"[XboxGuest] XBE entry thread exited with an exception or nonzero status.\\n");
+  if(!GetExitCodeThread(xbeThread,&guestExit)){
+   std::fprintf(stderr,"[XboxGuest] GetExitCodeThread failed: %lu\\n",GetLastError());
+   ok=false;
+  } else if(guestExit!=0){
+   std::fprintf(stderr,"[XboxGuest] XBE entry thread exit status: 0x%08lX\\n",guestExit);
    ok=false;
   }
   CloseHandle(xbeThread);
