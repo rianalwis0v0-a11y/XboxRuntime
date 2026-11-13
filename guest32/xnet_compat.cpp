@@ -145,11 +145,10 @@ extern "C" int WINAPI XNetDnsRelease(XNDNS* result) {
 
 extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
     if (!buffer || capacity <= 0) return WSAEFAULT;
-    const char* text = inet_ntoa(address);
-    if (!text) return WSAEINVAL;
-    const size_t length = std::strlen(text);
-    if (length + 1 > static_cast<size_t>(capacity)) return WSAEFAULT;
-    std::memcpy(buffer, text, length + 1);
+    if (!InetNtopA(AF_INET, &address, buffer, static_cast<size_t>(capacity))) {
+        const int error = WSAGetLastError();
+        return error ? error : WSAEINVAL;
+    }
     return 0;
 }
 
@@ -293,6 +292,14 @@ extern "C" int WINAPI XSocketListen(SOCKET socket, int backlog) {
 
 extern "C" SOCKET WINAPI XSocketAccept(SOCKET socket, sockaddr* address, int* addressLength) {
     if (socket == INVALID_SOCKET) return INVALID_SOCKET;
+    if (address && !addressLength) {
+        WSASetLastError(WSAEFAULT);
+        return INVALID_SOCKET;
+    }
+    if (addressLength && *addressLength < 0) {
+        WSASetLastError(WSAEINVAL);
+        return INVALID_SOCKET;
+    }
     uint32_t length = addressLength && *addressLength > 0
         ? static_cast<uint32_t>(*addressLength) : 0;
     const uint32_t accepted = XboxNetSocketAccept(static_cast<uint32_t>(socket),
@@ -369,6 +376,18 @@ extern "C" int WINAPI XSocketSendTo(SOCKET socket, const char* buffer, int lengt
 extern "C" int WINAPI XSocketRecvFrom(SOCKET socket, char* buffer, int length, int flags,
     sockaddr* from, int* fromLength) {
     if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
+    if (from && !fromLength) {
+        WSASetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (fromLength && *fromLength < 0) {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+    if (from && *fromLength < static_cast<int>(sizeof(sockaddr_in))) {
+        WSASetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
     uint32_t address = 0;
     uint16_t port = 0;
     const int result = XboxNetSocketReceiveFrom(static_cast<uint32_t>(socket), buffer,
