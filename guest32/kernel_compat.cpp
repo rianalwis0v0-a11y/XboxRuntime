@@ -488,7 +488,12 @@ static bool FindDvdFile(HANDLE handle, GuestDvdFile& file) {
     std::lock_guard<std::mutex> lock(g_dvdFileMutex);
     const auto found = g_dvdFiles.find(handle);
     if (found == g_dvdFiles.end()) return false;
-    file = found->second;
+    file.path = found->second.path;
+    file.size = found->second.size;
+    file.startSector = found->second.startSector;
+    file.attributes = found->second.attributes;
+    file.position = found->second.position;
+    file.directory = found->second.directory;
     return true;
 }
 
