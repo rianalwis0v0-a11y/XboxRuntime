@@ -232,12 +232,12 @@ int main()
     append_method(setup, 0x0000u, kDmaHandle);                 // bind PGRAPH object
     append_method(setup, 0x0180u, kDmaHandle);                 // bind DMA_A
     append_method(setup, 0x019Cu, kDmaHandle);                 // bind DMA_H for vertex arrays
-    append_method(setup, 0x1D88u, 0x00000106u);                // linear A8R8G8B8 surface
-    append_method(setup, 0x1D8Cu, kSurfacePitch);              // color pitch
-    append_method(setup, 0x1D90u, kSurfaceOffset);             // color offset
-    append_method(setup, 0x1D94u, 0u);                         // no zeta surface
-    append_method(setup, 0x1D98u, kWidth << 16);               // clip width
-    append_method(setup, 0x1D9Cu, kHeight << 16);              // clip height
+    append_method(setup, 0x0208u, 0x00000108u);                // linear A8R8G8B8 surface
+    append_method(setup, 0x020Cu, kSurfacePitch);              // color pitch
+    append_method(setup, 0x0210u, kSurfaceOffset);             // color offset
+    append_method(setup, 0x0214u, 0u);                         // no zeta surface
+    append_method(setup, 0x0200u, kWidth << 16);               // clip width
+    append_method(setup, 0x0204u, kHeight << 16);              // clip height
     append_method(setup, 0x1E94u, 2u);                         // programmable GPU mode
     append_method(setup, 0x1E98u, 0u);                         // no context writes
     append_method(setup, 0x1E9Cu, 0u);                         // program load slot 0
