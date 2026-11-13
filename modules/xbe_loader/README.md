@@ -35,6 +35,6 @@ allocation/callback semantics and import-directory interpretation remain the
 backend's responsibility.
 
 The parser validates the XBEH header, certificate extent, section table and
-section ranges, retail/debug entry-point and thunk decoding, TLS bounds, and
-library-version table bounds. The 256-byte RSA signature is retained in the
+section ranges and names, retail/debug entry-point and thunk decoding, bounded
+kernel thunk-table termination, TLS bounds, and library-version table bounds. The 256-byte RSA signature is retained in the
 mapped header but is not cryptographically verified by this module.
