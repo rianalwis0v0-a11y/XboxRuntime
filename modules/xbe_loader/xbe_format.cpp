@@ -318,6 +318,17 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
 
 
     if (parsed.tlsAddress != 0) {
+        // A TLS directory is six 32-bit fields. Validate the complete range
+        // before forming any field address so malformed near-UINT32_MAX
+        // values cannot wrap an offset back into an unrelated mapped region.
+        constexpr std::uint32_t kTlsDirectorySize = 6u * 4u;
+        if (parsed.tlsAddress >
+                (std::numeric_limits<std::uint32_t>::max)() -
+                    (kTlsDirectorySize - 1u) ||
+            !IsVirtualRangeMapped(parsed, parsed.tlsAddress,
+                                  kTlsDirectorySize))
+            return {Error::InvalidSection, parsed.tlsAddress};
+
         std::uint32_t dataStart = 0;
         std::uint32_t dataEnd = 0;
         std::uint32_t indexAddress = 0;
