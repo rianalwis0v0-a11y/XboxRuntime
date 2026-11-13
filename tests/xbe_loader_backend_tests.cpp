@@ -21,6 +21,7 @@ static bool g_importsResolved = false;
 static bool g_guestStarted = false;
 static bool g_guestStopped = false;
 static bool g_released = false;
+static bool g_failStart = false;
 static int g_sequence = 0;
 static int g_reserveOrder = 0;
 static int g_resolveOrder = 0;
@@ -66,7 +67,7 @@ static int __cdecl StartGuest(std::uint32_t entry, std::uint32_t tls, void*) {
     if (entry != 0x11010 || tls != 0) return 1;
     g_guestStarted = true;
     g_startOrder = ++g_sequence;
-    return 0;
+    return g_failStart ? 1 : 0;
 }
 
 static void __cdecl StopGuest(void*) {
