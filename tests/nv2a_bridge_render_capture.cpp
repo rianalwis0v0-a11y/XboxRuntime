@@ -7,7 +7,11 @@
 #include <string>
 #include <vector>
 
+#include <d3d11.h>
 #include "d3d8_xbox.h"
+
+extern "C" ID3D11Device* d3d8_GetD3D11Device(void);
+extern "C" ID3D11DeviceContext* d3d8_GetD3D11Context(void);
 
 namespace {
 constexpr uint32_t kChannel = 2u;
@@ -23,6 +27,7 @@ constexpr uint32_t kSurfacePitch = kWidth * 4u;
 using StartFn = int (__cdecl*)(void);
 using StopFn = void (__cdecl*)(void);
 using SetDeviceFn = int (__cdecl*)(void*);
+using SetD3D11DeviceFn = int (__cdecl*)(void*,void*);
 using WriteRAMINFn = int (__cdecl*)(uint32_t,const void*,uint32_t);
 using WriteVRAMFn = int (__cdecl*)(uint32_t,const void*,uint32_t);
 using ReadVRAMFn = int (__cdecl*)(uint32_t,void*,uint32_t);
@@ -150,6 +155,7 @@ int main()
     const auto start = proc<StartFn>(module, "ModuleStart");
     const auto stop = proc<StopFn>(module, "ModuleStop");
     const auto set_device = proc<SetDeviceFn>(module, "XboxNV2A_SetD3DDevice");
+    const auto set_d3d11_device = proc<SetD3D11DeviceFn>(module, "XboxNV2A_SetD3D11Device");
     const auto write_ramin = proc<WriteRAMINFn>(module, "XboxNV2A_WriteRAMIN");
     const auto write_vram = proc<WriteVRAMFn>(module, "XboxNV2A_WriteVRAM");
     const auto read_vram = proc<ReadVRAMFn>(module, "XboxNV2A_ReadVRAM");
@@ -157,8 +163,9 @@ int main()
     const auto submit_dma = proc<SubmitDMAPushBufferFn>(module, "XboxNV2A_SubmitDMAPushBuffer");
     const auto flush = proc<FlushFn>(module, "XboxNV2A_Flush");
     const auto get_stats = proc<GetStatsFn>(module, "XboxNV2A_GetStats");
-    if (!start || !stop || !set_device || !write_ramin || !write_vram ||
-        !read_vram || !write_register || !submit_dma || !flush || !get_stats) {
+    if (!start || !stop || !set_device || !set_d3d11_device ||
+        !write_ramin || !write_vram || !read_vram || !write_register ||
+        !submit_dma || !flush || !get_stats) {
         std::fprintf(stderr, "FAIL: NV2A bridge exports missing\n");
         FreeLibrary(module);
         device->lpVtbl->Release(device);
@@ -166,7 +173,12 @@ int main()
         DestroyWindow(hwnd);
         return 1;
     }
-    if (set_device(device) != 0 || start() != 0) {
+    ID3D11Device* d3d11_device = d3d8_GetD3D11Device();
+    ID3D11DeviceContext* d3d11_context = d3d8_GetD3D11Context();
+    if (!d3d11_device || !d3d11_context ||
+        set_device(device) != 0 ||
+        set_d3d11_device(d3d11_device, d3d11_context) != 0 ||
+        start() != 0) {
         std::fprintf(stderr, "FAIL: NV2A module/device initialization\n");
         stop();
         FreeLibrary(module);
