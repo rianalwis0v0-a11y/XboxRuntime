@@ -653,3 +653,12 @@ Exact previous failure: run 43427357424 failed kernel_guest_backend_smoke with `
 Diagnosis: the callback fixture read TEB.ThreadLocalStoragePointer at FS:[0x2C] as if it were the dynamic TlsAlloc slot array. It is not. The fixture now reads the x86 TEB TlsSlots array at offset 0xE10 indexed by the allocated TLS index. This is a test fixture bug found during diagnosis; no runtime pass claimed.
 Current CI: run 43427582455 — https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427582455 — IN PROGRESS.
 Next action: wait for the TLS callback smoke result; if it still fails, capture the exact faulting stage and revise the test/implementation. No real on-disk XBE or cooperative non-returning title shutdown is validated yet.
+
+
+[2026-11-13 12:45 UTC] [Kernel team — TLS callback branch correction]
+Status: IN PROGRESS — corrected generated x86 callback control flow; CI run active.
+Latest commit: cc1a7f80dc75a1f91a1844c1d57ee17b5658acac (work/kernel-execution-backend).
+Changed file: tests/kernel_guest_backend_smoke.cpp.
+Exact prior result: run 43427582455 still failed with 0xC0000005 after changing the TEB lookup. Further inspection of the generated callback bytes found the attach-path short JMP skipped past the RET 12 instruction and fell through into zero-filled image bytes, causing the access violation. The branch now targets the shared RET instruction.
+Current CI: run 43427795144 — https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427795144 — IN PROGRESS. No pass claimed.
+Next: verify the actual TLS callback execution in CI; only then report the TLS test PASS. Real ANON_XBE_02.xbe/LoadXbe integration and safe shutdown of a non-returning title remain unvalidated.
