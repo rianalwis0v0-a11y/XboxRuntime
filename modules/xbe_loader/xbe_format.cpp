@@ -22,6 +22,57 @@ bool RangeInside(std::size_t offset, std::size_t length,
     return offset <= total && length <= total - offset;
 }
 
+bool ReadVirtualByte(const std::uint8_t* file, std::size_t fileSize,
+                      const Image& image, std::uint32_t address,
+                      std::uint8_t* value) noexcept {
+    if (!value || address < image.baseAddress ||
+        static_cast<std::uint64_t>(address) >=
+            static_cast<std::uint64_t>(image.baseAddress) + image.imageSize)
+        return false;
+
+    const std::uint32_t imageOffset = address - image.baseAddress;
+    if (imageOffset < image.headerSize) {
+        if (!RangeInside(imageOffset, 1, fileSize)) return false;
+        *value = file[imageOffset];
+        return true;
+    }
+
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const Section& section = image.sections[i];
+        if (address < section.virtualAddress ||
+            static_cast<std::uint64_t>(address) >=
+                static_cast<std::uint64_t>(section.virtualAddress) +
+                    section.virtualSize)
+            continue;
+
+        const std::uint32_t sectionOffset = address - section.virtualAddress;
+        if (sectionOffset >= section.rawSize) {
+            *value = 0; // virtual zero-fill
+            return true;
+        }
+        const std::size_t rawOffset =
+            static_cast<std::size_t>(section.rawAddress) + sectionOffset;
+        if (!RangeInside(rawOffset, 1, fileSize)) return false;
+        *value = file[rawOffset];
+        return true;
+    }
+    return false;
+}
+
+bool ReadVirtual32(const std::uint8_t* file, std::size_t fileSize,
+                   const Image& image, std::uint32_t address,
+                   std::uint32_t* value) noexcept {
+    if (!value || address > (std::numeric_limits<std::uint32_t>::max)() - 3u)
+        return false;
+    std::uint8_t bytes[4]{};
+    for (std::uint32_t i = 0; i < 4; ++i) {
+        if (!ReadVirtualByte(file, fileSize, image, address + i, &bytes[i]))
+            return false;
+    }
+    *value = Read32(bytes);
+    return true;
+}
+
 bool VaRangeToFile(std::uint32_t address, std::uint32_t base,
                    std::uint32_t headerSize, std::size_t length,
                    std::size_t fileSize, std::size_t* offset) noexcept {
@@ -165,6 +216,27 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
             if (aStart < bEnd && bStart < aEnd)
                 return {Error::OverlappingSections, j};
         }
+    }
+
+    if (parsed.kernelThunkAddress != 0) {
+        bool terminated = false;
+        for (std::uint32_t i = 0; i < 4096u; ++i) {
+            const std::uint64_t current =
+                static_cast<std::uint64_t>(parsed.kernelThunkAddress) +
+                static_cast<std::uint64_t>(i) * 4u;
+            if (current > (std::numeric_limits<std::uint32_t>::max)())
+                break;
+            std::uint32_t thunk = 0;
+            if (!ReadVirtual32(file, fileSize, parsed,
+                               static_cast<std::uint32_t>(current), &thunk))
+                break;
+            if (thunk == 0) {
+                terminated = true;
+                break;
+            }
+        }
+        if (!terminated)
+            return {Error::InvalidThunkTable, parsed.kernelThunkAddress};
     }
 
     const auto entryInExecutableSection = [&parsed](std::uint32_t entry) noexcept {
