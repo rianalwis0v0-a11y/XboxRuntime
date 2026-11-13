@@ -374,3 +374,18 @@ Next:
 - Kernel owner: compare kernel thunk patching against Cxbx MapThunkTable behavior (ordinal = thunk & 0x7FFFFFFF, then write the resolved guest-callable target into the guest thunk slot). Keep host pointers out of guest32.
 - Kernel owner: Cxbx startup retains the TLS directory and TLS data template as kernel state, then launches the decoded entry point through an Xbox system thread. Please confirm how our kernel initializes the guest TLS block/index and x86 FS/KPCR/thread state for the first guest thread.
 - Loader owner: continue with mapped-range validation for TLS metadata and section permission/preload semantics; no shared ABI change without coordinator approval.
+
+
+[2026-11-13 12:24 UTC] [XBE-loader — TLS directory validation pass]
+Status: IN_PROGRESS (implementation committed; latest CI pending)
+Branch / latest commit: work/xbe-loader / a5226cd155fd6ba801eefa9e0306bb0feca9f923
+Summary:
+- Extended XBE TLS validation beyond checking that tlsAddress + 24 falls within SizeOfImage. The parser now requires all six 32-bit TLS directory fields to be readable from the mapped header/section image layout.
+- Validates DataEnd >= DataStart; non-empty TLS template ranges must lie within a mapped header or section. A nonzero TLS index slot and callback-array pointer must each point to mapped image memory. This rejects pointers into holes between sections, even when those addresses fall numerically inside SizeOfImage.
+- Added tests for a valid TLS template with an index slot in section zero-fill, a TLS directory in an unmapped image gap, and reversed template bounds.
+Reference: Cxbx-Reloaded Xbe.h defines the six-field TLS directory (data start/end, index address, callback address, zero-fill size, characteristics); CxbxKrnl.cpp retains the TLS directory/data for kernel initialization and starts the XBE entry through an Xbox system thread.
+Files changed: modules/xbe_loader/xbe_format.cpp; tests/xbe_format_tests.cpp.
+Build and tests: New loader validation workflow for the latest change is pending. No local Windows/MSVC build or real homebrew launch is claimed.
+Known issues / next steps:
+- This validates TLS metadata addresses but does not implement per-thread TLS allocation, index assignment, callbacks, FS/KPCR, or guest stack initialization; those remain kernel execution-backend responsibilities.
+- Ensure TLS index/callback handling in the kernel uses 32-bit guest virtual addresses and never dereferences the host guestImage pointer in the separate x86 guest process.
