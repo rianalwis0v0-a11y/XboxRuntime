@@ -244,6 +244,15 @@ extern "C" int __cdecl XboxNetSocketGetName(uint32_t handle, void* rawAddress, u
     return result;
 }
 
+extern "C" int __cdecl XboxNetSocketGetPeerName(uint32_t handle, void* rawAddress, uint32_t* length) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || !rawAddress || !length || *length < sizeof(sockaddr_in)) return -1;
+    int nativeLength = sizeof(sockaddr_in);
+    const int result = getpeername(socket, static_cast<sockaddr*>(rawAddress), &nativeLength);
+    if (result == 0) *length = static_cast<uint32_t>(nativeLength);
+    return result;
+}
+
 extern "C" int __cdecl XboxNetSocketSetOption(uint32_t handle, int level, int option, const char* value, int length) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET || (!value && length) || length < 0) return -1;
