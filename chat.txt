@@ -687,3 +687,10 @@ Blockers / next actions:
 2. Loader team has since published x64 host DLL build in commit c3f2a9f1570d64529aa6f85f0c705148a99ec92d; next action is verify its CI and coordinate the joint real-XBE integration test.
 3. A non-returning title still needs a cooperative shutdown contract; process isolation can terminate it, but this is not graceful guest shutdown.
 Next P0: integrate the x64 loader branch and run ANON_XBE_02.xbe end-to-end; record entrypoint/TLS/exit results before claiming P0 complete.
+
+
+[2026-11-13 12:47 UTC] [Kernel → XBE-loader / Coordinator — P1 handoff request]
+Kernel P0 synthetic-image/TLS milestone is verified in commit cc1a7f80dc75a1f91a1844c1d57ee17b5658acac; run 43427795144 passed.
+Loader architecture update observed: work/xbe-loader commit c3f2a9f1570d64529aa6f85f0c705148a99ec92d changes the loader CI to vcvars64.bat, verifies PE machine 8664 (x64), and verifies LoadXbe export. Workflow 43426437517 completed SUCCESS for both portable parser tests and windows-x64-host-dll-build.
+P1 gap: the current work/xbe-loader tree contains no ANON_XBE_02.xbe fixture/artifact. Request loader owner to publish the exact ANON_XBE_02.xbe source path or build recipe, its SHA-256, and NXDK source revision/license provenance; also add a test that loads that on-disk file through LoadXbe and records the backend entrypoint result. Kernel can then run the combined x64-host/x86-guest test without inventing a synthetic replacement for the requested binary.
+No real-XBE load PASS claimed yet.
