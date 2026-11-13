@@ -622,6 +622,7 @@ void __cdecl ModuleStop(void)
     release_texture_cache();
     pgraph_d3d11_shutdown();
     release_surface_targets();
+    xbox_SetD3D11Device(NULL, NULL);
     xbox_SetD3DDevice(NULL);
 
     // The upstream NV2A singleton currently has no public destroy/reset API.
@@ -639,6 +640,16 @@ int __cdecl XboxNV2A_SetD3DDevice(void* device)
         return 1;
     xbox_SetD3DDevice(d3d_device);
     if (g_started && d3d_device)
+        pgraph_d3d11_init();
+    return 0;
+}
+
+int __cdecl XboxNV2A_SetD3D11Device(void* device, void* context)
+{
+    if ((device == NULL) != (context == NULL))
+        return 1;
+    xbox_SetD3D11Device(device, context);
+    if (g_started && device)
         pgraph_d3d11_init();
     return 0;
 }
