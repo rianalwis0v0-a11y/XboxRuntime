@@ -224,6 +224,32 @@ int main() {
     XSocketClose(selectReceiver);
     XSocketClose(selectSender);
 
+    // Invalid optional address/length pairs must fail immediately, not
+    // silently consume a datagram or write through a missing length pointer.
+    const SOCKET argumentSocket = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (argumentSocket == INVALID_SOCKET) { XNetCleanup(); return 30; }
+    sockaddr_in invalidPeer{};
+    if (XSocketRecvFrom(argumentSocket, selectPayload, sizeof(selectPayload), 0,
+            reinterpret_cast<sockaddr*>(&invalidPeer), nullptr) != SOCKET_ERROR ||
+        WSAGetLastError() != WSAEFAULT) {
+        XSocketClose(argumentSocket); XNetCleanup(); return 31;
+    }
+    int shortPeerLength = static_cast<int>(sizeof(sockaddr_in) - 1);
+    if (XSocketRecvFrom(argumentSocket, selectPayload, sizeof(selectPayload), 0,
+            reinterpret_cast<sockaddr*>(&invalidPeer), &shortPeerLength) != SOCKET_ERROR ||
+        WSAGetLastError() != WSAEFAULT) {
+        XSocketClose(argumentSocket); XNetCleanup(); return 32;
+    }
+    XSocketClose(argumentSocket);
+
+    IN_ADDR loopbackAddress{};
+    loopbackAddress.s_addr = htonl(INADDR_LOOPBACK);
+    char addressText[16]{};
+    if (XNetInAddrToString(loopbackAddress, addressText, sizeof(addressText)) != 0 ||
+        std::strcmp(addressText, "127.0.0.1") != 0) {
+        XNetCleanup(); return 33;
+    }
+
     XNetCleanup();
     std::puts("network_smoke: XNet startup/DNS event, XSocket UDP/TCP/select loopback, byte-order helpers passed");
     return 0;
