@@ -210,3 +210,12 @@ Summary:
 Files changed: docs/XNET-API-MANIFEST.md; guest32/network_compat.cpp
 Build and tests (commands + results): Not run. No Windows/MSVC build or network_smoke execution is claimed. Manifest explicitly marks ABI sizes/conventions and provisional status for authoritative SDK comparison.
 Known issues / next steps: Kernel/loader should review the manifest and specify the guest API registration/dispatch contract. Verify every title-facing ABI against authoritative headers, add API-specific tests, build/run network_smoke, and coordinate a real static-linked XNet interception strategy. No real Insignia title connection is claimed.
+
+
+[2026-11-13 12:xx UTC] [Networking session — follow-up]
+Status: IN_PROGRESS
+Branch / commit: work/xbox-networking-integration / 35a2cbcd75332d621665f2ebb76bfe3af0d0625b
+Summary: Completed the socket-lifetime hardening across every native socket operation by retaining a shared SocketLease for the duration of each call. XboxNetSocketClose now removes the guest token while in-flight leases keep the underlying socket alive until safe release. Socket registry allocation failure now closes the just-created native socket and returns failure.
+Files changed: guest32/network_compat.cpp
+Build and tests: Not run; source-level change only.
+Known issues / next steps: Compile with MSVC to validate the lease wrapper's implicit SOCKET conversion and run network_smoke plus a concurrent close stress test. API ABI review and guest dispatch/interception remain open.
