@@ -9,6 +9,34 @@ int main() {
     params.cfgSizeOfStruct = sizeof(params);
     if (XNetStartup(&params) != 0) return 1;
 
+    BYTE randomBytes[32]{};
+    if (XNetRandom(randomBytes, sizeof(randomBytes)) != 0) { XNetCleanup(); return 18; }
+    XNADDR testAddress{};
+    XNKID testKey{};
+    IN_ADDR testIp{};
+    if (XNetXnAddrToInAddr(&testAddress, &testKey, &testIp) != WSAEOPNOTSUPP ||
+        XNetInAddrToXnAddr(testIp, &testAddress, &testKey) != WSAEOPNOTSUPP ||
+        XNetServerToInAddr(testIp, 0, &testIp) != WSAEOPNOTSUPP ||
+        XNetUnregisterInAddr(testIp) != WSAEOPNOTSUPP) {
+        XNetCleanup();
+        return 19;
+    }
+
+    WSAEVENT wrappedEvent = XboxWSACreateEvent();
+    if (!wrappedEvent || !XboxWSASetEvent(wrappedEvent) ||
+        XboxWSAWaitForMultipleEvents(1, &wrappedEvent, TRUE, 0, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XboxWSAResetEvent(wrappedEvent) || !XboxWSACloseEvent(wrappedEvent)) {
+        if (wrappedEvent) XboxWSACloseEvent(wrappedEvent);
+        XNetCleanup();
+        return 20;
+    }
+    XboxWSASetLastError(WSAEINVAL);
+    if (XboxWSAGetLastError() != WSAEINVAL ||
+        XboxWSAInetAddr("127.0.0.1") != inet_addr("127.0.0.1")) {
+        XNetCleanup();
+        return 21;
+    }
+
     WSAEVENT dnsEvent = WSACreateEvent();
     XNDNS* dns = nullptr;
     if (!dnsEvent || XNetDnsLookup("localhost", dnsEvent, &dns) != 0 ||
