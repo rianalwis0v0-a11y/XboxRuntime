@@ -240,26 +240,6 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
         }
     }
 
-    if (parsed.kernelThunkAddress != 0) {
-        bool terminated = false;
-        for (std::uint32_t i = 0; i < 4096u; ++i) {
-            const std::uint64_t current =
-                static_cast<std::uint64_t>(parsed.kernelThunkAddress) +
-                static_cast<std::uint64_t>(i) * 4u;
-            if (current > (std::numeric_limits<std::uint32_t>::max)())
-                break;
-            std::uint32_t thunk = 0;
-            if (!ReadVirtual32(file, fileSize, parsed,
-                               static_cast<std::uint32_t>(current), &thunk))
-                break;
-            if (thunk == 0) {
-                terminated = true;
-                break;
-            }
-        }
-        if (!terminated)
-            return {Error::InvalidThunkTable, parsed.kernelThunkAddress};
-    }
 
     const auto entryInExecutableSection = [&parsed](std::uint32_t entry) noexcept {
         for (std::uint32_t i = 0; i < parsed.sectionCount; ++i) {
@@ -281,6 +261,28 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
     parsed.debugImage = !retailValid && debugValid;
     parsed.entryPoint = parsed.debugImage ? debugEntry : retailEntry;
     parsed.kernelThunkAddress = parsed.debugImage ? debugThunk : retailThunk;
+
+    if (parsed.kernelThunkAddress != 0) {
+        bool terminated = false;
+        for (std::uint32_t i = 0; i < 4096u; ++i) {
+            const std::uint64_t current =
+                static_cast<std::uint64_t>(parsed.kernelThunkAddress) +
+                static_cast<std::uint64_t>(i) * 4u;
+            if (current > (std::numeric_limits<std::uint32_t>::max)())
+                break;
+            std::uint32_t thunk = 0;
+            if (!ReadVirtual32(file, fileSize, parsed,
+                               static_cast<std::uint32_t>(current), &thunk))
+                break;
+            if (thunk == 0) {
+                terminated = true;
+                break;
+            }
+        }
+        if (!terminated)
+            return {Error::InvalidThunkTable, parsed.kernelThunkAddress};
+    }
+
 
     if (parsed.tlsAddress != 0 &&
         (parsed.tlsAddress < parsed.baseAddress ||
@@ -351,7 +353,7 @@ const char* ErrorName(Error error) noexcept {
     case Error::InvalidSection: return "invalid section";
     case Error::OverlappingSections: return "overlapping sections";
     case Error::InvalidEntryPoint: return "entry point is not executable";
-    case Error::InvalidThunkTable: return "invalid kernel thunk table address";
+    case Error::InvalidThunkTable: return "invalid kernel thunk table";
     case Error::OutputTooSmall: return "destination image buffer too small";
     }
     return "unknown XBE error";
