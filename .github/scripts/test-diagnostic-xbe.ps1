@@ -334,7 +334,7 @@ EmitCheckEqual 0
 EmitLoadEax ([uint32]($directoryInfoVa + 64))
 EmitCheckEqual 0x00650064 # "de" from default.xbe
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
-EmitCheckEqual 0x20 # FILE_ATTRIBUTE_ARCHIVE
+EmitCheckEqual 0x21 # FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ARCHIVE
 EmitPush 0
 EmitPush 0
 EmitPush 1
@@ -351,7 +351,7 @@ EmitCheckEqual 0
 EmitLoadEax ([uint32]($directoryInfoVa + 64))
 EmitCheckEqual 0x00620078 # "xb" from xbe-test.txt
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
-EmitCheckEqual 0x20 # FILE_ATTRIBUTE_ARCHIVE
+EmitCheckEqual 0x21 # FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ARCHIVE
 EmitPush 0
 EmitPush 0
 EmitPush 1
