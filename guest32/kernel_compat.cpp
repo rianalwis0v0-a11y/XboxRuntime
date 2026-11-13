@@ -1044,9 +1044,35 @@ extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* base,ULONG infoClass,void
     if(returned)*returned=ULONG(n);if(length<sizeof(info))return LONG(0xC0000023u);
     std::memcpy(out,&info,sizeof(info));return 0;
 }
-extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out,void*,LONG initial,LONG maximum){
+extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK, void*, LONG initial, LONG maximum){
     if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
     HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
+}
+
+using NtQueryObjectInfoFn = LONG (NTAPI*)(HANDLE, ULONG, void*, ULONG, ULONG*);
+static FARPROC ResolveNtQueryRoutine(const char* name) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? GetProcAddress(ntdll, name) : nullptr;
+}
+static LONG QueryNativeObject(HANDLE handle, ULONG infoClass, void* info,
+                              ULONG length, ULONG* returnLength, const char* routine) {
+    if (!handle || handle == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    FARPROC address = ResolveNtQueryRoutine(routine);
+    if (!address) return LONG(0xC0000002u); // STATUS_NOT_IMPLEMENTED
+    auto query = reinterpret_cast<NtQueryObjectInfoFn>(address);
+    return query(handle, infoClass, info, length, returnLength);
+}
+extern "C" LONG __stdcall K_NtQueryEvent(HANDLE event, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(event, infoClass, info, length, returnLength, "NtQueryEvent");
+}
+extern "C" LONG __stdcall K_NtQueryMutant(HANDLE mutant, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(mutant, infoClass, info, length, returnLength, "NtQueryMutant");
+}
+extern "C" LONG __stdcall K_NtQuerySemaphore(HANDLE semaphore, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(semaphore, infoClass, info, length, returnLength, "NtQuerySemaphore");
+}
+extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(timer, infoClass, info, length, returnLength, "NtQueryTimer");
 }
 extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
     if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
@@ -1879,6 +1905,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_wait_multiple
         cmp eax, 230
         je nt_signal_wait
+        cmp eax, 209
+        je nt_query_event
+        cmp eax, 213
+        je nt_query_mutant
+        cmp eax, 214
+        je nt_query_semaphore
+        cmp eax, 216
+        je nt_query_timer
         push eax
         call K_Unsupported
         add esp, 4
@@ -2083,6 +2117,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_release_semaphore: jmp K_NtReleaseSemaphore
     nt_wait_multiple: jmp K_NtWaitForMultipleObjects
     nt_signal_wait: jmp K_NtSignalAndWaitForSingleObject
+    nt_query_event: jmp K_NtQueryEvent
+    nt_query_mutant: jmp K_NtQueryMutant
+    nt_query_semaphore: jmp K_NtQuerySemaphore
+    nt_query_timer: jmp K_NtQueryTimer
     }
 }
 namespace {
