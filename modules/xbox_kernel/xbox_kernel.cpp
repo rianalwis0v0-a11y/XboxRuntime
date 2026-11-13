@@ -388,8 +388,11 @@ int __cdecl StartGuest(const XBE_IMAGE_INFO* info,
 }
 extern "C" int __cdecl XboxKernelWaitForGuestExit(
     std::uint32_t timeoutMilliseconds, std::uint32_t* exitCode,
-    std::uint32_t* tlsIndexCleared) {
-    if (!exitCode || !tlsIndexCleared) return ERROR_INVALID_PARAMETER;
+    std::uint32_t* tlsIndexCleared, std::uint32_t* exceptionInstruction,
+    std::uint32_t* accessType, std::uint32_t* faultAddress) {
+    if (!exitCode || !tlsIndexCleared || !exceptionInstruction ||
+        !accessType || !faultAddress)
+        return ERROR_INVALID_PARAMETER;
     std::lock_guard<std::mutex> lock(g_mutex);
     BackendContext& context = g_context;
     if (!context.started || context.pipe == INVALID_HANDLE_VALUE ||
@@ -409,6 +412,9 @@ extern "C" int __cdecl XboxKernelWaitForGuestExit(
     if (reply.status != ERROR_SUCCESS) return static_cast<int>(reply.status);
     *exitCode = reply.exitCode;
     *tlsIndexCleared = reply.tlsIndexCleared;
+    *exceptionInstruction = reply.exceptionInstruction;
+    *accessType = reply.accessType;
+    *faultAddress = reply.faultAddress;
     context.started = false;
     return ERROR_SUCCESS;
 }
