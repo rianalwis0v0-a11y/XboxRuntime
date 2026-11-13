@@ -84,6 +84,27 @@ bool VaRangeToFile(std::uint32_t address, std::uint32_t base,
     if (offset) *offset = delta;
     return true;
 }
+
+bool IsVirtualRangeMapped(const Image& image, std::uint32_t address,
+                          std::uint32_t length) noexcept {
+    const std::uint64_t start = address;
+    const std::uint64_t end = start + length;
+    const std::uint64_t imageEnd =
+        static_cast<std::uint64_t>(image.baseAddress) + image.imageSize;
+    if (start < image.baseAddress || end > imageEnd || end < start)
+        return false;
+    if (start >= image.baseAddress &&
+        end <= static_cast<std::uint64_t>(image.baseAddress) + image.headerSize)
+        return true;
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const Section& section = image.sections[i];
+        const std::uint64_t sectionStart = section.virtualAddress;
+        const std::uint64_t sectionEnd = sectionStart + section.virtualSize;
+        if (start >= sectionStart && end <= sectionEnd)
+            return true;
+    }
+    return length == 0;
+}
 } // namespace
 
 bool HeaderVaToFileOffset(std::uint32_t address, std::uint32_t baseAddress,
@@ -296,11 +317,31 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
     }
 
 
-    if (parsed.tlsAddress != 0 &&
-        (parsed.tlsAddress < parsed.baseAddress ||
-         static_cast<std::uint64_t>(parsed.tlsAddress) + 24u >
-             static_cast<std::uint64_t>(parsed.baseAddress) + parsed.imageSize))
-        return {Error::InvalidSection, parsed.tlsAddress};
+    if (parsed.tlsAddress != 0) {
+        std::uint32_t dataStart = 0;
+        std::uint32_t dataEnd = 0;
+        std::uint32_t indexAddress = 0;
+        std::uint32_t callbackAddress = 0;
+        std::uint32_t zeroFill = 0;
+        std::uint32_t characteristics = 0;
+        const bool readableDirectory =
+            ReadVirtual32(file, fileSize, parsed, parsed.tlsAddress + 0u, &dataStart) &&
+            ReadVirtual32(file, fileSize, parsed, parsed.tlsAddress + 4u, &dataEnd) &&
+            ReadVirtual32(file, fileSize, parsed, parsed.tlsAddress + 8u, &indexAddress) &&
+            ReadVirtual32(file, fileSize, parsed, parsed.tlsAddress + 12u, &callbackAddress) &&
+            ReadVirtual32(file, fileSize, parsed, parsed.tlsAddress + 16u, &zeroFill) &&
+            ReadVirtual32(file, fileSize, parsed, parsed.tlsAddress + 20u, &characteristics);
+        (void)zeroFill;
+        (void)characteristics;
+        if (!readableDirectory || dataEnd < dataStart ||
+            (dataStart != dataEnd &&
+             !IsVirtualRangeMapped(parsed, dataStart, dataEnd - dataStart)) ||
+            (indexAddress != 0 &&
+             !IsVirtualRangeMapped(parsed, indexAddress, sizeof(std::uint32_t))) ||
+            (callbackAddress != 0 &&
+             !IsVirtualRangeMapped(parsed, callbackAddress, sizeof(std::uint32_t))))
+            return {Error::InvalidSection, parsed.tlsAddress};
+    }
 
     if (parsed.kernelThunkAddress != 0) {
         if ((parsed.kernelThunkAddress & 3u) != 0 ||
