@@ -579,6 +579,32 @@ extern "C" LONG __stdcall K_NtReadFile(
         return kInvalidHandle;
     }
 
+    {
+        std::unique_lock<std::mutex> dvdLock(g_dvdFileMutex);
+        auto dvd = g_dvdFiles.find(h);
+        if (dvd != g_dvdFiles.end()) {
+            if (offset && offset->QuadPart < 0) return kInvalidParameter;
+            const uint64_t start = offset
+                ? static_cast<uint64_t>(offset->QuadPart)
+                : dvd->second.position;
+            if (start > dvd->second.size) {
+                io->Status = kEndOfFile;
+                if (event) SetEvent(event);
+                return kEndOfFile;
+            }
+            DWORD received = 0;
+            const int result = XDVDFS_ReadFile(
+                dvd->second.path.c_str(), start, buffer, length, &received);
+            if (result != 0) return kUnsuccessful;
+            dvd->second.position = start + received;
+            dvdLock.unlock();
+            io->Status = (received || length == 0) ? 0 : kEndOfFile;
+            io->Information = received;
+            if (event) SetEvent(event);
+            return io->Status;
+        }
+    }
+
     DWORD read = 0;
     {
         // NtReadFile's optional byte offset must be applied atomically with
@@ -608,6 +634,16 @@ extern "C" LONG __stdcall K_NtWriteFile(
     if (!h || h == INVALID_HANDLE_VALUE) {
         io->Status = kInvalidHandle;
         return kInvalidHandle;
+    }
+
+    {
+        std::lock_guard<std::mutex> dvdLock(g_dvdFileMutex);
+        if (g_dvdFiles.find(h) != g_dvdFiles.end()) {
+            constexpr LONG kMediaWriteProtected = LONG(0xC00000A2u);
+            io->Status = kMediaWriteProtected;
+            io->Information = 0;
+            return kMediaWriteProtected;
+        }
     }
 
     DWORD written = 0;
