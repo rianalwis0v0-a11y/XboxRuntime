@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <string>
 #include <limits>
+#include <vector>
 #include "network_compat.h"
 
 namespace {
@@ -376,6 +377,91 @@ extern "C" int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled)
     if (socket == INVALID_SOCKET) return -1;
     u_long mode = enabled ? 1ul : 0ul;
     return ioctlsocket(socket, FIONBIO, &mode) == 0 ? 0 : -1;
+}
+
+
+extern "C" int __cdecl XboxNetSocketSelect(int, fd_set* readfds, fd_set* writefds,
+    fd_set* exceptfds, const timeval* timeout) {
+    // Xbox fd_set entries are guest tokens. Translate them to native handles
+    // for select(), then translate the ready sets back to guest tokens.
+    if (!readfds && !writefds && !exceptfds) {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+    if (timeout && (timeout->tv_sec < 0 || timeout->tv_usec < 0 ||
+        timeout->tv_usec >= 1000000)) {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    fd_set nativeRead{}, nativeWrite{}, nativeExcept{};
+    fd_set* nativeReadPtr = readfds ? &nativeRead : nullptr;
+    fd_set* nativeWritePtr = writefds ? &nativeWrite : nullptr;
+    fd_set* nativeExceptPtr = exceptfds ? &nativeExcept : nullptr;
+    std::vector<std::pair<uint32_t, SocketLease>> leases;
+    std::vector<uint32_t> readTokens, writeTokens, exceptTokens;
+
+    try {
+        auto translate = [&](fd_set* guestSet, fd_set* nativeSet,
+            std::vector<uint32_t>& tokens) -> bool {
+            if (!guestSet) return true;
+            if (guestSet->fd_count > FD_SETSIZE) {
+                WSASetLastError(WSAEINVAL);
+                return false;
+            }
+            tokens.reserve(guestSet->fd_count);
+            for (u_int i = 0; i < guestSet->fd_count; ++i) {
+                const uint32_t token = static_cast<uint32_t>(guestSet->fd_array[i]);
+                SocketLease lease = FindSocket(token);
+                const SOCKET nativeSocket = lease;
+                if (nativeSocket == INVALID_SOCKET) {
+                    WSASetLastError(WSAENOTSOCK);
+                    return false;
+                }
+                tokens.push_back(token);
+                FD_SET(nativeSocket, nativeSet);
+                leases.emplace_back(token, std::move(lease));
+            }
+            return true;
+        };
+
+        if (!translate(readfds, nativeReadPtr, readTokens) ||
+            !translate(writefds, nativeWritePtr, writeTokens) ||
+            !translate(exceptfds, nativeExceptPtr, exceptTokens))
+            return SOCKET_ERROR;
+    } catch (...) {
+        WSASetLastError(WSAENOBUFS);
+        return SOCKET_ERROR;
+    }
+
+    timeval timeoutCopy{};
+    timeval* timeoutPtr = nullptr;
+    if (timeout) {
+        timeoutCopy = *timeout;
+        timeoutPtr = &timeoutCopy;
+    }
+
+    const int result = ::select(0, nativeReadPtr, nativeWritePtr,
+        nativeExceptPtr, timeoutPtr);
+    if (result == SOCKET_ERROR) return SOCKET_ERROR;
+
+    auto restore = [&](fd_set* guestSet, const fd_set* nativeSet,
+        const std::vector<uint32_t>& tokens) {
+        if (!guestSet) return;
+        FD_ZERO(guestSet);
+        for (uint32_t token : tokens) {
+            for (const auto& entry : leases) {
+                if (entry.first == token && FD_ISSET(static_cast<SOCKET>(entry.second), nativeSet)) {
+                    FD_SET(static_cast<SOCKET>(token), guestSet);
+                    break;
+                }
+            }
+        }
+    };
+    if (readfds) restore(readfds, &nativeRead, readTokens);
+    if (writefds) restore(writefds, &nativeWrite, writeTokens);
+    if (exceptfds) restore(exceptfds, &nativeExcept, exceptTokens);
+    return result;
 }
 
 extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds) {
