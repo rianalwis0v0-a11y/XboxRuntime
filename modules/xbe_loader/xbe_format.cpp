@@ -132,7 +132,7 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
         return {Error::InvalidImageSize, parsed.imageSize};
 
     if (parsed.libraryVersionCount > 128u)
-        return {Error::InvalidHeaderSize, parsed.libraryVersionCount};
+        return {Error::InvalidLibraryVersions, parsed.libraryVersionCount};
     if (parsed.libraryVersionCount != 0) {
         const std::uint64_t libraryBytes =
             static_cast<std::uint64_t>(parsed.libraryVersionCount) * 16u;
@@ -140,13 +140,23 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
             !VaRangeToFile(parsed.libraryVersionsAddress, parsed.baseAddress,
                            parsed.headerSize, static_cast<std::size_t>(libraryBytes),
                            fileSize, nullptr))
-            return {Error::InvalidHeaderSize, parsed.libraryVersionsAddress};
+            return {Error::InvalidLibraryVersions, parsed.libraryVersionsAddress};
     }
+    const auto validLibraryVersionPointer = [&](std::uint32_t address) noexcept {
+        return address == 0 ||
+            (parsed.libraryVersionCount != 0 &&
+             VaRangeToFile(address, parsed.baseAddress, parsed.headerSize,
+                           16u, fileSize, nullptr));
+    };
+    if (!validLibraryVersionPointer(parsed.kernelLibraryVersionAddress) ||
+        !validLibraryVersionPointer(parsed.xapiLibraryVersionAddress))
+        return {Error::InvalidLibraryVersions, parsed.libraryVersionsAddress};
+
     if (parsed.nonKernelImportDirectoryAddress != 0 &&
         (parsed.nonKernelImportDirectoryAddress < parsed.baseAddress ||
          static_cast<std::uint64_t>(parsed.nonKernelImportDirectoryAddress) + 4u >
              static_cast<std::uint64_t>(parsed.baseAddress) + parsed.imageSize))
-        return {Error::InvalidHeaderSize, parsed.nonKernelImportDirectoryAddress};
+        return {Error::InvalidImportDirectory, parsed.nonKernelImportDirectoryAddress};
 
     if (parsed.sectionCount == 0 || parsed.sectionCount > kMaximumSections)
         return {Error::InvalidSectionCount, parsed.sectionCount};
@@ -168,7 +178,7 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
                        fileSize, &certificateOffset))
         return {Error::InvalidCertificate, parsed.certificateAddress};
     const std::uint32_t certificateSize = Read32(file + certificateOffset);
-    if (certificateSize < 4 ||
+    if (certificateSize < kMinimumCertificateSize ||
         !VaRangeToFile(parsed.certificateAddress, parsed.baseAddress,
                        parsed.headerSize, certificateSize, fileSize, nullptr))
         return {Error::InvalidCertificate, certificateSize};
@@ -192,6 +202,18 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
         s.nameReferenceCount = Read32(p + 0x18);
         s.headSharedPageReferenceCountAddress = Read32(p + 0x1C);
         s.tailSharedPageReferenceCountAddress = Read32(p + 0x20);
+
+        if (s.nameAddress != 0) {
+            std::size_t nameOffset = 0;
+            if (!VaRangeToFile(s.nameAddress, parsed.baseAddress,
+                               parsed.headerSize, 1u, fileSize, &nameOffset))
+                return {Error::InvalidSection, i};
+            const std::size_t nameLimit =
+                (std::min)(static_cast<std::size_t>(32u),
+                           static_cast<std::size_t>(parsed.headerSize) - nameOffset);
+            if (std::memchr(file + nameOffset, 0, nameLimit) == nullptr)
+                return {Error::InvalidSection, i};
+        }
 
         if (s.virtualSize == 0 || s.rawSize > s.virtualSize ||
             s.virtualAddress < parsed.baseAddress ||
@@ -324,6 +346,8 @@ const char* ErrorName(Error error) noexcept {
     case Error::InvalidSectionCount: return "invalid section count";
     case Error::SectionTableOutOfRange: return "section table out of range";
     case Error::InvalidCertificate: return "invalid certificate";
+    case Error::InvalidLibraryVersions: return "invalid library versions";
+    case Error::InvalidImportDirectory: return "invalid non-kernel import directory";
     case Error::InvalidSection: return "invalid section";
     case Error::OverlappingSections: return "overlapping sections";
     case Error::InvalidEntryPoint: return "entry point is not executable";
