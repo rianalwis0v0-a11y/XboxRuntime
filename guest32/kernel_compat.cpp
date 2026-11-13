@@ -592,7 +592,7 @@ LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestI
     DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
     if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
     HANDLE h=CreateFileW(path.c_str(),FileAccess(access),((share&1)?FILE_SHARE_READ:0)|((share&2)?FILE_SHARE_WRITE:0)|((share&4)?FILE_SHARE_DELETE:0),nullptr,FileDisposition(disposition),flags,nullptr);
-    if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();if(io){io->Status=LONG(0xC0000001u);io->Information=e;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
+    if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();std::fwprintf(stderr,L"XboxRuntime NtCreateFile failed: '%ls' (Win32 %lu)\\n",path.c_str(),e);if(io){io->Status=LONG(0xC0000001u);io->Information=e;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
     *out=h;if(io){io->Status=0;io->Information=1;}return 0;
 }
 extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
@@ -2526,7 +2526,7 @@ void XboxKernelFlushEeprom() {
 }
 
 void XboxKernelSetTitlePath(const wchar_t* path){
-    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
+    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);std::fwprintf(stderr,L"XboxRuntime title directory: '%ls'\\n",g_titleDirectory.c_str());
 }
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
