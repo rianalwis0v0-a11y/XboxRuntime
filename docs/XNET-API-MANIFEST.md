@@ -26,9 +26,13 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 | `XNetCleanup` | `int WINAPI ()` | 0; decrements startup reference count and cleans up transport at zero. |
 | `XNetDnsLookup` | `int WINAPI (const char*, WSAEVENT, XNDNS**)` | 0 when request is processed; result status is in `XNDNS.iStatus`. **Currently synchronous**, then signals the event; not yet true asynchronous completion. |
 | `XNetDnsRelease` | `int WINAPI (XNDNS*)` | 0; frees result allocated by this implementation. |
+| `XNetRandom` | `int WINAPI (BYTE*, UINT)` | Uses Windows system-preferred BCrypt RNG; 0 on success, WSA error on failure. |
 | `XNetInAddrToString` | `int WINAPI (IN_ADDR, char*, int)` | 0 on success; WSA-style error on invalid/short output buffer. |
-| `XNetServerToInAddr` | `int WINAPI (IN_ADDR, DWORD, IN_ADDR*)` | 0; currently a pass-through placeholder, not Xbox service-ID resolution. |
-| `XNetInAddrToServer` | `int WINAPI (IN_ADDR, IN_ADDR*)` | 0; currently a pass-through placeholder, not online address conversion. |
+| `XNetXnAddrToInAddr` | `int WINAPI (const XNADDR*, const XNKID*, IN_ADDR*)` | Returns `WSAEOPNOTSUPP` until online key/address registration is implemented; never fabricates a mapping. |
+| `XNetServerToInAddr` | `int WINAPI (IN_ADDR, DWORD, IN_ADDR*)` | Returns `WSAEOPNOTSUPP` until service-ID resolution is implemented. |
+| `XNetInAddrToXnAddr` | `int WINAPI (const IN_ADDR, XNADDR*, XNKID*)` | Returns `WSAEOPNOTSUPP` until registered online address/key state exists. |
+| `XNetUnregisterInAddr` | `int WINAPI (const IN_ADDR)` | Returns `WSAEOPNOTSUPP`; no registration table exists yet. |
+| `XNetGetDebugXnAddr` | `DWORD WINAPI (XNADDR*)` | Returns no debug address (zero); devkit-only identity is not synthesized. |
 | `XNetGetEthernetLinkStatus` | `DWORD WINAPI ()` | Host adapter-derived flags. Bit definitions and Xbox equivalence are **provisional and require ABI verification**. |
 | `XNetGetTitleXnAddr` | `DWORD WINAPI (XNADDR*)` | Populates LAN IPv4/MAC where available; online identity fields remain zero. Returned flags are provisional. |
 | `XSocketCreate` | `SOCKET WINAPI (int af, int type, int protocol)` | Opaque 32-bit token; `INVALID_SOCKET` on unsupported family/type or failure. TCP and UDP/IPv4 only. |
@@ -57,6 +61,20 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 - `XNDNS`: `INT iStatus`, `UINT cina`, `IN_ADDR aina[8]`; current size assertion 40.
 - Uses Windows `IN_ADDR`, `sockaddr`, `sockaddr_in`, `WSAEVENT`, and Winsock scalar types from the guest Win32 SDK headers.
 
+## WSA helper aliases
+
+The Xbox socket API list also includes Winsock helpers such as event operations, last-error access and `inet_addr`. To avoid colliding with the host process's imported `ws2_32` symbols, the current guest target implements prefixed aliases that the future guest API registry can map by original symbol identity:
+- `WSACreateEvent` → `XboxWSACreateEvent`
+- `WSACloseEvent` → `XboxWSACloseEvent`
+- `WSASetEvent` → `XboxWSASetEvent`
+- `WSAResetEvent` → `XboxWSAResetEvent`
+- `WSAWaitForMultipleEvents` → `XboxWSAWaitForMultipleEvents`
+- `WSAGetLastError` → `XboxWSAGetLastError`
+- `WSASetLastError` → `XboxWSASetLastError`
+- `inet_addr` → `XboxWSAInetAddr`
+
+These wrappers use the guest process's own Winsock event/error facilities. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. `select`, overlapped I/O (`WSARecv`/`WSASend`), and several helpers remain unsupported.
+
 ## Internal transport bridge (not title ABI)
 
 The following `__cdecl` functions are implementation-private guest32 helpers. They use fixed-width 32-bit tokens and values; the kernel should not register these as Xbox imports:
@@ -64,10 +82,10 @@ The following `__cdecl` functions are implementation-private guest32 helpers. Th
 
 ## Explicitly not implemented / not claimed
 
-- XNet QoS, key registration, security associations, NAT traversal and online identity negotiation.
+- XNet QoS, key creation/registration, security associations, NAT traversal and online identity negotiation.
 - XNet/XOnline sign-in/session services.
 - VDP voice protocol (protocol 254 is rejected rather than emulated as ordinary UDP).
-- Full system-link/broadcast semantics, overlapped I/O and select/event integration.
+- Full system-link/broadcast semantics, overlapped I/O and select integration.
 - Complete WSA error-state compatibility and full Xbox-specific socket option translation.
 - Verified title-call interception for statically linked XNet code.
 - Real Insignia sign-in or supported-title end-to-end connectivity.
@@ -76,6 +94,6 @@ The following `__cdecl` functions are implementation-private guest32 helpers. Th
 
 1. Compare every declaration, structure packing/size, constant and return convention against an authoritative Xbox-compatible SDK header.
 2. Build the x86 guest and `network_smoke` with MSVC; run the smoke test and record exact output.
-3. Add per-function ABI tests, including invalid pointers/lengths, event semantics, socket options, nonblocking I/O and close-vs-operation races.
+3. Add per-function ABI tests, including invalid pointers/lengths, event semantics, socket options, nonblocking I/O, select/overlapped behavior and close-vs-operation races.
 4. Agree with kernel/loader on a guest API registration format and prove one verified call path from a real XBE.
 5. Design static XNet interception separately; do not patch guessed signatures or claim that these compiled functions automatically redirect retail calls.
