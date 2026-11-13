@@ -771,13 +771,12 @@ int main() {
     /* GET > PUT is valid after the producer wraps the ring. The packet
      * executes at +16, then an explicit JUMP returns GET to PUT at +8. */
     const uint32_t dmaWrappedStream[] = {
-        0u, 0u,
-        (1u << 18) | 0x1D90u, 0xFF778899u,
-        0x00000009u
+        (1u << 18) | 0x1D90u, 0xFF99AABBu, 0x0000000Du, 0u,
+        (1u << 18) | 0x1D90u, 0xFF778899u, 0x00000001u
     };
     if (writeVram(0x1000u, dmaWrappedStream, sizeof(dmaWrappedStream)) != 0 ||
-        submitDmaPush(channel, dmaHandle, 16u, 8u, &dmaGet, &dmaMethods) != 0 ||
-        dmaGet != 8u || dmaMethods != 1u) {
+        submitDmaPush(channel, dmaHandle, 16u, 12u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 12u || dmaMethods != 2u) {
         std::cerr << "FAIL: NV2A PFIFO wrapped GET/PUT with jump-back\\n";
         stop();
         return 1;
