@@ -4,11 +4,13 @@
 #include "xbe_loader.h"
 #include "xbe_format.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace {
 constexpr std::uint64_t kMaximumXbeFileSize = 512ull * 1024ull * 1024ull;
@@ -25,10 +27,10 @@ void Log(const wchar_t* message) {
     OutputDebugStringW(L"\n");
 }
 
-void LogError(const char* prefix, XboxXbe::Error error) {
+void LogError(const char* prefix, const XboxXbe::Result& result) {
     char message[256]{};
     std::snprintf(message, sizeof(message), "%s: %s (detail=0x%08X)",
-                  prefix, XboxXbe::ErrorName(error), 0u);
+                  prefix, XboxXbe::ErrorName(result.error), result.detail);
     wchar_t wide[256]{};
     MultiByteToWideChar(CP_UTF8, 0, message, -1, wide,
                         static_cast<int>(_countof(wide)));
@@ -140,7 +142,7 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     const XboxXbe::Result parsedResult =
         XboxXbe::Parse(file.data(), file.size(), &parsed);
     if (!parsedResult) {
-        LogError("XBE validation failed", parsedResult.error);
+        LogError("XBE validation failed", parsedResult);
         return 6;
     }
 
@@ -149,7 +151,7 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     info.imageSize = parsed.imageSize;
     info.headerSize = parsed.headerSize;
     info.entryPoint = parsed.entryPoint;
-    info.tlsAddress = 0; // TLS is initialized by the guest backend in a later phase.
+    info.tlsAddress = parsed.tlsAddress;
     info.kernelThunkAddress = parsed.kernelThunkAddress;
     info.sectionCount = parsed.sectionCount;
     info.debugImage = parsed.debugImage ? 1u : 0u;
@@ -166,7 +168,7 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
         XboxXbe::MapImage(file.data(), file.size(), parsed,
                           guestImage, info.imageSize);
     if (!mapped) {
-        LogError("XBE image mapping failed", mapped.error);
+        LogError("XBE image mapping failed", mapped);
         g_backend.releaseImage(guestImage, g_backend.context);
         return 8;
     }
@@ -181,6 +183,7 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     if (g_backend.startGuest(info.entryPoint, info.tlsAddress,
                              g_backend.context) != 0) {
         Log(L"Guest entry-point startup failed.");
+        g_backend.stopGuest(g_backend.context);
         g_backend.releaseImage(guestImage, g_backend.context);
         return 10;
     }
