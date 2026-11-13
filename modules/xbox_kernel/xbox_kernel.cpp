@@ -293,6 +293,33 @@ int __cdecl StartGuest(const XBE_IMAGE_INFO* info,
     context.started = true;
     return 0;
 }
+extern "C" int __cdecl XboxKernelWaitForGuestExit(
+    std::uint32_t timeoutMilliseconds, std::uint32_t* exitCode,
+    std::uint32_t* tlsIndexCleared) {
+    if (!exitCode || !tlsIndexCleared) return ERROR_INVALID_PARAMETER;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    BackendContext& context = g_context;
+    if (!context.started || context.pipe == INVALID_HANDLE_VALUE ||
+        !context.process.hProcess)
+        return ERROR_INVALID_STATE;
+
+    XboxGuestCommandMessage message{};
+    message.magic = XBOX_GUEST_PROTOCOL_MAGIC;
+    message.command = XboxGuestWaitForExit;
+    message.imageBase = timeoutMilliseconds;
+    XboxGuestExitReply reply{};
+    if (!WriteExact(context.pipe, &message, sizeof(message)) ||
+        !ReadExact(context.pipe, &reply, sizeof(reply)) ||
+        reply.magic != XBOX_GUEST_PROTOCOL_MAGIC ||
+        reply.command != XboxGuestWaitForExit)
+        return ERROR_BROKEN_PIPE;
+    if (reply.status != ERROR_SUCCESS) return static_cast<int>(reply.status);
+    *exitCode = reply.exitCode;
+    *tlsIndexCleared = reply.tlsIndexCleared;
+    context.started = false;
+    return ERROR_SUCCESS;
+}
+
 void __cdecl StopGuest(void*) {
     std::lock_guard<std::mutex> lock(g_mutex);
     StopGuestProcessLocked(g_context);
