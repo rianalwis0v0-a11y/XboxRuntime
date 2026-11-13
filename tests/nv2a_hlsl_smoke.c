@@ -115,7 +115,7 @@ int main(void)
     /* MAC MOV v0 -> oPos exercises a real input read and position write. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (1u << 21) | 0x1Bu;
-    instruction[2] = 1u << 26;
+    instruction[2] = 3u << 26;
     instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MOV input-to-oPos") != 0)
         return 2;
@@ -123,15 +123,15 @@ int main(void)
     /* MAC ADD v5 + v5 -> oPos exercises a two-source arithmetic operation. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (3u << 21) | (5u << 9);
-    instruction[2] = (1u << 26);
-    instruction[3] = (1u << 28) | (0xFu << 12) | (1u << 11) | 1u;
+    instruction[2] = (2u << 26);
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
         return 3;
 
     /* MAC MAD R0 * v2 + c9 -> oPos exercises all three source fields. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (4u << 21) | (9u << 13) | (2u << 9);
-    instruction[2] = (1u << 11);
+    instruction[2] = (1u << 26) | (2u << 11);
     instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MAD A+B+C") != 0)
         return 4;
