@@ -506,6 +506,10 @@ extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     return 0;
 }
 
+extern "C" LONG __stdcall K_IoInvalidDeviceRequest(void*, void*) {
+    return LONG(0xC0000010u); // STATUS_INVALID_DEVICE_REQUEST
+}
+
 extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
     if (context) RtlCaptureContext(context);
 }
@@ -1608,6 +1612,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
+        cmp eax, 74
+        je io_invalid_device_request
         cmp eax, 361
         je rtl_snprintf
         cmp eax, 362
@@ -2058,6 +2064,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
     rtl_callers_address: jmp K_RtlGetCallersAddress
