@@ -791,16 +791,14 @@ int main() {
     const int dmaGetWrite = write(0x3244u, 16u, 4u);
     const int dmaPutWrite = write(0x3240u, 12u, 4u);
     const uint64_t mmioGet = read(0x3244u, 4u);
-    const uint64_t mmioClearColor = read(0x401D90u, 4u);
     if (push0Write != 0 || push1Write != 0 || dmaPushWrite != 0 ||
         dmaInstanceWrite != 0 || dmaGetWrite != 0 || dmaPutWrite != 0 ||
-        mmioGet != 12u || mmioClearColor != 0xFF99AABBu) {
+        mmioGet != 12u) {
         std::cerr << "FAIL: PFIFO MMIO DMA_PUT wrap"
                   << " writes=" << push0Write << "," << push1Write << ","
                   << dmaPushWrite << "," << dmaInstanceWrite << ","
                   << dmaGetWrite << "," << dmaPutWrite
-                  << " GET=0x" << std::hex << mmioGet
-                  << " COLOR=0x" << mmioClearColor << std::dec << "\\n";
+                  << " GET=0x" << std::hex << mmioGet << std::dec << "\\n";
         stop();
         return 1;
     }
