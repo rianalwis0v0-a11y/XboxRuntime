@@ -238,6 +238,11 @@ int main()
     append_method(setup, 0x0214u, 0u);                         // no zeta surface
     append_method(setup, 0x0200u, kWidth << 16);               // clip width
     append_method(setup, 0x0204u, kHeight << 16);              // clip height
+    append_method(setup, 0x0300u, 0u);                         // disable alpha test
+    append_method(setup, 0x0304u, 0u);                         // disable blending
+    append_method(setup, 0x0308u, 0u);                         // disable face culling
+    append_method(setup, 0x030Cu, 0u);                         // disable depth test (no zeta)
+    append_method(setup, 0x0314u, 0u);                         // disable fixed-function lighting
     append_method(setup, 0x1E94u, 2u);                         // programmable GPU mode
     append_method(setup, 0x1E98u, 0u);                         // no context writes
     append_method(setup, 0x1E9Cu, 0u);                         // program load slot 0
