@@ -46,3 +46,12 @@ Summary: Extended the guest Winsock transport with UDP sendto/recvfrom and nonbl
 Files changed: guest32/network_compat.h, guest32/network_compat.cpp, tests/network_smoke.cpp, guest32/CMakeLists.txt, root CMakeLists.txt
 Build and tests (commands + results): Not run. Added nonblocking-mode assertion to network_smoke; no Windows/MSVC build or test execution has occurred.
 Known issues / next steps: This remains a host Winsock transport layer, not the Xbox XNet/XSocket title-facing ABI. Research confirms XNet APIs are normally statically linked into titles, so they cannot simply be attached as made-up kernel import ordinals. Need a verified interception/translation strategy and coordination with XBE/kernel owners before ABI or loader changes. Insignia connection is not yet demonstrated.
+
+
+[2026-11-13 11:xx UTC] [Networking session]
+Status: IN_PROGRESS
+Branch / commit: work/xbox-networking-integration / 6d19f999 (DNS resolver hardening) + documentation follow-up; draft PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary: Added an Insignia-first DNS lookup path to the guest networking bridge. Fully qualified hostnames are queried directly against Insignia's documented primary DNS resolver (46.101.64.175), then fall back to the Windows resolver if no valid A answer arrives. Loopback, .local, and single-label names use the normal resolver. DNS replies are checked for transaction ID, source IP/port, QR flag, and RCODE.
+Files changed: guest32/network_compat.cpp, docs/INSIGNIA-ACCEPTANCE.md
+Build and tests (commands + results): Not run; no Windows/MSVC runner available in this session. The existing network_smoke localhost path is intentionally kept off the external Insignia resolver.
+Known issues / next steps: This resolver only affects calls routed through XboxNetResolveIPv4 / the internal socket-connect bridge. It does not intercept arbitrary title XNet calls yet, and DNS does not forward ICMP ping or application traffic. Need verified XNet/XSocket ABI/interception, plus a live DNS test and supported-title Insignia connection test.
