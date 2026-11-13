@@ -40,7 +40,12 @@ uint32_t StoreSocket(SOCKET socket) {
         uint32_t candidate = g_nextHandle++;
         if (!candidate) candidate = g_nextHandle++;
         if (g_sockets.find(candidate) == g_sockets.end()) {
-            g_sockets.emplace(candidate, std::make_shared<SocketState>(socket));
+            try {
+                g_sockets.emplace(candidate, std::make_shared<SocketState>(socket));
+            } catch (...) {
+                closesocket(socket);
+                return 0;
+            }
             return candidate;
         }
     }
