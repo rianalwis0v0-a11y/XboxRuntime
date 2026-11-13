@@ -221,10 +221,10 @@ int wmain(int argc,wchar_t**argv){
   WaitForSingleObject(xbeThread,INFINITE);
   DWORD guestExit=0;
   if(!GetExitCodeThread(xbeThread,&guestExit)){
-   std::fprintf(stderr,"[XboxGuest] GetExitCodeThread failed: %lu\\n",GetLastError());
+   std::fprintf(stderr,"[XboxGuest] GetExitCodeThread failed: %lu\n",GetLastError());
    ok=false;
   } else if(guestExit!=0){
-   std::fprintf(stderr,"[XboxGuest] XBE entry thread exit status: 0x%08lX\\n",guestExit);
+   std::fprintf(stderr,"[XboxGuest] XBE entry thread exit status: 0x%08lX\n",guestExit);
    ok=false;
   }
   CloseHandle(xbeThread);
