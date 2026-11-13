@@ -973,6 +973,9 @@ int main() {
     }
 
     /* Linear stage dimensions and row pitch come from IMAGE_RECT/CONTROL1. */
+    const uint8_t linearRgStage[8] = {
+        0x10,0x20, 0x30,0x40, 0x50,0x60, 0x70,0x80
+    };
     const uint32_t linearStageFormat = 1u | (2u << 4) | (0x12u << 8) | (1u << 16);
     TextureInfo linearStageInfo{};
     uint8_t linearStagePixels[16]{};
@@ -991,8 +994,17 @@ int main() {
             linearStageSizes) != 0 ||
         linearStageOffsets[0] != 0u || linearStageSizes[0] != 16u ||
         linearStagePixels[0] != 1u || linearStagePixels[8] != 7u ||
+        writeVram(0x500u, linearRgStage, sizeof(linearRgStage)) != 0 ||
         submit(0u, 0x1B04u, 1u | (2u << 4) | (0x17u << 8) | (1u << 16)) != 0 ||
-        getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0 ||
+        submit(0u, 0x1B10u, (4u << 16)) != 0 ||
+        getTextureInfo(channel, 0u, 0u, &linearStageInfo) != 0 ||
+        !linearStageInfo.linear || linearStageInfo.source_pitch != 4u ||
+        decodeTextureStage(channel, 0u, 0u, linearStagePixels,
+            sizeof(linearStagePixels), linearStageOffsets,
+            linearStageSizes) != 0 ||
+        linearStagePixels[0] != 0x10u || linearStagePixels[1] != 0x20u ||
+        linearStagePixels[2] != 0x10u || linearStagePixels[3] != 0x20u ||
+        linearStagePixels[12] != 0x70u || linearStagePixels[13] != 0x80u ||
         submit(0u, 0x1B04u, textureFormat | (1u << 2)) != 0 ||
         getTextureInfo(channel, 0u, 0u, &linearStageInfo) == 0 ||
         submit(0u, 0x1B04u, textureFormat | (1u << 3)) != 0 ||
