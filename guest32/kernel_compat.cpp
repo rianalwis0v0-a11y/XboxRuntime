@@ -46,6 +46,9 @@ struct GuestDvdFile {
     uint32_t startSector = 0;
     uint8_t attributes = 0;
     uint64_t position = 0;
+    bool directory = false;
+    uint32_t directoryIndex = 0;
+    std::vector<XDVDFS_FILE_INFO> children;
 };
 std::mutex g_dvdFileMutex;
 std::unordered_map<HANDLE, GuestDvdFile> g_dvdFiles;
@@ -499,21 +502,37 @@ static LONG OpenDvdFile(HANDLE* output, const std::string& path,
     if (!g_dvdReady) return statusDeviceNotReady;
     if ((access & 0x40000000u) || (access & 0x2u) || disposition != 1u)
         return statusMediaWriteProtected;
-    if (path.empty()) return statusFileIsADirectory;
-
     XDVDFS_FILE_INFO info{};
-    if (XDVDFS_GetFileInfo(path.c_str(), &info) != 0)
-        return statusObjectNameNotFound;
-    if (info.attributes & XDVDFS_ATTR_DIRECTORY)
-        return statusFileIsADirectory;
+    bool isDirectory = path.empty();
+    if (!path.empty()) {
+        if (XDVDFS_GetFileInfo(path.c_str(), &info) != 0)
+            return statusObjectNameNotFound;
+        isDirectory = (info.attributes & XDVDFS_ATTR_DIRECTORY) != 0;
+    }
 
     HANDLE handle = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!handle) return statusInsufficientResources;
     GuestDvdFile file{};
     file.path = path;
-    file.size = info.size;
+    file.size = isDirectory ? 0 : info.size;
     file.startSector = info.startSector;
-    file.attributes = info.attributes;
+    file.attributes = isDirectory ? XDVDFS_ATTR_DIRECTORY : info.attributes;
+    file.directory = isDirectory;
+    if (isDirectory) {
+        uint32_t required = 0;
+        const int sizing = XDVDFS_ListDirectory(path.c_str(), nullptr, 0, &required);
+        if (sizing != 0 && sizing != 7) {
+            CloseHandle(handle);
+            return statusObjectNameNotFound;
+        }
+        try { file.children.resize(required); }
+        catch (...) { CloseHandle(handle); return statusInsufficientResources; }
+        if (required && XDVDFS_ListDirectory(path.c_str(), file.children.data(),
+            required, &required) != 0) {
+            CloseHandle(handle);
+            return statusObjectNameNotFound;
+        }
+    }
     {
         std::lock_guard<std::mutex> lock(g_dvdFileMutex);
         g_dvdFiles.emplace(handle, std::move(file));
