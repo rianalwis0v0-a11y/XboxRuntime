@@ -199,6 +199,124 @@ static void GuestReleaseSpinLock(volatile LONG* lock) {
     MemoryBarrier();
     InterlockedExchange(lock, 0);
 }
+
+// Xbox KDEVICE_QUEUE/KDEVICE_QUEUE_ENTRY are 32-bit guest structures.
+// One host mutex serializes the queue family, including RemoveEntry (which
+// receives only an entry pointer and therefore cannot locate its queue lock).
+struct GuestDeviceQueue {
+    SHORT Type;
+    SHORT Size;
+    GuestListEntry DeviceListHead;
+    volatile LONG Lock;
+    UCHAR Busy;
+    UCHAR Reserved[3];
+};
+struct GuestDeviceQueueEntry {
+    GuestListEntry DeviceListEntry;
+    ULONG SortKey;
+    UCHAR Inserted;
+    UCHAR Reserved[3];
+};
+static std::mutex g_deviceQueueMutex;
+
+extern "C" void __stdcall K_KeInitializeDeviceQueue(GuestDeviceQueue* queue) {
+    if (!queue) return;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    queue->Type = 4;
+    queue->Size = sizeof(*queue);
+    queue->DeviceListHead.Flink = &queue->DeviceListHead;
+    queue->DeviceListHead.Blink = &queue->DeviceListHead;
+    queue->Lock = 0;
+    queue->Busy = FALSE;
+    std::memset(queue->Reserved, 0, sizeof(queue->Reserved));
+}
+extern "C" BOOL __stdcall K_KeInsertDeviceQueue(GuestDeviceQueue* queue, GuestDeviceQueueEntry* entry) {
+    if (!queue || !entry) return FALSE;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    if (entry->Inserted) return FALSE;
+    if (!queue->Busy) {
+        queue->Busy = TRUE;
+        return FALSE; // caller owns the device; entry was not queued
+    }
+    GuestListEntry* tail = queue->DeviceListHead.Blink;
+    entry->DeviceListEntry.Flink = &queue->DeviceListHead;
+    entry->DeviceListEntry.Blink = tail;
+    tail->Flink = &entry->DeviceListEntry;
+    queue->DeviceListHead.Blink = &entry->DeviceListEntry;
+    entry->Inserted = TRUE;
+    return TRUE;
+}
+extern "C" BOOL __stdcall K_KeInsertByKeyDeviceQueue(GuestDeviceQueue* queue, GuestDeviceQueueEntry* entry, ULONG key) {
+    if (!queue || !entry) return FALSE;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    if (entry->Inserted) return FALSE;
+    if (!queue->Busy) {
+        queue->Busy = TRUE;
+        return FALSE;
+    }
+    entry->SortKey = key;
+    GuestListEntry* cursor = queue->DeviceListHead.Flink;
+    while (cursor != &queue->DeviceListHead) {
+        auto* current = reinterpret_cast<GuestDeviceQueueEntry*>(cursor);
+        if (key < current->SortKey) break;
+        cursor = cursor->Flink;
+    }
+    entry->DeviceListEntry.Flink = cursor;
+    entry->DeviceListEntry.Blink = cursor->Blink;
+    cursor->Blink->Flink = &entry->DeviceListEntry;
+    cursor->Blink = &entry->DeviceListEntry;
+    entry->Inserted = TRUE;
+    return TRUE;
+}
+extern "C" GuestDeviceQueueEntry* __stdcall K_KeRemoveDeviceQueue(GuestDeviceQueue* queue) {
+    if (!queue) return nullptr;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    GuestListEntry* first = queue->DeviceListHead.Flink;
+    if (first == &queue->DeviceListHead) {
+        queue->Busy = FALSE;
+        return nullptr;
+    }
+    first->Flink->Blink = &queue->DeviceListHead;
+    queue->DeviceListHead.Flink = first->Flink;
+    auto* entry = reinterpret_cast<GuestDeviceQueueEntry*>(first);
+    entry->DeviceListEntry.Flink = nullptr;
+    entry->DeviceListEntry.Blink = nullptr;
+    entry->Inserted = FALSE;
+    return entry;
+}
+extern "C" GuestDeviceQueueEntry* __stdcall K_KeRemoveByKeyDeviceQueue(GuestDeviceQueue* queue, ULONG key) {
+    if (!queue) return nullptr;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    GuestListEntry* head = &queue->DeviceListHead;
+    GuestListEntry* selected = nullptr;
+    for (GuestListEntry* p = head->Flink; p != head; p = p->Flink) {
+        auto* entry = reinterpret_cast<GuestDeviceQueueEntry*>(p);
+        if (entry->SortKey >= key) { selected = p; break; }
+    }
+    if (!selected) selected = head->Flink;
+    if (selected == head) {
+        queue->Busy = FALSE;
+        return nullptr;
+    }
+    selected->Blink->Flink = selected->Flink;
+    selected->Flink->Blink = selected->Blink;
+    auto* entry = reinterpret_cast<GuestDeviceQueueEntry*>(selected);
+    entry->DeviceListEntry.Flink = nullptr;
+    entry->DeviceListEntry.Blink = nullptr;
+    entry->Inserted = FALSE;
+    return entry;
+}
+extern "C" BOOL __stdcall K_KeRemoveEntryDeviceQueue(GuestDeviceQueueEntry* entry) {
+    if (!entry) return FALSE;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    if (!entry->Inserted || !entry->DeviceListEntry.Flink || !entry->DeviceListEntry.Blink) return FALSE;
+    entry->DeviceListEntry.Blink->Flink = entry->DeviceListEntry.Flink;
+    entry->DeviceListEntry.Flink->Blink = entry->DeviceListEntry.Blink;
+    entry->DeviceListEntry.Flink = nullptr;
+    entry->DeviceListEntry.Blink = nullptr;
+    entry->Inserted = FALSE;
+    return TRUE;
+}
 extern "C" GuestListEntry* __stdcall K_ExfInterlockedInsertHeadList(
     GuestListEntry* head, GuestListEntry* entry, volatile LONG* lock) {
     if (!head || !entry || !lock || entry == head) return nullptr;
@@ -1236,6 +1354,18 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_bugcheck
         cmp eax, 96
         je ke_bugcheck_ex
+        cmp eax, 106
+        je ke_init_device_queue
+        cmp eax, 114
+        je ke_insert_by_key_device_queue
+        cmp eax, 115
+        je ke_insert_device_queue
+        cmp eax, 133
+        je ke_remove_by_key_device_queue
+        cmp eax, 134
+        je ke_remove_device_queue
+        cmp eax, 135
+        je ke_remove_entry_device_queue
         cmp eax, 107
         je ke_init_dpc
         cmp eax, 119
@@ -1567,6 +1697,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
     ex_release_rw: jmp K_ExReleaseReadWriteLock
+    ke_init_device_queue: jmp K_KeInitializeDeviceQueue
+    ke_insert_by_key_device_queue: jmp K_KeInsertByKeyDeviceQueue
+    ke_insert_device_queue: jmp K_KeInsertDeviceQueue
+    ke_remove_by_key_device_queue: jmp K_KeRemoveByKeyDeviceQueue
+    ke_remove_device_queue: jmp K_KeRemoveDeviceQueue
+    ke_remove_entry_device_queue: jmp K_KeRemoveEntryDeviceQueue
     ke_init_dpc: jmp K_KeInitializeDpc
     ke_insert_dpc: jmp K_KeInsertQueueDpc
     ke_remove_dpc: jmp K_KeRemoveQueueDpc
