@@ -150,6 +150,12 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     info.baseAddress = parsed.baseAddress;
     info.imageSize = parsed.imageSize;
     info.headerSize = parsed.headerSize;
+    info.certificateAddress = parsed.certificateAddress;
+    info.nonKernelImportDirectoryAddress = parsed.nonKernelImportDirectoryAddress;
+    info.libraryVersionCount = parsed.libraryVersionCount;
+    info.libraryVersionsAddress = parsed.libraryVersionsAddress;
+    info.kernelLibraryVersionAddress = parsed.kernelLibraryVersionAddress;
+    info.xapiLibraryVersionAddress = parsed.xapiLibraryVersionAddress;
     info.entryPoint = parsed.entryPoint;
     info.tlsAddress = parsed.tlsAddress;
     info.kernelThunkAddress = parsed.kernelThunkAddress;
