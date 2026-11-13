@@ -2672,6 +2672,18 @@ void XboxKernelShutdownTitle() {
     g_titleDirectory.clear();
 }
 
+static void ReleaseGuestTls(DWORD& tlsIndex, void*& tlsBlock,
+                              uint32_t* tlsIndexSlot) {
+    if (tlsIndex != TLS_OUT_OF_INDEXES) {
+        TlsSetValue(tlsIndex, nullptr);
+        if (tlsBlock) HeapFree(GetProcessHeap(), 0, tlsBlock);
+        TlsFree(tlsIndex);
+        tlsIndex = TLS_OUT_OF_INDEXES;
+        tlsBlock = nullptr;
+    }
+    if (tlsIndexSlot) *tlsIndexSlot = TLS_OUT_OF_INDEXES;
+}
+
 DWORD WINAPI XboxKernelStartXbe(void*) {
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
@@ -2684,17 +2696,6 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
 
     struct TlsDirectory {
         uint32_t start, end, index, callbacks, zeroFill, characteristics;
-    };
-
-    auto releaseTls = [&]() {
-        if (tlsIndex != TLS_OUT_OF_INDEXES) {
-            TlsSetValue(tlsIndex, nullptr);
-            if (tlsBlock) HeapFree(GetProcessHeap(), 0, tlsBlock);
-            TlsFree(tlsIndex);
-            tlsIndex = TLS_OUT_OF_INDEXES;
-            tlsBlock = nullptr;
-        }
-        if (tlsIndexSlot) *tlsIndexSlot = TLS_OUT_OF_INDEXES;
     };
 
     if (g_tls) {
@@ -2741,7 +2742,7 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
         tlsBlock = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
                              size_t(total ? total : 1));
         if (!tlsBlock) {
-            releaseTls();
+            ReleaseGuestTls(tlsIndex, tlsBlock, tlsIndexSlot);
             return ERROR_NOT_ENOUGH_MEMORY;
         }
         if (templateSize)
@@ -2749,7 +2750,7 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
                         size_t(templateSize));
         if (!TlsSetValue(tlsIndex, tlsBlock)) {
             const DWORD error = GetLastError();
-            releaseTls();
+            ReleaseGuestTls(tlsIndex, tlsBlock, tlsIndexSlot);
             return error;
         }
         *tlsIndexSlot = tlsIndex;
