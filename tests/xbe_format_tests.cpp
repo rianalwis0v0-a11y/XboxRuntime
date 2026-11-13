@@ -89,6 +89,22 @@ int main() {
                     forgedTarget.data(), forgedTarget.size()).error ==
            Error::InvalidImageSize);
 
+    auto thunkFile = file;
+    Put32(thunkFile, 0x158, 0x00011000 ^ kRetailThunkXor);
+    Put32(thunkFile, 0x400, 1);
+    Put32(thunkFile, 0x404, 0);
+    Image thunkImage{};
+    result = Parse(thunkFile.data(), thunkFile.size(), &thunkImage);
+    assert(result);
+    assert(thunkImage.kernelThunkAddress == 0x11000);
+
+    auto unterminatedThunks = file;
+    Put32(unterminatedThunks, 0x158, 0x00011000 ^ kRetailThunkXor);
+    Put32(unterminatedThunks, 0x350, 0x200);
+    std::memset(unterminatedThunks.data() + 0x400, 0x01, 0x200);
+    assert(Parse(unterminatedThunks.data(), unterminatedThunks.size(), &image).error ==
+           Error::InvalidThunkTable);
+
     auto badMagic = file;
     badMagic[0] = 0;
     assert(Parse(badMagic.data(), badMagic.size(), &image).error == Error::BadMagic);
