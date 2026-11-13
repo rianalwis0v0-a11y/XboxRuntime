@@ -733,3 +733,7 @@ Run 43429470261: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/4
 - New xbe_loader_file_tests.cpp compile failed exactly: tests\\xbe_loader_file_tests.cpp(87): error C2039: fwprintf is not a member of std.
 Fix: commit d773636a35485eb18b086ace701e73a9bb57fd05 changes usage diagnostic to std::fprintf. This is a test harness portability correction, not an XBE parser/runtime failure.
 Next: verify the rerun compiles and actually completes LoadXbe(default.xbe) -> V2 fake backend -> UnloadXbe. This is file parsing/mapping/handoff evidence only, not guest CPU execution.
+
+
+[2026-11-13 13:01 UTC] [XBE-loader — correction to compiler-fix commit record]
+Correction: the first attempted replacement did not change the std::fwprintf line, despite commit d773636a35485eb18b086ace701e73a9bb57fd05. Re-read the branch file and confirmed the original line remained. The actual source fix is commit 6740897eb50088d3c2e539d979685aa60183b26b, which replaces std::fwprintf(stderr, L\"...\") with std::fprintf(stderr, \"...\"). New CI run 43429711096 is queued; no pass claimed for the corrected test yet.
