@@ -37,8 +37,116 @@ uint32_t StoreSocket(SOCKET socket) {
     closesocket(socket);
     return 0;
 }
+// Insignia's documented primary DNS resolver. Query it directly so an ISP
+// DNS proxy cannot silently return the retired Xbox Live addresses.
+constexpr const char* kInsigniaDnsIPv4 = "46.101.64.175";
+volatile LONG g_dnsQueryId = 0;
+
+bool SkipDnsName(const uint8_t* packet, size_t length, size_t& offset) {
+    size_t hops = 0;
+    while (offset < length && hops++ < 128) {
+        const uint8_t n = packet[offset++];
+        if ((n & 0xC0) == 0xC0) {
+            if (offset >= length) return false;
+            ++offset;
+            return true;
+        }
+        if ((n & 0xC0) != 0 || n > 63) return false;
+        if (n == 0) return true;
+        if (offset + n > length) return false;
+        offset += n;
+    }
+    return false;
+}
+
+bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
+    if (!hostname || !*hostname) return false;
+    uint8_t query[512]{};
+    const uint16_t id = static_cast<uint16_t>(InterlockedIncrement(&g_dnsQueryId) ^
+        static_cast<LONG>(GetTickCount()));
+    query[0] = static_cast<uint8_t>(id >> 8);
+    query[1] = static_cast<uint8_t>(id);
+    query[2] = 0x01; // recursion desired
+    query[5] = 0x01; // one question
+
+    size_t out = 12;
+    const char* label = hostname;
+    while (*label) {
+        const char* dot = strchr(label, '.');
+        const size_t length = dot ? static_cast<size_t>(dot - label) : strlen(label);
+        if (!length || length > 63 || out + length + 2 >= sizeof(query)) return false;
+        query[out++] = static_cast<uint8_t>(length);
+        for (size_t i = 0; i < length; ++i)
+            query[out++] = static_cast<uint8_t>(label[i]);
+        if (!dot) break;
+        label = dot + 1;
+        if (!*label) break;
+    }
+    query[out++] = 0;
+    query[out++] = 0; query[out++] = 1; // A
+    query[out++] = 0; query[out++] = 1; // IN
+
+    SOCKET dns = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (dns == INVALID_SOCKET) return false;
+    DWORD timeout = 1800;
+    setsockopt(dns, SOL_SOCKET, SO_RCVTIMEO,
+        reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    sockaddr_in server{};
+    server.sin_family = AF_INET;
+    server.sin_port = htons(53);
+    InetPtonA(AF_INET, kInsigniaDnsIPv4, &server.sin_addr);
+    const int sent = sendto(dns, reinterpret_cast<const char*>(query),
+        static_cast<int>(out), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
+    uint8_t response[2048]{};
+    sockaddr_in source{};
+    int sourceLength = sizeof(source);
+    const int received = sent == static_cast<int>(out)
+        ? recvfrom(dns, reinterpret_cast<char*>(response), sizeof(response), 0,
+            reinterpret_cast<sockaddr*>(&source), &sourceLength)
+        : SOCKET_ERROR;
+    closesocket(dns);
+    if (received < 12 || response[0] != query[0] || response[1] != query[1] ||
+        (response[2] & 0x80) == 0 || (response[3] & 0x0F) != 0)
+        return false;
+
+    const uint16_t questions = static_cast<uint16_t>((response[4] << 8) | response[5]);
+    const uint16_t answers = static_cast<uint16_t>((response[6] << 8) | response[7]);
+    size_t pos = 12;
+    for (uint16_t i = 0; i < questions; ++i) {
+        if (!SkipDnsName(response, static_cast<size_t>(received), pos) || pos + 4 > static_cast<size_t>(received))
+            return false;
+        pos += 4;
+    }
+    for (uint16_t i = 0; i < answers; ++i) {
+        if (!SkipDnsName(response, static_cast<size_t>(received), pos) || pos + 10 > static_cast<size_t>(received))
+            return false;
+        const uint16_t recordType = static_cast<uint16_t>((response[pos] << 8) | response[pos + 1]);
+        const uint16_t recordClass = static_cast<uint16_t>((response[pos + 2] << 8) | response[pos + 3]);
+        const uint16_t dataLength = static_cast<uint16_t>((response[pos + 8] << 8) | response[pos + 9]);
+        pos += 10;
+        if (pos + dataLength > static_cast<size_t>(received)) return false;
+        if (recordType == 1 && recordClass == 1 && dataLength == 4) {
+            std::memcpy(&addressNetworkOrder, response + pos, 4);
+            return true;
+        }
+        pos += dataLength;
+    }
+    return false;
+}
+
 bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address) {
     if (!hostname || !*hostname) return false;
+    uint32_t insigniaAddress = 0;
+    if (QueryInsigniaDnsA(hostname, insigniaAddress)) {
+        address = {};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = insigniaAddress;
+        address.sin_port = htons(port);
+        return true;
+    }
+
+    // Preserve normal Internet access if Insignia has no matching zone or is
+    // temporarily unreachable; the operating system resolver is the fallback.
     ADDRINFOA hints{};
     hints.ai_family = AF_INET;
     hints.ai_socktype = type;
