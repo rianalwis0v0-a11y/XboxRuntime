@@ -9,6 +9,7 @@ namespace XboxXbe {
 
 constexpr std::uint32_t kMagic = 0x48454258u; // "XBEH"
 constexpr std::size_t kMinimumHeaderSize = 0x178;
+constexpr std::size_t kMinimumCertificateSize = 0x1D0;
 constexpr std::size_t kSectionHeaderSize = 0x38;
 constexpr std::uint32_t kRetailEntryXor = 0xA8FC57ABu;
 constexpr std::uint32_t kDebugEntryXor = 0x94859D4Bu;
@@ -28,6 +29,8 @@ enum class Error {
     InvalidSectionCount,
     SectionTableOutOfRange,
     InvalidCertificate,
+    InvalidLibraryVersions,
+    InvalidImportDirectory,
     InvalidSection,
     OverlappingSections,
     InvalidEntryPoint,
