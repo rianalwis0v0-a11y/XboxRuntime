@@ -95,10 +95,10 @@ target_link_libraries(audio_smoke PRIVATE winmm)
 add_test(NAME audio_smoke COMMAND audio_smoke)
 
 
-// Deploy the runnable host and its native guest/runtime DLLs as one layout.
-// boot.exe lives at XboxRuntime\\boot.exe; all DLLs plus xbe_guest32.exe
-// live in XboxRuntime\\system so both the host and XBE loader resolve them
-// relative to the same deployment directory.
+# Deploy the runnable host and its native guest/runtime DLLs as one layout.
+# boot.exe lives at XboxRuntime/boot.exe; all DLLs plus xbe_guest32.exe
+# live in XboxRuntime/system so both the host and XBE loader resolve them
+# relative to the same deployment directory.
 install(TARGETS boot
     RUNTIME DESTINATION .
 )
