@@ -38,3 +38,11 @@ Summary: Added a preliminary guest32 Winsock transport backend. This is not yet 
 Files changed: guest32/network_compat.h, guest32/network_compat.cpp, guest32/CMakeLists.txt, root CMakeLists.txt, tests/network_smoke.cpp, docs/INSIGNIA-ACCEPTANCE.md
 Build and tests (commands + results): Not run. A network_smoke CTest target was added for Winsock startup, localhost IPv4 resolution, TCP/UDP socket creation and cleanup. No Windows/MSVC build or runtime test has been performed.
 Known issues / next steps: Implement Xbox XNet/XSocket exports and correct guest ABI/structure marshalling; connect XBE non-kernel import resolution to those exports; then run network_smoke and test a supported title against Insignia. Coordinate ABI/import-resolver changes with the XBE-loader and kernel sessions before modifying shared interfaces.
+
+[2026-11-13 12:xx UTC] [Networking session]
+Status: IN_PROGRESS
+Branch / commit: work/xbox-networking-integration / latest networking commits 04862598, ecdc38ff, 42844af0, d73dd15; draft PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary: Extended the guest Winsock transport with UDP sendto/recvfrom and nonblocking mode. Corrected the build layout so the x86 guest is built as a separate Win32 Visual Studio 2022 sub-build, with an explicit 32-bit pointer-size check; this avoids silently compiling a supposed 32-bit guest as x64.
+Files changed: guest32/network_compat.h, guest32/network_compat.cpp, tests/network_smoke.cpp, guest32/CMakeLists.txt, root CMakeLists.txt
+Build and tests (commands + results): Not run. Added nonblocking-mode assertion to network_smoke; no Windows/MSVC build or test execution has occurred.
+Known issues / next steps: This remains a host Winsock transport layer, not the Xbox XNet/XSocket title-facing ABI. Research confirms XNet APIs are normally statically linked into titles, so they cannot simply be attached as made-up kernel import ordinals. Need a verified interception/translation strategy and coordination with XBE/kernel owners before ABI or loader changes. Insignia connection is not yet demonstrated.
