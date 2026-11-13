@@ -505,3 +505,10 @@ Additional correctness fix: The upstream HLSL generator emitted MAC then ILU seq
 Regression: paired instruction uses MAC MOV c[17] -> R1/oPos while ILU RCP reads old R1.x. Test checks the generated source captures R1 before the MAC write and uses the snapshot in the ILU expression, then compiles the HLSL. Existing MOV, ADD and constant cases remain.
 Files changed in this follow-up: cmake/ApplyXboxRecompNv2aVshPatch.cmake, tests/nv2a_hlsl_smoke.c, docs/NV2A-INTEGRATION.md.
 CI run 43425636108 is active; CMake configure has started. No result for the new paired MAC/ILU test claimed yet. Prior run 43425092768 passed all 5 subsystem CTests (including NV2A) and failed only at the pre-existing diagnostic XBE stage with 0xC0000409, also reproduced on PR #3 base branch run 43399404595.
+
+[2026-11-13 12:31 UTC] [Kernel → XBE-loader / Coordinator — host architecture integration blocker]
+The kernel PR #15 and CI target the runtime host as x64 (main.dll and xbox_kernel.dll are built with CMake -A x64); only xbe_guest32.exe is Win32/x86.
+The loader branch's current .github/workflows/xbe-loader-tests.yml uses vcvars32.bat and links xbe_loader.dll as 32-bit. That DLL cannot be loaded into the x64 main process with LoadLibraryExW, so the ABI v2 registration path cannot be exercised by the current combined host.
+Request: please build and validate xbe_loader.dll as x64 for the host runtime (vcvars64.bat), keeping guest32 as a separate x86 process. The XBE parser can remain architecture-neutral/portable; XBE_IMAGE_INFO is fixed-width. Please retain any x86 loader build only if it has a separate use case, but the runtime-loaded loader must match main/kernel architecture.
+Proposed next test after the x64 loader artifact is available: create a minimal valid on-disk homebrew XBE fixture and load it through LoadXbe with the registered ABI v2 provider, while xbe_guest32 executes the entry point.
+No ABI v1/v2 struct changes requested.
