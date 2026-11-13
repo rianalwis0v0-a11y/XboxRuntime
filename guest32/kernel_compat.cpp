@@ -565,6 +565,108 @@ extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* i
     if(io){io->Status=0;io->Information=0;}
     return 0;
 }
+extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
+    HANDLE h, GuestIoStatusBlock* io, void* out, ULONG length, ULONG infoClass) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInfoLengthMismatch = LONG(0xC0000004u);
+    constexpr LONG statusBufferOverflow = LONG(0x80000005u);
+    if (!h || h == INVALID_HANDLE_VALUE || !out) return statusInvalidParameter;
+
+    WCHAR finalPath[MAX_PATH * 4]{};
+    const DWORD pathLength = GetFinalPathNameByHandleW(
+        h, finalPath, static_cast<DWORD>(std::size(finalPath)), FILE_NAME_NORMALIZED);
+    if (!pathLength || pathLength >= std::size(finalPath))
+        return FileStatusFromWin32(GetLastError());
+
+    WCHAR volumeRoot[MAX_PATH * 4]{};
+    if (!GetVolumePathNameW(finalPath, volumeRoot, static_cast<DWORD>(std::size(volumeRoot))))
+        return FileStatusFromWin32(GetLastError());
+
+    WCHAR volumeLabel[MAX_PATH]{};
+    WCHAR fileSystemName[MAX_PATH]{};
+    DWORD serial = 0, maximumComponent = 0, fileSystemFlags = 0;
+    if (!GetVolumeInformationW(volumeRoot, volumeLabel, static_cast<DWORD>(std::size(volumeLabel)),
+                               &serial, &maximumComponent, &fileSystemFlags,
+                               fileSystemName, static_cast<DWORD>(std::size(fileSystemName))))
+        return FileStatusFromWin32(GetLastError());
+
+    auto writeField = [out](ULONG offset, const void* value, ULONG bytes) {
+        std::memcpy(static_cast<uint8_t*>(out) + offset, value, bytes);
+    };
+    ULONG information = 0;
+    switch (infoClass) {
+    case 1: { // FileFsVolumeInformation
+        constexpr ULONG labelOffset = 18;
+        if (length < labelOffset) return statusInfoLengthMismatch;
+        const ULONG labelBytes = static_cast<ULONG>(wcslen(volumeLabel) * sizeof(WCHAR));
+        const ULONG copiedBytes = std::min(labelBytes, length - labelOffset) & ~ULONG(1);
+        LARGE_INTEGER creationTime{};
+        const ULONG labelLength = labelBytes;
+        const BOOLEAN supportsObjects = FALSE;
+        std::memset(out, 0, length);
+        writeField(0, &creationTime, sizeof(creationTime));
+        writeField(8, &serial, sizeof(serial));
+        writeField(12, &labelLength, sizeof(labelLength));
+        writeField(16, &supportsObjects, sizeof(supportsObjects));
+        if (copiedBytes) writeField(labelOffset, volumeLabel, copiedBytes);
+        information = labelOffset + copiedBytes;
+        if (copiedBytes != labelBytes) {
+            if (io) { io->Status = statusBufferOverflow; io->Information = information; }
+            return statusBufferOverflow;
+        }
+        break;
+    }
+    case 3: { // FileFsSizeInformation
+        constexpr ULONG required = 24;
+        if (length < required) return statusInfoLengthMismatch;
+        DWORD sectorsPerCluster = 0, bytesPerSector = 0, freeClusters = 0, totalClusters = 0;
+        if (!GetDiskFreeSpaceW(volumeRoot, &sectorsPerCluster, &bytesPerSector,
+                               &freeClusters, &totalClusters))
+            return FileStatusFromWin32(GetLastError());
+        const LARGE_INTEGER total{static_cast<LONGLONG>(totalClusters)};
+        const LARGE_INTEGER available{static_cast<LONGLONG>(freeClusters)};
+        std::memset(out, 0, required);
+        writeField(0, &total, sizeof(total));
+        writeField(8, &available, sizeof(available));
+        writeField(16, &sectorsPerCluster, sizeof(sectorsPerCluster));
+        writeField(20, &bytesPerSector, sizeof(bytesPerSector));
+        information = required;
+        break;
+    }
+    case 4: { // FileFsDeviceInformation
+        constexpr ULONG required = 8;
+        if (length < required) return statusInfoLengthMismatch;
+        const ULONG deviceType = 7; // FILE_DEVICE_DISK
+        const ULONG characteristics = 0;
+        writeField(0, &deviceType, sizeof(deviceType));
+        writeField(4, &characteristics, sizeof(characteristics));
+        information = required;
+        break;
+    }
+    case 5: { // FileFsAttributeInformation
+        constexpr ULONG nameOffset = 12;
+        if (length < nameOffset) return statusInfoLengthMismatch;
+        const ULONG nameBytes = static_cast<ULONG>(wcslen(fileSystemName) * sizeof(WCHAR));
+        const ULONG copiedBytes = std::min(nameBytes, length - nameOffset) & ~ULONG(1);
+        std::memset(out, 0, length);
+        writeField(0, &fileSystemFlags, sizeof(fileSystemFlags));
+        writeField(4, &maximumComponent, sizeof(maximumComponent));
+        writeField(8, &nameBytes, sizeof(nameBytes));
+        if (copiedBytes) writeField(nameOffset, fileSystemName, copiedBytes);
+        information = nameOffset + copiedBytes;
+        if (copiedBytes != nameBytes) {
+            if (io) { io->Status = statusBufferOverflow; io->Information = information; }
+            return statusBufferOverflow;
+        }
+        break;
+    }
+    default:
+        return LONG(0xC0000003u); // STATUS_INVALID_INFO_CLASS
+    }
+    if (io) { io->Status = 0; io->Information = information; }
+    return 0;
+}
+
 extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
@@ -1590,6 +1692,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_free_vm
         cmp eax, 238
         je nt_yield
+        cmp eax, 218
+        je nt_query_volume_information_file
         cmp eax, 211
         je nt_query_information_file
         cmp eax, 226
@@ -1863,6 +1967,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_alloc_vm: jmp K_NtAllocateVirtualMemory
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
+    nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
