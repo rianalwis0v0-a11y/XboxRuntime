@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$guest = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build-guest32\out\xbe_guest32.exe"))
+$guest = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xbe_guest32.exe"))
 if (!(Test-Path $guest)) { throw "Guest helper missing: $guest" }
 
 # Build a real 32-bit XBE image. The entry point calls only kernel ordinals
@@ -270,7 +270,7 @@ EmitPushMemory $fileHandleVa
 EmitCallImport 218
 EmitCheckEqual 0
 EmitLoadEax $volumeDeviceVa
-EmitCheckEqual 7
+EmitCheckEqual 2
 EmitPush 5
 EmitPush 128
 EmitPush $volumeAttributesVa
@@ -1043,6 +1043,44 @@ $xbe = Join-Path $testDir "xboxruntime-diagnostic.xbe"
 [IO.File]::WriteAllBytes((Join-Path $testDir "xbe-test.txt"),[Text.Encoding]::ASCII.GetBytes("XRTFILE!"))
 $artifactXbe = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xboxruntime-diagnostic.xbe"))
 Copy-Item $xbe $artifactXbe -Force
+
+# Build a raw XDVDFS image so the diagnostic title boots from the optical
+# filesystem and exercises the same guest CD-ROM path used by retail images.
+$sector = 2048
+$isoBytes = [byte[]]::new(80 * $sector)
+for ($i=0; $i -lt $isoBytes.Length; $i++) { $isoBytes[$i] = 0xFF }
+function PutIso16([int]$offset,[uint16]$value) {
+    [BitConverter]::GetBytes($value).CopyTo($isoBytes,$offset)
+}
+function PutIso32([int]$offset,[uint32]$value) {
+    [BitConverter]::GetBytes($value).CopyTo($isoBytes,$offset)
+}
+$descriptor = 32 * $sector
+[Text.Encoding]::ASCII.GetBytes("MICROSOFT*XBOX*MEDIA").CopyTo($isoBytes,$descriptor)
+PutIso32 ($descriptor + 0x14) 40
+PutIso32 ($descriptor + 0x18) 56
+[Text.Encoding]::ASCII.GetBytes("MICROSOFT*XBOX*MEDIA").CopyTo($isoBytes,$descriptor + 0x7EC)
+$root = 40 * $sector
+# The root tree contains default.xbe followed by xbe-test.txt.
+PutIso16 $root 0xFFFF
+PutIso16 ($root + 2) 7
+PutIso32 ($root + 4) 50
+PutIso32 ($root + 8) ([uint32]$b.Length)
+$isoBytes[$root + 12] = 0x20
+$isoBytes[$root + 13] = 11
+[Text.Encoding]::ASCII.GetBytes("default.xbe").CopyTo($isoBytes,$root + 14)
+PutIso16 ($root + 28) 0xFFFF
+PutIso16 ($root + 30) 0xFFFF
+PutIso32 ($root + 32) 66
+PutIso32 ($root + 36) 8
+$isoBytes[$root + 40] = 0x20
+$isoBytes[$root + 41] = 12
+[Text.Encoding]::ASCII.GetBytes("xbe-test.txt").CopyTo($isoBytes,$root + 42)
+$b.CopyTo($isoBytes,50 * $sector)
+[Text.Encoding]::ASCII.GetBytes("XRTFILE!").CopyTo($isoBytes,66 * $sector)
+$discImage = Join-Path $testDir "xboxruntime-diagnostic.iso"
+[IO.File]::WriteAllBytes($discImage,$isoBytes)
+
 $eeprom = Join-Path $testDir "eeprom.bin"
 $eepromBytes = [byte[]]::new(256)
 for ($i=0; $i -lt $eepromBytes.Length; $i++) { $eepromBytes[$i] = 0xFF }
@@ -1055,7 +1093,7 @@ $pipe = [IO.Pipes.NamedPipeServerStream]::new(
 )
 $pipePath = "\\.\pipe\$name"
 $proc = Start-Process -FilePath $guest -ArgumentList @(
-    "--pipe",$pipePath,"--xbe",$xbe,"--eeprom",$eeprom,
+    "--pipe",$pipePath,"--dvd-image",$discImage,"--eeprom",$eeprom,
     "--report-va","0x10006000"
 ) -PassThru -NoNewWindow
 try {
