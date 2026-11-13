@@ -97,9 +97,25 @@ void StoreKernelObject(void* object, HANDLE handle) {
 DWORD KernelTimeout(const LARGE_INTEGER* timeout) {
     if (!timeout) return INFINITE;
     const LONGLONG ticks = timeout->QuadPart;
-    if (ticks >= 0) return 0;
-    const ULONGLONG ms = (ULONGLONG(-(ticks + 1)) + 1) / 10000ull;
-    return DWORD(ms > MAXDWORD ? MAXDWORD : ms);
+    ULONGLONG remaining100ns = 0;
+    if (ticks < 0) {
+        // Relative NT intervals are negative 100-ns units.
+        remaining100ns = ULONGLONG(-(ticks + 1)) + 1;
+    } else if (ticks > 0) {
+        // Absolute NT time is measured from 1601-01-01, like FILETIME.
+        FILETIME ft{};
+        GetSystemTimeAsFileTime(&ft);
+        ULARGE_INTEGER now{};
+        now.LowPart = ft.dwLowDateTime;
+        now.HighPart = ft.dwHighDateTime;
+        const ULONGLONG deadline = static_cast<ULONGLONG>(ticks);
+        if (deadline <= now.QuadPart) return 0;
+        remaining100ns = deadline - now.QuadPart;
+    }
+    if (!remaining100ns) return 0;
+    // Round up: a positive sub-millisecond interval must not become a poll.
+    const ULONGLONG ms = (remaining100ns + 9999ull) / 10000ull;
+    return DWORD(ms > MAXDWORD - 1ull ? MAXDWORD - 1ull : ms);
 }
 void TrackStringAllocation(void* p) {
     if (!p) return;
@@ -241,12 +257,12 @@ extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return 
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
-extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
-    if(!interval){Sleep(0);return 0;}
-    LONGLONG ticks=interval->QuadPart;
-    if(ticks<0){ULONGLONG ms=ULONGLONG(-ticks)/10000ull;Sleep(DWORD(ms>MAXDWORD?MAXDWORD:ms));}
-    else Sleep(0);
-    return 0;
+extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t, BOOL alertable, const LARGE_INTEGER* interval) {
+    if (!interval) { SwitchToThread(); return 0; }
+    const DWORD timeout = KernelTimeout(interval);
+    const DWORD result = SleepEx(timeout, alertable ? TRUE : FALSE);
+    // STATUS_USER_APC is returned when an alertable delay is interrupted.
+    return result == WAIT_IO_COMPLETION ? LONG(0x000000C0u) : 0;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
     LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
