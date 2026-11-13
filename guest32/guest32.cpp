@@ -80,9 +80,19 @@ uint32_t LoadBytes(const std::vector<uint8_t>& b, Reply& reply) {
   Section s{};std::memcpy(&s,b.data()+table+uint64_t(i)*kSectionSize,sizeof(s));
   uint32_t sectionOff=0;
   if(!s.vs||!VaOffset(s.va,base,image,sectionOff)||
-     !Fits(sectionOff,s.vs,image)||!Fits(s.raw,s.rawSize,b.size())||
-     s.rawSize>s.vs)return FORMAT;
+     sectionOff<headers||!Fits(sectionOff,s.vs,image)||
+     !Fits(s.raw,s.rawSize,b.size())||s.rawSize>s.vs)return FORMAT;
   sections[i]=s;
+ }
+
+ // Two virtual sections must never claim the same guest address range.
+ // Overlap would make copy order and final page permissions ambiguous.
+ std::vector<Section> byAddress=sections;
+ std::sort(byAddress.begin(),byAddress.end(),
+     [](const Section& a,const Section& b){return a.va<b.va;});
+ for(size_t i=1;i<byAddress.size();++i){
+  const uint64_t previousEnd=uint64_t(byAddress[i-1].va)+byAddress[i-1].vs;
+  if(previousEnd>byAddress[i].va)return FORMAT;
  }
 
  // Decode the retail/debug entry point and require it to land in executable
@@ -110,7 +120,9 @@ uint32_t LoadBytes(const std::vector<uint8_t>& b, Reply& reply) {
   if(!VaOffset(s.name,base,image,nameOff)||!Fits(nameOff,1,image)){VirtualFree(mem,0,MEM_RELEASE);return FORMAT;}
   const uint8_t*name=static_cast<const uint8_t*>(mem)+nameOff;
   size_t available=std::min<size_t>(9u,size_t(image-nameOff));
-  for(size_t n=0;n<available;n++)if(name[n]==0)break;
+  bool terminated=false;
+  for(size_t n=0;n<available;n++)if(name[n]==0){terminated=true;break;}
+  if(!terminated){VirtualFree(mem,0,MEM_RELEASE);return FORMAT;}
  }
 
  // Apply Xbox section permissions with page-rounded ranges constrained to
