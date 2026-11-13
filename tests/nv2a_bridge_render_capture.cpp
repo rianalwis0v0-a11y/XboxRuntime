@@ -9,6 +9,7 @@
 
 #include <d3d11.h>
 #include "d3d8_xbox.h"
+#include "d3d8_vsh.h"
 
 extern "C" ID3D11Device* d3d8_GetD3D11Device(void);
 extern "C" ID3D11DeviceContext* d3d8_GetD3D11Context(void);
@@ -28,6 +29,10 @@ using StartFn = int (__cdecl*)(void);
 using StopFn = void (__cdecl*)(void);
 using SetDeviceFn = int (__cdecl*)(void*);
 using SetD3D11DeviceFn = int (__cdecl*)(void*,void*);
+using VshCreateFn = HRESULT (__cdecl*)(const DWORD*,int,DWORD*);
+using VshDeleteFn = HRESULT (__cdecl*)(DWORD);
+using VshSetConstantFn = void (__cdecl*)(int,const float*,int);
+using SetVshCallbacksFn = int (__cdecl*)(VshCreateFn,VshDeleteFn,VshSetConstantFn);
 using WriteRAMINFn = int (__cdecl*)(uint32_t,const void*,uint32_t);
 using WriteVRAMFn = int (__cdecl*)(uint32_t,const void*,uint32_t);
 using ReadVRAMFn = int (__cdecl*)(uint32_t,void*,uint32_t);
@@ -156,6 +161,7 @@ int main()
     const auto stop = proc<StopFn>(module, "ModuleStop");
     const auto set_device = proc<SetDeviceFn>(module, "XboxNV2A_SetD3DDevice");
     const auto set_d3d11_device = proc<SetD3D11DeviceFn>(module, "XboxNV2A_SetD3D11Device");
+    const auto set_vsh_callbacks = proc<SetVshCallbacksFn>(module, "XboxNV2A_SetD3D8VshCallbacks");
     const auto write_ramin = proc<WriteRAMINFn>(module, "XboxNV2A_WriteRAMIN");
     const auto write_vram = proc<WriteVRAMFn>(module, "XboxNV2A_WriteVRAM");
     const auto read_vram = proc<ReadVRAMFn>(module, "XboxNV2A_ReadVRAM");
@@ -164,8 +170,8 @@ int main()
     const auto flush = proc<FlushFn>(module, "XboxNV2A_Flush");
     const auto get_stats = proc<GetStatsFn>(module, "XboxNV2A_GetStats");
     if (!start || !stop || !set_device || !set_d3d11_device ||
-        !write_ramin || !write_vram || !read_vram || !write_register ||
-        !submit_dma || !flush || !get_stats) {
+        !set_vsh_callbacks || !write_ramin || !write_vram || !read_vram ||
+        !write_register || !submit_dma || !flush || !get_stats) {
         std::fprintf(stderr, "FAIL: NV2A bridge exports missing\n");
         FreeLibrary(module);
         device->lpVtbl->Release(device);
@@ -178,6 +184,8 @@ int main()
     if (!d3d11_device || !d3d11_context ||
         set_device(device) != 0 ||
         set_d3d11_device(d3d11_device, d3d11_context) != 0 ||
+        set_vsh_callbacks(d3d8_vsh_create_shader, d3d8_vsh_delete_shader,
+                          d3d8_vsh_set_constant) != 0 ||
         start() != 0) {
         std::fprintf(stderr, "FAIL: NV2A module/device initialization\n");
         stop();
