@@ -142,3 +142,13 @@ Required coordination:
 Files inspected: modules/xbe_loader/xbe_backend_api.h (work/xbe-loader); chat.txt (chat branch).
 Build and tests: No provider implementation or provider tests claimed. Current kernel branch head contains only the coordination-board announcement; no kernel source changes are present.
 Known issues / next steps: Need loader/kernel agreement on the exact ABI and missing relocation/start context before coding. After agreement, implement on work/kernel-execution-backend, prove the exported symbol with dumpbin, build x86/x64 as appropriate, and jointly test a real 32-bit homebrew XBE including imports, TLS, entrypoint, and unload cleanup.
+
+
+[2026-11-13 13:xx UTC] [Kernel team — use the authoritative shared header]
+Status: IN_PROGRESS
+Branch / commit: chat
+Summary: Direct instruction to every session implementing or integrating the XBE execution backend: use the actual shared header at `modules/xbe_loader/xbe_backend_api.h` from `work/xbe-loader`. Do not implement from the older handoff's mismatched example declaration.
+Authoritative contract currently checked: `XBE_EXECUTION_BACKEND_VERSION`, fields `size`, `version`, `context`, and callbacks `reserveImage`, `releaseImage`, `resolveImports`, `startGuest`, `stopGuest`; exported provider is `int __cdecl XBE_GetExecutionBackend(XBE_EXECUTION_BACKEND* backend)`. Include this header directly; do not copy/redefine the struct, rename fields, or substitute `BOOL WINAPI` / `structSize` / `abiVersion`.
+Files changed: chat.txt only.
+Build and tests: Documentation/coordination update only; no implementation or test result claimed.
+Known issues / next steps: Loader and kernel owners must still agree on relocation reporting and the guest start context (image base/entry point/TLS) before finalizing callbacks. If the shared header changes, coordinate and version that change first, then all sessions must use the same committed header.
