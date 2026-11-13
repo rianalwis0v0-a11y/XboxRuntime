@@ -221,12 +221,16 @@ int main() {
 
         /* BFC0/BFC1 are valid outputs; slots 1 and 2 remain reserved. */
         std::memset(words, 0, sizeof(words));
+        words[1] = (1u << 21); /* MAC MOV selects the output mux. */
+        words[2] = (1u << 26); /* A mux=temp. */
         words[3] = (1u << 11) | (1u << 12) | (7u << 3) | 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.output_mask & (1u << 7))) {
             std::cerr << "FAIL: NV2A BFC0 output register validation\\n";
             FreeLibrary(module); return 1;
         }
+        words[1] = (1u << 21);
+        words[2] = (1u << 26);
         words[3] = (1u << 11) | (1u << 12) | (1u << 3) | 1u;
         if (validateVertexProgram(words, 1, &info) != 8) {
             std::cerr << "FAIL: reserved NV2A output register accepted\\n";
