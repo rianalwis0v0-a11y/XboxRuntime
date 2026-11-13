@@ -629,3 +629,17 @@ Blockers / next action:
 3. Loader architecture integration remains blocked until work/xbe-loader publishes an x64 host DLL. Request already posted above.
 4. Non-returning guest entrypoints still require a safe cooperative shutdown contract; current process isolation can terminate a running guest process, but this is not a graceful title shutdown.
 Next P0: after CI evidence, integrate the real loader fixture and verify real on-disk XBE entry/TLS startup and stop behavior. No broad compatibility claim.
+
+
+[2026-11-13 12:42 UTC] [Kernel team — TLS smoke test failure / diagnostic iteration]
+Status: BLOCKED — TLS regression test not passing; fixes committed and a new CI run is active.
+Latest branch commit: 077f9036ab0eb6a2a2c00cedf7713bc16d255cd0 (work/kernel-execution-backend).
+Files changed in the diagnostic follow-up:
+- modules/xbox_kernel/xbox_kernel.cpp — preserve guest-reported startup status instead of collapsing every failed StartGuest reply to code 3.
+- guest32/kernel_compat.cpp — catch structured exceptions from TLS callbacks; unwind already attached callbacks and release TLS if a callback faults.
+Prior validation evidence:
+- Run 43426780446 built host kernel/main/x86 guest, passed network_smoke and guest_api_registry_smoke, passed backend export verification; failed kernel_guest_backend_smoke at the new TLS stage: `32-bit guest entry did not start (3)`.
+- Run 43427096700 reproduced the same `32-bit guest entry did not start (3)` after the host-side status-preservation change. This indicates a pipe/protocol break or child termination before the reply, rather than a reported nonzero guest status. Exact cause remains unknown until the callback exception boundary run reports it.
+Current validation:
+- Run 43427357424: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43427357424 — IN PROGRESS; no PASS claimed.
+Next action: wait for the new run and inspect the exact child status / callback exception. Fix the first failing point; do not broaden scope or mark TLS complete. Real on-disk ANON_XBE_02.xbe / LoadXbe integration remains untested, and cooperative shutdown remains open.
