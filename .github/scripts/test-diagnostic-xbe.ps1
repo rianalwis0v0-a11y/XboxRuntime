@@ -975,9 +975,9 @@ $symObjectAttributesVa = [uint32]($base + 0x6320)
 $symOutputVa = [uint32]($base + 0x6340)
 $symReturnedLengthVa = [uint32]($base + 0x6350)
 $symHandleVa = [uint32]($base + 0x6354)
-$symNameBufferVa = [uint32]($base + 0x6380)
-$symTargetBufferVa = [uint32]($base + 0x63C0)
-$symOutputBufferVa = [uint32]($base + 0x6400)
+$symNameBufferVa = [uint32]($base + 0x6400)
+$symTargetBufferVa = [uint32]($base + 0x6460)
+$symOutputBufferVa = [uint32]($base + 0x64A0)
 $symName = "\Device\XboxRuntimeDiagnosticLink"
 $symTarget = "\Device\Cdrom0"
 $symNameBytes = [Text.Encoding]::Unicode.GetBytes($symName + [char]0)
@@ -1140,8 +1140,8 @@ Put32 0x6340 ([uint32](0 -bor (128 -shl 16)))
 Put32 0x6344 $symOutputBufferVa
 Put32 0x6350 0
 Put32 0x6354 0
-$symNameBytes.CopyTo($b,0x6380)
-$symTargetBytes.CopyTo($b,0x63C0)
+$symNameBytes.CopyTo($b,0x6400)
+$symTargetBytes.CopyTo($b,0x6460)
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
