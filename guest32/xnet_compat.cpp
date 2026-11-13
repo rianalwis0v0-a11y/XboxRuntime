@@ -350,7 +350,10 @@ extern "C" int WINAPI XboxWSAStartup(WORD versionRequested, LPWSADATA data) {
 }
 
 extern "C" int WINAPI XboxWSACleanup() {
-    return XboxNetCleanup() == 0 ? 0 : SOCKET_ERROR;
+    // XboxNetCleanup is intentionally void: it decrements the shared startup
+    // reference count and has no Winsock-style error return.
+    XboxNetCleanup();
+    return 0;
 }
 
 extern "C" WSAEVENT WINAPI XboxWSACreateEvent() { return WSACreateEvent(); }
