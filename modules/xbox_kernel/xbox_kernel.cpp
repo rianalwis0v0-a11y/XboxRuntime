@@ -221,6 +221,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     BOOL connected = ConnectNamedPipe(context.pipe, nullptr);
     if (!connected && GetLastError() != ERROR_PIPE_CONNECTED) {
         StopGuestProcessLocked(context);
+        ResetContextHandles(context);
         return 9;
     }
 
@@ -231,6 +232,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         hello.status != ERROR_SUCCESS ||
         hello.imageBase != guestBase || hello.imageSize != imageSize) {
         StopGuestProcessLocked(context);
+        ResetContextHandles(context);
         return 10;
     }
     *guestImage = context.hostView;
