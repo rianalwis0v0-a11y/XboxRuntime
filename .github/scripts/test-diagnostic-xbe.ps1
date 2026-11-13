@@ -120,6 +120,7 @@ EmitPushMemory $poolVa
 EmitCallImport 17
 EmitIncrement $passedVa
 
+EmitMovMemoryImmediate $progressVa 10
 # Performance counter/frequency, interrupt time, system time, stall, and yield.
 EmitCallImport 127
 EmitCheckNonZero
@@ -138,6 +139,7 @@ EmitIncrement $passedVa
 EmitCallImport 238
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 20
 # EEPROM SMBus read followed by a write-back of the exact byte just read.
 EmitPush $smbusValueVa
 EmitPush 0
@@ -152,6 +154,7 @@ EmitPush 0xA8
 EmitCallImport 50
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 30
 # Virtual memory allocate/query/free.
 EmitMovMemoryImmediate $vmBaseVa 0
 EmitMovMemoryImmediate $vmSizeVa 4096
@@ -180,6 +183,7 @@ EmitPush $vmBaseVa
 EmitCallImport 199
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 40
 # Host-file mapping, NT open/read/close, using the XBE title directory as CD-ROM.
 EmitPush 0
 EmitPush 1
@@ -205,6 +209,7 @@ EmitCheckEqual 0x46545258
 EmitLoadEax ([uint32]($readBufferVa + 4))
 EmitCheckEqual 0x21454C49
 
+EmitMovMemoryImmediate $progressVa 50
 # Query FILE_STANDARD_INFORMATION and verify the eight-byte diagnostic file size.
 $fileInfoVa = [uint32]($reportVa + 0x380)
 EmitPush 5
@@ -213,9 +218,11 @@ EmitPush $fileInfoVa
 EmitPush $ioStatusVa
 EmitPushMemory $fileHandleVa
 EmitCallImport 211
+EmitMovMemoryImmediate $progressVa 51
 EmitCheckEqual 0
 EmitLoadEax ([uint32]($fileInfoVa + 8))
 EmitCheckEqual 8
+EmitMovMemoryImmediate $progressVa 52
 
 # Set the file pointer to zero, then query FILE_POSITION_INFORMATION.
 EmitMovMemoryImmediate $fileInfoVa 0
@@ -226,6 +233,7 @@ EmitPush $fileInfoVa
 EmitPush $ioStatusVa
 EmitPushMemory $fileHandleVa
 EmitCallImport 226
+EmitMovMemoryImmediate $progressVa 53
 EmitCheckEqual 0
 EmitPush 14
 EmitPush 8
@@ -233,10 +241,13 @@ EmitPush $fileInfoVa
 EmitPush $ioStatusVa
 EmitPushMemory $fileHandleVa
 EmitCallImport 211
+EmitMovMemoryImmediate $progressVa 54
 EmitCheckEqual 0
 EmitLoadEax $fileInfoVa
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 55
 
+EmitMovMemoryImmediate $progressVa 60
 # Query the mounted volume's volume, size, device, and filesystem metadata.
 $volumeInfoVa = [uint32]($reportVa + 0x400)
 $volumeSizeVa = [uint32]($reportVa + 0x480)
@@ -287,6 +298,7 @@ EmitPushMemory $fileHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 70
 # Contiguous memory allocation, address validation, and free.
 EmitPush 4096
 EmitCallImport 165
@@ -299,6 +311,7 @@ EmitPushMemory $contiguousVa
 EmitCallImport 171
 EmitIncrement $passedVa
 
+EmitMovMemoryImmediate $progressVa 80
 # 64-bit interlocked operations: atomic add and compare/exchange.
 $largeIntegerVa = [uint32]($reportVa + 0x4E0)
 $exchangeVa = [uint32]($reportVa + 0x4F0)
@@ -378,6 +391,7 @@ EmitPush 12
 EmitCallImport 283
 EmitCheckEqual 4
 
+EmitMovMemoryImmediate $progressVa 90
 # UnicodeString descriptor at report+0x150; its buffer is report+0x180.
 $unicodeDescriptorVa = [uint32]($reportVa + 0x150)
 $unicodeBufferVa = [uint32]($reportVa + 0x1A0)
@@ -554,6 +568,7 @@ EmitCallImport 301
 EmitCheckEqual 87
 
 
+EmitMovMemoryImmediate $progressVa 100
 # Kernel dispatcher event lifecycle: initialize, signal, wait, reset, timeout.
 $eventObjectVa = [uint32]($reportVa + 0x220)
 $zeroTimeoutVa = [uint32]($reportVa + 0x230)
@@ -586,6 +601,7 @@ EmitPush $eventObjectVa
 EmitCallImport 159
 EmitCheckEqual 0x102
 
+EmitMovMemoryImmediate $progressVa 110
 # NT object query APIs: verify event, semaphore, mutant, and timer state.
 $nativeObjectHandleVa = [uint32]($reportVa + 0x520)
 $nativeObjectInfoVa = [uint32]($reportVa + 0x530)
@@ -697,6 +713,7 @@ EmitPushMemory $nativeObjectHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 120
 # Executive device queue lifecycle and keyed ordering.
 $deviceQueueVa = [uint32]($reportVa + 0x300)
 $deviceEntry1Va = [uint32]($reportVa + 0x340)
@@ -778,6 +795,7 @@ EmitCallImport 103
 EmitCheckEqual 0
 
 
+EmitMovMemoryImmediate $progressVa 130
 # Executive read-write lock: exclusive and shared acquisition/release.
 $rwLockVa = [uint32]($reportVa + 0x250)
 EmitPush $rwLockVa
@@ -805,6 +823,7 @@ EmitCallImport 295
 EmitIncrement $passedVa
 
 
+EmitMovMemoryImmediate $progressVa 140
 # System-memory allocation and release.
 $systemMemoryVa = [uint32]($reportVa + 0x270)
 EmitPush 4
@@ -817,6 +836,7 @@ EmitPushMemory $systemMemoryVa
 EmitCallImport 172
 EmitCheckNonZero
 
+EmitMovMemoryImmediate $progressVa 150
 # Interlocked doubly-linked list operations use a guest spin lock.
 $listHeadVa = [uint32]($reportVa + 0x300)
 $listEntryAVa = [uint32]($reportVa + 0x310)
