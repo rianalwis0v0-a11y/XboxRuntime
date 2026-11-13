@@ -27,6 +27,7 @@ $directoryObjectAttributesVa = [uint32]($reportVa + 0x220)
 $directoryHandleVa = [uint32]($reportVa + 0x240)
 $directoryPathVa = [uint32]($reportVa + 0x300)
 $directoryInfoVa = [uint32]($reportVa + 0x600)
+$fullAttributesVa = [uint32]($reportVa + 0x280)
 $testPathVa = [uint32]($reportVa + 0x100)
 $numberTextVa = [uint32]($reportVa + 0x140)
 $numberValueVa = [uint32]($reportVa + 0x148)
@@ -34,7 +35,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,207,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,207,210,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -188,6 +189,15 @@ EmitCheckEqual 0
 EmitPush 0
 EmitPush 1
 EmitPush $ioStatusVa
+EmitPush $fullAttributesVa
+EmitPush $objectAttributesVa
+EmitCallImport 210
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($fullAttributesVa + 40))
+EmitCheckEqual 8
+EmitLoadEax ([uint32]($fullAttributesVa + 48))
+EmitCheckEqual 0x20
+
 EmitPush $objectAttributesVa
 EmitPush ([uint32]2147483648)
 EmitPush $fileHandleVa
