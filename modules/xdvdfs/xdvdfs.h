@@ -33,6 +33,7 @@ __declspec(dllexport) int __cdecl ModuleStart(void);
 __declspec(dllexport) void __cdecl ModuleStop(void);
 __declspec(dllexport) int __cdecl XDVDFS_OpenImage(const wchar_t* imagePath, XDVDFS_VOLUME_INFO* info);
 __declspec(dllexport) void __cdecl XDVDFS_CloseImage(void);
+__declspec(dllexport) int __cdecl XDVDFS_ListDirectory(const char* path, XDVDFS_FILE_INFO* entries, uint32_t capacity, uint32_t* required);
 __declspec(dllexport) int __cdecl XDVDFS_GetFileInfo(const char* path, XDVDFS_FILE_INFO* info);
 __declspec(dllexport) int __cdecl XDVDFS_ReadFile(const char* path, uint64_t offset, void* buffer, uint32_t bytesToRead, uint32_t* bytesRead);
 
