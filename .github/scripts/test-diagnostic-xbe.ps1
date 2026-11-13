@@ -192,7 +192,9 @@ EmitPush $objectAttributesVa
 EmitPush ([uint32]2147483648)
 EmitPush $fileHandleVa
 EmitCallImport 202
+Write-Host "directory open check #$script:checkIndex"
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 21
 EmitPush 0
 EmitPush $fileOffsetVa
 EmitPush 8
@@ -296,7 +298,9 @@ EmitCheckNonZero
 
 EmitPushMemory $fileHandleVa
 EmitCallImport 187
+Write-Host "directory close check #$script:checkIndex"
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 25
 
 EmitMovMemoryImmediate $progressVa 70
 # Contiguous memory allocation, address validation, and free.
@@ -880,28 +884,38 @@ EmitCallImport 111
 EmitPush $queueTailEntryVa
 EmitPush $queueVa
 EmitCallImport 117
+Write-Host "queue tail check #$script:checkIndex"
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 11
 EmitPush $queueHeadEntryVa
 EmitPush $queueVa
 EmitCallImport 116
+Write-Host "queue head check #$script:checkIndex"
 EmitCheckEqual 1
+EmitMovMemoryImmediate $progressVa 12
 EmitPush 0
 EmitPush 0
 EmitPush $queueVa
 EmitCallImport 136
+Write-Host "queue first remove check #$script:checkIndex"
 EmitCheckEqual $queueHeadEntryVa
+EmitMovMemoryImmediate $progressVa 13
 EmitPush 0
 EmitPush 0
 EmitPush $queueVa
 EmitCallImport 136
+Write-Host "queue second remove check #$script:checkIndex"
 EmitCheckEqual $queueTailEntryVa
+EmitMovMemoryImmediate $progressVa 14
 EmitMovMemoryImmediate $queueTimeoutVa 4294957296
 EmitMovMemoryImmediate ([uint32]($queueTimeoutVa + 4)) 4294967295
 EmitPush $queueTimeoutVa
 EmitPush 0
 EmitPush $queueVa
 EmitCallImport 136
+Write-Host "queue timeout check #$script:checkIndex"
 EmitCheckEqual 258
+EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
 # Open the title directory and enumerate a real fixture entry.
@@ -930,11 +944,17 @@ EmitPush 0
 EmitPush 0
 EmitPushMemory $directoryHandleVa
 EmitCallImport 207
+Write-Host "directory query check #$script:checkIndex"
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 22
 EmitLoadEax ([uint32]($directoryInfoVa + 60))
+Write-Host "directory name length check #$script:checkIndex"
 EmitCheckNonZero
+EmitMovMemoryImmediate $progressVa 23
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
+Write-Host "directory attributes check #$script:checkIndex"
 EmitCheckNonZero
+EmitMovMemoryImmediate $progressVa 24
 EmitPushMemory $directoryHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
