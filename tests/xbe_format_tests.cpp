@@ -157,6 +157,34 @@ int main() {
                     tooSmall.data(), tooSmall.size()).error ==
            Error::OutputTooSmall);
 
+    // MapImage must defend itself against forged metadata and avoid
+    // partially modifying the destination when validation fails.
+    Image forgedOverlap = image;
+    forgedOverlap.sectionCount = 2;
+    forgedOverlap.sections[1] = forgedOverlap.sections[0];
+    std::vector<std::uint8_t> untouched(image.imageSize, 0x5A);
+    assert(MapImage(file.data(), file.size(), forgedOverlap,
+                    untouched.data(), untouched.size()).error ==
+           Error::OverlappingSections);
+    assert(untouched[0] == 0x5A && untouched[0x1000] == 0x5A);
+
+    Image forgedHeaderOverlap = image;
+    forgedHeaderOverlap.sections[0].virtualAddress =
+        forgedHeaderOverlap.baseAddress + 0x100;
+    assert(MapImage(file.data(), file.size(), forgedHeaderOverlap,
+                    untouched.data(), untouched.size()).error ==
+           Error::InvalidSection);
+    assert(untouched[0] == 0x5A && untouched[0x100] == 0x5A);
+
+    Image forgedRawRange = image;
+    forgedRawRange.sections[0].rawAddress =
+        static_cast<std::uint32_t>(file.size() - 1);
+    forgedRawRange.sections[0].rawSize = 0x200;
+    assert(MapImage(file.data(), file.size(), forgedRawRange,
+                    untouched.data(), untouched.size()).error ==
+           Error::InvalidSection);
+    assert(untouched[0] == 0x5A && untouched[0x1000] == 0x5A);
+
     std::cout << "XBE format tests passed\n";
     return 0;
 }
