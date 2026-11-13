@@ -88,7 +88,7 @@ int main() {
     image[0x2000] = 0xC3; // Minimal x86 guest entry: ret.
 
     // Build a real x86 TLS callback. On process attach it reads the TLS
-    // template and zero-fill bytes through the guest thread's TEB TLS vector.
+    // template and zero-fill bytes through the guest thread's dynamic TlsSlots array.
     // On process detach it records that reverse-order cleanup ran.
     constexpr std::uint32_t tlsDirectoryOffset = 0x3000u;
     constexpr std::uint32_t tlsTemplateOffset = 0x3100u;
@@ -139,9 +139,9 @@ int main() {
 
     emit8(0x83); emit8(0x7C); emit8(0x24); emit8(0x08); emit8(0x01); // cmp [esp+8],1
     const std::size_t toDetach = branch();
-    emit8(0x64); emit8(0xA1); emit32(0x2Cu);                       // mov eax,fs:[2c]
     emit8(0x8B); emit8(0x0D); emit32(tlsIndexVa);                 // mov ecx,[tlsIndex]
-    emit8(0x8B); emit8(0x04); emit8(0x88);                        // mov eax,[eax+ecx*4]
+    emit8(0x64); emit8(0x8B); emit8(0x04); emit8(0x8D);
+    emit32(0xE10u);                                                // mov eax,fs:[TlsSlots+ecx*4]
     emit8(0x89); emit8(0x0D); emit32(guestBase + tlsIndexMarkerOffset); // save allocated TLS index
     emit8(0x81); emit8(0x38); emit32(templateValue);              // cmp [eax],template
     const std::size_t badTemplate = branch();
