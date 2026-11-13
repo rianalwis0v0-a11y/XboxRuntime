@@ -37,6 +37,15 @@ These have guest x86 dispatch routes and diagnostic-XBE coverage. Divide-by-zero
 
 These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acquire/release the caller-provided 32-bit spin lock. The diagnostic XBE checks empty-list insertion, head/tail ordering, removal order, and the empty result. They are not a substitute for the separate executive I/O/object manager work.
 
+## Additional kernel implementations
+
+- Ordinals 106, 114, 115, 133, 134, and 135: device-queue initialization, FIFO/keyed insertion, FIFO/keyed removal, and entry removal. The guest x86 queue and entry layouts are represented explicitly; operations are serialized across host threads.
+- Ordinal 195: `NtDeleteFile`, using the same Xbox device-path translation and NTSTATUS mapping as the file-open path.
+- Ordinal 234: `NtWaitForSingleObjectEx`, routed to the alertable single-object wait implementation.
+- NT wait APIs now share conversion for negative relative and positive absolute 100-ns deadlines. Alertable waits report `STATUS_USER_APC`; timeout reports `STATUS_TIMEOUT`.
+
+These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
+
 ## Still incomplete
 
 Many catalogued APIs remain unsupported, including substantial parts of the I/O manager, object manager, device/interrupt queues, physical hardware access, crypto, and kernel debugging/memory diagnostics. These need real implementations and behavioural tests before they can be advertised as supported. A mapped ordinal is not equivalent to a working game-facing API.
