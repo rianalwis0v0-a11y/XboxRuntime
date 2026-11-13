@@ -54,10 +54,10 @@ uint32_t Load(const wchar_t* path,Reply& reply){
  // conversions are range checked before any allocation or guest mapping.
  const uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),headerImage=U32(b,0x110);
  const uint32_t certVa=U32(b,0x118),count=U32(b,0x11C),tableVa=U32(b,0x120);
- const uint32_t encodedEntry=U32(b,0x128),tlsVa=U32(b,0x12C);
+ const uint32_t encodedEntry=U32(b,0x128),tlsVa=U32(b,0x12C),kernelThunk=U32(b,0x158);
  const uint32_t libraryCount=U32(b,0x160),libraryVa=U32(b,0x164);
  const uint64_t imageEnd=uint64_t(base)+image;
- if(!base||(base&0xFFFu)||!image||imageEnd>0x100000000ull||
+ if(!base||(base&0xFFFu)||!image||imageEnd>0x80000000ull||
     headers<kHeaderMin||headers>b.size()||headerImage<kHeaderMin||
     headerImage>headers||image<headers||!count||count>96)return FORMAT;
 
@@ -84,18 +84,15 @@ uint32_t Load(const wchar_t* path,Reply& reply){
   uint32_t sectionOff=0;
   if(!s.vs||!VaOffset(s.va,base,image,sectionOff)||
      !Fits(sectionOff,s.vs,image)||!Fits(s.raw,s.rawSize,b.size())||
-     s.rawSize>s.vs||!s.name)return FORMAT;
+     s.rawSize>s.vs)return FORMAT;
   sections[i]=s;
  }
 
  // Decode the retail/debug entry point and require it to land in executable
  // section memory. Chihiro's separate key is intentionally not guessed here.
- uint32_t entry=encodedEntry^kRetailEntry;bool executable=false;
+ const uint32_t entryKey=(kernelThunk&0x80000000u)?kDebugEntry:kRetailEntry;
+ const uint32_t entry=encodedEntry^entryKey;bool executable=false;
  for(const auto&s:sections)if((s.flags&4u)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}
- if(!executable){
-  entry=encodedEntry^kDebugEntry;
-  for(const auto&s:sections)if((s.flags&4u)&&entry>=s.va&&uint64_t(entry)<uint64_t(s.va)+s.vs){executable=true;break;}
- }
  if(!executable)return FORMAT;
 
  // XBE virtual addresses are absolute; the preferred image base is required.
@@ -111,6 +108,7 @@ uint32_t Load(const wchar_t* path,Reply& reply){
  // Resolve each section name from its mapped VA as Cxbx does, but cap the
  // scan to the XBE's mapped image so malformed names cannot read past it.
  for(const auto&s:sections){
+  if(!s.name)continue; // Cxbx permits sections with an absent name pointer.
   uint32_t nameOff=0;
   if(!VaOffset(s.name,base,image,nameOff)||!Fits(nameOff,1,image)){VirtualFree(mem,0,MEM_RELEASE);return FORMAT;}
   const uint8_t*name=static_cast<const uint8_t*>(mem)+nameOff;
