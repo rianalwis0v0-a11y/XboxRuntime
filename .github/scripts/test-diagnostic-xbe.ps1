@@ -1150,7 +1150,7 @@ try {
     $failedCheck = [BitConverter]::ToUInt32($report,16)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
     Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck"
-    if ($failed -ne 0 -or $passed -lt 20 -or $skipped -gt 3) {
+    if ($failed -ne 0 -or $passed -lt 33 -or $skipped -gt 3) {
         throw "Diagnostic XBE reported an unexpected result."
     }
     if (!$proc.WaitForExit(10000)) { throw "x86 guest did not exit after diagnostic completion." }
