@@ -112,9 +112,9 @@ invalid classes, truncated RAMIN objects and VRAM ranges that exceed the 64 MiB
 aperture. The reported mapped span follows the upstream NV2A DMA helper's
 `limit` contract.
 
-This is the object lookup/mapping layer only. It does not yet implement PCI/AGP
-DMA, page tables, DMA pusher GET/PUT processing, jump/call/return flow, or
-channel switching and puller scheduling.
+This is the object lookup/mapping layer; the NV4-style DMA pusher below consumes
+these validated objects. PCI/AGP DMA, page tables, and channel switching/puller
+scheduling remain unsupported.
 
 
 ## NV4-style DMA pusher
@@ -126,7 +126,10 @@ incrementing and non-incrementing method packets, legacy and NV1A jump commands,
 single-level CALL/RETURN, and the reference-counter method. It validates
 all reads and control-flow targets against the mapped DMA span, bounds execution
 to one million command/data words, and performs a validation pass before GPU
-dispatch so malformed streams do not partially execute.
+dispatch so malformed streams do not partially execute. GET may be greater than
+PUT for a wrapped ring, but the stream must explicitly JUMP back to PUT before
+the bounded walk can finish; falling off the mapped span remains an error. The
+smoke test covers packets on both sides of a wrapped GET/PUT window.
 
 The puller currently binds only the graphics engine. It does not enable the later-generation NOP method on NV2A. Object-bind method 0 and
 the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
@@ -211,8 +214,10 @@ mode, `CACHE1_DMA_PUSH_ACCESS` is enabled, and the guest writes
 GET-to-PUT command stream, and advances `CACHE1_DMA_GET` only after successful
 validation and dispatch. PIO mode and disabled DMA push access are left alone.
 
-This connects the software pusher to the guest-visible PFIFO MMIO path. Ring
-wraparound, DMA fetch caching, push-buffer interrupts/error recovery, channel
+This connects the software pusher to the guest-visible PFIFO MMIO path. Explicit
+JUMP-based ring wraparound is supported and tested through both the direct DMA
+API and a guest-visible DMA_PUT write; DMA_GET advances only after successful
+dispatch. DMA fetch caching, push-buffer interrupts/error recovery, channel
 scheduling, and full PFIFO timing/flow semantics are still not implemented.
 
 
@@ -232,9 +237,10 @@ smoke test; the remaining slots share the same validated storage path.
 `SET_CONTEXT_DMA_VERTEX_A` or `VERTEX_B` object. It reads the NV097 array
 offset/format registers, supports UB_D3D, UB_OGL, S1, S32K, and float component
 encodings, honors per-array stride, and checks both DMA-object and VRAM bounds
-before copying packed elements. Compressed vertex format and conversion to a
-host vertex declaration are not included yet; this is the validated guest-data
-fetch stage for a later DRAW_ARRAYS translator.
+before copying packed elements. CMP packed-normal encoding is decoded for the
+three-component normal array; other CMP layouts and conversion to a general host
+vertex declaration remain unsupported. This is the validated guest-data fetch
+stage for the DRAW_ARRAYS translator.
 
 
 ## Host FVF vertex stream generation
