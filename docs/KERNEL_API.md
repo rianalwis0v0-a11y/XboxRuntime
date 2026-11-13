@@ -29,6 +29,14 @@ The diagnostic XBE in `.github/scripts/test-diagnostic-xbe.ps1` calls selected e
 
 These have guest x86 dispatch routes and diagnostic-XBE coverage. Divide-by-zero and invalid shift inputs raise guest status exceptions.
 
+## Interlocked list exports added
+
+- Ordinal 32: `ExfInterlockedInsertHeadList`
+- Ordinal 33: `ExfInterlockedInsertTailList`
+- Ordinal 34: `ExfInterlockedRemoveHeadList`
+
+These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acquire/release the caller-provided 32-bit spin lock. The diagnostic XBE checks empty-list insertion, head/tail ordering, removal order, and the empty result. They are not a substitute for the separate executive I/O/object manager work.
+
 ## Still incomplete
 
 Many catalogued APIs remain unsupported, including substantial parts of the I/O manager, object manager, device/interrupt queues, physical hardware access, crypto, and kernel debugging/memory diagnostics. These need real implementations and behavioural tests before they can be advertised as supported. A mapped ordinal is not equivalent to a working game-facing API.
