@@ -12,6 +12,7 @@ $progressVa = [uint32]($reportVa + 0x14)
 $failedVa = [uint32]($reportVa + 8)
 $failedCheckVa = [uint32]($reportVa + 0x10)
 $directoryOpenStatusVa = [uint32]($reportVa + 0x18)
+$directoryUnicodeValueVa = [uint32]($reportVa + 0x1C)
 $skippedVa = [uint32]($reportVa + 12)
 $poolVa = [uint32]($reportVa + 0x20)
 $vmBaseVa = [uint32]($reportVa + 0x24)
@@ -940,6 +941,7 @@ $directoryIoVa = [uint32]($base + 0x6700)
 EmitLoadEax ([uint32]($directoryObjectAttributesVa + 8))
 EmitCheckEqual $directoryUnicodeVa
 EmitLoadEax $directoryUnicodeVa
+EmitStoreEax $directoryUnicodeValueVa
 EmitCheckEqual 0x001E001C
 EmitLoadEax ([uint32]($directoryUnicodeVa + 4))
 EmitCheckEqual $directoryPathVa
@@ -1144,7 +1146,7 @@ try {
         $exit = if ($proc.HasExited) { $proc.ExitCode } else { "still running" }
         throw "Guest pipe closed before diagnostic release; process exit=$exit. $($_.Exception.Message)"
     }
-    $report = [byte[]]::new(28)
+    $report = [byte[]]::new(32)
     $read = 0
     while ($read -lt $report.Length) {
         $n = $pipe.Read($report,$read,$report.Length-$read)
@@ -1162,8 +1164,9 @@ try {
     $failedCheck = [BitConverter]::ToUInt32($report,16)
     $progress = [BitConverter]::ToUInt32($report,20)
     $directoryOpenStatus = [BitConverter]::ToUInt32($report,24)
+    $directoryUnicodeValue = [BitConverter]::ToUInt32($report,28)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
-    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus)"
+    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus); directory UNICODE_STRING 0x$('{0:X8}' -f $directoryUnicodeValue)"
     if ($progress -ne 255) { throw "Diagnostic XBE stopped before the final test group (progress marker $progress)." }
     if ($failed -ne 0 -or $passed -lt 20 -or $skipped -gt 3) {
         throw "Diagnostic XBE reported an unexpected result."
