@@ -53,6 +53,11 @@ struct Image {
     std::uint32_t imageSize = 0;
     std::uint32_t imageHeaderSize = 0;
     std::uint32_t certificateAddress = 0;
+    std::uint32_t nonKernelImportDirectoryAddress = 0;
+    std::uint32_t libraryVersionCount = 0;
+    std::uint32_t libraryVersionsAddress = 0;
+    std::uint32_t kernelLibraryVersionAddress = 0;
+    std::uint32_t xapiLibraryVersionAddress = 0;
     std::uint32_t sectionCount = 0;
     std::uint32_t entryPoint = 0;
     std::uint32_t tlsAddress = 0;
