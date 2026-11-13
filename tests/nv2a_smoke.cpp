@@ -153,18 +153,32 @@ int main() {
             FreeLibrary(module); return 1;
         }
 
-        /* ADD consumes both A and B; input register index is shared in word 1. */
+        /* ADD is A+C, not A+B. An unused B mux must not pollute metadata. */
         std::memset(words, 0, sizeof(words));
         words[1] = (3u << 21) | (5u << 9);
-        words[2] = (2u << 26) | (2u << 11);
-        words[3] = 1u;
+        words[2] = (2u << 26);
+        words[3] = (2u << 28) | 1u; /* C mux=input */
         if (validateVertexProgram(words, 1, &info) != 0 ||
-            !(info.input_mask & (1u << 5))) {
-            std::cerr << "FAIL: NV2A ADD source-B/input decoding\\n";
+            info.input_mask != (1u << 5) ||
+            info.constant_mask[0] || info.constant_mask[1] ||
+            info.constant_mask[2]) {
+            std::cerr << "FAIL: NV2A ADD A+C source decoding\\n";
             FreeLibrary(module); return 1;
         }
 
-        /* Mux zero is also a constant source; ARL/EXP/LOG/LIT are executable. */
+        /* ADD's C operand can independently select a physical constant. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (3u << 21) | (7u << 13) | (1u << 9);
+        words[2] = (2u << 26);
+        words[3] = (3u << 28) | 1u; /* C mux=constant */
+        if (validateVertexProgram(words, 1, &info) != 0 ||
+            !(info.input_mask & (1u << 1)) ||
+            !(info.constant_mask[0] & (UINT64_C(1) << 7))) {
+            std::cerr << "FAIL: NV2A ADD constant-C metadata\\n";
+            FreeLibrary(module); return 1;
+        }
+
+        /* ARL reads only A; ILU LIT reads only C. */
         std::memset(words, 0, sizeof(words));
         words[1] = (13u << 21) | (1u << 9);
         words[2] = (2u << 26);
@@ -176,11 +190,10 @@ int main() {
         }
         std::memset(words, 0, sizeof(words));
         words[1] = (7u << 25) | (3u << 13);
-        words[2] = (3u << 28);
-        words[3] = 1u;
+        words[3] = (3u << 28) | 1u; /* C mux=constant */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.constant_mask[0] & (UINT64_C(1) << 3))) {
-            std::cerr << "FAIL: NV2A LIT / mux-zero constant validation\\n";
+            std::cerr << "FAIL: NV2A LIT constant-C validation\\n";
             FreeLibrary(module); return 1;
         }
 
