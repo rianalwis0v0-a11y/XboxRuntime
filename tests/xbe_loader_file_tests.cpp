@@ -69,8 +69,6 @@ static int __cdecl StartGuest(const XBE_IMAGE_INFO* info,
 
     // This test validates the real file -> parser -> mapper -> backend handoff.
     // It deliberately does not execute Xbox machine code in the Windows host.
-    if (image[entryOffset] == 0x00 || image[entryOffset] == 0xFF)
-        return 3;
     state->started = true;
     std::printf("Mapped XBE: base=0x%08X size=0x%08X entry=0x%08X "
                 "TLS=0x%08X sections=%u entry-byte=0x%02X\n",
