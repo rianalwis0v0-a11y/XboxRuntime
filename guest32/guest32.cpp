@@ -29,6 +29,7 @@ bool WriteExact(HANDLE handle, const void* input, DWORD bytes) {
     }
     return true;
 }
+std::uint32_t g_tlsAddress = 0;
 const wchar_t* ArgumentValue(int argc, wchar_t** argv, const wchar_t* name) {
     for (int i = 1; i + 1 < argc; ++i)
         if (std::wcscmp(argv[i], name) == 0) return argv[i + 1];
@@ -105,6 +106,7 @@ int wmain(int argc, wchar_t** argv) {
                     message.nonKernelImportDirectoryAddress,
                     message.kernelThunkAddress
                 };
+                g_tlsAddress = message.tlsAddress;
                 if (!XboxKernelResolveImports(state)) {
                     status = ERROR_INVALID_DATA;
                     OutputDebugStringW(L"[XboxKernel] Guest import resolution failed.\\n");
@@ -153,6 +155,53 @@ int wmain(int argc, wchar_t** argv) {
             const auto reply = Reply(message.command, status);
             ok = WriteExact(pipe, &reply, sizeof(reply));
             if (status == ERROR_TIMEOUT) ExitProcess(status);
+        } else if (message.command == XboxGuestWaitForExit) {
+            XboxGuestExitReply exitReply{
+                XBOX_GUEST_PROTOCOL_MAGIC, XboxGuestWaitForExit,
+                ERROR_INVALID_STATE, 0, 0
+            };
+            if (guestThread) {
+                const DWORD timeout = message.imageBase ? message.imageBase : INFINITE;
+                const DWORD waitResult = WaitForSingleObject(guestThread, timeout);
+                if (waitResult == WAIT_OBJECT_0) {
+                    DWORD exitCode = ERROR_GEN_FAILURE;
+                    if (GetExitCodeThread(guestThread, &exitCode)) {
+                        CloseHandle(guestThread);
+                        guestThread = nullptr;
+                        bool tlsCleared = false;
+                        if (g_tlsAddress) {
+                            struct TlsDirectory {
+                                std::uint32_t start, end, index, callbacks,
+                                              zeroFill, characteristics;
+                            };
+                            if (g_tlsAddress >= base &&
+                                std::uint64_t(g_tlsAddress) + sizeof(TlsDirectory) <=
+                                    std::uint64_t(base) + size) {
+                                const auto* tls = reinterpret_cast<const TlsDirectory*>(
+                                    uintptr_t(g_tlsAddress));
+                                if (tls->index >= base &&
+                                    std::uint64_t(tls->index) + sizeof(std::uint32_t) <=
+                                        std::uint64_t(base) + size) {
+                                    const auto* index = reinterpret_cast<const std::uint32_t*>(
+                                        uintptr_t(tls->index));
+                                    tlsCleared = *index == TLS_OUT_OF_INDEXES;
+                                }
+                            }
+                        }
+                        exitReply.status = ERROR_SUCCESS;
+                        exitReply.exitCode = exitCode;
+                        exitReply.tlsIndexCleared = tlsCleared ? 1u : 0u;
+                        XboxKernelShutdownTitle();
+                    } else {
+                        exitReply.status = GetLastError();
+                    }
+                } else if (waitResult == WAIT_TIMEOUT) {
+                    exitReply.status = ERROR_TIMEOUT;
+                } else {
+                    exitReply.status = GetLastError();
+                }
+            }
+            ok = WriteExact(pipe, &exitReply, sizeof(exitReply));
         } else if (message.command == XboxGuestStop) {
             const bool threadRunning = guestThread &&
                 WaitForSingleObject(guestThread, 0) == WAIT_TIMEOUT;
