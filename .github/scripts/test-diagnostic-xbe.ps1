@@ -1,6 +1,10 @@
 $ErrorActionPreference = "Stop"
-$guest = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xbe_guest32.exe"))
-if (!(Test-Path $guest)) { throw "Guest helper missing: $guest" }
+$guestCandidates = @(
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xbe_guest32.exe")),
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build-guest32\out\xbe_guest32.exe"))
+)
+$guest = $guestCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $guest) { throw "xbe_guest32.exe was not found in either build output directory." }
 
 # Build a real 32-bit XBE image. The entry point calls only kernel ordinals
 # implemented by XboxRuntime and writes a machine-readable result block.
