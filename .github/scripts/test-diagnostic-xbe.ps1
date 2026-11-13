@@ -319,9 +319,9 @@ EmitPushMemory $directoryHandleVa
 EmitCallImport 207
 EmitCheckEqual 0
 EmitLoadEax ([uint32]($directoryInfoVa + 64))
-EmitCheckEqual 0x004F0046 # "FO"
+EmitCheckEqual 0x00650064 # "de" from default.xbe
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
-EmitCheckEqual 0x10 # FILE_ATTRIBUTE_DIRECTORY
+EmitCheckEqual 0x20 # FILE_ATTRIBUTE_ARCHIVE
 EmitPush 0
 EmitPush 0
 EmitPush 1
@@ -336,7 +336,7 @@ EmitPushMemory $directoryHandleVa
 EmitCallImport 207
 EmitCheckEqual 0
 EmitLoadEax ([uint32]($directoryInfoVa + 64))
-EmitCheckEqual 0x00450054 # "TE"
+EmitCheckEqual 0x00620078 # "xb" from xbe-test.txt
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
 EmitCheckEqual 0x20 # FILE_ATTRIBUTE_ARCHIVE
 EmitPush 0
