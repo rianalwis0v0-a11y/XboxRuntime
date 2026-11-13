@@ -147,6 +147,13 @@ int wmain() {
            g_startOrder < g_stopOrder &&
            g_stopOrder < g_releaseOrder);
 
+    g_guestStopped = false;
+    g_released = false;
+    g_failStart = true;
+    assert(load(path) == 10);
+    assert(g_guestStopped && g_released);
+    assert(g_stopOrder < g_releaseOrder);
+
     stop();
     FreeLibrary(dll);
     DeleteFileW(path);
