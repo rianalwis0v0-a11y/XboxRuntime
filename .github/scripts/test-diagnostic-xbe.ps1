@@ -851,7 +851,7 @@ EmitCheckEqual 0
 EmitPush 0
 EmitPush 0
 EmitCallImport 74
-EmitCheckEqual 0xC0000010
+EmitCheckEqual 3221225488
 
 # Capture the live x86 guest context; EIP and ESP must be populated.
 $guestContextVa = [uint32]($reportVa + 0x600)
