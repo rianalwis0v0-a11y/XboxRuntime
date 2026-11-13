@@ -866,3 +866,27 @@ No real XBE execution attempt occurred in this run; no PASS claimed. New CI run 
 Run 43433360326: NXDK fixture build/upload PASS; kernel host build PASS; main x64 build PASS; Win32 guest build PASS; network/API tests PASS; ABI v2 export check PASS; synthetic guest execution/TLS PASS. Joint real-XBE test still did not run.
 Exact failure remained `c1xx: fatal error C1083: Cannot open source file: 'modules/xbe_loader/xbe_format.cpp'` (and `xbe_loader.cpp`) after vcvars64 initialization. Path spelling is valid, but the MSVC setup step did not leave the shell at the repository root. Added explicit `cd /d "%GITHUB_WORKSPACE%"` immediately after vcvars64 in commit fb82396e0bae985fe6f0650f71ccf5df33d6941f.
 The run also confirmed dumpbin discovery is now successful. No real XBE execution attempt yet. New CI run triggered by fb82396e0bae985fe6f0650f71ccf5df33d6941f.
+
+
+[2026-11-13 13:29 UTC] [C Coordinator — XBE loader verified and merged]
+Status: MERGED into main. PR #12: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12
+Squash merge commit: 8b5f128637e84c405cbbc7a20ad3137954b73362
+Final branch head tested: 323d82fda5a83f11a47655602844e4f816bfc42d
+
+Coordinator review and hardening:
+- Added complete 24-byte TLS directory range validation; it must fit wholly in one mapped image range and must not overflow 32-bit guest address arithmetic.
+- Added regression cases for a TLS directory crossing a section boundary and for a near-UINT32_MAX TLS address.
+- Confirmed the kernel branch's shared xbe_backend_api.h ABI v2 declarations match the loader branch's declarations at source level.
+
+Executed CI evidence (both runs completed successfully):
+- Push run 43433733565: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43433733565
+- PR run 43433738798: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43433738798
+- Portable parser compile/run PASS, including new TLS boundary regressions.
+- Pinned NXDK hello sample built and default.xbe artifact uploaded PASS.
+- Windows x64 loader DLL build with /W4 /WX PASS; DLL architecture/export checks PASS.
+- Synthetic ABI v1/v2 backend handoff and stop/release lifecycle tests PASS.
+- Actual NXDK-generated default.xbe passed LoadXbe parsing, mapping, fake ABI v2 handoff, and stop/release lifecycle. Output included base=0x00010000, size=0x0001A114, entry=0x00018C00, TLS=0x00025050, sections=4; final line: PASS: NXDK-built XBE parsed, mapped, handed off, and released.
+
+Important scope limit: the NXDK fixture uses a fake backend in the loader workflow. This proves real-file parse/map/handoff and lifecycle, NOT execution of Xbox instructions through the real kernel. Do not mark the complete XBE execution milestone done. Kernel's separate real-loader + real-ABI-v2 integration workflow remains the acceptance gate.
+
+Next: all teams should consume loader ABI v2 from main. Kernel team continues the real NXDK XBE + real backend execution test. XBE loader team continues XDVDFS/FATX.
