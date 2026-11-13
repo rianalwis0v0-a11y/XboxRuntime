@@ -236,13 +236,15 @@ endif()
 file(READ "${_vsh_h}" _vsh_hdr)
 string(FIND "${_vsh_hdr}" "XBOXRUNTIME_NV2A_VSH_OUTPUT_MASK_PATCH" _hdr_patched)
 if(_hdr_patched LESS 0)
-    set(_old_dst [=[
-typedef struct NV2AVshDstOperand {
-    int               temp_reg;    /* Temp register index (0-12), or -1 if none */
-    NV2AVshOutputReg  output_reg;  /* Output register, or NV2A_VSH_OUT_NONE */
-    uint8_t           write_mask;  /* Bitmask: bit3=x, bit2=y, bit1=z, bit0=w */
-} NV2AVshDstOperand;
-]=])
+    string(FIND "${_vsh_hdr}" "typedef struct NV2AVshDstOperand {" _dst_start)
+    string(FIND "${_vsh_hdr}" "} NV2AVshDstOperand;" _dst_end)
+    if(_dst_start LESS 0 OR _dst_end LESS _dst_start)
+        message(FATAL_ERROR "Could not locate NV2AVshDstOperand in pinned xboxrecomp header")
+    endif()
+    string(LENGTH "} NV2AVshDstOperand;" _dst_end_len)
+    math(EXPR _dst_after_end "${_dst_end} + ${_dst_end_len}")
+    string(SUBSTRING "${_vsh_hdr}" 0 ${_dst_start} _hdr_prefix)
+    string(SUBSTRING "${_vsh_hdr}" ${_dst_after_end} -1 _hdr_suffix)
     set(_new_dst [=[
 typedef struct NV2AVshDstOperand {
     int               temp_reg;    /* Temp register index (0-12), or -1 if none */
@@ -251,11 +253,7 @@ typedef struct NV2AVshDstOperand {
     uint8_t           output_write_mask; /* Output-register write mask */
 } NV2AVshDstOperand; /* XBOXRUNTIME_NV2A_VSH_OUTPUT_MASK_PATCH */
 ]=])
-    string(FIND "${_vsh_hdr}" "${_old_dst}" _dst_found)
-    if(_dst_found LESS 0)
-        message(FATAL_ERROR "Could not locate NV2AVshDstOperand in pinned xboxrecomp header")
-    endif()
-    string(REPLACE "${_old_dst}" "${_new_dst}" _vsh_hdr "${_vsh_hdr}")
+    set(_vsh_hdr "${_hdr_prefix}${_new_dst}${_hdr_suffix}")
     file(WRITE "${_vsh_h}" "${_vsh_hdr}")
 endif()
 
