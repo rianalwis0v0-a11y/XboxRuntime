@@ -65,6 +65,12 @@ static int compile_program(const DWORD* instructions, unsigned count,
         return 6;
     }
 
+    const int length = d3d8_vsh_generate_hlsl(
+        &program, hlsl, (int)sizeof(hlsl));
+    if (length <= 0 || length >= (int)sizeof(hlsl)) {
+        fprintf(stderr, "FAIL: %s HLSL generation failed\\n", label);
+        return 1;
+    }
     if (strstr(label, "paired snapshot") &&
         (!strstr(hlsl, "R_pre[0] = R0;") ||
          !strstr(hlsl, "R1 = (R_pre[0]);"))) {
@@ -72,12 +78,6 @@ static int compile_program(const DWORD* instructions, unsigned count,
         return 10;
     }
 
-    const int length = d3d8_vsh_generate_hlsl(
-        &program, hlsl, (int)sizeof(hlsl));
-    if (length <= 0 || length >= (int)sizeof(hlsl)) {
-        fprintf(stderr, "FAIL: %s HLSL generation failed\\n", label);
-        return 1;
-    }
     if (!strstr(hlsl, "SV_POSITION")) {
         fprintf(stderr, "FAIL: %s generated HLSL has no position output\\n",
                 label);
