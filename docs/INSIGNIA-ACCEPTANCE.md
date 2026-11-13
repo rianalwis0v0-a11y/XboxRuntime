@@ -68,3 +68,19 @@ The milestone is **PASS** only when a real supported title in the x86 guest
 completes the Insignia connection/sign-in flow using real network traffic.
 DNS-only success, a successful Winsock startup, stubbed exports, and compile
 success are intermediate checks, not acceptance.
+
+
+## Networking implementation progress
+
+The first guest-side transport foundation is now present in `guest32/network_compat.cpp`:
+
+- Winsock 2.2 startup with reference-counted initialization and cleanup.
+- IPv4 hostname resolution through the Windows resolver.
+- TCP and UDP socket creation.
+- TCP/connected-UDP connect, bind, listen, accept, send, receive, and socket timeouts.
+- 32-bit guest tokens map to host `SOCKET` values; raw host socket handles are never exposed as guest tokens.
+- Closing a guest token removes it from the handle table before closing the host socket.
+
+A `network_smoke` CTest target checks Winsock startup, resolving `localhost`, creating TCP/UDP sockets, and closing them.
+
+**Important limitation:** this is a transport backend, not yet the Xbox XNet/XSocket ABI. The XBE loader currently resolves the Xbox kernel thunk table only; it does not yet parse non-kernel import libraries and bind XNet/XSocket imports to these functions. Therefore this commit does not make Insignia sign-in or multiplayer work yet. The next required step is implementing the XBE non-kernel import resolver and the correct Xbox XNet/XSocket ABI/structure mappings, then running a real title against Insignia.
