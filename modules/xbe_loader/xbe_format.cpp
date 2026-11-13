@@ -70,6 +70,7 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
         return {Error::InvalidHeaderSize, parsed.headerSize};
 
     if (parsed.imageSize < parsed.headerSize ||
+        parsed.imageSize > kMaximumImageSize ||
         parsed.baseAddress == 0 ||
         AddOverflows(parsed.baseAddress, parsed.imageSize))
         return {Error::InvalidImageSize, parsed.imageSize};
@@ -167,7 +168,7 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
 
     if (parsed.tlsAddress != 0 &&
         (parsed.tlsAddress < parsed.baseAddress ||
-         static_cast<std::uint64_t>(parsed.tlsAddress) >=
+         static_cast<std::uint64_t>(parsed.tlsAddress) + 24u >
              static_cast<std::uint64_t>(parsed.baseAddress) + parsed.imageSize))
         return {Error::InvalidSection, parsed.tlsAddress};
 
@@ -188,7 +189,9 @@ Result MapImage(const std::uint8_t* file, std::size_t fileSize,
                 std::size_t destinationSize) noexcept {
     if (!file || !destination) return {Error::NullArgument, 0};
     if (image.sectionCount == 0 || image.sectionCount > kMaximumSections ||
-        image.baseAddress == 0 || AddOverflows(image.baseAddress, image.imageSize))
+        image.baseAddress == 0 || image.headerSize > image.imageSize ||
+        image.imageSize > kMaximumImageSize ||
+        AddOverflows(image.baseAddress, image.imageSize))
         return {Error::InvalidImageSize, image.imageSize};
     if (image.imageSize == 0 || image.headerSize > fileSize ||
         image.imageSize > destinationSize)
@@ -199,10 +202,13 @@ Result MapImage(const std::uint8_t* file, std::size_t fileSize,
 
     for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
         const Section& s = image.sections[i];
+        if (s.virtualAddress < image.baseAddress || s.virtualSize == 0 ||
+            s.rawSize > s.virtualSize ||
+            (s.rawSize != 0 && s.rawAddress < image.headerSize))
+            return {Error::InvalidSection, i};
         const std::size_t destinationOffset = s.virtualAddress - image.baseAddress;
         if (!RangeInside(s.rawAddress, s.rawSize, fileSize) ||
-            !RangeInside(destinationOffset, s.virtualSize, image.imageSize) ||
-            s.rawSize > s.virtualSize)
+            !RangeInside(destinationOffset, s.virtualSize, image.imageSize))
             return {Error::InvalidSection, i};
         if (s.rawSize)
             std::memcpy(destination + destinationOffset,
