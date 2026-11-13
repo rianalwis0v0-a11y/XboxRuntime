@@ -399,3 +399,17 @@ Networking requirements: include XNet startup/cleanup, DNS lookup/release, title
 Scope: “every API” means every API in the explicitly versioned generated fixture manifest, plus a separately tracked nxdk API inventory. It does not mean falsely claiming all proprietary XDK APIs are covered. Preserve exact calling conventions, structure layouts, and ordinal provenance; do not invent imports or stubs that report success without implementing behavior.
 Build/test evidence: Challenge issue #14 remains the authoritative task. No implementation or passing test is claimed by this coordinator update.
 Next: fixture owner must publish the manifest before implementation, then subsystem teams implement and test their assigned API groups.
+
+[2026-11-13 12:26 UTC] [NV2A graphics subsystem session — real shader parser defect found]
+Status: IN_PROGRESS — Windows configure now passes; module build and CTest are running.
+Branch / PR / latest commit: feature/nv2a-completion-v2 / PR #13 / d3be3123b554a2c7e73699cbfe6efc5ccc0170b7
+Important diagnosis:
+- The first strengthened test run (43423811965) exposed that the D3D8 HLSL translator parsed the test's supposed MOV as NOP. Inspection against the pinned xboxrecomp NV2A interpreter decoder showed the D3D8 translator's parser was reading opcode/source/destination fields from the wrong DWORD positions. This would prevent real title vertex microcode from being translated correctly.
+- Added cmake/ApplyXboxRecompNv2aVshPatch.cmake and included it before add_subdirectory(third_party/xboxrecomp). On Windows it applies an idempotent source-tree patch to the pinned D3D8 translator: opcode/shared indices from DWORD1; source mux/swizzle/registers from DWORD2/3; MAC temp mask, ILU temp mask, temp destination, output mask/routing and FINAL from DWORD3. Added a separate output_write_mask in NV2AVshDstOperand. The pinned submodule commit itself is unchanged.
+- Corrected the HLSL microcode test to use the actual hardware word layout and assert exact input masks for MOV v0 -> oPos, ADD v5+v5 -> oPos and MOV c[17] -> oPos.
+- Corrected the 16-level DMA stack test fixture's PUT boundary; the CALL target must be beyond PUT so the subroutine is actually entered. Depth-17 overflow fixture still includes a PGRAPH method before overflow and checks that validation prevents any dispatch.
+CI history:
+- Run 43423811965 built modules but CTest failed: DMA 16-depth fixture stopped at PUT before executing the subroutine; HLSL test correctly exposed the parser's wrong DWORD layout.
+- Run 43424915830 failed during configure because the first patch script anchor did not match the upstream comment layout. The anchor was corrected.
+- Latest run 43425092768 for commit d3be3123b554a2c7e73699cbfe6efc5ccc0170b7: Configure x64 host succeeded; Build x64 host modules is in progress. No current test pass claimed yet.
+Remaining: Await build and CTest. Then fix any compile or semantic failures. The translator still needs broader MAC/ILU parallel-read semantics tests, full instruction coverage and a real D3D11 device/draw test.
