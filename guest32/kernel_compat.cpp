@@ -542,7 +542,12 @@ extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* i
         FILETIME a{DWORD(p->LastAccessTime.QuadPart),DWORD(ULONGLONG(p->LastAccessTime.QuadPart)>>32)};
         FILETIME w{DWORD(p->LastWriteTime.QuadPart),DWORD(ULONGLONG(p->LastWriteTime.QuadPart)>>32)};
         ok=SetFileTime(h,p->CreationTime.QuadPart?&c:nullptr,p->LastAccessTime.QuadPart?&a:nullptr,p->LastWriteTime.QuadPart?&w:nullptr);
-        if(ok && p->FileAttributes) ok=SetFileAttributesW(L"",p->FileAttributes); // attributes require a path; timestamps are still applied.
+        if(ok && p->FileAttributes) {
+            WCHAR path[MAX_PATH*4]{};
+            DWORD n=GetFinalPathNameByHandleW(h,path,static_cast<DWORD>(sizeof(path)/sizeof(path[0])),FILE_NAME_NORMALIZED);
+            if(!n || n>=sizeof(path)/sizeof(path[0])) ok=FALSE;
+            else ok=SetFileAttributesW(path,p->FileAttributes);
+        }
     } else if(infoClass==13) {
         if(length<sizeof(GuestFileDispositionInformation)) return LONG(0xC0000004u);
         FILE_DISPOSITION_INFO native{}; native.DeleteFile=static_cast<GuestFileDispositionInformation*>(in)->DeleteFile;
