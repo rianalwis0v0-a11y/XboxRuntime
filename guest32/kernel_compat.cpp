@@ -2700,6 +2700,8 @@ std::uint32_t g_lastGuestExceptionCode = 0;
 std::uint32_t g_lastGuestExceptionInstruction = 0;
 std::uint32_t g_lastGuestAccessType = 0;
 std::uint32_t g_lastGuestFaultAddress = 0;
+std::uint32_t g_lastGuestFaultProtection = 0;
+std::uint32_t g_lastGuestFaultState = 0;
 
 int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
     if (exception && exception->ExceptionRecord) {
@@ -2714,6 +2716,13 @@ int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
                 static_cast<std::uint32_t>(record->ExceptionInformation[0]);
             g_lastGuestFaultAddress =
                 static_cast<std::uint32_t>(record->ExceptionInformation[1]);
+            MEMORY_BASIC_INFORMATION memory{};
+            if (VirtualQuery(reinterpret_cast<const void*>(
+                    static_cast<std::uintptr_t>(g_lastGuestFaultAddress)),
+                    &memory, sizeof(memory)) == sizeof(memory)) {
+                g_lastGuestFaultProtection = memory.Protect;
+                g_lastGuestFaultState = memory.State;
+            }
         }
     }
     return EXCEPTION_EXECUTE_HANDLER;
@@ -2723,11 +2732,15 @@ int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
 void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
                                           std::uint32_t* instruction,
                                           std::uint32_t* accessType,
-                                          std::uint32_t* faultAddress) {
+                                          std::uint32_t* faultAddress,
+                                          std::uint32_t* faultProtection,
+                                          std::uint32_t* faultState) {
     if (code) *code = g_lastGuestExceptionCode;
     if (instruction) *instruction = g_lastGuestExceptionInstruction;
     if (accessType) *accessType = g_lastGuestAccessType;
     if (faultAddress) *faultAddress = g_lastGuestFaultAddress;
+    if (faultProtection) *faultProtection = g_lastGuestFaultProtection;
+    if (faultState) *faultState = g_lastGuestFaultState;
 }
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
@@ -2823,6 +2836,8 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
     g_lastGuestExceptionInstruction = 0;
     g_lastGuestAccessType = 0;
     g_lastGuestFaultAddress = 0;
+    g_lastGuestFaultProtection = 0;
+    g_lastGuestFaultState = 0;
     DWORD result = 0;
     using Entry = void (__cdecl*)();
     __try {
