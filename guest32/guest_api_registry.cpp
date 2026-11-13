@@ -150,6 +150,14 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(
             // XNet's named imports are supported. Ordinal imports require an
             // authoritative per-library ordinal map and are intentionally rejected.
             if (importNameAddress & 0x80000000u) return false;
+            // PE-derived XBE thunk data may be represented as an image VA or
+            // as an RVA. Normalize both forms without accepting out-of-image data.
+            if (!GuestRange(imageBase, imageSize, importNameAddress, 3)) {
+                if (importNameAddress >= imageSize ||
+                    std::uint64_t(imageBase) + importNameAddress > 0xFFFFFFFFull)
+                    return false;
+                importNameAddress += imageBase;
+            }
             if (!GuestRange(imageBase, imageSize, importNameAddress, 3)) return false;
 
             const char* functionName = reinterpret_cast<const char*>(
