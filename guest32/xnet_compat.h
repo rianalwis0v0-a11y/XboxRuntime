@@ -83,6 +83,7 @@ int WINAPI XSocketListen(SOCKET socket, int backlog);
 SOCKET WINAPI XSocketAccept(SOCKET socket, struct sockaddr* address, int* addressLength);
 int WINAPI XSocketShutdown(SOCKET socket, int how);
 int WINAPI XSocketIOCTLSocket(SOCKET socket, long command, u_long* argument);
+int WINAPI XSocketSelect(int nfds, fd_set* readfds, fd_set* writefds, fd_set* exceptfds, const timeval* timeout);
 int WINAPI XSocketSetSockOpt(SOCKET socket, int level, int option, const char* value, int length);
 int WINAPI XSocketGetSockOpt(SOCKET socket, int level, int option, char* value, int* length);
 int WINAPI XSocketGetSockName(SOCKET socket, struct sockaddr* address, int* addressLength);
