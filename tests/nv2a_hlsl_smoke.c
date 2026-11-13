@@ -37,6 +37,26 @@ static int compile_program(const DWORD* instructions, unsigned count,
         fprintf(stderr, "FAIL: %s ADD A+C decode is incorrect\\n", label);
         return 7;
     }
+    if (strstr(label, "MAD A+B+C") &&
+        (program.insns[0].mac_op != NV2A_VSH_MAC_MAD ||
+         program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_TEMP ||
+         program.insns[0].mac_src[1].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[2].mac_src[2].reg_type != NV2A_VSH_REG_CONST ||
+         program.inputs_read != (1u << 2) ||
+         program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].mac_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s MAD A+B+C decode is incorrect\\n", label);
+        return 8;
+    }
+    if (strstr(label, "ILU LIT C") &&
+        (program.insns[0].ilu_op != NV2A_VSH_ILU_LIT ||
+         program.insns[0].ilu_src.reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].ilu_src.reg_index != 3 ||
+         program.insns[0].ilu_dst.output_reg != NV2A_VSH_OUT_POS ||
+         program.insns[0].ilu_dst.output_write_mask != 0xFu)) {
+        fprintf(stderr, "FAIL: %s ILU C/output decode is incorrect\\n", label);
+        return 9;
+    }
     if (strstr(label, "constant-to-oPos") &&
         (program.insns[0].mac_op != NV2A_VSH_MAC_MOV ||
          program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_CONST ||
@@ -108,6 +128,22 @@ int main(void)
     if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
         return 3;
 
+    /* MAC MAD R0 * v2 + c9 -> oPos exercises all three source fields. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (4u << 21) | (9u << 13) | (2u << 9);
+    instruction[2] = (1u << 26) | (2u << 11);
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) | 1u;
+    if (compile_program(instruction, 1u, "NV2A MAD A+B+C") != 0)
+        return 4;
+
+    /* ILU LIT c3 -> oPos exercises the paired ILU output mux. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (7u << 25) | (3u << 13);
+    instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) |
+                     (1u << 2) | 1u;
+    if (compile_program(instruction, 1u, "NV2A ILU LIT C") != 0)
+        return 5;
+
     /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (1u << 21) | (5u << 13) | 0x1Bu;
@@ -116,6 +152,6 @@ int main(void)
     if (compile_program(instruction, 1u, "NV2A MOV constant-to-oPos") != 0)
         return 4;
 
-    puts("PASS: NV2A NOP, input MOV, input ADD, and constant MOV shader translation");
+    puts("PASS: NV2A NOP, MOV, ADD, MAD, ILU LIT, and constant shader translation");
     return 0;
 }
