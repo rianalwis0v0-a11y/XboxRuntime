@@ -497,3 +497,11 @@ Remaining blockers:
 Next concrete milestone:
 - Joint loader/kernel test: generate or supply a minimal valid homebrew XBE and run it through LoadXbe using the registered ABI v2 backend; record the exact result.
 - In parallel, design the per-thread KPCR/TIB + FS access rewrite path against the Cxbx reference, without changing the approved shared ABI.
+
+[2026-11-13 12:30 UTC] [NV2A graphics subsystem session — paired MAC/ILU semantics]
+Status: IN_PROGRESS; new Windows CI run is active.
+Branch / PR / latest commit: feature/nv2a-completion-v2 / PR #13 / 1bc3311d6dd21a9c0aa62271e9801e2f2b0b92bc
+Additional correctness fix: The upstream HLSL generator emitted MAC then ILU sequentially and assumed that was equivalent to hardware parallel execution. The NV2A interpreter confirms A/B/C are read before either unit writes. Added per-instruction HLSL source snapshots whenever both MAC and ILU are active, then emits both operations against the snapshots. Extended the internal source-register enum with a generated-HLSL snapshot type.
+Regression: paired instruction uses MAC MOV c[17] -> R1/oPos while ILU RCP reads old R1.x. Test checks the generated source captures R1 before the MAC write and uses the snapshot in the ILU expression, then compiles the HLSL. Existing MOV, ADD and constant cases remain.
+Files changed in this follow-up: cmake/ApplyXboxRecompNv2aVshPatch.cmake, tests/nv2a_hlsl_smoke.c, docs/NV2A-INTEGRATION.md.
+CI run 43425636108 is active; CMake configure has started. No result for the new paired MAC/ILU test claimed yet. Prior run 43425092768 passed all 5 subsystem CTests (including NV2A) and failed only at the pre-existing diagnostic XBE stage with 0xC0000409, also reproduced on PR #3 base branch run 43399404595.
