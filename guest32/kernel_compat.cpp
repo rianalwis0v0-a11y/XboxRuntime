@@ -821,7 +821,10 @@ extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIo
         std::unique_lock<std::mutex> lock(g_dvdFileMutex);
         auto dvd = g_dvdFiles.find(h);
         if (dvd != g_dvdFiles.end()) {
-            if (dvd->second.directory) return LONG(0xC00000BAu);
+            if (dvd->second.directory) {
+                if (io) { io->Status = LONG(0xC00000BAu); io->Information = 0; }
+                return LONG(0xC00000BAu);
+            }
             if (offset && offset->QuadPart < 0) return LONG(0xC000000Du);
             const uint64_t start = offset ? static_cast<uint64_t>(offset->QuadPart) : dvd->second.position;
             if (start > dvd->second.size) {
@@ -1210,11 +1213,10 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
 }
 
 extern "C" LONG __stdcall K_NtClose(HANDLE h){
-    bool dvdHandle = false;
     {
         std::lock_guard<std::mutex> lock(g_dvdFileMutex);
         auto found = g_dvdFiles.find(h);
-        if (found != g_dvdFiles.end()) { g_dvdFiles.erase(found); dvdHandle = true; }
+        if (found != g_dvdFiles.end()) g_dvdFiles.erase(found);
     }
     CloseGuestDirectorySearch(h);
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
