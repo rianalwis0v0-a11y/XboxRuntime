@@ -28,6 +28,8 @@ static uint32_t g_transform_execution_mode;
 /* Mirror NV2A program/constant upload ports into the existing D3D11 HLSL
  * translator. The translator compiles on the first draw and caches by
  * microcode hash; subsequent draws bind the cached ID3D11VertexShader. */
+/* NV2A vertex register file mirrored from PFIFO/PGRAPH uploads.
+ * The CPU owns register state only; vertex instructions execute on D3D11. */
 static DWORD g_nv2a_vsh_program[136][4];
 static float g_nv2a_vsh_constants[192][4];
 static uint64_t g_nv2a_vsh_constant_dirty[3];
@@ -35,7 +37,6 @@ static uint32_t g_nv2a_vsh_load_slot, g_nv2a_vsh_load_word;
 static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
 static uint32_t g_nv2a_vsh_constant_word;
 static DWORD g_nv2a_vsh_handle;
-static uint16_t g_nv2a_vsh_input_mask;
 static int g_nv2a_vsh_dirty = 1;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
@@ -2106,7 +2107,6 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
                 &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
                 instruction_count, &metadata) != 0)
             return 0;
-        g_nv2a_vsh_input_mask = metadata.input_mask;
         if (g_nv2a_vsh_handle) {
             (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
             g_nv2a_vsh_handle = 0;
