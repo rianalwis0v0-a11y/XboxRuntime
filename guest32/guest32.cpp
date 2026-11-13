@@ -169,7 +169,7 @@ int wmain(int argc,wchar_t**argv){
   if(!xbeThread)ok=false;
  }
  if(xbeThread){WaitForSingleObject(xbeThread,INFINITE);CloseHandle(xbeThread);}
- struct DiagnosticReport { uint32_t magic,passed,failed,skipped,firstFailedCheck; } report{};
+ struct DiagnosticReport { uint32_t magic,passed,failed,skipped,firstFailedCheck,progress; } report{};
  if(reportVa && g_image && reportVa>=r.imageBase && uint64_t(reportVa)+sizeof(report)<=uint64_t(r.imageBase)+r.imageSize){
   std::memcpy(&report,reinterpret_cast<const void*>(uintptr_t(reportVa)),sizeof(report));
   if(report.magic==0x54535258u)WriteExact(pipe,&report,sizeof(report));

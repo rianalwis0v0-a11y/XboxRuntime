@@ -8,6 +8,7 @@ $base = [uint32]0x10000000
 $entryVa = [uint32]0x10001000
 $reportVa = [uint32]0x10006000
 $passedVa = [uint32]($reportVa + 4)
+$progressVa = [uint32]($reportVa + 0x14)
 $failedVa = [uint32]($reportVa + 8)
 $failedCheckVa = [uint32]($reportVa + 0x10)
 $skippedVa = [uint32]($reportVa + 12)
@@ -847,6 +848,7 @@ EmitPush $listHeadVa
 EmitCallImport 34
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 1
 # Initialize a KQUEUE, insert at tail/head, remove in FIFO order, then time out.
 $queueVa = [uint32]($reportVa + 0xA00)
 $queueTailEntryVa = [uint32]($reportVa + 0xA40)
@@ -881,6 +883,7 @@ EmitPush $queueVa
 EmitCallImport 136
 EmitCheckEqual 258
 
+EmitMovMemoryImmediate $progressVa 2
 # Open the title directory and enumerate a real fixture entry.
 $directoryUnicodeVa = [uint32]($base + 0x61C0)
 $directoryObjectAttributesVa = [uint32]($base + 0x61D0)
@@ -916,6 +919,7 @@ EmitPushMemory $directoryHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 3
 # The generic invalid-device dispatch routine must return its documented status.
 EmitPush 0
 EmitPush 0
@@ -967,7 +971,10 @@ EmitCheckEqual 0
 EmitIncrement $skippedVa
 EmitIncrement $skippedVa
 EmitIncrement $skippedVa
+EmitMovMemoryImmediate $progressVa 4
 EmitByte 0x31; EmitByte 0xC0
+EmitCheckEqual 0
+Write-HostEmitByte 0x31; EmitByte 0xC0
 EmitCheckEqual 0
 Write-Host "Generated diagnostic assertions: $script:checkIndex"
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
@@ -1075,7 +1082,7 @@ try {
         $exit = if ($proc.HasExited) { $proc.ExitCode } else { "still running" }
         throw "Guest pipe closed before diagnostic release; process exit=$exit. $($_.Exception.Message)"
     }
-    $report = [byte[]]::new(20)
+    $report = [byte[]]::new(24)
     $read = 0
     while ($read -lt $report.Length) {
         $n = $pipe.Read($report,$read,$report.Length-$read)
@@ -1091,8 +1098,9 @@ try {
     $failed = [BitConverter]::ToUInt32($report,8)
     $skipped = [BitConverter]::ToUInt32($report,12)
     $failedCheck = [BitConverter]::ToUInt32($report,16)
+    $progress = [BitConverter]::ToUInt32($report,20)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
-    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck"
+    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress"
     if ($failed -ne 0 -or $passed -lt 20 -or $skipped -gt 3) {
         throw "Diagnostic XBE reported an unexpected result."
     }
