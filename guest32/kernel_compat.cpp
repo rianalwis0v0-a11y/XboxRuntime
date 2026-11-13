@@ -500,7 +500,10 @@ static LONG OpenDvdFile(HANDLE* output, const std::string& path,
     constexpr LONG statusInsufficientResources = LONG(0xC000009Au);
     if (!output) return LONG(0xC000000Du);
     if (!g_dvdReady) return statusDeviceNotReady;
-    if ((access & 0x40000000u) || (access & 0x2u) || disposition != 1u)
+    constexpr uint32_t kWriteAccessMask =
+        0x40000000u | 0x10000000u | 0x00000002u | 0x00000004u |
+        0x00000010u | 0x00000100u | 0x00010000u | 0x00040000u | 0x00080000u;
+    if ((access & kWriteAccessMask) || disposition != 1u)
         return statusMediaWriteProtected;
     XDVDFS_FILE_INFO info{};
     bool isDirectory = path.empty();
