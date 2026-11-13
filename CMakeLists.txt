@@ -13,6 +13,7 @@ endif()
 
 # Correct the pinned D3D8 translator's NV2A microcode decoder before it is compiled.
 include("${CMAKE_CURRENT_SOURCE_DIR}/modules/nv2a/patches/patch_xboxrecomp_vsh.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/modules/nv2a/patches/patch_xboxrecomp_device_share.cmake")
 add_subdirectory(third_party/xboxrecomp)
 add_subdirectory(modules/nv2a)
 add_subdirectory(modules/insignia_dns)
