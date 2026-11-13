@@ -103,7 +103,8 @@ int wmain(int argc, wchar_t** argv) {
                 XboxKernelState state{
                     message.imageBase, message.imageSize, message.headerSize,
                     message.entryPoint, message.sectionCount, message.tlsAddress,
-                    message.nonKernelImportDirectoryAddress
+                    message.nonKernelImportDirectoryAddress,
+                    message.kernelThunkAddress
                 };
                 status = (XboxKernelResolveImports(state) &&
                           XboxKernelProtectImage()) ? ERROR_SUCCESS : ERROR_BAD_EXE_FORMAT;
