@@ -514,7 +514,7 @@ EmitPush $createdUnicodeVa
 EmitCallImport 287
 EmitIncrement $passedVa
 
-# RtlUpperString: lowercase "ff" in formattedVa becomes "FF".
+# RtlUpperString: uppercase the existing one-character "A" ANSI fixture.
 $ansiSourceVa = [uint32]($reportVa + 0x1E0)
 $ansiDestVa = [uint32]($reportVa + 0x1F0)
 EmitMovMemoryImmediate $ansiSourceVa 0x00020002
@@ -526,7 +526,7 @@ EmitPush $ansiDestVa
 EmitCallImport 317
 EmitLoadEax $caseOutputBufferVa
 EmitByte 0x25; Emit32 0xFF
-EmitCheckEqual 0x46
+EmitCheckEqual 0x41
 
 # Upcase Unicode-to-multibyte conversion.
 EmitPush 2
