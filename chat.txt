@@ -549,3 +549,19 @@ Latest CI: run 43426277616 for 5835e16999f59db2133d5a564fa5ca0f96750a5e is queue
 Status: NV2A subsystem CTests PASS; overall Windows workflow continues through native x86 guest validation.
 Branch / PR / latest commit: feature/nv2a-completion-v2 / PR #13 / c252f053abe203e1d73cff6a4e0f68a6914197c8
 Windows run: 43426137299. Configure x64 host PASS; build x64 host modules PASS; subsystem test step PASS (includes nv2a_smoke and nv2a_hlsl_smoke). The new paired MAC/ILU test now passes its HLSL source-order assertion and VS 5.0 compilation. This follows the prior 5/5 subsystem pass at d3be312 and adds the source snapshot semantic regression. Native x86 guest configure is currently in progress. Full workflow result not yet available; the known 0xC0000409 diagnostic XBE failure has already reproduced on PR #3 base branch, so it remains a separate baseline issue unless evidence changes.
+
+
+[2026-11-13 12:38 UTC] [Networking team — delivery reset response]
+Priority: P3 Networking.
+Branch: work/xbox-networking-integration.
+Latest test-fix commit: 5835e16999f59db2133d5a564fa5ca0f96750a5e
+Changed file in that commit: tests/network_smoke.cpp (DNS event wait now allows asynchronous completion up to 5 seconds; prior test incorrectly expected synchronous completion).
+Functional work already committed on this branch:
+- XSocketSelect guest-token/native-handle translation and lease-safe select path, with UDP readiness smoke test (select tranche commits through eaa723881e480280088f81f1c186f2d6a1fceaa0; touched guest32/network_compat.h, guest32/network_compat.cpp, guest32/xnet_compat.h, guest32/xnet_compat.cpp, tests/network_smoke.cpp, docs/XNET-API-MANIFEST.md).
+- XNetDnsLookup asynchronous worker/event completion with independent Winsock reference and cleanup-race protection; XNetGetTitleXnAddr Ethernet flag; async DNS smoke coverage (implementation in guest32/xnet_compat.cpp; test coverage in tests/network_smoke.cpp; manifest updated).
+- Socket argument validation and thread-safe IPv4 address formatting (guest32/xnet_compat.cpp; tests/network_smoke.cpp; manifest).
+CI evidence:
+- Select-only tranche passed Guest networking validation run 43425479052.
+- Async DNS correction commit 5835e16999f59db2133d5a564fa5ca0f96750a5e is currently under CI: network run 43426290217 and full-module run 43426290213, both in_progress at report time. Network job currently configuring dedicated x86 guest; later steps including build and runtime smoke are pending. No PASS claimed for latest code.
+Blocker/error: no new compiler/runtime error reported yet for the current runs; awaiting execution. Previous async DNS run 43426060355 built the guest and smoke executable but runtime smoke failed because the old test waited with timeout=0 for an asynchronous DNS event. Corrected in 5835e16999f59db2133d5a564fa5ca0f96750a5e.
+Remaining P3 blockers: verified XBE call dispatch for these APIs; authoritative Xbox SDK ABI review; WSA overlapped I/O; XNet key/security, QoS, NAT traversal and online XNADDR; real title networking/sign-in/session tests against Insignia. Current implementation is NOT production-complete and must not be marked PASS until the current CI and guest-facing integration tests pass.
