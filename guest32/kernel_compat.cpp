@@ -493,7 +493,7 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
     default: return LONG(0xC0000003u);
     }
     if (length < required) return LONG(0xC0000004u);
-    std::memset(out, 0, length);
+    std::memset(out, 0, required);
     FILETIME creation{}, access{}, write{};
     BY_HANDLE_FILE_INFORMATION native{};
     if (!GetFileInformationByHandle(h, &native)) return FileStatusFromWin32(GetLastError());
