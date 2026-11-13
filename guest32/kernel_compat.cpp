@@ -2684,6 +2684,17 @@ static void ReleaseGuestTls(DWORD& tlsIndex, void*& tlsBlock,
     if (tlsIndexSlot) *tlsIndexSlot = TLS_OUT_OF_INDEXES;
 }
 
+static DWORD InvokeGuestTlsCallback(uint32_t address, void* image,
+                                      DWORD reason) {
+    using Callback = void (NTAPI*)(void*, DWORD, void*);
+    __try {
+        reinterpret_cast<Callback>(uintptr_t(address))(image, reason, nullptr);
+        return ERROR_SUCCESS;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return GetExceptionCode();
+    }
+}
+
 DWORD WINAPI XboxKernelStartXbe(void*) {
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
@@ -2755,10 +2766,17 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
         }
         *tlsIndexSlot = tlsIndex;
 
-        using Callback = void (NTAPI*)(void*, DWORD, void*);
         for (; attachedCallbacks < callbackCount; ++attachedCallbacks) {
-            reinterpret_cast<Callback>(uintptr_t(callbacks[attachedCallbacks]))(
-                g_image, DLL_PROCESS_ATTACH, nullptr);
+            const DWORD callbackStatus = InvokeGuestTlsCallback(
+                callbacks[attachedCallbacks], g_image, DLL_PROCESS_ATTACH);
+            if (callbackStatus != ERROR_SUCCESS) {
+                while (attachedCallbacks) {
+                    InvokeGuestTlsCallback(callbacks[--attachedCallbacks],
+                                           g_image, DLL_PROCESS_DETACH);
+                }
+                ReleaseGuestTls(tlsIndex, tlsBlock, tlsIndexSlot);
+                return callbackStatus;
+            }
         }
     }
 
@@ -2777,10 +2795,8 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
 
     // Detach only callbacks whose attach invocation completed, in reverse order.
     while (attachedCallbacks) {
-        const uint32_t callback = callbacks[--attachedCallbacks];
-        using Callback = void (NTAPI*)(void*, DWORD, void*);
-        reinterpret_cast<Callback>(uintptr_t(callback))(
-            g_image, DLL_PROCESS_DETACH, nullptr);
+        InvokeGuestTlsCallback(callbacks[--attachedCallbacks],
+                               g_image, DLL_PROCESS_DETACH);
     }
     ReleaseGuestTls(tlsIndex, tlsBlock, tlsIndexSlot);
     return result;
