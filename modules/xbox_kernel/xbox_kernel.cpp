@@ -308,7 +308,7 @@ extern "C" void __cdecl ModuleStop() {
 extern "C" std::uint32_t __cdecl XboxKernelGetGuestApiAddress(const char* symbolName) {
     if (!symbolName) return 0;
     const std::size_t length = std::strlen(symbolName);
-    if (!length || length >= sizeof(XboxGuestCommandMessage::symbolName)) return 0;
+    if (!length || length >= 64u) return 0;
     std::lock_guard<std::mutex> lock(g_mutex);
     BackendContext& context = g_context;
     if (context.pipe == INVALID_HANDLE_VALUE || !context.process.hProcess ||
