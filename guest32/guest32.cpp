@@ -216,7 +216,15 @@ int wmain(int argc,wchar_t**argv){
   xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);
   if(!xbeThread)ok=false;
  }
- if(xbeThread){WaitForSingleObject(xbeThread,INFINITE);CloseHandle(xbeThread);}
+ if(xbeThread){
+  WaitForSingleObject(xbeThread,INFINITE);
+  DWORD guestExit=0;
+  if(!GetExitCodeThread(xbeThread,&guestExit)||guestExit!=0){
+   OutputDebugStringW(L"[XboxGuest] XBE entry thread exited with an exception or nonzero status.\\n");
+   ok=false;
+  }
+  CloseHandle(xbeThread);
+ }
  struct DiagnosticReport { uint32_t magic,passed,failed,skipped,firstFailedCheck; } report{};
  if(reportVa && g_image && reportVa>=r.imageBase && uint64_t(reportVa)+sizeof(report)<=uint64_t(r.imageBase)+r.imageSize){
   std::memcpy(&report,reinterpret_cast<const void*>(uintptr_t(reportVa)),sizeof(report));
