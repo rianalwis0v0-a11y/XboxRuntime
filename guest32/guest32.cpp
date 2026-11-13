@@ -63,11 +63,15 @@ uint32_t Load(const wchar_t* path,Reply& reply){
 
  // Cxbx reads the certificate, section table, library versions and TLS
  // from their image VAs. Validate each before dereferencing it.
- uint32_t certOff=0;
- if(!VaOffset(certVa,base,image,certOff)||!Fits(certOff,0x5Cu,image)||
-    !Fits(certOff,0x5Cu,b.size())||!Fits(certOff,0x5Cu,headers))return FORMAT;
- const uint32_t certSize=U32(b,certOff);
- if(certSize<0x5Cu||!Fits(certOff,certSize,b.size())||!Fits(certOff,certSize,headers))return FORMAT;
+ // Homebrew/test XBEs may intentionally omit the certificate (cert VA == 0).
+ // Retail images with a certificate still receive strict bounds validation.
+ if(certVa){
+  uint32_t certOff=0;
+  if(!VaOffset(certVa,base,image,certOff)||!Fits(certOff,0x5Cu,image)||
+     !Fits(certOff,0x5Cu,b.size())||!Fits(certOff,0x5Cu,headers))return FORMAT;
+  const uint32_t certSize=U32(b,certOff);
+  if(certSize<0x5Cu||!Fits(certOff,certSize,b.size())||!Fits(certOff,certSize,headers))return FORMAT;
+ }
 
  uint32_t table=0;
  if(!VaOffset(tableVa,base,image,table)||!Fits(table,uint64_t(count)*kSectionSize,headers))return FORMAT;
