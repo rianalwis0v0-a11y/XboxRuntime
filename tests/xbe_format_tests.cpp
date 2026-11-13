@@ -98,6 +98,32 @@ int main() {
     assert(Parse(mismatchedType.data(), mismatchedType.size(), &image).error ==
            Error::InvalidEntryPoint);
 
+    // A valid TLS directory lives in the mapped executable section.
+    // Its template is in the raw section and its index slot is in zero-fill.
+    auto validTls = file;
+    Put32(validTls, 0x12C, 0x00011000);
+    Put32(validTls, 0x400, 0x00011020); // DataStart
+    Put32(validTls, 0x404, 0x00011040); // DataEnd
+    Put32(validTls, 0x408, 0x00011040); // TLS index slot (zero-fill)
+    Put32(validTls, 0x40C, 0);          // no callback array
+    Put32(validTls, 0x410, 0x10);       // zero-fill bytes
+    Put32(validTls, 0x414, 0);          // characteristics
+    Image tlsImage{};
+    assert(Parse(validTls.data(), validTls.size(), &tlsImage));
+    assert(tlsImage.tlsAddress == 0x11000);
+
+    // A TLS directory in an unmapped hole inside SizeOfImage must be rejected.
+    auto tlsDirectoryInGap = file;
+    Put32(tlsDirectoryInGap, 0x12C, 0x00012000);
+    assert(Parse(tlsDirectoryInGap.data(), tlsDirectoryInGap.size(), &image).error ==
+           Error::InvalidSection);
+
+    // Reject a TLS template whose end precedes its start.
+    auto reversedTlsTemplate = validTls;
+    Put32(reversedTlsTemplate, 0x404, 0x00011010);
+    assert(Parse(reversedTlsTemplate.data(), reversedTlsTemplate.size(), &image).error ==
+           Error::InvalidSection);
+
     auto invalidTls = file;
     Put32(invalidTls, 0x12C, 0x00012FF0);
     assert(Parse(invalidTls.data(), invalidTls.size(), &image).error ==
