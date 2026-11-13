@@ -366,6 +366,29 @@ int main() {
             decodeTexture(0x9900u,2,1,0,argb,sizeof(argb),rgba,sizeof(rgba),&pitch)==0) {
             std::cerr << "FAIL: texture decode bounds/format validation\n"; return 1;
         }
+
+        /* Additional NV2A two-channel and linear-image formats. */
+        const uint8_t rg[2] = {0x12, 0x34};
+        const uint8_t ay[2] = {0x56, 0x78};
+        const uint8_t ay8[1] = {0x9A};
+        const uint8_t y16[2] = {0xBC, 0xDE};
+        const uint8_t rgba_bytes[4] = {0x10, 0x20, 0x30, 0x40};
+        if (decodeTexture(0x1700u,1,1,0,rg,sizeof(rg),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0x34 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
+            decodeTexture(0x1B00u,1,1,0,ay8,sizeof(ay8),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x9A || rgba[1]!=0x9A || rgba[2]!=0x9A || rgba[3]!=0x9A ||
+            decodeTexture(0x2000u,1,1,0,ay,sizeof(ay),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x56 || rgba[1]!=0x56 || rgba[2]!=0x56 || rgba[3]!=0x78 ||
+            decodeTexture(0x3500u,1,1,0,y16,sizeof(y16),rgba,4,&pitch)!=0 ||
+            rgba[0]!=255 || rgba[1]!=0xDE || rgba[2]!=0xBC || rgba[3]!=255 ||
+            decodeTexture(0x3F00u,1,1,0,rgba_bytes,sizeof(rgba_bytes),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x10 || rgba[1]!=0x20 || rgba[2]!=0x30 || rgba[3]!=0x40 ||
+            decodeTexture(0x4000u,1,1,0,rgba_bytes,sizeof(rgba_bytes),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x20 || rgba[1]!=0x30 || rgba[2]!=0x40 || rgba[3]!=0x10 ||
+            decodeTexture(0x4100u,1,1,0,rgba_bytes,sizeof(rgba_bytes),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x40 || rgba[1]!=0x30 || rgba[2]!=0x20 || rgba[3]!=0x10) {
+            std::cerr << "FAIL: additional linear NV2A texture formats\\n"; return 1;
+        }
     }
 
 
@@ -395,6 +418,29 @@ int main() {
 
 
     {
+        const uint8_t rg[2] = {0x12, 0x34};
+        const uint8_t ay[2] = {0x56, 0x78};
+        const uint8_t rgba_bytes[4] = {0x10, 0x20, 0x30, 0x40};
+        uint8_t rgba[4]{};
+        uint32_t pitch = 0;
+        if (decodeSwizzledTexture(0x1A00u,1,1,ay,sizeof(ay),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x56 || rgba[1]!=0x56 || rgba[2]!=0x56 || rgba[3]!=0x78 ||
+            decodeSwizzledTexture(0x2800u,1,1,rg,sizeof(rg),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0x34 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
+            decodeSwizzledTexture(0x2900u,1,1,rg,sizeof(rg),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x34 || rgba[1]!=0x12 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
+            decodeSwizzledTexture(0x3A00u,1,1,rgba_bytes,sizeof(rgba_bytes),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x10 || rgba[1]!=0x20 || rgba[2]!=0x30 || rgba[3]!=0x40 ||
+            decodeSwizzledTexture(0x3B00u,1,1,rgba_bytes,sizeof(rgba_bytes),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x20 || rgba[1]!=0x30 || rgba[2]!=0x40 || rgba[3]!=0x10 ||
+            decodeSwizzledTexture(0x3C00u,1,1,rgba_bytes,sizeof(rgba_bytes),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x40 || rgba[1]!=0x30 || rgba[2]!=0x20 || rgba[3]!=0x10) {
+            std::cerr << "FAIL: additional swizzled NV2A texture formats\\n";
+            return 1;
+        }
+    }
+
+    {
         const uint8_t linearMipSource[4] = {0x33,0x22,0x11,0xFF};
         uint8_t linearMipOutput[4]{};
         uint32_t linearMipOffset[1]{}, linearMipSize[1]{};
@@ -403,6 +449,21 @@ int main() {
             linearMipOffset[0]!=0u || linearMipSize[0]!=4u ||
             linearMipOutput[0]!=0x11 || linearMipOutput[3]!=0xFF) {
             std::cerr << "FAIL: linear-image mip-chain decode\\n"; return 1;
+        }
+
+        const uint8_t twoChannelMip[2] = {0x12, 0x34};
+        uint8_t twoChannelOutput[4]{};
+        uint32_t twoChannelOffsets[1]{}, twoChannelSizes[1]{};
+        if (decodeMipChain(0x1700u,1,1,1,twoChannelMip,sizeof(twoChannelMip),
+                twoChannelOutput,sizeof(twoChannelOutput),twoChannelOffsets,twoChannelSizes)!=0 ||
+            twoChannelOffsets[0]!=0u || twoChannelSizes[0]!=4u ||
+            twoChannelOutput[0]!=0x12 || twoChannelOutput[1]!=0x34 ||
+            twoChannelOutput[2]!=0x12 || twoChannelOutput[3]!=0x34 ||
+            decodeMipChain(0x2800u,1,1,1,twoChannelMip,sizeof(twoChannelMip),
+                twoChannelOutput,sizeof(twoChannelOutput),twoChannelOffsets,twoChannelSizes)!=0 ||
+            twoChannelOutput[0]!=0x12 || twoChannelOutput[1]!=0x34) {
+            std::cerr << "FAIL: additional NV2A texture mip-chain formats\\n";
+            return 1;
         }
 
         const uint8_t mipSource[20] = {
