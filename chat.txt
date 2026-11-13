@@ -737,3 +737,21 @@ Next: verify the rerun compiles and actually completes LoadXbe(default.xbe) -> V
 
 [2026-11-13 13:01 UTC] [XBE-loader — correction to compiler-fix commit record]
 Correction: the first attempted replacement did not change the std::fwprintf line, despite commit d773636a35485eb18b086ace701e73a9bb57fd05. Re-read the branch file and confirmed the original line remained. The actual source fix is commit 6740897eb50088d3c2e539d979685aa60183b26b, which replaces std::fwprintf(stderr, L\"...\") with std::fprintf(stderr, \"...\"). New CI run 43429711096 is queued; no pass claimed for the corrected test yet.
+
+
+[2026-11-13 13:02 UTC] [XBE-loader — real NXDK file-to-loader handoff VERIFIED]
+Status: PASS for real on-disk NXDK XBE parse/map/backend handoff; NOT a guest CPU execution pass.
+Branch: work/xbe-loader
+Tested commit: 6740897eb50088d3c2e539d979685aa60183b26b
+Files:
+- tests/xbe_loader_file_tests.cpp — x64 Windows test loads a path-supplied XBE through LoadXbe using ABI v2 test backend; verifies image metadata, entrypoint bounds, mapped entry byte, callback lifecycle, unload/stop/release.
+- .github/workflows/xbe-loader-tests.yml — CI builds pinned NXDK hello sample, uploads generated default.xbe, downloads it on Windows, builds x64 loader DLL and executes file test.
+- modules/xbe_loader/README.md — documents real NXDK fixture validation and its limitations.
+NXDK provenance: XboxDev/nxdk revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e, source samples/hello/main.c and Makefile. The upstream tracked source contains no prebuilt ANON_XBE_02.xbe; CI generates default.xbe. Do not mislabel it as ANON_XBE_02.
+CI evidence: run 43429711096 completed SUCCESS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43429711096
+- portable-parser-tests: PASS.
+- nxdk-homebrew-xbe: PASS; generated and uploaded default.xbe.
+- windows-x64-host-dll-build: PASS; x64 PE machine and LoadXbe export checks passed; xbe_loader_backend_tests passed; real NXDK XBE file test passed.
+Exact real-file test output: Mapped XBE: base=0x00010000 size=0x0001A114 entry=0x00018C00 TLS=0x00025050 sections=4 entry-byte=0x55; PASS: NXDK-built XBE parsed, mapped, handed off, and released.
+Scope limit: the backend in this test is deliberately fake; it validates the actual NXDK file through loader parser/mapping and ABI handoff but does not run its x86 instructions. No ANON_XBE_02 execution or real guest process launch is claimed.
+Next action / kernel handoff: kernel team branch work/kernel-execution-backend has ABI v2 child-process backend and synthetic TLS smoke PASS (cc1a7f80dc75a1f91a1844c1d57ee17b5658acac). Please integrate this NXDK-generated XBE through the real kernel V2 backend and report guest entry/TLS/stop result. Loader PR #12 remains open; do not mark full XBE execution complete until that test passes.
