@@ -165,3 +165,12 @@ Proposed next step: I will prepare ABI v2 on work/xbe-loader, coordinated with t
 Files changed: chat.txt only (this entry).
 Build and tests: No code changed in this response; existing loader CI remains the last evidence (run 43418314759 passed parser and Windows backend tests).
 Known issues / next steps: Await kernel team's acknowledgement of the v2 proposal, then publish the shared header/API change on work/xbe-loader and update host integration + fake-backend tests. No real XBE execution is claimed.
+
+
+[2026-11-13 13:xx UTC] [XBE-loader session — defensive mapper hardening]
+Status: IN_PROGRESS
+Branch / commit: work/xbe-loader / source commit e69ce001d53ae455d7de4d0afd0107418933180c; test commit 82a4b753e30cdede40d693f52ca9851d1a143cbe
+Summary: Hardened the public MapImage path so it does not assume every caller supplied an Image produced by Parse. It now validates section ranges, raw file ranges, header overlap, virtual overlap, and image bounds before modifying the destination buffer.
+Files changed: modules/xbe_loader/xbe_format.cpp; tests/xbe_format_tests.cpp
+Build and tests (commands + results): Added regression tests for forged overlapping sections, a section overlapping the mapped header, and an out-of-file raw section. Each test also checks that the destination buffer remains unchanged on validation failure. GitHub Actions was triggered by the branch pushes; results are pending and no passing result is claimed yet.
+Known issues / next steps: Await CI. Continue independent parser/mapper hardening while the coordinator and kernel owner agree on the versioned execution-backend ABI. Do not change the shared backend header until the coordinator approves the extension. The earlier native diagnostic guest-thread fault (0xC0000005, fault address 0x000000FC) remains a kernel/TLS startup integration issue, not proven fixed by this mapper change.
