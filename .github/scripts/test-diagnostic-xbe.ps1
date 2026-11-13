@@ -92,7 +92,7 @@ function EmitCheckPoolSize {
     EmitByte 0x3D; Emit32 ([uint32]4294967295)
     EmitByte 0x74; EmitByte 15
     EmitByte 0x3D; Emit32 ([uint32]64)
-    EmitByte 0x72; EmitByte 6
+    EmitByte 0x72; EmitByte 8
     EmitIncrement $script:passedAddress
     EmitByte 0xEB; EmitByte 25
     EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
@@ -502,7 +502,8 @@ EmitPush $letterVa
 EmitCallImport 268
 EmitCheckEqual 1
 
-$createdUnicodeVa = [uint32]($reportVa + 0x1D0)
+$createdUnicodeVa = [uint32]($reportVa + 0x2A0)
+EmitMovMemoryImmediate ([uint32]($unicodeBufferVa + 2)) 0
 EmitPush $unicodeBufferVa
 EmitPush $createdUnicodeVa
 EmitCallImport 274
@@ -513,7 +514,7 @@ EmitPush $createdUnicodeVa
 EmitCallImport 287
 EmitIncrement $passedVa
 
-# RtlUpperString: lowercase "ff" in formattedVa becomes "FF".
+# RtlUpperString: uppercase the existing one-character "A" ANSI fixture.
 $ansiSourceVa = [uint32]($reportVa + 0x1E0)
 $ansiDestVa = [uint32]($reportVa + 0x1F0)
 EmitMovMemoryImmediate $ansiSourceVa 0x00020002
@@ -525,7 +526,7 @@ EmitPush $ansiDestVa
 EmitCallImport 317
 EmitLoadEax $caseOutputBufferVa
 EmitByte 0x25; Emit32 0xFF
-EmitCheckEqual 0x46
+EmitCheckEqual 0x41
 
 # Upcase Unicode-to-multibyte conversion.
 EmitPush 2
@@ -546,7 +547,7 @@ EmitPush $letterVa
 EmitPush $extraAnsiDescVa
 EmitCallImport 289
 EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $extraAnsiDescVa
-EmitCheckEqual 2
+EmitCheckEqual 1
 EmitPush 0
 EmitPush $extraAnsiDescVa
 EmitPush $extraAnsiDescVa
