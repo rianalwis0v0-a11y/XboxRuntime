@@ -833,7 +833,7 @@ extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIo
                 if (event) SetEvent(event);
                 return LONG(0xC0000011u);
             }
-            DWORD received = 0;
+            uint32_t received = 0;
             const int result = XDVDFS_ReadFile(dvd->second.path.c_str(), start, buffer, length, &received);
             if (result != 0) {
                 if (io) { io->Status = LONG(0xC0000001u); io->Information = 0; }
