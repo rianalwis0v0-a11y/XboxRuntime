@@ -1017,7 +1017,7 @@ int main() {
             return 1;
         }
         for (uint32_t i = 0; i < 300u; ++i) {
-            if (submit(0u, 0x1810u, i & 1u) != 0) {
+            if (submit(0u, 0x1800u, i & 1u) != 0) {
                 std::cerr << "FAIL: submit large indexed batch element\\n";
                 stop();
                 return 1;
