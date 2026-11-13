@@ -20,3 +20,7 @@ bool XboxKernelProtectImage();
 void XboxKernelSetStartupEvent(HANDLE eventHandle);
 void XboxKernelShutdownTitle();
 DWORD WINAPI XboxKernelStartXbe(void* context);
+void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
+                                              std::uint32_t* instruction,
+                                              std::uint32_t* accessType,
+                                              std::uint32_t* faultAddress);
