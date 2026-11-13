@@ -53,6 +53,12 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## Kernel work queues
+
+- Ordinals 111, 116, 117, and 136: `KeInitializeQueue`, `KeInsertHeadQueue`, `KeInsertQueue`, and `KeRemoveQueue` now use the guest's native x86 KQUEUE/LIST_ENTRY layout with synchronized host-side wait state.
+- Queue signal count, current worker count, maximum concurrency, head/tail insertion, FIFO removal, and relative/absolute timeout conversion are maintained. A timeout returns `STATUS_TIMEOUT` in the pointer-sized return value, matching the NT wait convention.
+- The diagnostic XBE verifies head/tail ordering and the empty-queue timeout path.
+
 ## Directory enumeration
 
 - Ordinal 207, `NtQueryDirectoryFile`, supports synchronous single-entry `FileDirectoryInformation` queries against opened host-backed directory handles.

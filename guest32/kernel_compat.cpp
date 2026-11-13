@@ -14,6 +14,9 @@
 #include <cwctype>
 #include <string>
 #include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <chrono>
 #include <array>
 #include <unordered_set>
 #include <unordered_map>
@@ -210,6 +213,122 @@ extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
 extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
 
 struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
+
+struct GuestDispatcherHeader {
+    UCHAR Type, Absolute, Size, Inserted;
+    LONG SignalState;
+    GuestListEntry WaitListHead;
+};
+struct GuestKQueue {
+    GuestDispatcherHeader Header;
+    GuestListEntry EntryListHead;
+    ULONG CurrentCount;
+    ULONG MaximumCount;
+    GuestListEntry ThreadListHead;
+};
+struct GuestQueueState {
+    std::mutex mutex;
+    std::condition_variable changed;
+};
+static std::mutex g_guestQueueMapMutex;
+static std::unordered_map<void*, std::shared_ptr<GuestQueueState>> g_guestQueues;
+static thread_local std::unordered_set<void*> g_activeGuestQueues;
+static void InitializeGuestList(GuestListEntry* head) {
+    head->Flink = head;
+    head->Blink = head;
+}
+static std::shared_ptr<GuestQueueState> GetGuestQueueState(GuestKQueue* queue, bool create) {
+    if (!queue) return {};
+    std::lock_guard<std::mutex> lock(g_guestQueueMapMutex);
+    auto it = g_guestQueues.find(queue);
+    if (it != g_guestQueues.end()) return it->second;
+    if (!create) return {};
+    auto state = std::make_shared<GuestQueueState>();
+    g_guestQueues.emplace(queue, state);
+    return state;
+}
+extern "C" void __stdcall K_KeInitializeQueue(GuestKQueue* queue, ULONG count) {
+    if (!queue) return;
+    auto state = GetGuestQueueState(queue, true);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    queue->Header.Type = 4; // QueueObject
+    queue->Header.Absolute = 0;
+    queue->Header.Size = static_cast<UCHAR>(sizeof(GuestKQueue) / sizeof(ULONG));
+    queue->Header.Inserted = 0;
+    queue->Header.SignalState = 0;
+    InitializeGuestList(&queue->Header.WaitListHead);
+    InitializeGuestList(&queue->EntryListHead);
+    queue->CurrentCount = 0;
+    queue->MaximumCount = count > 1 ? count : 1;
+    InitializeGuestList(&queue->ThreadListHead);
+    g_activeGuestQueues.erase(queue);
+}
+static LONG InsertGuestQueueEntry(GuestKQueue* queue, GuestListEntry* entry, bool atHead) {
+    if (!queue || !entry) return 0;
+    auto state = GetGuestQueueState(queue, true);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    GuestListEntry* head = &queue->EntryListHead;
+    const LONG previous = queue->Header.SignalState;
+    if (atHead) {
+        entry->Flink = head->Flink;
+        entry->Blink = head;
+        head->Flink->Blink = entry;
+        head->Flink = entry;
+    } else {
+        entry->Flink = head;
+        entry->Blink = head->Blink;
+        head->Blink->Flink = entry;
+        head->Blink = entry;
+    }
+    if (queue->Header.SignalState < LONG(0x7FFFFFFF)) ++queue->Header.SignalState;
+    state->changed.notify_one();
+    return previous;
+}
+extern "C" LONG __stdcall K_KeInsertQueue(GuestKQueue* queue, GuestListEntry* entry) {
+    return InsertGuestQueueEntry(queue, entry, false);
+}
+extern "C" LONG __stdcall K_KeInsertHeadQueue(GuestKQueue* queue, GuestListEntry* entry) {
+    return InsertGuestQueueEntry(queue, entry, true);
+}
+extern "C" GuestListEntry* __stdcall K_KeRemoveQueue(
+    GuestKQueue* queue, ULONG, const LARGE_INTEGER* timeout) {
+    if (!queue) return reinterpret_cast<GuestListEntry*>(uintptr_t(0xC000000Du));
+    auto state = GetGuestQueueState(queue, true);
+    std::unique_lock<std::mutex> lock(state->mutex);
+    if (g_activeGuestQueues.erase(queue)) {
+        if (queue->CurrentCount) --queue->CurrentCount;
+        state->changed.notify_all();
+    }
+    auto available = [&]() {
+        return queue->Header.SignalState > 0 &&
+               queue->EntryListHead.Flink != &queue->EntryListHead &&
+               queue->CurrentCount < queue->MaximumCount;
+    };
+    if (!available()) {
+        if (!timeout) {
+            state->changed.wait(lock, available);
+        } else {
+            const DWORD milliseconds = KernelTimeout(timeout);
+            if (!milliseconds || !state->changed.wait_for(
+                    lock, std::chrono::milliseconds(milliseconds), available))
+                return reinterpret_cast<GuestListEntry*>(uintptr_t(0x00000102u)); // STATUS_TIMEOUT
+        }
+    }
+    if (!available())
+        return reinterpret_cast<GuestListEntry*>(uintptr_t(0xC0000001u));
+    GuestListEntry* head = &queue->EntryListHead;
+    GuestListEntry* entry = head->Flink;
+    GuestListEntry* next = entry->Flink;
+    head->Flink = next;
+    next->Blink = head;
+    entry->Flink = nullptr;
+    entry->Blink = nullptr;
+    --queue->Header.SignalState;
+    ++queue->CurrentCount;
+    g_activeGuestQueues.insert(queue);
+    return entry;
+}
+
 static void GuestAcquireSpinLock(volatile LONG* lock) {
     while (InterlockedExchange(lock, 1) != 0) YieldProcessor();
 }
@@ -1850,6 +1969,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_bugcheck
         cmp eax, 96
         je ke_bugcheck_ex
+        cmp eax, 111
+        je ke_init_queue
+        cmp eax, 116
+        je ke_insert_head_queue
+        cmp eax, 117
+        je ke_insert_queue
+        cmp eax, 136
+        je ke_remove_queue
         cmp eax, 106
         je ke_init_device_queue
         cmp eax, 114
@@ -2218,6 +2345,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
     ex_release_rw: jmp K_ExReleaseReadWriteLock
+    ke_init_queue: jmp K_KeInitializeQueue
+    ke_insert_head_queue: jmp K_KeInsertHeadQueue
+    ke_insert_queue: jmp K_KeInsertQueue
+    ke_remove_queue: jmp K_KeRemoveQueue
     ke_init_device_queue: jmp K_KeInitializeDeviceQueue
     ke_insert_by_key_device_queue: jmp K_KeInsertByKeyDeviceQueue
     ke_insert_device_queue: jmp K_KeInsertDeviceQueue
