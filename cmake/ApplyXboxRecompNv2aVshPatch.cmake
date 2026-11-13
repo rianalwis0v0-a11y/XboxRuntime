@@ -33,7 +33,7 @@ if(_src_patched LESS 0)
 
 /* ================================================================
 ]=])
-    _replace_range(_vsh_src "/* NV2A Instruction Bit Field Extraction" "/* ================================================================\n * Module State" _layout_note _vsh_src)
+    _replace_range(_vsh_src "/* NV2A Instruction Bit Field Extraction" " * Module State" _layout_note _vsh_src)
 
     set(_parser_block [=[
 /* Decode one NV2A source using the hardware DWORD layout.
@@ -201,7 +201,7 @@ void d3d8_vsh_parse(const DWORD *microcode, int num_insns, NV2AVshProgram *progr
 }
 
 ]=])
-    _replace_range(_vsh_src "static void parse_source(" "/* ================================================================\n * HLSL Code Generator" _parser_block _vsh_src)
+    _replace_range(_vsh_src "static void parse_source(" " * HLSL Code Generator" _parser_block _vsh_src)
 
     set(_dest_block [=[
 static void emit_dest_assign(StrBuf *sb, const NV2AVshDstOperand *dst,
@@ -231,7 +231,7 @@ static void emit_dest_assign(StrBuf *sb, const NV2AVshDstOperand *dst,
 }
 
 ]=])
-    _replace_range(_vsh_src "static void emit_dest_assign(" "/**\n * Emit the HLSL for one MAC operation." _dest_block _vsh_src)
+    _replace_range(_vsh_src "static void emit_dest_assign(" " * Emit the HLSL for one MAC operation." _dest_block _vsh_src)
     file(WRITE "${_vsh_c}" "${_vsh_src}")
 endif()
 
