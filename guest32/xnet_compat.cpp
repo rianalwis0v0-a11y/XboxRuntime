@@ -206,9 +206,10 @@ extern "C" int WINAPI XSocketGetSockName(SOCKET socket, sockaddr* address, int* 
 extern "C" int WINAPI XSocketGetPeerName(SOCKET socket, sockaddr* address, int* addressLength) {
     if (socket == INVALID_SOCKET || !address || !addressLength || *addressLength < static_cast<int>(sizeof(sockaddr_in)))
         return SOCKET_ERROR;
-    // The transport token is intentionally opaque; use a small internal helper
-    // rather than treating it as a native host SOCKET.
-    return SOCKET_ERROR; // Peer-name bridge is not implemented yet.
+    uint32_t length = static_cast<uint32_t>(*addressLength);
+    const int result = XboxNetSocketGetPeerName(static_cast<uint32_t>(socket), address, &length);
+    if (result == 0) *addressLength = static_cast<int>(length);
+    return result;
 }
 
 extern "C" int WINAPI XSocketSend(SOCKET socket, const char* buffer, int length, int flags) {
