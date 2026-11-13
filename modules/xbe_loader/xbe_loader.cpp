@@ -61,8 +61,9 @@ int StartGuest(const wchar_t*xbe){
  if(pipe==INVALID_HANDLE_VALUE)return XBE_E_PIPE;
  std::wstring eeprom=EepromPath();if(eeprom.empty()){CloseHandle(pipe);return XBE_E_START;}
  std::wstring extension;
- size_t dot=xbe.find_last_of(L'.');
- if(dot!=std::wstring::npos)extension=xbe.substr(dot);
+ const std::wstring selectedPath(xbe);
+ size_t dot=selectedPath.find_last_of(L'.');
+ if(dot!=std::wstring::npos)extension=selectedPath.substr(dot);
  const bool discImage=
   CompareStringOrdinal(extension.c_str(),-1,L".iso",-1,TRUE)==CSTR_EQUAL||
   CompareStringOrdinal(extension.c_str(),-1,L".xiso",-1,TRUE)==CSTR_EQUAL;
