@@ -133,7 +133,21 @@ void StopGuestProcessLocked(BackendContext& context) {
             WaitForSingleObject(context.process.hProcess, 5000);
         }
     }
-    ResetContextHandles(context);
+    if (context.pipe != INVALID_HANDLE_VALUE) {
+        CloseHandle(context.pipe);
+        context.pipe = INVALID_HANDLE_VALUE;
+    }
+    if (context.process.hThread) {
+        CloseHandle(context.process.hThread);
+        context.process.hThread = nullptr;
+    }
+    if (context.process.hProcess) {
+        CloseHandle(context.process.hProcess);
+        context.process.hProcess = nullptr;
+    }
+    context.process = {};
+    context.importsResolved = false;
+    context.started = false;
 }
 int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
                          std::uint8_t** guestImage, void*) {
