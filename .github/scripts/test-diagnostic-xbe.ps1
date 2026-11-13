@@ -35,7 +35,15 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,207,210,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$tlsCallbackCountVa = [uint32]($reportVa + 0x500)
+$threadRoutineCountVa = [uint32]($reportVa + 0x504)
+$threadHandleVa = [uint32]($reportVa + 0x510)
+$clientIdVa = [uint32]($reportVa + 0x518)
+$tlsDirectoryVa = [uint32]0x10006540
+$tlsCallbacksVa = [uint32]0x10006560
+$tlsTemplateVa = [uint32]0x10006570
+$tlsIndexVa = [uint32]0x10006580
+$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,207,210,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,233,254,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -99,6 +107,20 @@ function EmitCheckPoolSize {
     EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
+
+# Helper routines live before the entry body; jump over them on launch.
+$helperJumpOffset = $script:code.Count
+EmitByte 0xE9; Emit32 0
+$tlsCallbackVa = [uint32]($entryVa + $script:code.Count)
+EmitIncrement $tlsCallbackCountVa
+EmitByte 0xC2; EmitByte 0x0C; EmitByte 0x00
+$threadRoutineVa = [uint32]($entryVa + $script:code.Count)
+EmitIncrement $threadRoutineCountVa
+EmitByte 0x31; EmitByte 0xC0
+EmitByte 0xC2; EmitByte 0x04; EmitByte 0x00
+$entryBodyOffset = $script:code.Count
+$helperDisplacement = [BitConverter]::GetBytes([int32]($entryBodyOffset - ($helperJumpOffset + 5)))
+for ($i = 0; $i -lt 4; $i++) { $script:code[$helperJumpOffset + 1 + $i] = $helperDisplacement[$i] }
 
 # Pool allocator, size query, memory fill/zero, and free.
 EmitPush 64
@@ -929,6 +951,29 @@ EmitByte 0xB9; Emit32 $slistHeaderVa
 EmitCallImport 56
 EmitCheckEqual 0
 
+# A kernel-created guest thread must receive its own TLS block and callbacks.
+EmitPush 0
+EmitPush $threadRoutineVa
+EmitPush $clientIdVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $threadHandleVa
+EmitCallImport 254
+EmitCheckEqual 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $threadHandleVa
+EmitCallImport 233
+EmitCheckEqual 0
+EmitLoadEax $threadRoutineCountVa
+EmitCheckEqual 1
+EmitLoadEax $tlsCallbackCountVa
+EmitCheckAtLeast 2 # process attach + guest thread attach
+EmitPushMemory $threadHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
 # These are host-module facilities, not kernel imports callable by this guest yet.
 # Mark FATX API, NV2A/D3D rendering, and Xbox networking as NOT SUPPORTED.
 EmitIncrement $skippedVa
@@ -948,6 +993,7 @@ Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
 Put32 0x128 ($entryVa -bxor [Convert]::ToUInt32('A8FC57AB',16))
+Put32 0x12C $tlsDirectoryVa
 Put32 0x158 ([uint32]($thunkVa -bxor [uint32]0x5B6D40B6))
 # Executable, writable section: code at VA 0x10001000, data at 0x10002200.
 Put32 0x178 5
@@ -963,6 +1009,17 @@ for ($i=0; $i -lt $ordinals.Count; $i++) {
 Put32 (0x6800 + 4*$ordinals.Count) 0
 Put32 0x6000 0x54535258
 Put32 0x6028 4096
+# TLS directory: one 4-byte template value plus four zero-fill bytes.
+Put32 0x6540 $tlsTemplateVa
+Put32 0x6544 ([uint32]($tlsTemplateVa + 4))
+Put32 0x6548 $tlsIndexVa
+Put32 0x654C $tlsCallbacksVa
+Put32 0x6550 4
+Put32 0x6554 0
+Put32 0x6560 $tlsCallbackVa
+Put32 0x6564 0
+Put32 0x6570 0x11223344
+Put32 0x6580 0
 # Guest-side OBJECT_ATTRIBUTES + UNICODE_STRING for \Device\Cdrom0\xbe-test.txt.
 $guestPath = "\Device\Cdrom0\xbe-test.txt"
 $guestPathBytes = [Text.Encoding]::Unicode.GetBytes($guestPath + [char]0)
