@@ -41,7 +41,7 @@ static int compile_program(const DWORD* instructions, unsigned count,
         (program.insns[0].mac_op != NV2A_VSH_MAC_MAD ||
          program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_TEMP ||
          program.insns[0].mac_src[1].reg_type != NV2A_VSH_REG_INPUT ||
-         program.insns[2].mac_src[2].reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].mac_src[2].reg_type != NV2A_VSH_REG_CONST ||
          program.inputs_read != (1u << 2) ||
          program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
          program.insns[0].mac_dst.output_write_mask != 0xFu)) {
