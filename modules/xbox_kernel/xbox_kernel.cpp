@@ -261,7 +261,7 @@ int __cdecl ResolveImports(std::uint8_t* guestImage,
         XBOX_GUEST_PROTOCOL_MAGIC, XboxGuestResolveImports,
         info->baseAddress, info->imageSize, info->headerSize,
         info->entryPoint, info->tlsAddress, info->sectionCount,
-        info->nonKernelImportDirectoryAddress
+        info->nonKernelImportDirectoryAddress, info->kernelThunkAddress
     };
     XboxGuestCommandReply reply{};
     if (!WriteExact(context.pipe, &message, sizeof(message)) ||
