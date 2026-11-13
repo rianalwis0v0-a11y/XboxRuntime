@@ -2099,6 +2099,12 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
 {
     if (!device || !device->lpVtbl || !device->lpVtbl->SetVertexShader)
         return 0;
+    /* Context-write programs modify the NV2A constant file as a side effect.
+     * The D3D11 translator does not implement that side effect yet, so reject
+     * them rather than silently producing incorrect GPU results or falling
+     * back to CPU vertex execution. */
+    if (g_nv2a_vsh_context_write)
+        return 0;
     if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle) {
         uint32_t instruction_count = 0;
         XboxNV2A_VERTEX_PROGRAM_INFO metadata;
