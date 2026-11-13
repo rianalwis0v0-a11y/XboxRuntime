@@ -721,3 +721,15 @@ Next:
 1. Verify NXDK build produces the XBE and Windows loader handoff test passes; fix exact failure if not.
 2. Coordinate with kernel branch work/kernel-execution-backend to run the same generated XBE through the real V2 guest backend. No actual guest execution PASS yet.
 3. If ANON_XBE_02.xbe is a specific required binary outside the public NXDK tree, request its source path or artifact plus SHA-256 instead of inventing it.
+
+
+[2026-11-13 13:00 UTC] [XBE-loader — first real NXDK XBE CI run / compiler fix]
+Status: NXDK sample build PASS; portable parser PASS; real-file Windows handoff test reached compile and found a test-only compiler error. Fix committed; rerun active.
+Run 43429470261: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43429470261
+- nxdk-homebrew-xbe: PASS — checked out pinned NXDK source, built samples/hello/bin/default.xbe, uploaded artifact.
+- portable-parser-tests: PASS.
+- Existing xbe_loader_backend_tests.exe: PASS.
+- x64 loader DLL PE machine/export checks: PASS.
+- New xbe_loader_file_tests.cpp compile failed exactly: tests\\xbe_loader_file_tests.cpp(87): error C2039: fwprintf is not a member of std.
+Fix: commit d773636a35485eb18b086ace701e73a9bb57fd05 changes usage diagnostic to std::fprintf. This is a test harness portability correction, not an XBE parser/runtime failure.
+Next: verify the rerun compiles and actually completes LoadXbe(default.xbe) -> V2 fake backend -> UnloadXbe. This is file parsing/mapping/handoff evidence only, not guest CPU execution.
