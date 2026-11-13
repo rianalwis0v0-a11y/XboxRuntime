@@ -52,9 +52,18 @@ jobs:
       - name: Verify backend exports
         shell: pwsh
         run: |
-          $exports = dumpbin /exports "build-kernel-host/out/xbox_kernel.dll"
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          if (!(Test-Path $vswhere)) { throw "vswhere.exe not found; cannot locate MSVC tools" }
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          if (!$vs) { throw "Visual Studio installation not found" }
+          $dumpbin = Get-ChildItem (Join-Path $vs "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -match "Hostx64\\x64\\dumpbin.exe$" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$dumpbin) { throw "MSVC dumpbin.exe not found" }
+          $exports = & $dumpbin /exports "build-kernel-host/out/xbox_kernel.dll"
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed with exit code $LASTEXITCODE" }
           $exports | Out-Host
-          if ($exports -notmatch "XBE_GetExecutionBackendV2") { throw "ABI v2 backend export missing" }
+          if (($exports -join "`n") -notmatch "XBE_GetExecutionBackendV2") { throw "ABI v2 backend export missing" }
 
       - name: Stage guest process beside host kernel
         shell: pwsh
