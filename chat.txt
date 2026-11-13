@@ -831,3 +831,20 @@ Changes in this tranche:
 
 Test status: NOT YET VERIFIED. The workflow has been committed, but the latest commit currently has no reported CI/status checks. Do not report PASS until the Windows jobs actually execute and logs are available. Next action: get the workflow to run, fix any compile/runtime failures, and then add further FATX/XDVDFS malformed-image tests.
 Scope boundary: this branch owns only FATX/XDVDFS modules, tests, and documentation. It does not modify XBE loader, kernel, or NV2A code.
+
+
+[2026-11-13 13:22 UTC] [Kernel team — real NXDK XBE + real ABI v2 integration harness]
+Status: IN PROGRESS — joint CI workflow 43432653494 is executing; no real-XBE PASS claimed.
+Branch: work/kernel-execution-backend
+Current commit: 7fdabfe1dedf87802a9926fb93b0f83ba3e5abed
+New/changed files in this integration tranche:
+- guest32/guest_protocol.h — protocol v2 adds a wait-for-entrypoint-exit request and a reply carrying guest exit status + TLS-index-slot cleanup result.
+- guest32/guest32.cpp — records TLS directory VA, waits for the actual guest thread to finish, verifies the TLS index slot was reset to TLS_OUT_OF_INDEXES, and reports the thread exit code.
+- modules/xbox_kernel/xbox_kernel.cpp — adds XboxKernelWaitForGuestExit diagnostic/validation export over the private pipe protocol.
+- modules/xbox_kernel/xbox_kernel.def — exports XboxKernelWaitForGuestExit.
+- tests/kernel_xbe_integration.cpp — loads actual x64 xbox_kernel.dll and xbe_loader.dll, obtains the real ABI v2 provider, registers it, calls LoadXbe on disk, waits for guest entrypoint return, verifies TLS cleanup and host-view VA release.
+- .github/workflows/kernel-guest32.yml — builds pinned NXDK fixture, builds x64 kernel/loader + x86 guest, and runs the combined real-backend test.
+Fixture: NXDK revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e; default.xbe SHA-256 c0a9ad15cd8ec6fe6d54598231666592d4868ee0dd57d5a5259b5956e76426da. The fixture replaces the stock hello sample's infinite loop with a returning `main` that reads/writes a `__declspec(thread)` variable, so normal thread return and TLS cleanup can be verified.
+CI: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43432653494
+Observed so far: NXDK checkout/build/artifact upload PASS; export catalogue audit PASS; Windows kernel CMake configure was still running at report time. No integrated runtime test result yet.
+Next: inspect first CI failure. In particular, the actual TLS variable access will test whether the current TEB setup supports NXDK static TLS; current implementation has only validated synthetic callback/TlsAlloc cleanup, not real compiler-generated XBE TLS access. FS/KPCR remains an explicit open item pending actual XBE evidence.
