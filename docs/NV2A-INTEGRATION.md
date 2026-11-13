@@ -497,3 +497,8 @@ The pinned xboxrecomp D3D8 HLSL translator previously read opcode/source/destina
 ## Parallel MAC/ILU source semantics
 
 When both execution units are active in one NV2A instruction slot, the hardware reads A, B and C before either unit commits a destination. The HLSL lowering now snapshots all three source vectors into unique per-instruction temporaries before emitting MAC and ILU writes. The regression test pairs a MAC MOV that overwrites R1 with an ILU RCP that reads the old R1.x, and asserts the generated HLSL snapshots R1 before the MAC write and uses the snapshot for the ILU operation.
+
+
+## Vertex opcode compilation matrix
+
+The Windows HLSL smoke suite now compiles representative MAC operations (MOV, MUL, ADD, MAD, DP3, DPH, DP4, DST, MIN, MAX, SLT and SGE) and ILU operations (MOV, RCP, RCC, RSQ, EXP, LOG and LIT) from actual four-DWORD NV2A instruction words. These are targeted translation/bytecode checks, not exhaustive numerical conformance tests against physical NV2A hardware.
