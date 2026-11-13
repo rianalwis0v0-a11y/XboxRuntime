@@ -27,7 +27,6 @@
 
 extern "C" void KernelDispatch();
 namespace {
-constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
 static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0,g_headerSize=0,g_sectionCount=0;
@@ -2484,9 +2483,6 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_timer: jmp K_NtQueryTimer
     }
 }
-namespace {
-bool DecodeVa(uint32_t encoded,uint32_t key,uint32_t&va){va=encoded^key;return InImage(va,4);}
-}
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
     if (!path || !*path) return false;
     g_eepromPath = path;
@@ -2544,19 +2540,17 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
     g_tls = image.tlsAddress;
     g_sectionCount = image.sectionCount;
     if (!g_image || !g_base || !g_size || !g_headerSize ||
-        !InImage(g_entry) || g_sectionCount == 0 || g_sectionCount > 96 ||
-        !InImage(g_base + 0x158, 4))
+        !InImage(g_entry) || g_sectionCount == 0 || g_sectionCount > 96)
         return false;
 
-    const uint32_t encoded = *reinterpret_cast<uint32_t*>(g_image + 0x158);
-    uint32_t thunk = 0;
-    if (!DecodeVa(encoded, kRetailThunk, thunk) &&
-        !DecodeVa(encoded, kDebugThunk, thunk)) {
-        // An absent kernel thunk table is valid only when the header field is zero.
-        return (encoded == 0 || encoded == kRetailThunk || encoded == kDebugThunk) &&
-            XboxGuestResolveNonKernelImports(g_base, g_size,
-                image.nonKernelImportDirectoryAddress);
-    }
+    // The loader has already selected the correct retail/debug/Chihiro XOR
+    // scheme and validated this decoded guest VA. Never decode it a second time.
+    const uint32_t thunk = image.kernelThunkAddress;
+    if (!thunk)
+        return XboxGuestResolveNonKernelImports(g_base, g_size,
+            image.nonKernelImportDirectoryAddress);
+    if ((thunk & 3u) != 0 || !InImage(thunk, 4))
+        return false;
 
     g_stubPage = VirtualAlloc(nullptr, 0x2000, MEM_RESERVE | MEM_COMMIT,
                               PAGE_EXECUTE_READWRITE);
