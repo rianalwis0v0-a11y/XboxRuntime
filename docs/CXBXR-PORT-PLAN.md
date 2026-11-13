@@ -6,6 +6,18 @@ Reuse proven Cxbx-Reloaded implementation code inside XboxRuntime. XboxRuntime r
 
 Original Xbox XBE files must execute from their original form. Do not add static recompilation or an XBE-to-native recompilation pipeline.
 
+## Mixed licensing
+
+The intended source layout is mixed-licence:
+
+- Independently authored, non-derivative XboxRuntime code remains MIT where the relevant copyright holders have granted those rights.
+- Copied or adapted Cxbx-Reloaded code retains its upstream GPL-2.0 (or exact per-file) licence and notices.
+- Do not relabel Cxbx-derived code as MIT.
+- A combined executable/distribution may be subject to GPL requirements. Keeping files in separate directories does not itself settle that issue.
+- Keep the root MIT licence for eligible original code for now. Do not replace it or claim dual-licensing rights for contributors without confirming permission from every relevant rights holder.
+
+This is a source-file licensing plan, not legal advice. Review the final combined-work and distribution obligations before release.
+
 ## Upstream components identified
 
 Source repository: https://github.com/Cxbx-Reloaded/Cxbx-Reloaded
@@ -41,4 +53,4 @@ Source repository: https://github.com/Cxbx-Reloaded/Cxbx-Reloaded
 
 ## Status
 
-This commit adds the upstream GPL text and porting/attribution plan only. It does not claim that Cxbx code has already been integrated or that any game boots.
+This preparation PR adds the upstream GPL text and porting/licensing plan only. It does not claim that Cxbx code has already been integrated or that any game boots.
