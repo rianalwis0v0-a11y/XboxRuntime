@@ -78,6 +78,13 @@ static int compile_program(const DWORD* instructions, unsigned count,
         return 10;
     }
 
+    if (strstr(label, "relative A0 snapshot") &&
+        (!strstr(hlsl, "a0_pre = a0;") ||
+         !strstr(hlsl, "c[a0_pre + 3]"))) {
+        fprintf(stderr, "FAIL: %s did not preserve the pre-issue address register\\n", label);
+        return 11;
+    }
+
     if (!strstr(hlsl, "SV_POSITION")) {
         fprintf(stderr, "FAIL: %s generated HLSL has no position output\\n",
                 label);
@@ -162,6 +169,15 @@ int main(void)
                      (1u << 28) | 1u;        /* ILU source C = old R0; FINAL */
     if (compile_program(instruction, 2u, "NV2A paired snapshot") != 0)
         return 6;
+
+    /* ARL updates A0 while the paired ILU reads a relative constant.
+     * The ILU must use the address value from before this instruction. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (13u << 21) | (7u << 25) | (3u << 13) | (1u << 9);
+    instruction[2] = (2u << 26); /* MAC source A = v1 */
+    instruction[3] = (0xFu << 16) | (3u << 28) | (1u << 1) | 1u;
+    if (compile_program(instruction, 1u, "NV2A relative A0 snapshot") != 0)
+        return 7;
 
     /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
     memset(instruction, 0, sizeof(instruction));
