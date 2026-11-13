@@ -39,7 +39,7 @@ __declspec(dllexport) int __cdecl XboxNV2A_ValidateVertexProgram(
    * Do not decode an unused source: its mux bits may contain arbitrary data. */
   if(mac&&!decode_source(w,0,&m))return 4;
   switch(mac){
-  case 2: case 5: case 6: case 7: case 8:
+  case 2: case 4: case 5: case 6: case 7: case 8:
   case 9: case 10: case 11: case 12:
    if(!decode_source(w,1,&m))return 5;
    break;
