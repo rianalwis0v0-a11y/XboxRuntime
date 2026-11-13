@@ -9,6 +9,9 @@ void __cdecl XboxNetCleanup();
 int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* addressNetworkOrder);
 uint32_t __cdecl XboxNetSocketCreate(int type); // 1 = stream/TCP, 2 = datagram/UDP
 int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostname, uint16_t port);
+int __cdecl XboxNetSocketConnectAddress(uint32_t handle, const void* sockaddrIn, uint32_t length);
+int __cdecl XboxNetSocketBindAddress(uint32_t handle, const void* sockaddrIn, uint32_t length);
+int __cdecl XboxNetSocketShutdown(uint32_t handle, int how);
 int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port);
 int __cdecl XboxNetSocketListen(uint32_t handle, int backlog);
 uint32_t __cdecl XboxNetSocketAccept(uint32_t handle);
@@ -19,5 +22,5 @@ int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t 
 int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4NetworkOrder, uint16_t* port);
 int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled);
 int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds);
-void __cdecl XboxNetSocketClose(uint32_t handle);
+int __cdecl XboxNetSocketClose(uint32_t handle);
 }
