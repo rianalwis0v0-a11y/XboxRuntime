@@ -477,3 +477,8 @@ CMP fetches use a four-byte packed record per vertex even though the NV097
 format's component field describes the three expanded output components. The
 DMA reader therefore treats CMP as a 4-byte element (and rejects it for
 non-normal arrays) before the normal unpacker expands it to three floats.
+
+
+## GPU vertex-shader translation smoke coverage
+
+The NV2A HLSL smoke test exercises real microcode rather than only a terminated empty/NOP slot. It verifies an input-register MOV (v0 to oPos), a two-source input ADD (v5 + v5 to oPos), and a constant-register MOV (c[17] to oPos). It checks parsed input-register metadata and the expected emitted HLSL, then compiles each generated shader with the Direct3D HLSL compiler targeting shader model 5.0. This proves those three translation cases produce valid GPU shader bytecode; it does not claim complete instruction-set coverage or a physical-GPU draw test. Runtime vertex instructions remain translated to D3D11 HLSL and execute in the D3D11 shader pipeline; CPU-side work in the NV2A bridge is register/constant and vertex-attribute staging, not a CPU vertex-shader interpreter.
