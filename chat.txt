@@ -277,3 +277,18 @@ Additional changes: documented that the XBE_IMAGE_INFO pointer passed to V2 star
 PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12 (draft; head updates automatically with branch commits)
 Build and tests: New CI run triggered by the latest test commit; pending at report time. No success claimed yet.
 Next: kernel owner to review the exact V2 signatures and report guest shared-section mapping/TLS/thread plan. After CI passes, request PR review and continue with the first real 32-bit homebrew XBE fixture.
+
+[2026-11-13 12:xx UTC] [NV2A graphics subsystem session — ownership handoff / implementation]
+Status: IN_PROGRESS — NV2A subsystem work is now being handled on a dedicated branch; Windows CI is running.
+Branch / PR: feature/nv2a-completion-v2 / https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/13 (draft, stacked on PR #3 https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/3)
+Base: agent/nv2a/hlsl-instruction-smoke (PR #3 head fe09c323df7889b8dff72f2311c8e9e6f4f84f5e), which contains the 1,024-index batch expansion work. This PR deliberately builds on that branch rather than duplicating its changes into the work branch.
+Summary:
+- Strengthened tests/nv2a_hlsl_smoke.c: actual NV2A microcode for input MOV (v0 -> oPos), two-source ADD (v5 + v5 -> oPos), and constant MOV (c[17] -> oPos); verifies input-register metadata and emitted HLSL snippets before compiling each shader to VS 5.0 bytecode.
+- Extended the DMA pusher from a single saved CALL return address to a bounded 16-entry LIFO return stack. Validation and dispatch use the same parser path, and overflow is rejected during validation before any PGRAPH method dispatch.
+- Added NV2A smoke cases for a two-level nested call that binds three DMA contexts, maximum supported depth 16, rejected depth 17 with PFIFO CALL_ACTIVE reporting, invalid call target, and RETURN with no active call.
+- Updated nv2a_bridge.h and docs/NV2A-INTEGRATION.md to describe the bounded call-stack contract and shader-test coverage.
+Files changed: modules/nv2a/nv2a_bridge.c, modules/nv2a/nv2a_bridge.h, tests/nv2a_smoke.cpp, tests/nv2a_hlsl_smoke.c, docs/NV2A-INTEGRATION.md.
+Build and tests:
+- Baseline at integration commit 7e98d5b217e2948d276ec9d0f6b3461537135e01: Windows build workflow 43419856129 succeeded; CTest reported 5/5 passed, including nv2a_smoke and nv2a_hlsl_smoke. This baseline predates the current NV2A changes.
+- Current PR #13 commit cf267acf42bb0a7db82a561a4afbe42c8b921188: Windows workflow 43423581668 is in progress; no current-branch pass is claimed yet.
+Known issues / next steps: Await current CI and fix compile/runtime test failures. This is a targeted NV2A milestone, not a claim that the full NV2A is complete. Still outside current support: PCI/AGP DMA and page translation, PFIFO ring wraparound/scheduling/interrupt recovery, full PGRAPH method coverage, complete pixel-shader/combiner behavior, cubemap/3D textures, and full instruction-set/hardware validation. A physical GPU draw test and actual game capture remain necessary before declaring retail-game graphics compatibility.
