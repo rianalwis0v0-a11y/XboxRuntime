@@ -36,6 +36,7 @@ static uint64_t g_nv2a_vsh_constant_dirty[3];
 static uint32_t g_nv2a_vsh_load_slot, g_nv2a_vsh_load_word;
 static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
 static uint32_t g_nv2a_vsh_constant_word;
+static uint32_t g_nv2a_vsh_context_write;
 static DWORD g_nv2a_vsh_handle;
 static int g_nv2a_vsh_dirty = 1;
 static uint32_t g_pgraph_fallback_methods;
@@ -400,28 +401,31 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
-    if (method == 0x1E98u) { nv2a_vsh_set_cxt_write(parameter); return; }
+    if (method == 0x1E98u) {
+        g_nv2a_vsh_context_write = parameter & 1u;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
+        return;
+    }
     if (method == 0x1E9Cu) {
-        nv2a_vsh_set_load_slot(parameter);
-        g_nv2a_vsh_load_slot = parameter;
+                g_nv2a_vsh_load_slot = parameter;
         g_nv2a_vsh_load_word = 0;
         g_nv2a_vsh_dirty = 1;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
     if (method == 0x1EA0u) {
-        nv2a_vsh_set_start_slot(parameter);
-        g_nv2a_vsh_start_slot = parameter;
+                g_nv2a_vsh_start_slot = parameter;
         g_nv2a_vsh_dirty = 1;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
     if (method == 0x1EA4u) {
-        nv2a_vsh_set_constant_load(parameter);
-        g_nv2a_vsh_constant_load = parameter;
+                g_nv2a_vsh_constant_load = parameter;
         g_nv2a_vsh_constant_word = 0;
+        g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
     if (method >= 0x0B00u && method < 0x0B80u) {
-        nv2a_vsh_program_word(parameter);
         if (g_nv2a_vsh_load_slot < 136u) {
             g_nv2a_vsh_program[g_nv2a_vsh_load_slot][g_nv2a_vsh_load_word] = parameter;
             if (++g_nv2a_vsh_load_word == 4u) {
@@ -434,7 +438,6 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         return;
     }
     if (method >= 0x0B80u && method < 0x0C00u) {
-        nv2a_vsh_constant_word(parameter);
         if (g_nv2a_vsh_constant_load < 192u) {
             memcpy(&g_nv2a_vsh_constants[g_nv2a_vsh_constant_load][g_nv2a_vsh_constant_word],
                    &parameter, sizeof(parameter));
@@ -581,6 +584,7 @@ int __cdecl ModuleStart(void)
     g_nv2a_vsh_load_slot = g_nv2a_vsh_load_word = 0;
     g_nv2a_vsh_start_slot = g_nv2a_vsh_constant_load = 0;
     g_nv2a_vsh_constant_word = 0;
+    g_nv2a_vsh_context_write = 0;
     if (g_nv2a_vsh_handle) {
         (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
         g_nv2a_vsh_handle = 0;
