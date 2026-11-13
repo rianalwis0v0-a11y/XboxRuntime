@@ -119,7 +119,7 @@ int wmain() {
     backend.version = XBE_EXECUTION_BACKEND_VERSION;
     backend.reserveImage = ReserveImage;
     backend.releaseImage = ReleaseImage;
-    backend.resolveKernelImports = ResolveImports;
+    backend.resolveImports = ResolveImports;
     backend.startGuest = StartGuest;
     backend.stopGuest = StopGuest;
     assert(registerBackend(&backend) == 0);
