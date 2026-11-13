@@ -373,6 +373,20 @@ int main() {
         const uint8_t ay8[1] = {0x9A};
         const uint8_t y16[2] = {0xBC, 0xDE};
         const uint8_t rgba_bytes[4] = {0x10, 0x20, 0x30, 0x40};
+        const uint8_t depth16[2] = {0x34, 0x12};
+        const uint8_t depth24[4] = {0x5A, 0x34, 0x12, 0xAB};
+        const uint8_t halfOne[2] = {0x00, 0x3C}; /* IEEE-754 binary16 1.0 */
+        if (decodeTexture(0x2E00u,1,1,0,depth24,sizeof(depth24),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0xAB || rgba[1]!=255 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeTexture(0x2F00u,1,1,0,depth24,sizeof(depth24),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0xAB || rgba[1]!=255 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeTexture(0x3000u,1,1,0,depth16,sizeof(depth16),rgba,4,&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeTexture(0x3100u,1,1,0,halfOne,sizeof(halfOne),rgba,4,&pitch)!=0 ||
+            rgba[0]!=255 || rgba[1]!=0 || rgba[2]!=255 || rgba[3]!=0) {
+            std::cerr << "FAIL: NV2A depth texture formats\\n"; return 1;
+        }
+
         if (decodeTexture(0x1700u,1,1,0,rg,sizeof(rg),rgba,4,&pitch)!=0 ||
             rgba[0]!=0x12 || rgba[1]!=0x34 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
             decodeTexture(0x1B00u,1,1,0,ay8,sizeof(ay8),rgba,4,&pitch)!=0 ||
@@ -423,7 +437,10 @@ int main() {
         const uint8_t rgba_bytes[4] = {0x10, 0x20, 0x30, 0x40};
         uint8_t rgba[4]{};
         uint32_t pitch = 0;
-        if (decodeSwizzledTexture(0x1A00u,1,1,ay,sizeof(ay),rgba,sizeof(rgba),&pitch)!=0 ||
+        const uint8_t depth16[2] = {0x34, 0x12};
+        if (decodeSwizzledTexture(0x2C00u,1,1,depth16,sizeof(depth16),rgba,sizeof(rgba),&pitch)!=0 ||
+            rgba[0]!=0x12 || rgba[1]!=0 || rgba[2]!=0 || rgba[3]!=0 ||
+            decodeSwizzledTexture(0x1A00u,1,1,ay,sizeof(ay),rgba,sizeof(rgba),&pitch)!=0 ||
             rgba[0]!=0x56 || rgba[1]!=0x56 || rgba[2]!=0x56 || rgba[3]!=0x78 ||
             decodeSwizzledTexture(0x2800u,1,1,rg,sizeof(rg),rgba,sizeof(rgba),&pitch)!=0 ||
             rgba[0]!=0x12 || rgba[1]!=0x34 || rgba[2]!=0x12 || rgba[3]!=0x34 ||
@@ -449,6 +466,21 @@ int main() {
             linearMipOffset[0]!=0u || linearMipSize[0]!=4u ||
             linearMipOutput[0]!=0x11 || linearMipOutput[3]!=0xFF) {
             std::cerr << "FAIL: linear-image mip-chain decode\\n"; return 1;
+        }
+
+        const uint8_t depthMip[2] = {0x34, 0x12};
+        uint8_t depthMipOutput[4]{};
+        uint32_t depthMipOffsets[1]{}, depthMipSizes[1]{};
+        if (decodeMipChain(0x3000u,1,1,1,depthMip,sizeof(depthMip),
+                depthMipOutput,sizeof(depthMipOutput),depthMipOffsets,depthMipSizes)!=0 ||
+            depthMipOutput[0]!=0x12 || depthMipOutput[1]!=0 ||
+            depthMipOutput[2]!=0 || depthMipOutput[3]!=0 ||
+            decodeMipChain(0x2C00u,1,1,1,depthMip,sizeof(depthMip),
+                depthMipOutput,sizeof(depthMipOutput),depthMipOffsets,depthMipSizes)!=0 ||
+            depthMipOutput[0]!=0x12 || depthMipOutput[1]!=0 ||
+            depthMipOutput[2]!=0 || depthMipOutput[3]!=0) {
+            std::cerr << "FAIL: NV2A depth texture mip paths\\n";
+            return 1;
         }
 
         const uint8_t twoChannelMip[2] = {0x12, 0x34};
