@@ -83,7 +83,30 @@ The Xbox socket API list also includes Winsock helpers such as event operations,
 - `WSASetLastError` → `XboxWSASetLastError`
 - `inet_addr` → `XboxWSAInetAddr`
 
-These wrappers use the guest process's own Winsock startup, event and error facilities. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. `select`, overlapped I/O (`WSARecv`/`WSASend`), and several helpers remain unsupported.
+These wrappers use the guest process's own Winsock startup, event and error facilities.
+
+### Original Xbox socket symbol → guest implementation map
+
+All targets below use `WINAPI` (stdcall on x86), and all socket handles are opaque 32-bit tokens. The registry must bind the exact Xbox import identity to the listed guest function address; the internal `XSocket*` names are not claimed to be original Xbox export names.
+
+| Xbox socket symbol | Guest implementation |
+|---|---|
+| `socket` | `XSocketCreate` |
+| `closesocket` | `XSocketClose` |
+| `bind` | `XSocketBind` |
+| `connect` | `XSocketConnect` |
+| `listen` | `XSocketListen` |
+| `accept` | `XSocketAccept` |
+| `shutdown` | `XSocketShutdown` |
+| `ioctlsocket` | `XSocketIOCTLSocket` |
+| `setsockopt` / `getsockopt` | `XSocketSetSockOpt` / `XSocketGetSockOpt` |
+| `getsockname` / `getpeername` | `XSocketGetSockName` / `XSocketGetPeerName` |
+| `send` / `recv` | `XSocketSend` / `XSocketRecv` |
+| `sendto` / `recvfrom` | `XSocketSendTo` / `XSocketRecvFrom` |
+| `htonl` / `ntohl` | `XSocketHTONL` / `XSocketNTOHL` |
+| `htons` / `ntohs` | `XSocketHTONS` / `XSocketNTOHS` |
+
+`select`, `WSARecv`, `WSARecvFrom`, `WSASend`, `WSASendTo`, `WSAGetOverlappedResult` and `WSACancelOverlappedIO` are not implemented. Do not register them until their guest-pointer, event, completion and cancellation semantics are implemented and tested. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. `select`, overlapped I/O (`WSARecv`/`WSASend`), and several helpers remain unsupported.
 
 ## Internal transport bridge (not title ABI)
 
