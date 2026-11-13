@@ -59,6 +59,11 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
     parsed.imageHeaderSize = Read32(file + 0x110);
     parsed.tlsAddress = Read32(file + 0x12C);
     parsed.certificateAddress = Read32(file + 0x118);
+    parsed.nonKernelImportDirectoryAddress = Read32(file + 0x15C);
+    parsed.libraryVersionCount = Read32(file + 0x160);
+    parsed.libraryVersionsAddress = Read32(file + 0x164);
+    parsed.kernelLibraryVersionAddress = Read32(file + 0x168);
+    parsed.xapiLibraryVersionAddress = Read32(file + 0x16C);
     parsed.sectionCount = Read32(file + 0x11C);
     const std::uint32_t sectionTableAddress = Read32(file + 0x120);
     const std::uint32_t encodedEntry = Read32(file + 0x128);
@@ -74,6 +79,23 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
         parsed.baseAddress == 0 ||
         AddOverflows(parsed.baseAddress, parsed.imageSize))
         return {Error::InvalidImageSize, parsed.imageSize};
+
+    if (parsed.libraryVersionCount > 128u)
+        return {Error::InvalidHeaderSize, parsed.libraryVersionCount};
+    if (parsed.libraryVersionCount != 0) {
+        const std::uint64_t libraryBytes =
+            static_cast<std::uint64_t>(parsed.libraryVersionCount) * 16u;
+        if (libraryBytes > (std::numeric_limits<std::size_t>::max)() ||
+            !VaRangeToFile(parsed.libraryVersionsAddress, parsed.baseAddress,
+                           parsed.headerSize, static_cast<std::size_t>(libraryBytes),
+                           fileSize, nullptr))
+            return {Error::InvalidHeaderSize, parsed.libraryVersionsAddress};
+    }
+    if (parsed.nonKernelImportDirectoryAddress != 0 &&
+        (parsed.nonKernelImportDirectoryAddress < parsed.baseAddress ||
+         static_cast<std::uint64_t>(parsed.nonKernelImportDirectoryAddress) + 4u >
+             static_cast<std::uint64_t>(parsed.baseAddress) + parsed.imageSize))
+        return {Error::InvalidHeaderSize, parsed.nonKernelImportDirectoryAddress};
 
     if (parsed.sectionCount == 0 || parsed.sectionCount > kMaximumSections)
         return {Error::InvalidSectionCount, parsed.sectionCount};
