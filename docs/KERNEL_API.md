@@ -29,6 +29,13 @@ The diagnostic XBE in `.github/scripts/test-diagnostic-xbe.ps1` calls selected e
 
 These have guest x86 dispatch routes and diagnostic-XBE coverage. Divide-by-zero and invalid shift inputs raise guest status exceptions.
 
+## 64-bit interlocked arithmetic exports
+
+- Ordinal 19: `ExInterlockedAddLargeInteger` acquires the guest-provided spin lock, adds a signed 64-bit increment, releases the lock, and returns the previous value.
+- Ordinal 20: `ExInterlockedAddLargeStatistic` uses a 64-bit compare/exchange loop to atomically add the unsigned 32-bit increment.
+- Ordinal 21: `ExInterlockedCompareExchange64` performs an atomic 64-bit compare/exchange and returns the value observed before the operation.
+- The diagnostic XBE exercises ordinals 20 and 21, including the expected resulting 64-bit memory values. Ordinal 19 is routed but its by-value 64-bit return and guest spin-lock ABI still need a dedicated guest-side test before it is counted as behaviourally verified.
+
 ## Interlocked list exports added
 
 - Ordinal 32: `ExfInterlockedInsertHeadList`
