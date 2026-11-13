@@ -2695,6 +2695,41 @@ static DWORD InvokeGuestTlsCallback(uint32_t address, void* image,
     }
 }
 
+namespace {
+std::uint32_t g_lastGuestExceptionCode = 0;
+std::uint32_t g_lastGuestExceptionInstruction = 0;
+std::uint32_t g_lastGuestAccessType = 0;
+std::uint32_t g_lastGuestFaultAddress = 0;
+
+int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
+    if (exception && exception->ExceptionRecord) {
+        const auto* record = exception->ExceptionRecord;
+        g_lastGuestExceptionCode = record->ExceptionCode;
+        g_lastGuestExceptionInstruction =
+            static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(
+                record->ExceptionAddress));
+        if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+            record->NumberParameters >= 2) {
+            g_lastGuestAccessType =
+                static_cast<std::uint32_t>(record->ExceptionInformation[0]);
+            g_lastGuestFaultAddress =
+                static_cast<std::uint32_t>(record->ExceptionInformation[1]);
+        }
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+}
+
+void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
+                                          std::uint32_t* instruction,
+                                          std::uint32_t* accessType,
+                                          std::uint32_t* faultAddress) {
+    if (code) *code = g_lastGuestExceptionCode;
+    if (instruction) *instruction = g_lastGuestExceptionInstruction;
+    if (accessType) *accessType = g_lastGuestAccessType;
+    if (faultAddress) *faultAddress = g_lastGuestFaultAddress;
+}
+
 DWORD WINAPI XboxKernelStartXbe(void*) {
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
@@ -2784,12 +2819,15 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
     // callbacks have completed.
     if (g_startupEvent) SetEvent(g_startupEvent);
 
+    g_lastGuestExceptionCode = 0;
+    g_lastGuestExceptionInstruction = 0;
+    g_lastGuestAccessType = 0;
+    g_lastGuestFaultAddress = 0;
     DWORD result = 0;
     using Entry = void (__cdecl*)();
     __try {
         reinterpret_cast<Entry>(uintptr_t(g_entry))();
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
-        OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\\n");
+    } __except(GuestExceptionFilter(GetExceptionInformation())) {
         result = GetExceptionCode();
     }
 
