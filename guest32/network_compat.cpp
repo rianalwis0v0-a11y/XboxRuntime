@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstring>
 #include <mutex>
+#include <memory>
 #include <unordered_map>
 #include <string>
 #include <limits>
@@ -14,14 +15,23 @@
 
 namespace {
 std::mutex g_mutex;
-std::unordered_map<uint32_t, SOCKET> g_sockets;
+struct SocketState {
+    explicit SocketState(SOCKET value) : socket(value) {}
+    ~SocketState() { if (socket != INVALID_SOCKET) closesocket(socket); }
+    SOCKET socket;
+};
+struct SocketLease {
+    std::shared_ptr<SocketState> state;
+    operator SOCKET() const { return state ? state->socket : INVALID_SOCKET; }
+};
+std::unordered_map<uint32_t, std::shared_ptr<SocketState>> g_sockets;
 uint32_t g_nextHandle = 1;
 unsigned g_startUsers = 0;
 
-SOCKET FindSocket(uint32_t token) {
+SocketLease FindSocket(uint32_t token) {
     std::lock_guard<std::mutex> lock(g_mutex);
     auto it = g_sockets.find(token);
-    return it == g_sockets.end() ? INVALID_SOCKET : it->second;
+    return { it == g_sockets.end() ? std::shared_ptr<SocketState>{} : it->second };
 }
 uint32_t StoreSocket(SOCKET socket) {
     if (socket == INVALID_SOCKET) return 0;
@@ -30,7 +40,7 @@ uint32_t StoreSocket(SOCKET socket) {
         uint32_t candidate = g_nextHandle++;
         if (!candidate) candidate = g_nextHandle++;
         if (g_sockets.find(candidate) == g_sockets.end()) {
-            g_sockets.emplace(candidate, socket);
+            g_sockets.emplace(candidate, std::make_shared<SocketState>(socket));
             return candidate;
         }
     }
@@ -183,7 +193,9 @@ extern "C" int __cdecl XboxNetStartup() {
 extern "C" void __cdecl XboxNetCleanup() {
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_startUsers || --g_startUsers) return;
-    for (auto& entry : g_sockets) closesocket(entry.second);
+    // Active operations hold SocketLease references. Clearing the registry
+    // removes guest-visible handles; each native socket closes after its last
+    // in-flight operation releases its lease.
     g_sockets.clear();
     WSACleanup();
 }
@@ -364,5 +376,7 @@ extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
         socket = it->second;
         g_sockets.erase(it);
     }
-    return closesocket(socket) == 0 ? 0 : -1;
+    // Erasing the registry entry invalidates the guest handle immediately.
+    // Any in-flight operation retains its lease until it safely completes.
+    return 0;
 }
