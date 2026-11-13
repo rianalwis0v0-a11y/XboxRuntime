@@ -139,9 +139,10 @@ bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
 bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address) {
     if (!hostname || !*hostname) return false;
     // Keep loopback and single-label/LAN names on the machine's normal resolver.
+    const size_t hostnameLength = strlen(hostname);
     const bool fullyQualified = strchr(hostname, '.') != nullptr;
     const bool localName = _stricmp(hostname, "localhost") == 0 ||
-        (fullyQualified && (_stricmp(hostname + strlen(hostname) - 6, ".local") == 0));
+        (hostnameLength >= 6 && _stricmp(hostname + hostnameLength - 6, ".local") == 0);
     uint32_t insigniaAddress = 0;
     if (fullyQualified && !localName && QueryInsigniaDnsA(hostname, insigniaAddress)) {
         address = {};
