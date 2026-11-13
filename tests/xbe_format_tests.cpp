@@ -105,6 +105,22 @@ int main() {
     assert(Parse(unterminatedThunks.data(), unterminatedThunks.size(), &image).error ==
            Error::InvalidThunkTable);
 
+    auto shortCertificate = file;
+    Put32(shortCertificate, 0x178, 4);
+    assert(Parse(shortCertificate.data(), shortCertificate.size(), &image).error ==
+           Error::InvalidCertificate);
+
+    auto badLibraryVersions = file;
+    Put32(badLibraryVersions, 0x160, 1);
+    Put32(badLibraryVersions, 0x164, 0xFFFFFFF0);
+    assert(Parse(badLibraryVersions.data(), badLibraryVersions.size(), &image).error ==
+           Error::InvalidLibraryVersions);
+
+    auto badImportDirectory = file;
+    Put32(badImportDirectory, 0x15C, 0xFFFFFFFC);
+    assert(Parse(badImportDirectory.data(), badImportDirectory.size(), &image).error ==
+           Error::InvalidImportDirectory);
+
     auto badMagic = file;
     badMagic[0] = 0;
     assert(Parse(badMagic.data(), badMagic.size(), &image).error == Error::BadMagic);
