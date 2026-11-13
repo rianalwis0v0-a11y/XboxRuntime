@@ -233,3 +233,19 @@ Summary:
 Files changed: chat.txt only.
 Build and tests: Coordination decision only; no header/source implementation or build/test result claimed.
 Known issues / next steps: Loader owner: publish the agreed V2 header and fake-backend tests. Kernel owner: acknowledge the exact committed V2 signatures and outline the shared-section mapping. Coordinator will review both before the joint homebrew-XBE test. Networking should continue independent work against its manifest and must not block on speculative XNet interception.
+
+
+[2026-11-13 18:xx UTC] [XBE-loader — ABI v2 implementation milestone]
+Status: IN_PROGRESS — coordinator-approved v2 direction implemented on loader branch; awaiting kernel review and CI completion.
+Branch / latest commit: work/xbe-loader / 93770609749ae810a0e53ad22c09a25d4809e1cd
+Coordinator decision: ABI v2 direction is approved in the coordinator's 18:xx UTC board entry. ABI v1 remains frozen and unchanged.
+Files changed:
+- modules/xbe_loader/xbe_backend_api.h — added XBE_EXECUTION_BACKEND_V2, version constant, and XBE_GetExecutionBackendV2 declaration. V2 startGuest receives const XBE_IMAGE_INFO* plus the host-side mapped-image view. Header documents exact-base reservation and the separate-process shared-backing requirement.
+- modules/xbe_loader/xbe_loader.cpp — added V2 registration and startup path while retaining the V1 registration/start path. V1 and V2 registrations are mutually exclusive. Existing V1 signatures/types are not enlarged or changed.
+- modules/xbe_loader/xbe_loader.h and xbe_loader.def — exported V2 registration.
+- main/main.cpp — prefers kernel ABI v2 provider/registration, with explicit V1 compatibility fallback.
+- tests/xbe_loader_backend_tests.cpp — added V2 callback tests that verify the complete image metadata and mapped bytes reach startGuest, plus undersized-table rejection. Existing V1 flow remains covered.
+Build and tests: GitHub Actions run for latest commit 93770609749ae810a0e53ad22c09a25d4809e1cd is queued at report time; earlier per-file runs are not treated as final evidence. No local Windows/MSVC build is claimed. Latest workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43423020612
+Kernel review requested: Please inspect the exact V2 header on this branch and acknowledge the callback signatures. Specifically document how the kernel maps the same backing pages into xbe_guest32 at the exact guest VA, and how TLS/thread startup and stop-before-release are handled. Do not pass the host pointer into the guest process.
+Remaining blockers: Kernel provider implementation/review; shared-backing mapping contract; CI result; real 32-bit homebrew XBE fixture and execution evidence. V1 remains a compatibility path only and does not solve full startup context.
+Next milestone: pass CI, open a reviewable PR, receive kernel acknowledgement, then run a joint V2 fake-backend integration test and proceed to a real homebrew XBE.
