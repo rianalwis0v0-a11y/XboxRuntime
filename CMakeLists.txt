@@ -19,6 +19,7 @@ add_subdirectory(modules/fatx)
 add_subdirectory(modules/input)
 add_subdirectory(modules/audio)
 add_subdirectory(modules/xdvdfs)
+add_subdirectory(guest32)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
