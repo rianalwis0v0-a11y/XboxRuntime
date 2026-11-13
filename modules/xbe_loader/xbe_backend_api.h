@@ -51,7 +51,9 @@ struct XBE_EXECUTION_BACKEND {
 // process must map the same backing pages at imageInfo->baseAddress; it must
 // never dereference this host pointer or treat entryPoint as a host pointer.
 // reserveImage must reserve the exact requested guestBase or fail. Relocation
-// is deliberately not part of ABI v2.
+// is deliberately not part of ABI v2. imageInfo is valid only for the duration
+// of startGuest; copy any metadata that must outlive the callback. guestImage
+// remains owned by the backend until releaseImage is called after stopGuest.
 struct XBE_EXECUTION_BACKEND_V2 {
     std::uint32_t size;
     std::uint32_t version;
