@@ -36,3 +36,7 @@ jobs:
           cl /nologo /std:c++17 /EHsc /W4 /WX /c modules\xbe_loader\xbe_format.cpp modules\xbe_loader\xbe_loader.cpp main\main.cpp
           if errorlevel 1 exit /b 1
           link /nologo /DLL /DEF:modules\xbe_loader\xbe_loader.def /OUT:xbe_loader.dll xbe_format.obj xbe_loader.obj
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /W4 /WX /Fe:xbe_loader_backend_tests.exe tests\xbe_loader_backend_tests.cpp
+          if errorlevel 1 exit /b 1
+          xbe_loader_backend_tests.exe
