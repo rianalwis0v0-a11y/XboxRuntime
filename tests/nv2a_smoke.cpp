@@ -728,22 +728,28 @@ int main() {
         return 1;
     }
 
-    std::vector<uint32_t> overflowCallDepthStream(35u, 0u);
+    std::vector<uint32_t> overflowCallDepthStream(37u, 0u);
     overflowCallDepthStream[0] = 0x0000000Au;
     overflowCallDepthStream[1] = 0x00000009u;
+    overflowCallDepthStream[2] = (1u << 18) | 0x1D90u; /* Must not dispatch before overflow is found. */
+    overflowCallDepthStream[3] = 0xFFAA55CCu;
     for (uint32_t depth = 1u; depth < 17u; ++depth) {
-        const uint32_t callIndex = depth * 2u;
+        const uint32_t callIndex = 2u + depth * 2u;
         overflowCallDepthStream[callIndex] = ((callIndex + 2u) * 4u) | 2u;
         overflowCallDepthStream[callIndex + 1u] = 0x00020000u;
     }
-    overflowCallDepthStream[34] = 0x00020000u;
-    if (writeVram(0x1000u, overflowCallDepthStream.data(),
+    overflowCallDepthStream[36] = 0x00020000u;
+    Stats beforeDepthOverflow{}, afterDepthOverflow{};
+    if (getStats(&beforeDepthOverflow) != 0 ||
+        writeVram(0x1000u, overflowCallDepthStream.data(),
                   (uint32_t)(overflowCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, 8u, &dmaGet, &dmaMethods) == 0 ||
+        getStats(&afterDepthOverflow) != 0 || dmaMethods != 0u ||
+        beforeDepthOverflow.methods_handled != afterDepthOverflow.methods_handled ||
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
         (read(0x3228u, 4u) >> 29) != 1u ||
         write(0x2100u, 0x1000u, 4u) != 0) {
-        std::cerr << "FAIL: NV2A DMA CALL stack overflow protection / PFIFO error reporting\\n";
+        std::cerr << "FAIL: NV2A DMA CALL stack overflow was not rejected before dispatch\\n";
         stop();
         return 1;
     }
