@@ -623,7 +623,7 @@ extern "C" LONG __stdcall K_NtReadFile(
                 if (event) SetEvent(event);
                 return kEndOfFile;
             }
-            DWORD received = 0;
+            uint32_t received = 0;
             const int result = XDVDFS_ReadFile(
                 dvd->second.path.c_str(), start, buffer, length, &received);
             if (result != 0) return kUnsuccessful;
