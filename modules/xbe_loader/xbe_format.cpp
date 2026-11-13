@@ -183,10 +183,25 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
                        parsed.headerSize, certificateSize, fileSize, nullptr))
         return {Error::InvalidCertificate, certificateSize};
 
-    const std::uint32_t retailEntry = encodedEntry ^ kRetailEntryXor;
-    const std::uint32_t debugEntry = encodedEntry ^ kDebugEntryXor;
-    const std::uint32_t retailThunk = encodedThunk ^ kRetailThunkXor;
-    const std::uint32_t debugThunk = encodedThunk ^ kDebugThunkXor;
+    // Match Cxbx-Reloaded's XBE type selection before decoding either
+    // address. The entry-point value identifies Chihiro; otherwise the
+    // encoded thunk's KSEG0 bit distinguishes debug from retail XBEs.
+    // Do not choose an XOR key merely because its decoded address happens
+    // to land inside an executable section: that can misclassify malformed
+    // or deliberately ambiguous headers.
+    parsed.chihiroImage =
+        (encodedEntry & kChihiroEntryTypeMask) == kChihiroEntryTypeValue;
+    parsed.debugImage = !parsed.chihiroImage &&
+        (encodedThunk & kDebugThunkTypeMask) != 0;
+
+    const std::uint32_t entryXor = parsed.chihiroImage
+        ? kChihiroEntryXor
+        : (parsed.debugImage ? kDebugEntryXor : kRetailEntryXor);
+    const std::uint32_t thunkXor = parsed.chihiroImage
+        ? kChihiroThunkXor
+        : (parsed.debugImage ? kDebugThunkXor : kRetailThunkXor);
+    const std::uint32_t decodedEntry = encodedEntry ^ entryXor;
+    const std::uint32_t decodedThunk = encodedThunk ^ thunkXor;
 
     // Section metadata is decoded before choosing the retail/debug key.
     for (std::uint32_t i = 0; i < parsed.sectionCount; ++i) {
@@ -253,14 +268,11 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
         return false;
     };
 
-    const bool retailValid = entryInExecutableSection(retailEntry);
-    const bool debugValid = entryInExecutableSection(debugEntry);
-    if (!retailValid && !debugValid)
+    if (!entryInExecutableSection(decodedEntry))
         return {Error::InvalidEntryPoint, encodedEntry};
 
-    parsed.debugImage = !retailValid && debugValid;
-    parsed.entryPoint = parsed.debugImage ? debugEntry : retailEntry;
-    parsed.kernelThunkAddress = parsed.debugImage ? debugThunk : retailThunk;
+    parsed.entryPoint = decodedEntry;
+    parsed.kernelThunkAddress = decodedThunk;
 
     if (parsed.kernelThunkAddress != 0) {
         bool terminated = false;
