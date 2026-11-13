@@ -286,8 +286,10 @@ int __cdecl StartGuest(const XBE_IMAGE_INFO* info,
     if (!WriteExact(context.pipe, &message, sizeof(message)) ||
         !ReadExact(context.pipe, &reply, sizeof(reply)) ||
         reply.magic != XBOX_GUEST_PROTOCOL_MAGIC ||
-        reply.command != XboxGuestStart || reply.status != ERROR_SUCCESS)
+        reply.command != XboxGuestStart)
         return 3;
+    if (reply.status != ERROR_SUCCESS)
+        return static_cast<int>(reply.status);
     context.started = true;
     return 0;
 }
