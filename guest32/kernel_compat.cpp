@@ -586,7 +586,7 @@ static void CloseGuestSymbolicLinkHandle(HANDLE handle) {
 }
 extern "C" LONG __stdcall K_IoCreateSymbolicLink(
     const GuestUnicodeString* linkName, const GuestUnicodeString* deviceName) {
-    if (!linkName || !deviceName || !deviceName->Buffer || !deviceName->Length)
+    if (!linkName || !deviceName || !deviceName->Buffer || !deviceName->Length || (deviceName->Length & 1))
         return LONG(0xC000000Du);
     const std::wstring key = CanonicalObjectName(linkName);
     if (key.empty()) return LONG(0xC0000033u);
@@ -611,7 +611,7 @@ extern "C" LONG __stdcall K_NtOpenSymbolicLinkObject(
     if (g_symbolicLinks.find(key) == g_symbolicLinks.end()) return LONG(0xC0000034u);
     HANDLE handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!handle) return LONG(0xC0000001u);
-    g_symbolicLinkHandles.emplace(handle, key);
+    g_symbolicLinkHandles.emplace(handle, g_symbolicLinks.find(key)->second);
     *out = handle;
     return 0;
 }
@@ -623,9 +623,7 @@ extern "C" LONG __stdcall K_NtQuerySymbolicLinkObject(
         std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
         const auto opened = g_symbolicLinkHandles.find(handle);
         if (opened == g_symbolicLinkHandles.end()) return LONG(0xC0000008u);
-        const auto link = g_symbolicLinks.find(opened->second);
-        if (link == g_symbolicLinks.end()) return LONG(0xC0000034u);
-        target = link->second;
+        target = opened->second;
     }
     const ULONG required = static_cast<ULONG>(target.size() * sizeof(wchar_t));
     if (returnedLength) *returnedLength = required;
