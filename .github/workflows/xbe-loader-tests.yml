@@ -1,0 +1,38 @@
+name: XBE loader validation
+
+on:
+  push:
+    branches:
+      - work/xbe-loader
+  pull_request:
+    paths:
+      - "modules/xbe_loader/**"
+      - "tests/xbe_format_tests.cpp"
+      - ".github/workflows/xbe-loader-tests.yml"
+
+jobs:
+  portable-parser-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile parser tests
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+            tests/xbe_format_tests.cpp modules/xbe_loader/xbe_format.cpp \
+            -o xbe_format_tests
+      - name: Run parser tests
+        run: ./xbe_format_tests
+
+  windows-dll-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build 32-bit loader DLL and exports
+        shell: cmd
+        run: |
+          call "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath > vs-path.txt
+          set /p VS_PATH=<vs-path.txt
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvars32.bat"
+          cl /nologo /std:c++17 /EHsc /W4 /WX /c modules\xbe_loader\xbe_format.cpp modules\xbe_loader\xbe_loader.cpp
+          if errorlevel 1 exit /b 1
+          link /nologo /DLL /DEF:modules\xbe_loader\xbe_loader.def /OUT:xbe_loader.dll xbe_format.obj xbe_loader.obj
