@@ -99,6 +99,7 @@ All targets below use `WINAPI` (stdcall on x86), and all socket handles are opaq
 | `accept` | `XSocketAccept` |
 | `shutdown` | `XSocketShutdown` |
 | `ioctlsocket` | `XSocketIOCTLSocket` |
+| `select` | `XSocketSelect` | Translates guest 32-bit socket tokens to native host sockets, invokes Winsock `select`, then restores ready sets using guest tokens. `nfds` is ignored per Winsock semantics. |
 | `setsockopt` / `getsockopt` | `XSocketSetSockOpt` / `XSocketGetSockOpt` |
 | `getsockname` / `getpeername` | `XSocketGetSockName` / `XSocketGetPeerName` |
 | `send` / `recv` | `XSocketSend` / `XSocketRecv` |
@@ -106,7 +107,7 @@ All targets below use `WINAPI` (stdcall on x86), and all socket handles are opaq
 | `htonl` / `ntohl` | `XSocketHTONL` / `XSocketNTOHL` |
 | `htons` / `ntohs` | `XSocketHTONS` / `XSocketNTOHS` |
 
-`select`, `WSARecv`, `WSARecvFrom`, `WSASend`, `WSASendTo`, `WSAGetOverlappedResult` and `WSACancelOverlappedIO` are not implemented. Do not register them until their guest-pointer, event, completion and cancellation semantics are implemented and tested. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. `select`, overlapped I/O (`WSARecv`/`WSASend`), and several helpers remain unsupported.
+`WSARecv`, `WSARecvFrom`, `WSASend`, `WSASendTo`, `WSAGetOverlappedResult` and `WSACancelOverlappedIO` are not implemented. Do not register them until their guest-pointer, event, completion and cancellation semantics are implemented and tested. The full socket API names in the Xbox `SOCKAPILIST` are the standard `socket`, `closesocket`, `bind`, `connect`, `listen`, `accept`, `select`, `send`, `recv`, etc.; current `XSocket*` wrappers are an internal compatibility surface and still need explicit name-to-address registration. Overlapped I/O (`WSARecv`/`WSASend`) and several helpers remain unsupported.
 
 ## Internal transport bridge (not title ABI)
 
@@ -127,6 +128,6 @@ The following `__cdecl` functions are implementation-private guest32 helpers. Th
 
 1. Compare every declaration, structure packing/size, constant and return convention against an authoritative Xbox-compatible SDK header.
 2. Build the x86 guest and `network_smoke` with MSVC; run the smoke test and record exact output.
-3. Add per-function ABI tests, including invalid pointers/lengths, event semantics, socket options, nonblocking I/O, select/overlapped behavior and close-vs-operation races.
+3. Add per-function ABI tests, including invalid pointers/lengths, event semantics, socket options, nonblocking I/O, select edge cases, overlapped behavior and close-vs-operation races.
 4. Agree with kernel/loader on a guest API registration format and prove one verified call path from a real XBE.
 5. Design static XNet interception separately; do not patch guessed signatures or claim that these compiled functions automatically redirect retail calls.
