@@ -224,7 +224,7 @@ extern "C" int __cdecl XDVDFS_ListDirectory(
     std::sort(children.begin(), children.end(),
         [](const auto& a, const auto& b) { return a.first < b.first; });
     *required = static_cast<uint32_t>(children.size());
-    if (capacity < children.size()) return 7;
+    if (capacity < children.size()) return XDVDFS_ERROR_BUFFER_TOO_SMALL;
 
     for (uint32_t i = 0; i < *required; ++i) {
         const Entry& source = *children[i].second;
