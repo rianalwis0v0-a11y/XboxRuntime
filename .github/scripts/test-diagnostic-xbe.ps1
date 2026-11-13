@@ -547,7 +547,7 @@ EmitPush $letterVa
 EmitPush $extraAnsiDescVa
 EmitCallImport 289
 EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $extraAnsiDescVa
-EmitCheckEqual 2
+EmitCheckEqual 1
 EmitPush 0
 EmitPush $extraAnsiDescVa
 EmitPush $extraAnsiDescVa
