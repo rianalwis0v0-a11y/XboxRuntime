@@ -14,7 +14,7 @@ using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
 using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
-using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*);
+using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
@@ -145,12 +145,20 @@ int wmain(int argc, wchar_t** argv) {
     if (!result) {
         std::uint32_t exitCode = 0xFFFFFFFFu;
         std::uint32_t tlsCleared = 0;
-        const int waitResult = waitForExit(30000, &exitCode, &tlsCleared);
-        std::printf("Guest exit: wait=%d exitCode=0x%08X tlsIndexCleared=%u\n",
-                    waitResult, exitCode, tlsCleared);
+        std::uint32_t exceptionInstruction = 0;
+        std::uint32_t accessType = 0xFFFFFFFFu;
+        std::uint32_t faultAddress = 0;
+        const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
+            &exceptionInstruction, &accessType, &faultAddress);
+        std::printf("Guest exit: wait=%d exitCode=0x%08X tlsIndexCleared=%u "
+                    "exceptionIP=0x%08X accessType=%u faultAddress=0x%08X\n",
+                    waitResult, exitCode, tlsCleared, exceptionInstruction,
+                    accessType, faultAddress);
         if (waitResult != ERROR_SUCCESS || exitCode != ERROR_SUCCESS ||
             tlsCleared != 1) {
-            std::fprintf(stderr, "FAIL: guest did not return cleanly or TLS cleanup failed\n");
+            std::fprintf(stderr, "FAIL: guest did not return cleanly or TLS cleanup failed "
+                "(exceptionIP=0x%08X accessType=%u faultAddress=0x%08X)\n",
+                exceptionInstruction, accessType, faultAddress);
             result = 13;
         } else {
             std::puts("PASS: real guest entrypoint returned and TLS index slot was cleared.");
