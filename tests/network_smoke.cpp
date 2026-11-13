@@ -48,7 +48,7 @@ int main() {
     XNDNS* dns = nullptr;
     if (!dnsEvent || XNetDnsLookup("localhost", dnsEvent, &dns) != 0 ||
         !dns || dns->iStatus != 0 || dns->cina == 0 ||
-        WSAWaitForMultipleEvents(1, &dnsEvent, TRUE, 0, FALSE) != WSA_WAIT_EVENT_0) {
+        WSAWaitForMultipleEvents(1, &dnsEvent, TRUE, 5000, FALSE) != WSA_WAIT_EVENT_0) {
         if (dns) XNetDnsRelease(dns);
         if (dnsEvent) WSACloseEvent(dnsEvent);
         XNetCleanup();
