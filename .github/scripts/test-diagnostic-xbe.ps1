@@ -476,6 +476,63 @@ EmitPush $eventObjectVa
 EmitCallImport 159
 EmitCheckEqual 0x102
 
+# Executive device queue lifecycle and keyed ordering.
+$deviceQueueVa = [uint32]($reportVa + 0x300)
+$deviceEntry1Va = [uint32]($reportVa + 0x340)
+$deviceEntry2Va = [uint32]($reportVa + 0x350)
+$deviceEntry3Va = [uint32]($reportVa + 0x360)
+EmitPush $deviceQueueVa
+EmitCallImport 106
+# First insertion claims an idle device and is not queued.
+EmitPush $deviceEntry1Va
+EmitPush $deviceQueueVa
+EmitCallImport 115
+EmitCheckEqual 0
+# A second entry is queued and can be removed.
+EmitPush $deviceEntry2Va
+EmitPush $deviceQueueVa
+EmitCallImport 115
+EmitCheckEqual 1
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual $deviceEntry2Va
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual 0
+
+# Keyed insertion is stable in ascending key order; remove-by-key selects
+# the first key >= requested key, then falls back to the head.
+EmitPush $deviceQueueVa
+EmitCallImport 106
+EmitPush 0
+EmitPush $deviceEntry1Va
+EmitPush $deviceQueueVa
+EmitCallImport 114
+EmitCheckEqual 0
+EmitPush 20
+EmitPush $deviceEntry2Va
+EmitPush $deviceQueueVa
+EmitCallImport 114
+EmitCheckEqual 1
+EmitPush 10
+EmitPush $deviceEntry3Va
+EmitPush $deviceQueueVa
+EmitCallImport 114
+EmitCheckEqual 1
+EmitPush 15
+EmitPush $deviceQueueVa
+EmitCallImport 133
+EmitCheckEqual $deviceEntry2Va
+EmitPush $deviceEntry2Va
+EmitCallImport 135
+EmitCheckEqual 0
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual $deviceEntry3Va
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual 0
+
 
 # IRQL and critical-region bookkeeping.
 EmitCallImport 103
