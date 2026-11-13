@@ -98,6 +98,7 @@ add_test(NAME input_smoke COMMAND input_smoke)
 add_executable(network_smoke
     tests/network_smoke.cpp
     guest32/network_compat.cpp
+    guest32/xnet_compat.cpp
 )
 target_include_directories(network_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/guest32")
 target_compile_features(network_smoke PRIVATE cxx_std_17)
