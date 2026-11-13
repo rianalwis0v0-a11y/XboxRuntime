@@ -38,7 +38,10 @@ static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
 static uint32_t g_nv2a_vsh_constant_word;
 static uint32_t g_nv2a_vsh_context_write;
 static DWORD g_nv2a_vsh_handle;
+static uint16_t g_nv2a_vsh_input_mask;
 static uint32_t g_nv2a_vsh_program_hash;
+static uint8_t* g_nv2a_gpu_vertex_stream;
+static size_t g_nv2a_gpu_vertex_capacity;
 static int g_nv2a_vsh_dirty = 1;
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
@@ -2113,6 +2116,7 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
                 &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
                 instruction_count, &metadata) != 0)
             return 0;
+        g_nv2a_vsh_input_mask = metadata.input_mask;
         uint32_t hash = 2166136261u;
         const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
         for (uint32_t i = 0; i < instruction_count * 4u; ++i)
@@ -2136,6 +2140,83 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
     /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
      * compiles it on cache miss, and binds the cached GPU vertex shader. */
     return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
+}
+
+/* Match d3d8_vsh.c's ATTR input-layout order exactly. CPU work here is
+ * register-to-stream staging only; all vertex instructions run on D3D11. */
+static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
+    uint32_t vertex_count, uint16_t input_mask,
+    const uint8_t** output, uint32_t* stride_out)
+{
+    uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
+    size_t required;
+    if (output) *output = NULL;
+    if (stride_out) *stride_out = 0;
+    if (!vertices || !vertex_count || !output || !stride_out)
+        return 0;
+
+    for (uint32_t reg = 0; reg < 16u; ++reg) {
+        if (!(input_mask & (uint16_t)(1u << reg)))
+            continue;
+        offsets[reg] = stride;
+        switch (reg) {
+        case 0u: case 2u: sizes[reg] = 12u; break;
+        case 3u: case 4u: case 7u: sizes[reg] = 4u; break;
+        case 5u: case 6u: sizes[reg] = 4u; break;
+        case 8u: case 9u: case 10u: case 11u: sizes[reg] = 8u; break;
+        default: sizes[reg] = 16u; break;
+        }
+        if (stride > UINT32_MAX - sizes[reg]) return 0;
+        stride += sizes[reg];
+    }
+    if (!stride || vertex_count > SIZE_MAX / stride)
+        return 0;
+    required = (size_t)vertex_count * stride;
+    if (required > g_nv2a_gpu_vertex_capacity) {
+        uint8_t* grown = (uint8_t*)realloc(g_nv2a_gpu_vertex_stream, required);
+        if (!grown) return 0;
+        g_nv2a_gpu_vertex_stream = grown;
+        g_nv2a_gpu_vertex_capacity = required;
+    }
+
+    for (uint32_t i = 0; i < vertex_count; ++i) {
+        for (uint32_t reg = 0; reg < 16u; ++reg) {
+            if (!(input_mask & (uint16_t)(1u << reg)))
+                continue;
+            uint8_t* dst = g_nv2a_gpu_vertex_stream +
+                (size_t)i * stride + offsets[reg];
+            const XboxNV2A_VERTEX* v = &vertices[i];
+            switch (reg) {
+            case 0u: memcpy(dst, &v->x, 12u); break;
+            case 1u: {
+                const float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+                memcpy(dst, weights, sizeof(weights)); break;
+            }
+            case 2u: memcpy(dst, &v->nx, 12u); break;
+            case 3u: memcpy(dst, &v->diffuse, 4u); break;
+            case 4u: memcpy(dst, &v->specular, 4u); break;
+            case 5u: case 6u: {
+                const float zero = 0.0f;
+                memcpy(dst, &zero, sizeof(zero)); break;
+            }
+            case 7u: {
+                const uint32_t opaque_black = 0xFF000000u;
+                memcpy(dst, &opaque_black, sizeof(opaque_black)); break;
+            }
+            case 8u: memcpy(dst, &v->u, 8u); break;
+            case 9u: memcpy(dst, &v->u1, 8u); break;
+            case 10u: memcpy(dst, &v->u2, 8u); break;
+            case 11u: memcpy(dst, &v->u3, 8u); break;
+            default: {
+                const float generic[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                memcpy(dst, generic, sizeof(generic)); break;
+            }
+            }
+        }
+    }
+    *output = g_nv2a_gpu_vertex_stream;
+    *stride_out = stride;
+    return 1;
 }
 
 static void nv2a_flush_vertex_constants(void)
@@ -2189,15 +2270,20 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     IDirect3DDevice8* d=xbox_GetD3DDevice();
     if(!d||!d->lpVtbl||!d->lpVtbl->SetVertexShader||!d->lpVtbl->DrawPrimitiveUP)return 5;
     const void *draw_data = draw;
-    const uint32_t draw_stride = stride;
+    uint32_t draw_stride = stride;
     if ((g_transform_execution_mode & 3u) == 2u) {
-        /* The vertex stream stays in its native FVF layout. The programmable
-         * NV2A vertex instructions execute only in the D3D11 vertex shader. */
+        /* Select the FVF so the D3D11 translator builds the matching ATTR
+         * input layout, then bind the cached programmable vertex shader. */
         if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
-            return 6; /* Establish the native Xbox vertex-register layout. */
+            return 6;
         nv2a_flush_vertex_constants();
         if (!nv2a_prepare_gpu_vertex_shader(d))
             return 9;
+        const uint8_t* packed = NULL;
+        if (!nv2a_pack_gpu_vertex_stream(draw, draw_count,
+                g_nv2a_vsh_input_mask, &packed, &draw_stride))
+            return 10;
+        draw_data = packed;
     } else if (FAILED(d->lpVtbl->SetVertexShader(d,fvf))) {
         return 6;
     }
