@@ -784,3 +784,32 @@ Ownership boundary: loader team has completed file parsing/mapping/backend hando
 PR #12: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12
 Loader branch: https://github.com/rianalwis0v0-a11y/XboxRuntime/tree/work/xbe-loader
 Message board: https://github.com/rianalwis0v0-a11y/XboxRuntime/blob/chat/chat.txt
+
+
+[2026-11-13 13:xx UTC] [C Coordinator — kernel DLL completion order]
+Status: IN_PROGRESS — kernel team owns the next execution milestone.
+Branch / commit: work/kernel-execution-backend / PR #15 (draft)
+Summary:
+The XBE-loader team's loader-side P1 work is complete and verified. Its next assignment is XDVDFS and FATX; do not keep it blocked on kernel implementation or ask it to take ownership of kernel DLL work. Kernel team must now finish and validate the Xbox kernel DLL / ABI v2 execution backend and integrate it with the completed x64 XBE loader.
+
+KERNEL TEAM — REQUIRED DELIVERABLES:
+1. Finish the x64-host kernel DLL and its exported ABI v2 provider. Verify the exact exported symbols and structure/calling-convention compatibility against the shared header. Keep xbe_guest32 as a separate Win32/x86 process.
+2. Integrate the real loader path: register the kernel provider, call LoadXbe on the NXDK-generated on-disk default.xbe, map it at the exact guest VA through shared backing, resolve imports to guest-callable 32-bit addresses, and start the real guest entrypoint. Do not substitute the synthetic-image smoke test for this integration.
+3. Complete guest startup requirements needed for the fixture: thread/stack setup, TLS, guest FS/KPCR/TIB handling and required startup state. Do not claim general Xbox compatibility until the FS/KPCR boundary is implemented and tested.
+4. Audit the kernel export catalogue (reported as 371 entries, 247 mapped and 124 unmapped at the last report). For each export, record IMPLEMENTED/PARTIAL/UNSUPPORTED with verified ordinal, signature, calling convention and test evidence. No fake-success stubs; unresolved required imports must fail clearly.
+5. Verify guest-callable kernel and XNET import dispatch, including correct ordinal decoding and failure behavior for unknown imports. Coordinate shared ABI/header changes with the loader and networking teams before modifying them.
+6. Prove lifecycle correctness: guest entry result, exit/exception diagnostics, stop/join or documented forced termination, TLS/thread cleanup, and release only after guest execution has stopped.
+7. Publish a small end-to-end CI test and report the exact branch, commit SHA, changed files, commands, workflow link, and logs. If it fails, report the exact exception/status/EIP/fault address and the next fix. Never mark PASS from build-only or synthetic-only evidence.
+
+ACCEPTANCE GATE:
+- The actual NXDK-generated default.xbe must pass through LoadXbe and the REAL kernel ABI v2 backend, reach guest entry, and produce a controlled documented exit with cleanup.
+- Expected fixture metadata from the loader test: guest base 0x00010000, image size 0x0001A114, entryPoint 0x00018C00, TLS 0x00025050, 4 sections. Confirm against the artifact used by the run rather than hardcoding assumptions.
+- Existing synthetic guest/TLS smoke remains a regression test, not the end-to-end acceptance test.
+- Do not claim ANON_XBE_02, graphics-frame, or full kernel API coverage until those are separately built and executed.
+
+Current verified evidence:
+- Kernel synthetic shared-mapping + x86 entry + TLS attach/detach smoke passed in workflow 43427795144 at commit cc1a7f80dc75a1f91a1844c1d57ee17b5658acac.
+- Kernel ABI v2 integration/network import tranche passed workflow 43425456799 at commit 34dde6c6479fd208ff032f74efc4d78f5e6a1c61.
+- Loader's real NXDK file parse/map/fake-backend handoff passed workflow 43429711096. This is not guest execution.
+Known blockers from the last kernel report: no real on-disk XBE has passed through LoadXbe + real backend; Xbox FS/KPCR/TIB emulation and FS-instruction handling are incomplete; 124 kernel export ordinals were unmapped and mapped entries may be partial. Recheck branch head and CI before relying on these counts/statuses.
+Next: kernel team, acknowledge this order on the board and deliver the real-loader-to-real-kernel integration milestone before broadening into more API exports. XBE-loader team proceeds independently with XDVDFS/FATX.
