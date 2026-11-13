@@ -776,6 +776,38 @@ static void decode_dxt_alpha_block(const uint8_t* block, uint8_t* dst,
     }
 }
 
+static uint8_t nv2a_half_to_u8(uint16_t value)
+{
+    const uint32_t sign = (uint32_t)(value & 0x8000u) << 16;
+    uint32_t exponent = (value >> 10) & 0x1Fu;
+    uint32_t mantissa = value & 0x03FFu;
+    uint32_t bits;
+    float converted;
+    if (exponent == 0u) {
+        if (mantissa == 0u) {
+            bits = sign;
+        } else {
+            int shift = 0;
+            while ((mantissa & 0x0400u) == 0u) {
+                mantissa <<= 1;
+                ++shift;
+            }
+            mantissa &= 0x03FFu;
+            bits = sign | ((uint32_t)(113 - shift) << 23) | (mantissa << 13);
+        }
+    } else if (exponent == 31u) {
+        bits = sign | 0x7F800000u | (mantissa << 13);
+    } else {
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    }
+    memcpy(&converted, &bits, sizeof(converted));
+    if (!(converted > 0.0f))
+        return 0u;
+    if (converted >= 1.0f)
+        return 255u;
+    return (uint8_t)(converted * 255.0f + 0.5f);
+}
+
 int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     uint32_t height, uint32_t source_pitch, const void* source,
     uint32_t source_length, void* destination, uint32_t destination_capacity,
@@ -792,8 +824,10 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
     case 0x02u: case 0x03u: case 0x04u: case 0x05u:
     case 0x10u: case 0x11u: case 0x17u: case 0x1Au: case 0x20u:
     case 0x1Cu: case 0x1Du: case 0x28u: case 0x29u:
-    case 0x32u: case 0x35u:
+    case 0x2Cu: case 0x30u: case 0x31u: case 0x32u: case 0x35u:
         bytes_per_pixel=2u; break;
+    case 0x2Eu: case 0x2Fu:
+        bytes_per_pixel=4u; break;
     case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
     case 0x3Au: case 0x3Bu: case 0x3Cu: case 0x3Fu: case 0x40u: case 0x41u:
         bytes_per_pixel=4u; break;
@@ -863,6 +897,13 @@ int __cdecl XboxNV2A_DecodeTextureRGBA8(uint32_t format, uint32_t width,
                 q[0]=q[1]=q[2]=p[0]; q[3]=p[1];
             } else if(color==0x1Bu) {
                 q[0]=q[1]=q[2]=q[3]=p[0];
+            } else if(color==0x2Cu || color==0x30u) {
+                q[0]=p[1]; q[1]=0u; q[2]=0u; q[3]=0u;
+            } else if(color==0x31u) {
+                q[0]=nv2a_half_to_u8((uint16_t)(p[0] | ((uint16_t)p[1] << 8)));
+                q[1]=0u; q[2]=255u; q[3]=0u;
+            } else if(color==0x2Eu || color==0x2Fu) {
+                q[0]=p[3]; q[1]=255u; q[2]=0u; q[3]=0u;
             } else if(color==0x32u || color==0x35u) {
                 q[0]=255u; q[1]=p[1]; q[2]=p[0]; q[3]=255u;
             } else if(color==0x3Au || color==0x3Fu) {
@@ -897,7 +938,7 @@ int __cdecl XboxNV2A_DecodeSwizzledTextureRGBA8(uint32_t format,
     switch (color) {
     case 0x00u: case 0x19u: bytes_per_pixel = 1u; break;
     case 0x02u: case 0x03u: case 0x04u: case 0x05u:
-    case 0x1Au: case 0x28u: case 0x29u: case 0x32u:
+    case 0x1Au: case 0x28u: case 0x29u: case 0x2Cu: case 0x32u:
         bytes_per_pixel = 2u; break;
     case 0x06u: case 0x07u: case 0x3Au: case 0x3Bu: case 0x3Cu:
         bytes_per_pixel = 4u; break;
@@ -944,8 +985,9 @@ int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(uint32_t format,
         color == 0x12u || color == 0x13u || color == 0x17u ||
         color == 0x1Bu || color == 0x1Cu || color == 0x1Du ||
         color == 0x1Eu || color == 0x1Fu || color == 0x20u ||
-        color == 0x35u || color == 0x3Fu || color == 0x40u ||
-        color == 0x41u;
+        color == 0x2Eu || color == 0x2Fu || color == 0x30u ||
+        color == 0x31u || color == 0x35u || color == 0x3Fu ||
+        color == 0x40u || color == 0x41u;
     uint32_t bytes_per_pixel = 0;
     if (!dxt1 && !dxt_other) {
         switch (color) {
@@ -954,8 +996,11 @@ int __cdecl XboxNV2A_DecodeTextureMipChainRGBA8(uint32_t format,
         case 0x02u: case 0x03u: case 0x04u: case 0x05u:
         case 0x10u: case 0x11u: case 0x17u: case 0x1Au:
         case 0x1Cu: case 0x1Du: case 0x20u: case 0x28u:
-        case 0x29u: case 0x32u: case 0x35u:
+        case 0x29u: case 0x2Cu: case 0x30u: case 0x31u:
+        case 0x32u: case 0x35u:
             bytes_per_pixel = 2u; break;
+        case 0x2Eu: case 0x2Fu:
+            bytes_per_pixel = 4u; break;
         case 0x06u: case 0x07u: case 0x12u: case 0x1Eu:
         case 0x3Au: case 0x3Bu: case 0x3Cu: case 0x3Fu:
         case 0x40u: case 0x41u:
@@ -1206,6 +1251,7 @@ static int nv2a_texture_format_is_supported(uint32_t color)
     case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x17u:
     case 0x19u: case 0x1Au: case 0x1Bu: case 0x1Cu: case 0x1Du:
     case 0x1Eu: case 0x1Fu: case 0x20u: case 0x28u: case 0x29u:
+    case 0x2Cu: case 0x2Eu: case 0x2Fu: case 0x30u: case 0x31u:
     case 0x32u: case 0x35u: case 0x3Au: case 0x3Bu: case 0x3Cu:
     case 0x3Fu: case 0x40u: case 0x41u:
         return 1;
@@ -1219,7 +1265,8 @@ static int nv2a_texture_format_is_linear(uint32_t color)
     switch (color) {
     case 0x10u: case 0x11u: case 0x12u: case 0x13u: case 0x17u:
     case 0x1Bu: case 0x1Cu: case 0x1Du: case 0x1Eu: case 0x1Fu:
-    case 0x20u: case 0x35u: case 0x3Fu: case 0x40u: case 0x41u:
+    case 0x20u: case 0x2Eu: case 0x2Fu: case 0x30u: case 0x31u:
+    case 0x35u: case 0x3Fu: case 0x40u: case 0x41u:
         return 1;
     default:
         return 0;
