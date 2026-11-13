@@ -6,3 +6,4 @@ EXPORTS
     XBE_GetExecutionBackendV2
     XboxKernelSetGuestTitlePath
     XboxKernelWaitForGuestExit
+    XboxKernelGetLastReserveDiagnostic
