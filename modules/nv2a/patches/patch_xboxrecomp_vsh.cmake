@@ -253,3 +253,97 @@ if(NOT _source MATCHES "dst->output_write_mask")
     endif()
     file(WRITE "${_vsh_c}" "${_source}")
 endif()
+
+
+# Preserve NV2A paired-issue semantics. MAC and ILU read the same pre-instruction
+# register file even though the generated HLSL statements are emitted sequentially.
+file(READ "\${_vsh_c}" _source)
+if(NOT _source MATCHES "XBOXRUNTIME_NV2A_PAIRED_SNAPSHOT_PATCH")
+    set(_temp_old [=[
+    case NV2A_VSH_REG_TEMP:
+        if (src->reg_index == 12)
+            sb_append(sb, "R12"); /* oPos alias */
+        else
+            sb_append(sb, "R%d", src->reg_index);
+        break;
+]=])
+    set(_temp_new [=[
+    case NV2A_VSH_REG_TEMP:
+        /* XBOXRUNTIME_NV2A_PAIRED_SNAPSHOT_PATCH: read the pre-issue register file. */
+        sb_append(sb, "R_pre[%d]", src->reg_index);
+        break;
+]=])
+    string(FIND "\${_source}" "\${_temp_old}" _temp_at)
+    if(_temp_at LESS 0)
+        message(FATAL_ERROR "Could not locate temporary source emitter for paired-issue patch")
+    endif()
+    string(REPLACE "\${_temp_old}" "\${_temp_new}" _source "\${_source}")
+
+    set(_rel_old [=[
+            sb_append(sb, "c[a0 + %d]", src->reg_index);
+]=])
+    set(_rel_new [=[
+            sb_append(sb, "c[a0_pre + %d]", src->reg_index);
+]=])
+    string(FIND "\${_source}" "\${_rel_old}" _rel_at)
+    if(_rel_at LESS 0)
+        message(FATAL_ERROR "Could not locate relative-constant emitter for paired-issue patch")
+    endif()
+    string(REPLACE "\${_rel_old}" "\${_rel_new}" _source "\${_source}")
+
+    set(_a0_old [=[
+    sb_append(&sb, "    int a0 = 0;\\n\\n");
+]=])
+    set(_a0_new [=[
+    sb_append(&sb, "    int a0 = 0;\\n    int a0_pre = 0;\\n\\n");
+]=])
+    string(FIND "\${_source}" "\${_a0_old}" _a0_at)
+    if(_a0_at LESS 0)
+        message(FATAL_ERROR "Could not locate address-register declaration")
+    endif()
+    string(REPLACE "\${_a0_old}" "\${_a0_new}" _source "\${_source}")
+
+    set(_alias_old [=[
+    sb_append(&sb, "    #define R12 oPos\\n\\n");
+]=])
+    set(_alias_new [=[
+    sb_append(&sb, "    #define R12 oPos\\n");
+    sb_append(&sb, "    float4 R_pre[13];\\n\\n");
+]=])
+    string(FIND "\${_source}" "\${_alias_old}" _alias_at)
+    if(_alias_at LESS 0)
+        message(FATAL_ERROR "Could not locate R12 alias for paired-issue snapshot array")
+    endif()
+    string(REPLACE "\${_alias_old}" "\${_alias_new}" _source "\${_source}")
+
+    set(_instruction_old [=[
+        sb_append(&sb, "\\n    /* Instruction %d */\\n", i);
+]=])
+    set(_instruction_new [=[
+        sb_append(&sb, "\\n    /* Instruction %d */\\n", i);
+        /* Both execution units read the old register file before either writes. */
+        {
+            int r;
+            sb_append(&sb, "    a0_pre = a0;\\n");
+            for (r = 0; r <= 12; ++r)
+                sb_append(&sb, "    R_pre[%d] = R%d;\\n", r, r);
+        }
+]=])
+    string(FIND "\${_source}" "\${_instruction_old}" _instruction_at)
+    if(_instruction_at LESS 0)
+        message(FATAL_ERROR "Could not locate HLSL instruction loop for paired-issue snapshots")
+    endif()
+    string(REPLACE "\${_instruction_old}" "\${_instruction_new}" _source "\${_source}")
+
+    set(_comment_old [=[
+        /* ILU operation (executes in parallel with MAC on hardware;
+         * in HLSL they are sequential but semantically equivalent
+         * because ILU reads source C, not MAC destinations) */
+]=])
+    set(_comment_new [=[
+        /* ILU operation shares the same pre-instruction source snapshot as MAC. */
+]=])
+    string(REPLACE "\${_comment_old}" "\${_comment_new}" _source "\${_source}")
+
+    file(WRITE "\${_vsh_c}" "\${_source}")
+endif()
