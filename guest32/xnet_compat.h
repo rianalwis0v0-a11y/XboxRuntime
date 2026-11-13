@@ -4,6 +4,22 @@
 #include <winsock2.h>
 #include <cstdint>
 
+// Original Xbox XNet address/link status flags.
+constexpr DWORD XNET_GET_XNADDR_NONE = 0x00000001u;
+constexpr DWORD XNET_GET_XNADDR_ETHERNET = 0x00000002u;
+constexpr DWORD XNET_GET_XNADDR_STATIC = 0x00000004u;
+constexpr DWORD XNET_GET_XNADDR_DHCP = 0x00000008u;
+constexpr DWORD XNET_GET_XNADDR_GATEWAY = 0x00000020u;
+constexpr DWORD XNET_GET_XNADDR_DNS = 0x00000040u;
+constexpr DWORD XNET_GET_XNADDR_ONLINE = 0x00000080u;
+constexpr DWORD XNET_GET_XNADDR_TROUBLESHOOT = 0x00008000u;
+constexpr DWORD XNET_ETHERNET_LINK_ACTIVE = 0x00000001u;
+constexpr DWORD XNET_ETHERNET_LINK_100MBPS = 0x00000002u;
+constexpr DWORD XNET_ETHERNET_LINK_10MBPS = 0x00000004u;
+constexpr DWORD XNET_ETHERNET_LINK_FULL_DUPLEX = 0x00000008u;
+constexpr DWORD XNET_ETHERNET_LINK_HALF_DUPLEX = 0x00000010u;
+constexpr DWORD XNET_ETHERNET_LINK_WIRELESS = 0x00000020u;
+
 // Original Xbox XNet ABI structures. Keep these fixed-width: this file is
 // compiled only into the dedicated 32-bit guest process.
 #pragma pack(push, 4)
