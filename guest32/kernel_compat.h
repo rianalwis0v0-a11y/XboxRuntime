@@ -12,5 +12,7 @@ struct XboxKernelState {
 bool XboxKernelInitializeEeprom(const wchar_t* path);
 void XboxKernelFlushEeprom();
 void XboxKernelSetTitlePath(const wchar_t* path);
+bool XboxKernelMountDvdImage(const wchar_t* path);
+void XboxKernelUnmountDvdImage();
 bool XboxKernelResolveImports(const XboxKernelState& image);
 DWORD WINAPI XboxKernelStartXbe(void* context);
