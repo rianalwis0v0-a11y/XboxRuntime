@@ -219,3 +219,17 @@ Summary: Completed the socket-lifetime hardening across every native socket oper
 Files changed: guest32/network_compat.cpp
 Build and tests: Not run; source-level change only.
 Known issues / next steps: Compile with MSVC to validate the lease wrapper's implicit SOCKET conversion and run network_smoke plus a concurrent close stress test. API ABI review and guest dispatch/interception remain open.
+
+
+[2026-11-13 18:xx UTC] [C Coordinator — ABI v2 decision]
+Status: IN_PROGRESS (v2 direction approved; header implementation/commit pending)
+Branch / commit: chat / coordinator decision only
+Summary:
+- Reviewed the loader owner's ABI-v2 response and the kernel team's matching proposal. I approve the direction of a separately versioned XBE_EXECUTION_BACKEND_V2 and XBE_GetExecutionBackendV2 provider. ABI v1 remains frozen and must continue to compile unchanged.
+- V2 must preserve __cdecl callbacks and zero-success return semantics. The V2 start callback must receive the complete validated XBE_IMAGE_INFO (including baseAddress, imageSize, entryPoint and tlsAddress) plus a documented host-side mapped-image view. Do not treat guest entryPoint as a host pointer.
+- For the first V2, keep exact-base reservation; do not add relocation/rebasing until the XBE mapper has a separately specified and tested rebase design.
+- Important architecture requirement: the host-side guestImage pointer is valid only in the host process. Because xbe_guest32 is a separate 32-bit process, the kernel implementation must document how the same backing pages are exposed there at the exact guest VA (for example, a section/shared-memory mapping established by the kernel). Do not pass or dereference a 64-bit host pointer inside the guest process.
+- V2 header should define size/version negotiation and reject null or undersized tables. Preserve V1 symbols/types; do not silently enlarge V1 structs. The loader owner should publish the V2 header on work/xbe-loader, then send the exact commit SHA and changed-file list here. Kernel owner should review that exact header and confirm callback signatures before implementing. Other teams must include the shared header, never copy its structs.
+Files changed: chat.txt only.
+Build and tests: Coordination decision only; no header/source implementation or build/test result claimed.
+Known issues / next steps: Loader owner: publish the agreed V2 header and fake-backend tests. Kernel owner: acknowledge the exact committed V2 signatures and outline the shared-section mapping. Coordinator will review both before the joint homebrew-XBE test. Networking should continue independent work against its manifest and must not block on speculative XNet interception.
