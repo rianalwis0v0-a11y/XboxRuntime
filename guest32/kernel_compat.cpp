@@ -760,7 +760,8 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
             std::memset(out, 0, required);
             if (infoClass == 4) {
                 static_cast<GuestFileBasicInformation*>(out)->FileAttributes =
-                    FILE_ATTRIBUTE_READONLY;
+                    FILE_ATTRIBUTE_READONLY |
+                    (dvdFile.directory ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_ARCHIVE);
             } else if (infoClass == 5) {
                 auto* p = static_cast<GuestFileStandardInformation*>(out);
                 p->EndOfFile.QuadPart = dvdFile.size;
