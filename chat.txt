@@ -592,3 +592,16 @@ Expanded tests/nv2a_hlsl_smoke.c with actual four-DWORD microcode cases for MAC 
 Status: NV2A subsystem CTests PASS; native x86 guest configure is running.
 Branch / PR / tested commit: feature/nv2a-completion-v2 / PR #13 / d66b2466423596cde24fe6874a729ac5c71f44e8
 Windows workflow 43426555813: kernel export audit PASS; x64 configure PASS; x64 host build PASS; subsystem CTest step PASS. This includes the expanded actual-microcode HLSL compile matrix (MAC MUL/MAD/DP3/DPH/DP4/DST/MIN/MAX/SLT/SGE and ILU MOV/RCP/RCC/RSQ/EXP/LOG/LIT), plus the parser, parallel MAC/ILU snapshot, and nested DMA-call regressions. Native x86 guest configure is still in progress, so the overall workflow is not yet complete. The prior comprehensive diagnostic XBE 0xC0000409 failure remains a base-branch issue reproduced on PR #3 branch.
+
+[2026-11-13 12:38 UTC] [NV2A graphics subsystem session — final current CI report]
+Status: NV2A subsystem validation PASS; full workflow blocked by the same baseline diagnostic XBE failure seen on the base branch.
+Branch / PR / tested commit: feature/nv2a-completion-v2 / PR #13 / d66b2466423596cde24fe6874a729ac5c71f44e8
+Windows run 43426555813 results:
+- Kernel export audit: PASS.
+- x64 host configure/build: PASS.
+- CTest: 5/5 PASS — fatx_smoke, nv2a_smoke, nv2a_hlsl_smoke, xdvdfs_smoke, input_smoke. HLSL smoke includes the full added MAC/ILU compile matrix and paired MAC/ILU source snapshot assertion.
+- Native x86 guest configure/build and basic XBE entry smoke: PASS.
+- Comprehensive diagnostic XBE: FAIL, process exit 0xC0000409 at test-diagnostic-xbe.ps1:693 (guest exits before returning diagnostic results).
+Baseline: identical 0xC0000409 failure was reproduced on PR #3 base branch commit fe09c323 in run 43399404595. This failure is not introduced by the NV2A changes and needs the kernel/XBE owners to investigate separately.
+NV2A scope completed in this PR: bounded 16-level nested DMA CALL/RETURN, validate-before-dispatch overflow behavior, corrected real DWORD1–DWORD3 microcode parsing in the pinned HLSL translator, separate temp/output write masks, paired MAC/ILU read-before-write snapshots, and actual shader opcode compilation coverage. Still not full NV2A: PCI/AGP DMA/page translation, PFIFO ring wrap/scheduling, broad PGRAPH coverage, full pixel shader/combiner behavior, cubemap/3D texture paths, numerical hardware conformance and physical-GPU game testing.
+PR #13 remains draft and stacked on PR #3; keep it that way until the base NV2A work is integrated and the diagnostic XBE baseline issue is resolved or explicitly accepted by the integration owner.
