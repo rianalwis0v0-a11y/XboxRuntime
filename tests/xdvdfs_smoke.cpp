@@ -64,7 +64,7 @@ int main() {
 
     uint32_t required = 0;
     XDVDFS_FILE_INFO entries[2]{};
-    if (XDVDFS_ListDirectory("", entries, 1, &required) != 7 || required != 2) return 8;
+    if (XDVDFS_ListDirectory("", entries, 1, &required) != XDVDFS_ERROR_BUFFER_TOO_SMALL || required != 2) return 8;
     if (XDVDFS_ListDirectory("", entries, 2, &required) != 0 || required != 2) return 9;
     if (std::strcmp(entries[0].name, "FOLDER") != 0 ||
         std::strcmp(entries[1].name, "TEST.TXT") != 0) return 10;
