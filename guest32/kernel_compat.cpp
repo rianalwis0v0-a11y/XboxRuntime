@@ -2782,6 +2782,6 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
         reinterpret_cast<Callback>(uintptr_t(callback))(
             g_image, DLL_PROCESS_DETACH, nullptr);
     }
-    releaseTls();
+    ReleaseGuestTls(tlsIndex, tlsBlock, tlsIndexSlot);
     return result;
 }
