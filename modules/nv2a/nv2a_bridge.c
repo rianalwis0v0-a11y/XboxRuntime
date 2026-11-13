@@ -14,6 +14,7 @@
 #define XBOX_VRAM_SIZE  (64u * 1024u * 1024u)
 #define XBOX_RAMIN_SIZE (1u * 1024u * 1024u)
 #define XBOX_GPU_MEMORY_SIZE (XBOX_VRAM_SIZE + XBOX_RAMIN_SIZE)
+#define NV2A_MAX_BATCH_VERTICES 1024u
 
 static uint8_t* g_vram;
 static uint8_t* g_ramin;
@@ -48,7 +49,7 @@ static uint32_t g_pgraph_custom_methods;
 static uint32_t g_pgraph_custom_draws;
 static uint32_t g_pgraph_custom_vertices;
 static uint32_t g_primitive_mode[32][8];
-static uint32_t g_element_indices[32][8][255];
+static uint32_t g_element_indices[32][8][NV2A_MAX_BATCH_VERTICES];
 static uint32_t g_element_count[32][8];
 static int g_element_overflow[32][8];
 typedef struct NV2A_TEXTURE_CACHE {
@@ -72,7 +73,7 @@ int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
 {
     if (stride_out) *stride_out = 0;
     if (fvf_out) *fvf_out = 0;
-    if (!indices || !destination || !index_count || index_count > 255u ||
+    if (!indices || !destination || !index_count || index_count > NV2A_MAX_BATCH_VERTICES ||
         destination_capacity < index_count * (uint32_t)sizeof(XboxNV2A_VERTEX))
         return 1;
 
@@ -480,7 +481,7 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
     }
     if(method==NV097_ARRAY_ELEMENT16||method==NV097_ARRAY_ELEMENT32){
         if(g_primitive_mode[channel][subchannel]==NV097_SET_BEGIN_END_OP_END)return;
-        if(g_element_count[channel][subchannel]>=255u){g_element_overflow[channel][subchannel]=1;return;}
+        if(g_element_count[channel][subchannel]>=NV2A_MAX_BATCH_VERTICES){g_element_overflow[channel][subchannel]=1;return;}
         uint32_t index=method==NV097_ARRAY_ELEMENT16?(parameter&0xFFFFu):parameter;
         g_element_indices[channel][subchannel][g_element_count[channel][subchannel]++]=index;
         g_gpu->pgraph.regs[method/4u]=parameter;++g_pgraph_custom_methods;return;
@@ -2251,8 +2252,8 @@ static void nv2a_flush_vertex_constants(void)
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
 {
     const uint32_t mode=g_primitive_mode[channel][subchannel];
-    if(!indices||!count||count>255u||mode==NV097_SET_BEGIN_END_OP_END)return 1;
-    XboxNV2A_VERTEX v[255],x[768]; uint32_t stride=0,fvf=0;
+    if(!indices||!count||count>NV2A_MAX_BATCH_VERTICES||mode==NV097_SET_BEGIN_END_OP_END)return 1;
+    XboxNV2A_VERTEX v[NV2A_MAX_BATCH_VERTICES],x[NV2A_MAX_BATCH_VERTICES * 2u]; uint32_t stride=0,fvf=0;
     if(XboxNV2A_BuildIndexedVertexStream(channel,subchannel,indices,count,v,sizeof(v),&stride,&fvf)!=0)return 2;
     const XboxNV2A_VERTEX* draw=v; uint32_t draw_count=count,pc=0; D3DPRIMITIVETYPE pt=D3DPT_TRIANGLELIST;
     switch(mode){
@@ -2300,7 +2301,7 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)
 {
     uint32_t count=(parameter&NV097_DRAW_ARRAYS_COUNT)>>24,first=parameter&NV097_DRAW_ARRAYS_START_INDEX;
-    if(!count||count>255u)return 1;uint32_t indices[255];
+    if(!count||count>NV2A_MAX_BATCH_VERTICES)return 1;uint32_t indices[NV2A_MAX_BATCH_VERTICES];
     for(uint32_t i=0;i<count;++i){if(first>UINT32_MAX-i)return 1;indices[i]=first+i;}
     return draw_nv2a_indexed(channel,subchannel,indices,count);
 }

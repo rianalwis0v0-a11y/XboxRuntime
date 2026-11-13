@@ -572,6 +572,36 @@ int main() {
         return 1;
     }
 
+    /* Indexed expansion must handle batches larger than the old 255-vertex cap. */
+    {
+        std::vector<uint32_t> largeIndices(300u);
+        std::vector<HostVertex> largeVertices(largeIndices.size());
+        for (size_t i = 0; i < largeIndices.size(); ++i)
+            largeIndices[i] = (uint32_t)(i & 1u);
+        if (buildIndexedVertexStream(channel, 0u, largeIndices.data(),
+                (uint32_t)largeIndices.size(), largeVertices.data(),
+                (uint32_t)(largeVertices.size() * sizeof(HostVertex)),
+                &indexedStride, &indexedFvf) != 0 ||
+            indexedStride != sizeof(HostVertex) || indexedFvf != 0x4D2u ||
+            largeVertices[0].x != hostVertices[0].x ||
+            largeVertices[1].x != hostVertices[1].x ||
+            largeVertices[299].x != hostVertices[1].x) {
+            std::cerr << "FAIL: indexed vertex expansion above 255 vertices\\n";
+            stop();
+            return 1;
+        }
+        std::vector<uint32_t> tooManyIndices(1025u, 0u);
+        std::vector<HostVertex> tooManyVertices(tooManyIndices.size());
+        if (buildIndexedVertexStream(channel, 0u, tooManyIndices.data(),
+                (uint32_t)tooManyIndices.size(), tooManyVertices.data(),
+                (uint32_t)(tooManyVertices.size() * sizeof(HostVertex)),
+                &indexedStride, &indexedFvf) == 0) {
+            std::cerr << "FAIL: indexed vertex expansion exceeded its 1024-vertex bound\\n";
+            stop();
+            return 1;
+        }
+    }
+
     /* UB_OGL arrays are RGBA bytes; the D3D8 FVF requires D3DCOLOR ARGB. */
     const uint32_t oglDiffuse[2] = {0xFF332211u,0xFF665544u};
     const uint32_t oglSpecular[2] = {0x00332211u,0x00665544u};
@@ -975,6 +1005,31 @@ int main() {
         std::cerr << "FAIL: invalid MMIO access size was not rejected\n";
         stop();
         return 1;
+    }
+
+    /* ARRAY_ELEMENT16 accumulation must not overflow at the old 255-index cap. */
+    {
+        Stats beforeBatch{}, afterBatch{};
+        if (getStats(&beforeBatch) != 0 ||
+            submit(0u, 0x17FCu, 5u) != 0) {
+            std::cerr << "FAIL: begin large indexed batch\\n";
+            stop();
+            return 1;
+        }
+        for (uint32_t i = 0; i < 300u; ++i) {
+            if (submit(0u, 0x1800u, i & 1u) != 0) {
+                std::cerr << "FAIL: submit large indexed batch element\\n";
+                stop();
+                return 1;
+            }
+        }
+        if (submit(0u, 0x17FCu, 0u) != 0 ||
+            getStats(&afterBatch) != 0 ||
+            afterBatch.methods_handled < beforeBatch.methods_handled + 300u) {
+            std::cerr << "FAIL: PGRAPH dropped indexed elements above 255\\n";
+            stop();
+            return 1;
+        }
     }
 
     // Exercise PGRAPH method dispatch without requiring a window or a D3D device.
