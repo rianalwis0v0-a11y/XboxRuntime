@@ -105,8 +105,10 @@ bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
             reinterpret_cast<sockaddr*>(&source), &sourceLength)
         : SOCKET_ERROR;
     closesocket(dns);
-    if (received < 12 || response[0] != query[0] || response[1] != query[1] ||
-        (response[2] & 0x80) == 0 || (response[3] & 0x0F) != 0)
+    if (received < 12 || source.sin_addr.s_addr != server.sin_addr.s_addr ||
+        source.sin_port != server.sin_port || response[0] != query[0] ||
+        response[1] != query[1] || (response[2] & 0x80) == 0 ||
+        (response[3] & 0x0F) != 0)
         return false;
 
     const uint16_t questions = static_cast<uint16_t>((response[4] << 8) | response[5]);
@@ -136,8 +138,12 @@ bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
 
 bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address) {
     if (!hostname || !*hostname) return false;
+    // Keep loopback and single-label/LAN names on the machine's normal resolver.
+    const bool fullyQualified = strchr(hostname, '.') != nullptr;
+    const bool localName = _stricmp(hostname, "localhost") == 0 ||
+        (fullyQualified && (_stricmp(hostname + strlen(hostname) - 6, ".local") == 0));
     uint32_t insigniaAddress = 0;
-    if (QueryInsigniaDnsA(hostname, insigniaAddress)) {
+    if (fullyQualified && !localName && QueryInsigniaDnsA(hostname, insigniaAddress)) {
         address = {};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = insigniaAddress;
