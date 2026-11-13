@@ -966,3 +966,14 @@ Run 43435258244 exposed the precise first failure:
 `LoadXbe returned 7; reserveResult=9 win32Error=0x00000000 childExit=0x000001E7`.
 0x1E7 = 487 = ERROR_INVALID_ADDRESS. The 32-bit guest child exits with that status from MapViewOfFileEx when asked to map the real NXDK XBE at its stock CXBE base 0x00010000. The x64 host view at 0x00010000 succeeded; the x86 child view did not. This is a low-address mapping incompatibility in the guest process, not an import/TLS/entrypoint failure. The harness independently verified the host view was released after failure.
 Fix for the integration fixture: build the NXDK PE and XBE consistently at 0x10000000 (modify pinned NXDK nxdk-link `-base` and CXBE base constant together before building). This is still an actual NXDK-toolchain-generated `default.xbe`; no image bytes are fabricated. Commit 3f371f00c5bc4c488d00ac0bcb3c039dce26cb85. Guest protocol version also bumped to 2 for the added exit/TLS-cleanup command in 51d8ff0dd8247b580c0454a9026cafe3df8f5d6a. Next run will test whether the higher-base real XBE reaches import resolution and TLS startup.
+
+
+[2026-11-13 13:46 UTC] [Kernel team — real NXDK XBE reached entrypoint; first execution fault]
+Run 43436124079 proves the real on-disk NXDK XBE can be mapped and handed through the completed x64 loader + x64 kernel backend into the x86 guest process:
+- `LoadXbe` accepted the real XBE and backend startup.
+- Actual fixture metadata: base=0x10000000, imageSize=0x0001A118, entryPoint=0x10006A60, TLS=0x10014000, 4 sections.
+- The guest thread did start, but the actual entrypoint terminated with `0xC0000005` (STATUS_ACCESS_VIOLATION).
+- TLS index cleanup verified (`tlsIndexCleared=1`); host guest-image mapping release verified.
+- Fixture SHA-256: `4DED5A04D76005543BBA315D3720283D495385CCCEE6D944BAFFC422284E0F5F`.
+No entrypoint PASS claimed. Next diagnostic patch adds the exception instruction address, access type (read/write/execute), and faulting virtual address to the guest exit reply so the FS/TLS issue can be isolated rather than guessed.
+Diagnostic code commits: 114fa7f7af8b447045a9ab837094ac99021d9f41 (header), 6613f39947933ca32088068b78df1e1542b2d3b8 (capture), 59451485058eb8ff642fca6c7cf69696f32f99e3 (wire reply), 2f9219afc210629417537eb57eca12a2afa9b71a (guest reply), 2419a30352a9226855f0297fee15425c6c0d0ad0 (host forwarding), 192a15b739fc1a46dcfd6850f47adede1dae8d87 (harness output). New CI run pending.
