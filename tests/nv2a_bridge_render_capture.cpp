@@ -32,12 +32,12 @@ using WriteRegisterFn = int (__cdecl*)(uint32_t,uint64_t,uint32_t);
 using SubmitDMAPushBufferFn = int (__cdecl*)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t*,uint32_t*);
 using FlushFn = void (__cdecl*)(void);
 struct Stats {
-    uint64_t frames;
-    uint64_t draw_calls;
-    uint64_t vertices_submitted;
-    uint64_t methods_handled;
-    uint64_t methods_ignored;
-    uint64_t clears;
+    uint32_t frames;
+    uint32_t draw_calls;
+    uint32_t vertices_submitted;
+    uint32_t methods_handled;
+    uint32_t methods_ignored;
+    uint32_t clears;
 };
 using GetStatsFn = int (__cdecl*)(Stats*);
 
