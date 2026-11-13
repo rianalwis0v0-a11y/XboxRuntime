@@ -958,6 +958,7 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
     }
     if (length < required) return LONG(0xC0000004u);
     std::memset(out, 0, required);
+    std::lock_guard<std::mutex> fileLock(g_fileIoMutex);
     FILETIME creation{}, access{}, write{};
     BY_HANDLE_FILE_INFORMATION native{};
     if (!GetFileInformationByHandle(h, &native)) return FileStatusFromWin32(GetLastError());
@@ -1014,6 +1015,7 @@ extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* i
             return LONG(0xC00000A2u);
         }
     }
+    std::lock_guard<std::mutex> fileLock(g_fileIoMutex);
     BOOL ok=FALSE;
     if(infoClass==4) {
         if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
@@ -1220,6 +1222,7 @@ extern "C" LONG __stdcall K_NtClose(HANDLE h){
         if (found != g_dvdFiles.end()) g_dvdFiles.erase(found);
     }
     CloseGuestDirectorySearch(h);
+    std::lock_guard<std::mutex> fileLock(g_fileIoMutex);
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
 }
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
