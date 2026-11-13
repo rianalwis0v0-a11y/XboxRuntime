@@ -866,10 +866,14 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     case 12: nameOffset = 12; break; // FileNamesInformation
     default: return LONG(0xC0000003u);
     }
-    if (length < nameOffset) return statusInfoLengthMismatch;
+    if (length < nameOffset) {
+        io->Status = statusInfoLengthMismatch;
+        io->Information = 0;
+        return statusInfoLengthMismatch;
+    }
 
     std::wstring wanted;
-    if (filter) {
+    if (filter && filter->Length) {
         if (!filter->Buffer || (filter->Length & 1u)) return statusInvalidParameter;
         wanted.assign(filter->Buffer, filter->Length / sizeof(WCHAR));
         if (wanted == L"*.*") wanted = L"*";
@@ -909,7 +913,11 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
         const ULONG nameBytes = static_cast<ULONG>(chars * sizeof(WCHAR));
         const ULONG entryBytes = (nameOffset + nameBytes + 7u) & ~7u;
         if (entryBytes > length - written) {
-            if (!written) return statusInfoLengthMismatch;
+            if (!written) {
+                io->Status = statusInfoLengthMismatch;
+                io->Information = 0;
+                return statusInfoLengthMismatch;
+            }
             break;
         }
 
