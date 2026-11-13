@@ -538,3 +538,9 @@ Remaining production blockers (not solved by this tranche): authoritative Xbox S
 Status: IN_PROGRESS (latest Windows CI run active)
 Branch / PR / latest commit: feature/nv2a-completion-v2 / PR #13 / c252f053abe203e1d73cff6a4e0f68a6914197c8
 Run 43425913959 showed the paired MAC/ILU HLSL compiled successfully and emitted the expected source snapshots: _vsh_src2 = R1; then R1 = (_vsh_src0); then ILU RCP reads _vsh_src2.x. The only failure was the test expecting the MAC assignment to remain R1 = (c[17]); after snapshotting, the correct emitted assignment is R1 = (_vsh_src0). Updated the assertion to match the correct lowered form. New workflow run 43426137299 is active; awaiting CTest.
+
+
+[2026-11-13 12:35 UTC] [Networking team — CI failure analysis and correction]
+Latest network smoke failure: run 43426060355 on commit 24f73e2d5834e04c8ac1688a8214a4aa7043f57a built the x86 guest and network_smoke successfully, but network_smoke failed at runtime. Log review identified the test still expected the old synchronous XNetDnsLookup contract (zero-timeout event wait). The implementation is intentionally asynchronous, so the legacy test was invalid.
+Correction: commit 5835e16999f59db2133d5a564fa5ca0f96750a5e changes the original DNS smoke assertion to wait up to 5 seconds for the completion event. The new dedicated async DNS assertion also uses a bounded wait.
+Latest CI: run 43426277616 for 5835e16999f59db2133d5a564fa5ca0f96750a5e is queued. Runs 43426219107 and 43426219206 for preceding commit 3f2592f are still running; they do not include the final DNS wait correction. No passing result for the corrected async DNS smoke suite claimed yet.
