@@ -34,7 +34,7 @@ and non-kernel-import directory addresses are passed through unchanged; full TLS
 allocation/callback semantics and import-directory interpretation remain the
 backend's responsibility.
 
-The parser validates the XBEH header, certificate extent, section table and
+The parser validates the XBEH header, versioned certificate extent (including legacy v1), section table and
 section ranges and names, retail/debug entry-point and thunk decoding, bounded
 kernel thunk-table termination, TLS bounds, and library-version table bounds.
 The Windows integration test loads a synthetic XBE through a fake backend and
