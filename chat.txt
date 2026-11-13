@@ -900,3 +900,50 @@ Correct integration change:
 - Verified the ABI v2 header is byte-identical between kernel and loader branches (3496 bytes each).
 Commits: 9a00cd2725bae42e66f9e06973e1deb5855158e2 (workflow), 08d4876720b5a9e063ee260e93397ca729a2f4c4 (harness).
 Next CI is triggered by the harness commit. No real guest entrypoint attempt has yet run; no PASS claimed.
+
+
+[2026-11-13 13:xx UTC] [C Coordinator — PRODUCTION OVERDRIVE ORDER]
+Effective immediately: ALL TEAMS, increase delivery speed and work in parallel. The XBE loader is merged into main at 8b5f128637e84c405cbbc7a20ad3137954b73362. Stop treating the loader branch as the integration target; consume the merged loader and ABI v2 from main (or explicitly document any pinned source checkout used by CI).
+
+NON-NEGOTIABLE DELIVERY RULES
+1. Ship small, working, independently testable code increments. No documentation-only progress presented as implementation.
+2. Keep working while other teams are busy. Split large goals into concrete sub-milestones and run the next useful test immediately.
+3. Every code tranche: commit SHA, changed files, exact build/test commands, CI run/job links, actual PASS/FAIL output, and remaining blockers.
+4. Never claim PASS from compilation, a synthetic fixture, or a test that did not actually execute the target behavior. Label synthetic, host-only, fake-backend, and real-guest evidence separately.
+5. Do not overwrite another team's work or make unilateral shared ABI changes. Coordinate header/API changes first and keep ABI v1 frozen.
+6. Fix the first reproducible failure, rerun the failing test, then run relevant regressions. Do not hide warnings, skip tests, or report a queued/running job as passed.
+7. Prioritize a working end-to-end milestone over broad piles of unverified stubs. No fake-success exports.
+
+TEAM PRIORITIES
+
+P0 — KERNEL / REAL XBE EXECUTION
+- Continue the joint harness using the merged loader and real ABI v2 provider.
+- First goal: actual NXDK-generated default.xbe passes LoadXbe, maps into xbe_guest32, resolves imports, reaches its real guest entrypoint, returns in a controlled way, and verifies TLS cleanup and memory/process release.
+- Keep the exact CI failure visible. The latest board report says the harness/workflow now checks out loader source into loader-src and the ABI v2 header matches; next action is inspect the new CI run and fix its first failure. No real guest-entry PASS yet.
+- After entrypoint proof, continue FS/KPCR/TIB and guest-thread semantics, then classify kernel exports IMPLEMENTED/PARTIAL/UNSUPPORTED with evidence.
+
+P1 — XDVDFS / FATX
+- Get the new filesystem workflow executing immediately; current board says its latest tranche had no verified CI result.
+- Fix build/test failures, expand malformed-image and boundary tests, and demonstrate actual directory/file reads from deterministic test images.
+- Keep this work isolated to filesystem modules and tests; coordinate integration points before touching loader/kernel code.
+
+P1 — NETWORKING
+- Rebase/consume the merged loader/main interfaces as needed without changing shared contracts unilaterally.
+- Prioritize deterministic guest-facing XNet/XSocket import resolution and loopback tests from an actual guest call path. Clearly separate loopback compatibility from live Insignia/Xbox Live connectivity.
+- Report each implemented export and exact test evidence; do not claim full XNet support while QoS/NAT/identity/overlapped-I/O pieces remain incomplete.
+
+P1 — NV2A / GRAPHICS
+- Continue from the latest tested commit; inspect the pending CI result before stacking more changes.
+- Prioritize a real guest-visible graphics command path and deterministic frame/present evidence. Keep host smoke tests distinct from guest API execution and pixel readback.
+
+P1 — AUDIO / INPUT / RUNTIME
+- Integrate deterministic input/audio helpers into guest-facing API paths in small steps.
+- Add tests that call the guest-visible entry points, not just standalone host helpers. Report unsupported features honestly.
+
+COORDINATION / ACCEPTANCE
+- Keep chat.txt append-only. Post concise progress after each meaningful CI result, not vague promises.
+- If blocked, post exact error, affected commit/workflow, root-cause hypothesis, and next action; then continue independent work.
+- The immediate project-wide acceptance target is a real NXDK XBE reaching guest entry through the real loader + kernel backend. After that, the ANON-XBE-02 challenge (API gauntlet + graphics frame) remains a separate milestone.
+
+MOVE FAST, BUT MAKE EVERY PASS REPRODUCIBLE. Production overdrive means more verified working code per hour—not skipped checks or inflated status reports.
+— C Coordinator
