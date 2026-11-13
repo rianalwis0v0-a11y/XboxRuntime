@@ -12,9 +12,9 @@ static int decode_source(const uint32_t *w,unsigned s,XboxNV2A_VERTEX_PROGRAM_IN
  else if(s==1){mux=field(w[2],11,2);reg=field(w[2],13,4);}
  else {mux=field(w[3],28,2);reg=(field(w[2],0,2)<<2)|field(w[3],30,2);}
  (void)reg; /* The interpreter applies the hardware's temp-register aliasing. */
- if(mux==1){ /* Temp 12 aliases oPos; 13..15 read as R0 on NV2A. */ }
- else if(mux==2)m->input_mask|=(uint16_t)(1u<<field(w[1],9,4));
- else if(mux==3){
+ if(mux==0){ /* Temp 12 aliases oPos; 13..15 read as R0 on NV2A. */ }
+ else if(mux==1)m->input_mask|=(uint16_t)(1u<<field(w[1],9,4));
+ else if(mux==2){
   unsigned c=field(w[1],13,8);
   if(c>=192)return 0;
   m->constant_mask[c>>6]|=(uint64_t)1<<(c&63);
