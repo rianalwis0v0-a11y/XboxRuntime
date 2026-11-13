@@ -90,20 +90,20 @@ static void nv2a_decode_source(const DWORD *w, int slot,
     }
     src->negate = (int)neg;
     switch (mux) {
-    case 0: /* temporary R0-R12; R12 aliases oPos */
+    case 1: /* temporary R0-R12 */
         src->reg_type = NV2A_VSH_REG_TEMP;
         src->reg_index = reg <= 12u ? (int)reg : 0;
         break;
-    case 1: /* vertex input v0-v15 */
+    case 2: /* vertex input v0-v15 */
         src->reg_type = NV2A_VSH_REG_INPUT;
         src->reg_index = input_index;
         break;
-    case 2: /* constant c0-c191 */
+    case 3: /* constant c0-c191 */
         src->reg_type = NV2A_VSH_REG_CONST;
         src->reg_index = const_index;
         src->rel_addr = (w[3] & 2u) ? 1 : 0;
         break;
-    default: /* Reserved mux; validation rejects this encoding. */
+    default: /* Reserved mux; the XboxRuntime validator rejects it. */
         src->reg_type = NV2A_VSH_REG_TEMP;
         src->reg_index = 0;
         break;
