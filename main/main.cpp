@@ -250,10 +250,10 @@ namespace XboxRuntime
         OPENFILENAMEW dialog{};
         dialog.lStructSize = sizeof(dialog);
         dialog.lpstrFilter =
-            L"Xbox executable files (*.xbe)\0*.xbe\0All files (*.*)\0*.*\0\0";
+            L"Xbox executables and disc images (*.xbe;*.iso;*.xiso)\0*.xbe;*.iso;*.xiso\0All files (*.*)\0*.*\0\0";
         dialog.lpstrFile = path.data();
         dialog.nMaxFile = static_cast<DWORD>(path.size());
-        dialog.lpstrTitle = L"Select an Xbox XBE";
+        dialog.lpstrTitle = L"Select an Xbox XBE or disc image";
         dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
                        OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
 
