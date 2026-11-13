@@ -65,6 +65,13 @@ int main() {
     std::memcpy(&resolved, image + 0x200, sizeof(resolved));
     assert(resolved == XboxGuestApiLookup("XNetStartup"));
 
+    // Also accept an image-relative thunk name and normalize it to the same VA.
+    const std::uint32_t importNameRva = 0x400u;
+    std::memcpy(image + 0x200, &importNameRva, sizeof(importNameRva));
+    assert(XboxGuestResolveNonKernelImports(base, sizeof(image), va(0x100)));
+    std::memcpy(&resolved, image + 0x200, sizeof(resolved));
+    assert(resolved == XboxGuestApiLookup("XNetStartup"));
+
     // Unknown names and unknown non-kernel libraries must fail closed.
     std::memcpy(image + 0x200, &importName, sizeof(importName));
     std::memcpy(image + 0x402, "XNetNotAnApi", sizeof("XNetNotAnApi"));
