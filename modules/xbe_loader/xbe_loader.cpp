@@ -19,6 +19,8 @@ bool g_initialized = false;
 bool g_imageActive = false;
 std::uint8_t* g_guestImage = nullptr;
 XBE_EXECUTION_BACKEND g_backend{};
+XBE_EXECUTION_BACKEND_V2 g_backendV2{};
+bool g_useBackendV2 = false;
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XBE] ");
@@ -37,10 +39,18 @@ void LogError(const char* prefix, const XboxXbe::Result& result) {
 }
 
 void ReleaseActiveImage() {
-    if (g_imageActive && g_backend.stopGuest)
-        g_backend.stopGuest(g_backend.context);
-    if (g_guestImage && g_backend.releaseImage)
-        g_backend.releaseImage(g_guestImage, g_backend.context);
+    if (g_imageActive) {
+        if (g_useBackendV2 && g_backendV2.stopGuest)
+            g_backendV2.stopGuest(g_backendV2.context);
+        else if (g_backend.stopGuest)
+            g_backend.stopGuest(g_backend.context);
+    }
+    if (g_guestImage) {
+        if (g_useBackendV2 && g_backendV2.releaseImage)
+            g_backendV2.releaseImage(g_guestImage, g_backendV2.context);
+        else if (g_backend.releaseImage)
+            g_backend.releaseImage(g_guestImage, g_backend.context);
+    }
     g_guestImage = nullptr;
     g_imageActive = false;
 }
@@ -99,6 +109,8 @@ extern "C" void __cdecl ModuleStop() {
     if (!g_initialized) return;
     ReleaseActiveImage();
     g_backend = {};
+    g_backendV2 = {};
+    g_useBackendV2 = false;
     g_initialized = false;
     Log(L"XBE loader module stopped.");
 }
@@ -118,14 +130,36 @@ extern "C" int __cdecl XBE_RegisterExecutionBackend(
     return 0;
 }
 
+extern "C" int __cdecl XBE_RegisterExecutionBackendV2(
+    const XBE_EXECUTION_BACKEND_V2* backend) {
+    if (!backend || backend->size < sizeof(XBE_EXECUTION_BACKEND_V2) ||
+        backend->version != XBE_EXECUTION_BACKEND_V2_VERSION ||
+        !backend->reserveImage || !backend->releaseImage ||
+        !backend->resolveImports || !backend->startGuest ||
+        !backend->stopGuest)
+        return 1;
+
+    std::lock_guard<std::mutex> guard(g_lock);
+    if (!g_initialized || g_imageActive) return 2;
+    g_backendV2 = *backend;
+    g_backend = {};
+    g_useBackendV2 = true;
+    return 0;
+}
+
 extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     if (!path || !*path) return 1;
     std::lock_guard<std::mutex> guard(g_lock);
     if (!g_initialized) return 2;
     if (g_imageActive) return 3;
-    if (!g_backend.reserveImage || !g_backend.releaseImage ||
-        !g_backend.resolveImports || !g_backend.startGuest ||
-        !g_backend.stopGuest) {
+    const bool backendReady = g_useBackendV2
+        ? (g_backendV2.reserveImage && g_backendV2.releaseImage &&
+           g_backendV2.resolveImports && g_backendV2.startGuest &&
+           g_backendV2.stopGuest)
+        : (g_backend.reserveImage && g_backend.releaseImage &&
+           g_backend.resolveImports && g_backend.startGuest &&
+           g_backend.stopGuest);
+    if (!backendReady) {
         Log(L"No guest execution backend is registered; refusing to fake XBE execution.");
         return 4;
     }
@@ -161,9 +195,12 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     info.debugImage = parsed.debugImage ? 1u : 0u;
 
     std::uint8_t* guestImage = nullptr;
-    if (g_backend.reserveImage(info.baseAddress, info.imageSize,
-                               &guestImage, g_backend.context) != 0 ||
-        !guestImage) {
+    const int reserveResult = g_useBackendV2
+        ? g_backendV2.reserveImage(info.baseAddress, info.imageSize,
+                                   &guestImage, g_backendV2.context)
+        : g_backend.reserveImage(info.baseAddress, info.imageSize,
+                                 &guestImage, g_backend.context);
+    if (reserveResult != 0 || !guestImage) {
         Log(L"Guest address-space reservation failed.");
         return 7;
     }
@@ -173,22 +210,38 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
                           guestImage, info.imageSize);
     if (!mapped) {
         LogError("XBE image mapping failed", mapped);
-        g_backend.releaseImage(guestImage, g_backend.context);
+        if (g_useBackendV2)
+            g_backendV2.releaseImage(guestImage, g_backendV2.context);
+        else
+            g_backend.releaseImage(guestImage, g_backend.context);
         return 8;
     }
 
-    if (g_backend.resolveImports(guestImage, &info,
-                                       g_backend.context) != 0) {
+    const int importResult = g_useBackendV2
+        ? g_backendV2.resolveImports(guestImage, &info, g_backendV2.context)
+        : g_backend.resolveImports(guestImage, &info, g_backend.context);
+    if (importResult != 0) {
         Log(L"Kernel import resolution failed.");
-        g_backend.releaseImage(guestImage, g_backend.context);
+        if (g_useBackendV2)
+            g_backendV2.releaseImage(guestImage, g_backendV2.context);
+        else
+            g_backend.releaseImage(guestImage, g_backend.context);
         return 9;
     }
 
-    if (g_backend.startGuest(info.entryPoint, info.tlsAddress,
-                             g_backend.context) != 0) {
+    const int startResult = g_useBackendV2
+        ? g_backendV2.startGuest(&info, guestImage, g_backendV2.context)
+        : g_backend.startGuest(info.entryPoint, info.tlsAddress,
+                               g_backend.context);
+    if (startResult != 0) {
         Log(L"Guest entry-point startup failed.");
-        g_backend.stopGuest(g_backend.context);
-        g_backend.releaseImage(guestImage, g_backend.context);
+        if (g_useBackendV2) {
+            g_backendV2.stopGuest(g_backendV2.context);
+            g_backendV2.releaseImage(guestImage, g_backendV2.context);
+        } else {
+            g_backend.stopGuest(g_backend.context);
+            g_backend.releaseImage(guestImage, g_backend.context);
+        }
         return 10;
     }
 
