@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$guest = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build-guest32\out\xbe_guest32.exe"))
+$guest = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\build\out\xbe_guest32.exe"))
 if (!(Test-Path $guest)) { throw "Guest helper missing: $guest" }
 
 # Build a real 32-bit XBE image. The entry point calls only kernel ordinals
