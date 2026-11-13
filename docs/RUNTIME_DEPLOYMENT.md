@@ -1,9 +1,9 @@
 # Runtime deployment layout
 
-Configure and build the 32-bit Windows host with Visual Studio 2022:
+Configure and build the 64-bit Windows host with Visual Studio 2022. CMake builds `xbe_guest32.exe` separately with a nested Win32 generator, because original Xbox title code is x86 while the NV2A MMIO hook requires a 64-bit host:
 
 ```powershell
-cmake -S . -B build -A Win32
+cmake -S . -B build -A x64
 cmake --build build --config Release --parallel
 ctest --test-dir build -C Release --output-on-failure
 ```
@@ -37,4 +37,4 @@ The XBE loader stores the persistent EEPROM image at `system\eeprom.bin`. A newl
 
 The startup animation and sound are optional assets under `assets\startup.avi` and `assets\startup.wav`. The project does not bundle a copyrighted Xbox dashboard or game image. Supply only XBE files and media that you are legally entitled to use.
 
-This is a native x86 compatibility runtime, not a static-recompilation pipeline. The current kernel export coverage, DirectSound layer, graphics integration, and title compatibility are incomplete; a successful build does not establish that a retail dashboard or arbitrary game will boot.
+The host is x64 and the guest is a separate native x86 process. This is a native compatibility runtime, not a static-recompilation pipeline. The current kernel export coverage, DirectSound layer, graphics integration, and title compatibility are incomplete; a successful build does not establish that a retail dashboard or arbitrary game will boot.
