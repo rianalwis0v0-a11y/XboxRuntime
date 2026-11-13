@@ -30,7 +30,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320,210,229,265,74,207,111,116,117,136,103,106,114,115,133,134,135,211,226)
+$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,67,69,203,215,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320,210,229,265,74,207,111,116,117,136,103,106,114,115,133,134,135,211,226)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -79,7 +79,7 @@ function EmitCheckNonZero {
 function EmitCheckAtLeast([uint32]$minimum) {
     $script:checkIndex++
     EmitByte 0x3D; Emit32 $minimum
-    EmitByte 0x72; EmitByte 6
+    EmitByte 0x72; EmitByte 8
     EmitIncrement $script:passedAddress
     EmitByte 0xEB; EmitByte 25
     EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
@@ -967,6 +967,49 @@ EmitPushMemory $directoryHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 26
+# Symbolic links: create, open, query, close, and delete a named object.
+$symNameVa = [uint32]($base + 0x6300)
+$symTargetVa = [uint32]($base + 0x6310)
+$symObjectAttributesVa = [uint32]($base + 0x6320)
+$symOutputVa = [uint32]($base + 0x6340)
+$symReturnedLengthVa = [uint32]($base + 0x6350)
+$symHandleVa = [uint32]($base + 0x6354)
+$symNameBufferVa = [uint32]($base + 0x6380)
+$symTargetBufferVa = [uint32]($base + 0x63C0)
+$symOutputBufferVa = [uint32]($base + 0x6400)
+$symName = "\Device\XboxRuntimeDiagnosticLink"
+$symTarget = "\Device\Cdrom0"
+$symNameBytes = [Text.Encoding]::Unicode.GetBytes($symName + [char]0)
+$symTargetBytes = [Text.Encoding]::Unicode.GetBytes($symTarget + [char]0)
+$symNameLength = [uint32]($symName.Length * 2)
+$symTargetLength = [uint32]($symTarget.Length * 2)
+EmitPush $symTargetVa
+EmitPush $symNameVa
+EmitCallImport 67
+EmitCheckEqual 0
+EmitPush $symObjectAttributesVa
+EmitPush 1
+EmitPush $symHandleVa
+EmitCallImport 203
+EmitCheckEqual 0
+EmitPush $symReturnedLengthVa
+EmitPush $symOutputVa
+EmitPushMemory $symHandleVa
+EmitCallImport 215
+EmitCheckEqual 0
+EmitLoadEax $symReturnedLengthVa
+EmitCheckEqual $symTargetLength
+EmitLoadEax $symOutputBufferVa
+EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x00
+EmitCheckEqual 92
+EmitPushMemory $symHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+EmitPush $symNameVa
+EmitCallImport 69
+EmitCheckEqual 0
+
 EmitMovMemoryImmediate $progressVa 3
 # The generic invalid-device dispatch routine must return its documented status.
 EmitPush 0
@@ -1082,6 +1125,23 @@ Put32 0x61DC 0
 Put32 0x61E0 0
 Put32 0x61E4 0
 $directoryPathBytes.CopyTo($b,0x6200)
+# Guest OBJECT_ATTRIBUTES and UNICODE_STRING records for the symbolic-link test.
+Put32 0x6300 ([uint32]($symNameLength -bor (($symNameLength + 2) -shl 16)))
+Put32 0x6304 $symNameBufferVa
+Put32 0x6310 ([uint32]($symTargetLength -bor (($symTargetLength + 2) -shl 16)))
+Put32 0x6314 $symTargetBufferVa
+Put32 0x6320 24
+Put32 0x6324 0
+Put32 0x6328 $symNameVa
+Put32 0x632C 0
+Put32 0x6330 0
+Put32 0x6334 0
+Put32 0x6340 ([uint32](0 -bor (128 -shl 16)))
+Put32 0x6344 $symOutputBufferVa
+Put32 0x6350 0
+Put32 0x6354 0
+$symNameBytes.CopyTo($b,0x6380)
+$symTargetBytes.CopyTo($b,0x63C0)
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
