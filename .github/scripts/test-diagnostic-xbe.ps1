@@ -957,8 +957,6 @@ EmitPush 2147483648
 EmitPush $directoryHandleVa
 EmitCallImport 202
 EmitStoreEax $directoryOpenStatusVa
-EmitLoadEax ([uint32]($directoryIoVa + 4))
-EmitStoreEax $directoryUnicodeValueVa
 EmitMovMemoryImmediate $progressVa 21
 EmitCheckEqual 0
 EmitMovMemoryImmediate $progressVa 22
@@ -1170,7 +1168,7 @@ try {
     $directoryOpenStatus = [BitConverter]::ToUInt32($report,24)
     $directoryUnicodeValue = [BitConverter]::ToUInt32($report,28)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
-    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus); NtOpenFile Win32 error 0x$('{0:X8}' -f $directoryUnicodeValue)"
+    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus); directory first wchar 0x$('{0:X8}' -f $directoryUnicodeValue)"
     if ($progress -ne 255) { throw "Diagnostic XBE stopped before the final test group (progress marker $progress)." }
     if ($failed -ne 0 -or $passed -lt 20 -or $skipped -gt 3) {
         throw "Diagnostic XBE reported an unexpected result."
