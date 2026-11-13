@@ -50,3 +50,22 @@ int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output)
 int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
 DWORD WINAPI XNetGetEthernetLinkStatus();
 }
+
+extern "C" {
+SOCKET WINAPI XSocketCreate(int af, int type, int protocol);
+int WINAPI XSocketClose(SOCKET socket);
+int WINAPI XSocketBind(SOCKET socket, const struct sockaddr* address, int addressLength);
+int WINAPI XSocketConnect(SOCKET socket, const struct sockaddr* address, int addressLength);
+int WINAPI XSocketListen(SOCKET socket, int backlog);
+SOCKET WINAPI XSocketAccept(SOCKET socket, struct sockaddr* address, int* addressLength);
+int WINAPI XSocketShutdown(SOCKET socket, int how);
+int WINAPI XSocketIOCTLSocket(SOCKET socket, long command, u_long* argument);
+int WINAPI XSocketSend(SOCKET socket, const char* buffer, int length, int flags);
+int WINAPI XSocketRecv(SOCKET socket, char* buffer, int length, int flags);
+int WINAPI XSocketSendTo(SOCKET socket, const char* buffer, int length, int flags, const struct sockaddr* to, int toLength);
+int WINAPI XSocketRecvFrom(SOCKET socket, char* buffer, int length, int flags, struct sockaddr* from, int* fromLength);
+u_long WINAPI XSocketHTONL(u_long value);
+u_long WINAPI XSocketNTOHL(u_long value);
+u_short WINAPI XSocketHTONS(u_short value);
+u_short WINAPI XSocketNTOHS(u_short value);
+}
