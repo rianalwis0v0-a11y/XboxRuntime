@@ -209,6 +209,16 @@ int main() {
             FreeLibrary(module); return 1;
         }
 
+        /* Mux 0 is reserved/unknown and must not be accepted as a constant. */
+        std::memset(words, 0, sizeof(words));
+        words[1] = (1u << 21); /* MAC MOV */
+        words[2] = 0u;          /* A mux=0 */
+        words[3] = 1u;
+        if (validateVertexProgram(words, 1, &info) != 4) {
+            std::cerr << "FAIL: invalid NV2A source mux was accepted\\n";
+            FreeLibrary(module); return 1;
+        }
+
         /* BFC0/BFC1 are valid outputs; slots 1 and 2 remain reserved. */
         std::memset(words, 0, sizeof(words));
         words[3] = (1u << 11) | (1u << 12) | (7u << 3) | 1u;
