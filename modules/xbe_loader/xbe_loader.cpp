@@ -110,7 +110,7 @@ extern "C" int __cdecl XBE_RegisterExecutionBackend(
     if (!backend || backend->size < sizeof(XBE_EXECUTION_BACKEND) ||
         backend->version != XBE_EXECUTION_BACKEND_VERSION ||
         !backend->reserveImage || !backend->releaseImage ||
-        !backend->resolveKernelImports || !backend->startGuest ||
+        !backend->resolveImports || !backend->startGuest ||
         !backend->stopGuest)
         return 1;
 
@@ -126,7 +126,7 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
     if (!g_initialized) return 2;
     if (g_imageActive) return 3;
     if (!g_backend.reserveImage || !g_backend.releaseImage ||
-        !g_backend.resolveKernelImports || !g_backend.startGuest ||
+        !g_backend.resolveImports || !g_backend.startGuest ||
         !g_backend.stopGuest) {
         Log(L"No guest execution backend is registered; refusing to fake XBE execution.");
         return 4;
@@ -179,7 +179,7 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
         return 8;
     }
 
-    if (g_backend.resolveKernelImports(guestImage, &info,
+    if (g_backend.resolveImports(guestImage, &info,
                                        g_backend.context) != 0) {
         Log(L"Kernel import resolution failed.");
         g_backend.releaseImage(guestImage, g_backend.context);
