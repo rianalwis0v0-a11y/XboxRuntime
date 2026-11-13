@@ -19,6 +19,7 @@ struct BackendContext {
     PROCESS_INFORMATION process{};
     std::wstring mappingName;
     std::wstring pipeName;
+    std::wstring titlePath;
     std::uint32_t base = 0;
     std::uint32_t size = 0;
     bool importsResolved = false;
@@ -113,6 +114,7 @@ void ResetContextHandles(BackendContext& context) {
     }
     context.mappingName.clear();
     context.pipeName.clear();
+    context.titlePath.clear();
     context.base = context.size = 0;
     context.importsResolved = false;
     context.started = false;
@@ -209,7 +211,8 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         L" --mapping " + Quote(context.mappingName) +
         L" --base " + Quote(std::to_wstring(guestBase)) +
         L" --size " + Quote(std::to_wstring(imageSize)) +
-        L" --eeprom " + Quote(eeprom);
+        L" --eeprom " + Quote(eeprom) +
+        (context.titlePath.empty() ? L"" : L" --xbe " + Quote(context.titlePath));
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -305,6 +308,13 @@ extern "C" void __cdecl ModuleStop() {
     StopGuestProcessLocked(g_context);
     ResetContextHandles(g_context);
     Log(L"Guest x86 kernel backend stopped.");
+}
+extern "C" int __cdecl XboxKernelSetGuestTitlePath(const wchar_t* path) {
+    if (!path || !*path) return 1;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_context.process.hProcess || g_context.mapping) return 2;
+    g_context.titlePath = path;
+    return 0;
 }
 extern "C" std::uint32_t __cdecl XboxKernelGetGuestApiAddress(const char* symbolName) {
     if (!symbolName) return 0;
