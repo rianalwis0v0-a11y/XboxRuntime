@@ -524,7 +524,7 @@ static LONG OpenDvdFile(HANDLE* output, const std::string& path,
     if (isDirectory) {
         uint32_t required = 0;
         const int sizing = XDVDFS_ListDirectory(path.c_str(), nullptr, 0, &required);
-        if (sizing != 0 && sizing != 7) {
+        if (sizing != 0 && sizing != XDVDFS_ERROR_BUFFER_TOO_SMALL) {
             CloseHandle(handle);
             return statusObjectNameNotFound;
         }
