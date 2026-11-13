@@ -95,7 +95,7 @@ int main() {
     constexpr std::uint32_t tlsCallbacksOffset = 0x3200u;
     constexpr std::uint32_t attachMarkerOffset = 0x3300u;
     constexpr std::uint32_t detachMarkerOffset = 0x3304u;
-    constexpr std::uint32_t tlsCheckMarkerOffset = 0x3308u;
+    constexpr std::uint32_t tlsCheckMarkerOffset = 0x3308u;\n    constexpr std::uint32_t tlsIndexMarkerOffset = 0x330Cu;
     constexpr std::uint32_t tlsIndexVa = guestBase + tlsDirectoryOffset + 8u;
     std::uint32_t tlsDirectory[6] = {
         guestBase + tlsTemplateOffset,
@@ -190,7 +190,7 @@ int main() {
         Sleep(1);
         ++waited;
     }
-    const std::uint32_t tlsIndex = readMarker(tlsDirectoryOffset + 8u);
+    const std::uint32_t tlsIndex = readMarker(tlsIndexMarkerOffset);
     if (tlsIndex == TLS_OUT_OF_INDEXES ||
         readMarker(attachMarkerOffset) != 1u ||
         readMarker(tlsCheckMarkerOffset) != 1u ||
