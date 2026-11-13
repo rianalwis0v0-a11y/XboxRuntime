@@ -75,6 +75,10 @@ static int compile_program(const DWORD* instructions, unsigned count,
         (!strstr(hlsl, "R_pre[0] = R0;") ||
          !strstr(hlsl, "R1 = (R_pre[0]);"))) {
         fprintf(stderr, "FAIL: %s did not preserve pre-issue MAC/ILU register values\\n", label);
+        fprintf(stderr, "snapshot=%d old-source=%d\\n",
+                strstr(hlsl, "R_pre[0] = R0;") != NULL,
+                strstr(hlsl, "R1 = (R0)") != NULL);
+        fputs(hlsl, stderr);
         return 10;
     }
 
