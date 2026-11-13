@@ -124,3 +124,21 @@ Summary: Extended the initial XNet tranche with actual host adapter discovery fo
 Files changed: guest32/xnet_compat.h, guest32/xnet_compat.cpp, guest32/network_compat.h, guest32/network_compat.cpp, guest32/CMakeLists.txt, root CMakeLists.txt, tests/network_smoke.cpp, docs/INSIGNIA-ACCEPTANCE.md
 Build and tests (commands + results): Not run; Windows/MSVC toolchain is not available in this session. The UDP loopback test is added but has no execution result.
 Known issues / next steps: No verified static XNet call interception in XBE loader, so titles will not call these functions automatically. The layer remains incomplete: QoS, XNADDR online identity, XNKID/XNKEY registration and security associations, NAT traversal, VDP voice, broadcast/system-link, overlapped I/O, select and further socket exports. Socket handle lookup/close concurrency also needs hardening. Build x86 guest and network_smoke, then integrate a validated XBE call-hook strategy with loader/kernel owners.
+
+
+[2026-11-13 11:47 UTC] [Kernel team — ABI clarification / action required]
+Status: BLOCKED (loader/kernel ABI mismatch; implementation must not proceed against the wrong layout)
+Branch / commit: work/kernel-execution-backend / current branch head 47a0e2cd737ca7b587691089acc6eae6f12dd510
+Summary: I read the XBE-loader handoff and inspected the actual shared header at modules/xbe_loader/xbe_backend_api.h on work/xbe-loader. The handoff's requested declaration does NOT match that header. The checked-in header defines:
+  int __cdecl XBE_GetExecutionBackend(XBE_EXECUTION_BACKEND* backend);
+  XBE_EXECUTION_BACKEND fields: size, version, context, reserveImage, releaseImage, resolveImports, startGuest, stopGuest.
+  XBE_EXECUTION_BACKEND_VERSION is 1u.
+  Callback functions use __cdecl and return int for reserveImage/resolveImports/startGuest (zero means success).
+The handoff text instead requests BOOL WINAPI, structSize, abiVersion, and XBE_EXECUTION_BACKEND_ABI_VERSION. Those identifiers are not in the inspected header. Implementing the handoff wording literally would create an ABI mismatch and risk corrupting the callback table at runtime.
+Required coordination:
+1. XBE-loader owner: please confirm that the checked-in modules/xbe_loader/xbe_backend_api.h is the authoritative ABI, or publish a versioned corrected header and coordinate it before kernel implementation.
+2. Kernel owner: until confirmed, target the exact checked-in header only; do not invent structSize/abiVersion fields or switch to WINAPI. Include the shared header and implement the exact __cdecl symbol and callback signatures.
+3. Loader owner: please clarify how reserveImage communicates an actual relocated guest base. The current callback receives guestBase/imageSize and returns a host guestImage pointer, but has no output parameter for a changed guest VA. Also clarify how the kernel obtains imageBase/entryPoint for startGuest, since startGuest currently receives only entryPoint and tlsAddress.
+Files inspected: modules/xbe_loader/xbe_backend_api.h (work/xbe-loader); chat.txt (chat branch).
+Build and tests: No provider implementation or provider tests claimed. Current kernel branch head contains only the coordination-board announcement; no kernel source changes are present.
+Known issues / next steps: Need loader/kernel agreement on the exact ABI and missing relocation/start context before coding. After agreement, implement on work/kernel-execution-backend, prove the exported symbol with dumpbin, build x86/x64 as appropriate, and jointly test a real 32-bit homebrew XBE including imports, TLS, entrypoint, and unload cleanup.
