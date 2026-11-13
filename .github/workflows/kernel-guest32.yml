@@ -14,11 +14,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  nxdk-homebrew-xbe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out XboxRuntime
+        uses: actions/checkout@v4
+      - name: Check out reviewed NXDK source
+        uses: actions/checkout@v4
+        with:
+          repository: XboxDev/nxdk
+          ref: fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e
+          path: nxdk
+          submodules: recursive
+      - name: Install NXDK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm lld pkgconf bison flex cmake
+      - name: Build a returnable NXDK homebrew XBE with TLS
+        run: |
+          cat > nxdk/samples/hello/main.c <<'EOF'
+          __declspec(thread) static volatile unsigned int kernel_smoke_tls = 0x58424532u;
+          int main(void) {
+              kernel_smoke_tls ^= 0x00000001u;
+              return kernel_smoke_tls == 0x58424533u ? 0 : 1;
+          }
+          EOF
+          eval "$(./nxdk/bin/activate -s)"
+          make -C nxdk/samples/hello -j2
+          test -s nxdk/samples/hello/bin/default.xbe
+          sha256sum nxdk/samples/hello/bin/default.xbe
+      - name: Upload NXDK XBE fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdk-kernel-smoke-xbe
+          path: nxdk/samples/hello/bin/default.xbe
+          if-no-files-found: error
+
+
   kernel:
+    needs: nxdk-homebrew-xbe
     runs-on: windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Download NXDK XBE fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: nxdk-kernel-smoke-xbe
+          path: nxdk-fixture
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,6 +115,34 @@ jobs:
 
       - name: Run shared-memory guest execution smoke test
         run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R kernel_guest_backend_smoke
+
+      - name: Build x64 XBE loader DLL for joint integration
+        shell: cmd
+        run: |
+          call "%ProgramFiles(x86)%\\Microsoft Visual Studio\\Installer\\vswhere.exe" -latest -property installationPath > vs-path.txt
+          set /p VS_PATH=<vs-path.txt
+          call "%VS_PATH%\\VC\\Auxiliary\\Build\\vcvars64.bat"
+          cl /nologo /std:c++17 /EHsc /W4 /WX /c modules\\xbe_loader\\xbe_format.cpp modules\\xbe_loader\\xbe_loader.cpp
+          if errorlevel 1 exit /b 1
+          link /nologo /DLL /DEF:modules\\xbe_loader\\xbe_loader.def /OUT:xbe_loader.dll xbe_format.obj xbe_loader.obj
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /W4 /permissive- /Fe:kernel_xbe_integration.exe tests\\kernel_xbe_integration.cpp modules\\xbe_loader\\xbe_format.cpp
+          if errorlevel 1 exit /b 1
+
+      - name: Stage real backend integration runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force integration | Out-Null
+          Copy-Item build-kernel-host/out/xbox_kernel.dll integration/
+          Copy-Item build-guest32/out/xbe_guest32.exe integration/
+          Copy-Item xbe_loader.dll integration/
+          Copy-Item kernel_xbe_integration.exe integration/
+          Copy-Item nxdk-fixture/default.xbe integration/
+          Get-FileHash integration/default.xbe -Algorithm SHA256 | Format-List
+
+      - name: Execute NXDK XBE through real loader and kernel backend
+        working-directory: integration
+        run: .\\kernel_xbe_integration.exe .\\default.xbe
 
       - name: Verify backend pair
         shell: pwsh
