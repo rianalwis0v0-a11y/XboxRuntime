@@ -49,9 +49,9 @@ bool RangeOK(uint64_t offset, uint64_t length, uint64_t total) {
 std::string Normalize(const char* path) {
     if (!path) return {};
     std::string out;
-    while (*path == '/' || *path == '\\\\') ++path;
+    while (*path == '/' || *path == '\\') ++path;
     for (; *path; ++path) {
-        char c = *path == '\\\\' ? '/' : *path;
+        char c = *path == '\\' ? '/' : *path;
         if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
         out.push_back(c);
     }
@@ -112,7 +112,7 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
         const uint32_t entryBytes = (14u + nameLength + 3u) & ~3u;
         if (entryBytes > size - offset) return false;
         std::string name(reinterpret_cast<const char*>(p + 14), nameLength);
-        if (name.find('/') != std::string::npos || name.find('\\\\') != std::string::npos ||
+        if (name.find('/') != std::string::npos || name.find('\\') != std::string::npos ||
             name == "." || name == "..") return false;
         const std::string key = parent.empty() ? Normalize(name.c_str()) : parent + "/" + Normalize(name.c_str());
         Entry entry{fileSector, fileSize, attributes, name, (attributes & 0x10) != 0};
@@ -144,7 +144,7 @@ void CloseUnlocked() {
 extern "C" int __cdecl ModuleStart(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_started = true;
-    OutputDebugStringW(L"[XboxRuntime:XDVDFS] Read-only disc filesystem ready.\\n");
+    OutputDebugStringW(L"[XboxRuntime:XDVDFS] Read-only disc filesystem ready.\n");
     return 0;
 }
 extern "C" void __cdecl ModuleStop(void) {
