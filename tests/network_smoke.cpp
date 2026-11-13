@@ -57,6 +57,29 @@ int main() {
     XNetDnsRelease(dns);
     WSACloseEvent(dnsEvent);
 
+    // DNS completion is asynchronous: the returned XNDNS remains owned by
+    // the caller and is consumed only after its event is signaled.
+    WSAEVENT asyncDnsEvent = WSACreateEvent();
+    XNDNS* asyncDns = nullptr;
+    if (!asyncDnsEvent || XNetDnsLookup("localhost", asyncDnsEvent, &asyncDns) != 0 ||
+        !asyncDns || WSAWaitForMultipleEvents(1, &asyncDnsEvent, TRUE, 5000, FALSE) != WSA_WAIT_EVENT_0 ||
+        asyncDns->iStatus != 0 || asyncDns->cina == 0) {
+        if (asyncDns) XNetDnsRelease(asyncDns);
+        if (asyncDnsEvent) WSACloseEvent(asyncDnsEvent);
+        XNetCleanup();
+        return 28;
+    }
+    XNetDnsRelease(asyncDns);
+    WSACloseEvent(asyncDnsEvent);
+
+    XNADDR titleAddress{};
+    const DWORD titleAddressFlags = XNetGetTitleXnAddr(&titleAddress);
+    if (titleAddressFlags != XNET_GET_XNADDR_NONE &&
+        !(titleAddressFlags & XNET_GET_XNADDR_ETHERNET)) {
+        XNetCleanup();
+        return 29;
+    }
+
     uint32_t loopback = 0;
     if (XboxNetResolveIPv4("localhost", &loopback) != 0 || loopback == 0) {
         XNetCleanup();
