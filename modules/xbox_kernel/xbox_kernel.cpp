@@ -23,6 +23,9 @@ struct BackendContext {
     std::uint32_t size = 0;
     bool importsResolved = false;
     bool started = false;
+    int lastReserveResult = 0;
+    DWORD lastReserveWin32Error = ERROR_SUCCESS;
+    DWORD lastReserveChildExitCode = 0;
 };
 BackendContext g_context;
 std::mutex g_mutex;
@@ -155,10 +158,16 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     *guestImage = nullptr;
     std::lock_guard<std::mutex> lock(g_mutex);
     BackendContext& context = g_context;
+    context.lastReserveResult = 0;
+    context.lastReserveWin32Error = ERROR_SUCCESS;
+    context.lastReserveChildExitCode = 0;
     if (context.mapping || context.process.hProcess || !guestBase || !imageSize ||
         (guestBase & 0xFFFFu) != 0 ||
-        std::uint64_t(guestBase) + imageSize > 0x80000000ull)
+        std::uint64_t(guestBase) + imageSize > 0x80000000ull) {
+        context.lastReserveResult = 2;
+        context.lastReserveWin32Error = ERROR_INVALID_PARAMETER;
         return 2;
+    }
 
     const std::uint32_t sequence = g_sequence.fetch_add(1);
     const std::wstring suffix = std::to_wstring(GetCurrentProcessId()) +
@@ -171,13 +180,19 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     context.mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr,
         PAGE_EXECUTE_READWRITE, 0, imageSize, context.mappingName.c_str());
     if (!context.mapping) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 3;
+        context.lastReserveWin32Error = error;
         ResetContextHandles(context);
         return 3;
     }
     void* view = MapViewOfFileEx(context.mapping, FILE_MAP_ALL_ACCESS, 0, 0,
         imageSize, reinterpret_cast<void*>(static_cast<std::uintptr_t>(guestBase)));
     if (view != reinterpret_cast<void*>(static_cast<std::uintptr_t>(guestBase))) {
+        const DWORD error = GetLastError();
         if (view) UnmapViewOfFile(view);
+        context.lastReserveResult = 4;
+        context.lastReserveWin32Error = error;
         ResetContextHandles(context);
         return 4;
     }
@@ -187,6 +202,9 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
         1, 4096, 4096, 5000, nullptr);
     if (context.pipe == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 5;
+        context.lastReserveWin32Error = error;
         ResetContextHandles(context);
         return 5;
     }
@@ -194,12 +212,18 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     std::wstring directory;
     std::wstring eeprom;
     if (!ModuleDirectory(directory) || !RuntimeEepromPath(eeprom)) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 6;
+        context.lastReserveWin32Error = error;
         ResetContextHandles(context);
         return 6;
     }
     const std::wstring guestExe = directory + L"\\xbe_guest32.exe";
     if (GetFileAttributesW(guestExe.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        const DWORD error = GetLastError();
         Log(L"xbe_guest32.exe was not found beside xbox_kernel.dll.");
+        context.lastReserveResult = 7;
+        context.lastReserveWin32Error = error;
         ResetContextHandles(context);
         return 7;
     }
@@ -216,6 +240,9 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     if (!CreateProcessW(guestExe.c_str(), command.data(), nullptr, nullptr,
         FALSE, CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup,
         &context.process)) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 8;
+        context.lastReserveWin32Error = error;
         ResetContextHandles(context);
         return 8;
     }
@@ -224,6 +251,9 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     // pipe (for example, after a failed shared-view mapping).
     DWORD pipeMode = PIPE_READMODE_BYTE | PIPE_NOWAIT;
     if (!SetNamedPipeHandleState(context.pipe, &pipeMode, nullptr, nullptr)) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 9;
+        context.lastReserveWin32Error = error;
         StopGuestProcessLocked(context);
         ResetContextHandles(context);
         return 9;
@@ -243,6 +273,8 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         if (connectError != ERROR_PIPE_LISTENING &&
             connectError != ERROR_NO_DATA) {
             Log(L"Named-pipe connection failed with an unexpected error.");
+            context.lastReserveResult = 9;
+            context.lastReserveWin32Error = connectError;
             StopGuestProcessLocked(context);
             ResetContextHandles(context);
             return 9;
@@ -252,14 +284,19 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
             DWORD childExitCode = ERROR_GEN_FAILURE;
             GetExitCodeProcess(context.process.hProcess, &childExitCode);
             wchar_t diagnostic[128]{};
-            swprintf_s(diagnostic, L"xbe_guest32.exe exited before pipe connect (exit=0x%08X).",
+            swprintf_s(diagnostic, _countof(diagnostic),
+                       L"xbe_guest32.exe exited before pipe connect (exit=0x%08X).",
                        childExitCode);
             Log(diagnostic);
+            context.lastReserveResult = 9;
+            context.lastReserveChildExitCode = childExitCode;
             ResetContextHandles(context);
             return 9;
         }
         if (GetTickCount64() >= connectDeadline) {
             Log(L"Timed out waiting 10 seconds for xbe_guest32.exe to connect.");
+            context.lastReserveResult = 9;
+            context.lastReserveWin32Error = ERROR_TIMEOUT;
             TerminateProcess(context.process.hProcess, ERROR_TIMEOUT);
             WaitForSingleObject(context.process.hProcess, 5000);
             ResetContextHandles(context);
@@ -270,6 +307,9 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     pipeMode = PIPE_READMODE_BYTE | PIPE_WAIT;
     if (!connected ||
         !SetNamedPipeHandleState(context.pipe, &pipeMode, nullptr, nullptr)) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 9;
+        context.lastReserveWin32Error = error;
         StopGuestProcessLocked(context);
         ResetContextHandles(context);
         return 9;
@@ -281,10 +321,14 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         hello.version != XBOX_GUEST_PROTOCOL_VERSION ||
         hello.status != ERROR_SUCCESS ||
         hello.imageBase != guestBase || hello.imageSize != imageSize) {
+        context.lastReserveResult = 10;
+        context.lastReserveWin32Error = hello.status != ERROR_SUCCESS
+            ? hello.status : ERROR_INVALID_DATA;
         StopGuestProcessLocked(context);
         ResetContextHandles(context);
         return 10;
     }
+    context.lastReserveResult = 0;
     *guestImage = context.hostView;
     return 0;
 }
@@ -391,6 +435,16 @@ extern "C" int __cdecl XboxKernelSetGuestTitlePath(const wchar_t* path) {
     if (g_context.process.hProcess || g_context.mapping) return 2;
     g_context.titlePath = path;
     return 0;
+}
+extern "C" int __cdecl XboxKernelGetLastReserveDiagnostic(
+    int* reserveResult, DWORD* win32Error, DWORD* childExitCode) {
+    if (!reserveResult || !win32Error || !childExitCode)
+        return ERROR_INVALID_PARAMETER;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    *reserveResult = g_context.lastReserveResult;
+    *win32Error = g_context.lastReserveWin32Error;
+    *childExitCode = g_context.lastReserveChildExitCode;
+    return ERROR_SUCCESS;
 }
 extern "C" int __cdecl XBE_GetExecutionBackendV2(XBE_EXECUTION_BACKEND_V2* backend) {
     if (!backend || backend->size < sizeof(XBE_EXECUTION_BACKEND_V2)) return 1;
