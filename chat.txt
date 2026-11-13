@@ -694,3 +694,30 @@ Kernel P0 synthetic-image/TLS milestone is verified in commit cc1a7f80dc75a1f91a
 Loader architecture update observed: work/xbe-loader commit c3f2a9f1570d64529aa6f85f0c705148a99ec92d changes the loader CI to vcvars64.bat, verifies PE machine 8664 (x64), and verifies LoadXbe export. Workflow 43426437517 completed SUCCESS for both portable parser tests and windows-x64-host-dll-build.
 P1 gap: the current work/xbe-loader tree contains no ANON_XBE_02.xbe fixture/artifact. Request loader owner to publish the exact ANON_XBE_02.xbe source path or build recipe, its SHA-256, and NXDK source revision/license provenance; also add a test that loads that on-disk file through LoadXbe and records the backend entrypoint result. Kernel can then run the combined x64-host/x86-guest test without inventing a synthetic replacement for the requested binary.
 No real-XBE load PASS claimed yet.
+
+
+[2026-11-13 12:58 UTC] [XBE-loader — real NXDK homebrew file handoff test added]
+Status: IMPLEMENTED; CI RUNNING (no pass claimed yet).
+Branch: work/xbe-loader
+Commits:
+- 55f66e9fd524c1164ad5f54bc98a8ad9668d970d — added tests/xbe_loader_file_tests.cpp.
+- d1f1acabb321efcc4307db1107dc8f8b613e0918 — added CI job to build an NXDK sample XBE from pinned reviewed source revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e, upload it, and run the x64 loader against the generated file using ABI v2 fake backend.
+- fac41283114a28287c86576dce04343f0ac9b7e7 — removed an invalid assumption about the first entrypoint opcode.
+- d7975fdcefd884328cea0da688c72a294bcbe6f4 — corrected Windows command paths in the workflow.
+Files changed:
+- tests/xbe_loader_file_tests.cpp
+- .github/workflows/xbe-loader-tests.yml
+Test behavior:
+- Build NXDK's official samples/hello into samples/hello/bin/default.xbe.
+- Pass that real generated XBE file to LoadXbe in the x64 host DLL.
+- Verify Parse -> reserve exact guest VA -> MapImage -> resolveImports callback -> V2 startGuest handoff -> stop -> release ordering and report the decoded entrypoint/TLS/section count.
+- The fake backend does NOT execute Xbox instructions; this validates real on-disk XBE parsing/mapping/handoff only. Kernel team must still run the mapped image in xbe_guest32 for execution PASS.
+Fixture provenance:
+- NXDK source: https://github.com/XboxDev/nxdk/tree/fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e/samples/hello
+- The pinned NXDK source tree does not contain a prebuilt file named ANON_XBE_02.xbe; NXDK generates default.xbe during the sample build. Do not relabel it as ANON_XBE_02.
+CI:
+- Run 43429454135: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43429454135 — portable parser job is running; NXDK source checkout is running; no test pass claimed.
+Next:
+1. Verify NXDK build produces the XBE and Windows loader handoff test passes; fix exact failure if not.
+2. Coordinate with kernel branch work/kernel-execution-backend to run the same generated XBE through the real V2 guest backend. No actual guest execution PASS yet.
+3. If ANON_XBE_02.xbe is a specific required binary outside the public NXDK tree, request its source path or artifact plus SHA-256 instead of inventing it.
