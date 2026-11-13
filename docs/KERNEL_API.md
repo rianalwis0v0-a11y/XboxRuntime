@@ -53,6 +53,13 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## File attribute query
+
+- Ordinal 210, `NtQueryFullAttributesFile`, translates absolute Xbox device paths through the guest title path mapping and queries the host file metadata.
+- Returns Xbox `FILE_NETWORK_OPEN_INFORMATION` layout (six 64-bit time/size fields followed by attributes), with Win32 creation/access/write times and logical file size.
+- The Win32 query does not expose a distinct change timestamp or allocation size through this API, so change time mirrors last-write time and allocation size mirrors logical EOF. Relative names using a root-directory handle are explicitly unsupported rather than misresolved.
+- Diagnostic XBE verifies the file length and nonzero file attributes against its known 8-byte fixture.
+
 ## NT dispatcher-object query APIs
 
 - Ordinals 209, 213, 214, and 216: `NtQueryEvent`, `NtQueryMutant`, `NtQuerySemaphore`, and `NtQueryTimer` forward the Xbox basic-information query ABI to the corresponding Windows NT native query routines. Native NTSTATUS values and required-buffer/return-length behavior are preserved.
