@@ -130,7 +130,7 @@ namespace XboxBoot
     const wchar_t* GetMainDllPath()
     {
         static std::wstring path;
-        path = JoinPath(g_systemDirectory, L"main.dll");
+        path = JoinPath(JoinPath(g_runtimeDirectory, L"system"), L"main.dll");
         return path.c_str();
     }
 
@@ -212,7 +212,7 @@ namespace XboxBoot
             return true;
 
         std::wstring mainPath =
-            JoinPath(g_systemDirectory, L"main.dll");
+            JoinPath(JoinPath(g_runtimeDirectory, L"system"), L"main.dll");
 
         g_mainModule = LoadLibraryExW(
             mainPath.c_str(),
@@ -340,7 +340,7 @@ namespace XboxBoot
             {
                 MessageBoxW(
                     window,
-                    L"Could not start main.dll from Windows System32.",
+                    L"Could not start main.dll from XboxRuntime\\system.",
                     L"XboxRuntime",
                     MB_OK | MB_ICONERROR
                 );
