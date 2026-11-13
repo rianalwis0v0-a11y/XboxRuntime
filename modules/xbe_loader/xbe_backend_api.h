@@ -42,4 +42,14 @@ typedef struct XBE_EXECUTION_BACKEND {
     void (__cdecl* stopGuest)(void* context);
 } XBE_EXECUTION_BACKEND;
 
+// Implemented by xbox_kernel.dll. The host calls this after every module has
+// started and before loading the dashboard XBE.
+#ifdef __cplusplus
+extern "C" {
+#endif
+int __cdecl XBE_GetExecutionBackend(XBE_EXECUTION_BACKEND* backend);
+#ifdef __cplusplus
+}
+#endif
+
 #endif
