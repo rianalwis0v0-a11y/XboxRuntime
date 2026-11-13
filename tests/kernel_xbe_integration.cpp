@@ -128,8 +128,13 @@ int wmain(int argc, wchar_t** argv) {
     if (!result) {
         const int loadResult = loadXbe(argv[1]);
         if (loadResult != 0) {
-            std::fprintf(stderr, "FAIL: real LoadXbe + kernel backend returned %d\n",
-                         loadResult);
+            int reserveResult = -1;
+            DWORD win32Error = 0;
+            DWORD childExitCode = 0;
+            getReserveDiagnostic(&reserveResult, &win32Error, &childExitCode);
+            std::fprintf(stderr,
+                "FAIL: LoadXbe returned %d; reserveResult=%d win32Error=0x%08lX childExit=0x%08lX\n",
+                loadResult, reserveResult, win32Error, childExitCode);
             result = 12;
         } else {
             xbeActive = true;
