@@ -535,8 +535,12 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
     }
 
     if ((method == NV097_SET_BEGIN_END && parameter != 0u) ||
-        method == NV097_CLEAR_SURFACE)
-        (void)update_surface_target();
+        method == NV097_CLEAR_SURFACE) {
+        const int surface_result = update_surface_target();
+        if (surface_result != 0)
+            fprintf(stderr, "[NV2A-SURFACE] target update failed=%d method=%04X\\n",
+                surface_result, method);
+    }
     /* These real NV097 offsets collide with incorrect aliases in the
      * pinned translator. Apply them here and do not feed them to that switch. */
     if (method == NV097_SET_ALPHA_TEST_ENABLE ||
@@ -1754,7 +1758,13 @@ static int update_surface_target(void)
         g_surface_regs.format, g_surface_regs.pitch,
         g_surface_regs.color_offset, g_surface_regs.zeta_offset,
         g_surface_regs.clip_horizontal, g_surface_regs.clip_vertical, &info);
-    if (result != 0) return 2 + result;
+    if (result != 0) {
+        fprintf(stderr, "[NV2A-SURFACE] decode failed=%d format=%08X pitch=%08X color=%08X clip=%08X/%08X\\n",
+            result, g_surface_regs.format, g_surface_regs.pitch,
+            g_surface_regs.color_offset, g_surface_regs.clip_horizontal,
+            g_surface_regs.clip_vertical);
+        return 2 + result;
+    }
 
     if (g_surface_bound &&
         memcmp(&info, &g_bound_surface_info, sizeof(info)) == 0) {
@@ -1767,8 +1777,11 @@ static int update_surface_target(void)
     HRESULT hr = device->lpVtbl->CreateRenderTarget(
         device, info.width, info.height, (D3DFORMAT)info.color_format,
         D3DMULTISAMPLE_NONE, TRUE, &new_color);
-    if (FAILED(hr) || !new_color)
+    if (FAILED(hr) || !new_color) {
+        fprintf(stderr, "[NV2A-SURFACE] CreateRenderTarget failed hr=0x%08lX size=%ux%u format=%u\\n",
+            (unsigned long)hr, info.width, info.height, (unsigned)info.color_format);
         return 16;
+    }
 
     if (info.zeta_format) {
         if (!device->lpVtbl->CreateDepthStencilSurface) {
@@ -1796,6 +1809,8 @@ static int update_surface_target(void)
         mark_all_textures_dirty();
 
     if (!copy_vram_to_surface(new_color, &info)) {
+        fprintf(stderr, "[NV2A-SURFACE] initial VRAM-to-surface copy failed offset=%08X pitch=%u\\n",
+            info.color_offset, info.color_pitch);
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 20;
@@ -1808,10 +1823,14 @@ static int update_surface_target(void)
 
     hr = device->lpVtbl->SetRenderTarget(device, new_color, new_zeta);
     if (FAILED(hr)) {
+        fprintf(stderr, "[NV2A-SURFACE] SetRenderTarget failed hr=0x%08lX\\n", (unsigned long)hr);
         if (new_zeta) new_zeta->lpVtbl->Release(new_zeta);
         new_color->lpVtbl->Release(new_color);
         return 21;
     }
+    fprintf(stderr, "[NV2A-SURFACE] bound %ux%u format=%u offset=%08X pitch=%u\\n",
+        info.width, info.height, (unsigned)info.color_format,
+        info.color_offset, info.color_pitch);
 
     IDirect3DSurface8* old_color = g_color_surface;
     IDirect3DSurface8* old_zeta = g_zeta_surface;
