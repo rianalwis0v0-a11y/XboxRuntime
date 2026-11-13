@@ -50,6 +50,9 @@ struct GuestDirectorySearch {
 };
 std::mutex g_directorySearchMutex;
 std::unordered_map<HANDLE, GuestDirectorySearch> g_directorySearches;
+std::mutex g_symbolicLinkMutex;
+std::unordered_map<std::wstring, std::wstring> g_symbolicLinks;
+std::unordered_map<HANDLE, std::wstring> g_symbolicLinkHandles;
 static void CloseGuestDirectorySearch(HANDLE file) {
     std::lock_guard<std::mutex> lock(g_directorySearchMutex);
     auto it = g_directorySearches.find(file);
@@ -571,6 +574,66 @@ extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
 struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
+static std::wstring CanonicalObjectName(const GuestUnicodeString* name) {
+    if (!name || !name->Buffer || !name->Length || (name->Length & 1)) return {};
+    std::wstring value(name->Buffer, name->Length / sizeof(wchar_t));
+    for (wchar_t& ch : value) ch = static_cast<wchar_t>(towlower(ch));
+    return value;
+}
+static void CloseGuestSymbolicLinkHandle(HANDLE handle) {
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    g_symbolicLinkHandles.erase(handle);
+}
+extern "C" LONG __stdcall K_IoCreateSymbolicLink(
+    const GuestUnicodeString* linkName, const GuestUnicodeString* deviceName) {
+    if (!linkName || !deviceName || !deviceName->Buffer || !deviceName->Length || (deviceName->Length & 1))
+        return LONG(0xC000000Du);
+    const std::wstring key = CanonicalObjectName(linkName);
+    if (key.empty()) return LONG(0xC0000033u);
+    const std::wstring target(deviceName->Buffer, deviceName->Length / sizeof(wchar_t));
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    if (g_symbolicLinks.find(key) != g_symbolicLinks.end()) return LONG(0xC0000035u);
+    g_symbolicLinks.emplace(key, target);
+    return 0;
+}
+extern "C" LONG __stdcall K_IoDeleteSymbolicLink(const GuestUnicodeString* linkName) {
+    const std::wstring key = CanonicalObjectName(linkName);
+    if (key.empty()) return LONG(0xC0000033u);
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    return g_symbolicLinks.erase(key) ? 0 : LONG(0xC0000034u);
+}
+extern "C" LONG __stdcall K_NtOpenSymbolicLinkObject(
+    HANDLE* out, ULONG, GuestObjectAttributes* oa) {
+    if (!out || !oa || !oa->ObjectName) return LONG(0xC000000Du);
+    const std::wstring key = CanonicalObjectName(oa->ObjectName);
+    if (key.empty()) return LONG(0xC0000033u);
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    if (g_symbolicLinks.find(key) == g_symbolicLinks.end()) return LONG(0xC0000034u);
+    HANDLE handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!handle) return LONG(0xC0000001u);
+    g_symbolicLinkHandles.emplace(handle, g_symbolicLinks.find(key)->second);
+    *out = handle;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtQuerySymbolicLinkObject(
+    HANDLE handle, GuestUnicodeString* output, ULONG* returnedLength) {
+    if (!output || !output->Buffer) return LONG(0xC000000Du);
+    std::wstring target;
+    {
+        std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+        const auto opened = g_symbolicLinkHandles.find(handle);
+        if (opened == g_symbolicLinkHandles.end()) return LONG(0xC0000008u);
+        target = opened->second;
+    }
+    const ULONG required = static_cast<ULONG>(target.size() * sizeof(wchar_t));
+    if (returnedLength) *returnedLength = required;
+    if (output->MaximumLength < required) return LONG(0xC0000023u);
+    if (required) memcpy(output->Buffer, target.data(), required);
+    output->Length = static_cast<USHORT>(required);
+    if (output->MaximumLength >= required + sizeof(wchar_t))
+        output->Buffer[target.size()] = L'\\0';
+    return 0;
+}
 std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     if(!name||!name->Buffer||!name->Length)return {};
     std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
@@ -885,7 +948,7 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);CloseGuestSymbolicLinkHandle(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
@@ -2117,6 +2180,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_create_file
         cmp eax, 195
         je nt_delete_file
+        cmp eax, 67
+        je io_create_symbolic_link
+        cmp eax, 69
+        je io_delete_symbolic_link
+        cmp eax, 203
+        je nt_open_symbolic_link
+        cmp eax, 215
+        je nt_query_symbolic_link
         cmp eax, 202
         je nt_open_file
         cmp eax, 219
@@ -2408,6 +2479,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_create_file: jmp K_NtCreateFile
     nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
+    io_create_symbolic_link: jmp K_IoCreateSymbolicLink
+    io_delete_symbolic_link: jmp K_IoDeleteSymbolicLink
+    nt_open_symbolic_link: jmp K_NtOpenSymbolicLinkObject
+    nt_query_symbolic_link: jmp K_NtQuerySymbolicLinkObject
     nt_read_file: jmp K_NtReadFile
     nt_write_file: jmp K_NtWriteFile
     nt_flush: jmp K_NtFlushBuffersFile
