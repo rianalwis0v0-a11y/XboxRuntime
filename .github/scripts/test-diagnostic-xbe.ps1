@@ -6,7 +6,7 @@ if (!(Test-Path $guest)) { throw "Guest helper missing: $guest" }
 # implemented by XboxRuntime and writes a machine-readable result block.
 $base = [uint32]0x10000000
 $entryVa = [uint32]0x10001000
-$reportVa = [uint32]0x10002600
+$reportVa = [uint32]0x10006000
 $passedVa = [uint32]($reportVa + 4)
 $failedVa = [uint32]($reportVa + 8)
 $failedCheckVa = [uint32]($reportVa + 0x10)
@@ -28,7 +28,7 @@ $numberValueVa = [uint32]($reportVa + 0x148)
 $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
-$thunkVa = [uint32]0x10002E00
+$thunkVa = [uint32]0x10006800
 $ordinals = @(8,14,17,23,45,50,53,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
@@ -563,13 +563,14 @@ EmitIncrement $skippedVa
 EmitIncrement $skippedVa
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
-if ($script:code.Count -gt 0x1600) { throw "Diagnostic XBE code overlaps its data region." }
-$b = [byte[]]::new(0x4000)
+$dataOffset = 0x6000
+if ($script:code.Count -gt ($dataOffset - 0x1000)) { throw "Diagnostic XBE code overlaps its data region." }
+$b = [byte[]]::new(0x8000)
 function Put32([int]$offset,[uint32]$value) { [BitConverter]::GetBytes($value).CopyTo($b,$offset) }
 [Text.Encoding]::ASCII.GetBytes("XBEH").CopyTo($b,0)
 Put32 0x104 $base
 Put32 0x108 0x1000
-Put32 0x10C 0x4000
+Put32 0x10C 0x8000
 Put32 0x110 0x178
 Put32 0x11C 1
 Put32 0x120 0x10000178
@@ -578,35 +579,35 @@ Put32 0x158 ([uint32]($thunkVa -bxor [uint32]0x5B6D40B6))
 # Executable, writable section: code at VA 0x10001000, data at 0x10002200.
 Put32 0x178 5
 Put32 0x17C $entryVa
-Put32 0x180 0x3000
+Put32 0x180 0x7000
 Put32 0x184 0x1000
-Put32 0x188 0x3000
+Put32 0x188 0x7000
 $script:code.ToArray().CopyTo($b,0x1000)
 # The guest import resolver replaces these encoded ordinal slots with thunks.
 for ($i=0; $i -lt $ordinals.Count; $i++) {
-    Put32 (0x2E00 + 4*$i) ([uint32](2147483648 + [int64]$ordinals[$i]))
+    Put32 (0x6800 + 4*$i) ([uint32](2147483648 + [int64]$ordinals[$i]))
 }
-Put32 (0x2E00 + 4*$ordinals.Count) 0
-Put32 0x2600 0x54535258
-Put32 0x2228 4096
+Put32 (0x6800 + 4*$ordinals.Count) 0
+Put32 0x6000 0x54535258
+Put32 0x6028 4096
 # Guest-side OBJECT_ATTRIBUTES + UNICODE_STRING for \Device\Cdrom0\xbe-test.txt.
 $guestPath = "\Device\Cdrom0\xbe-test.txt"
 $guestPathBytes = [Text.Encoding]::Unicode.GetBytes($guestPath + [char]0)
 $guestPathLength = [uint32]($guestPath.Length * 2)
-Put32 0x2280 ([uint32]($guestPathLength -bor (($guestPathLength + 2) -shl 16)))
-Put32 0x2284 $testPathVa
-Put32 0x2290 24
-Put32 0x2294 0
-Put32 0x2298 $unicodeVa
-Put32 0x229C 0
-Put32 0x22A0 0
-Put32 0x22A4 0
-Put32 0x22B0 0
-Put32 0x22B4 0
-Put32 0x22B8 0
-$guestPathBytes.CopyTo($b,0x2300)
-[Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x2340)
-[Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x2380)
+Put32 0x6080 ([uint32]($guestPathLength -bor (($guestPathLength + 2) -shl 16)))
+Put32 0x6084 $testPathVa
+Put32 0x6090 24
+Put32 0x6094 0
+Put32 0x6098 $unicodeVa
+Put32 0x609C 0
+Put32 0x60A0 0
+Put32 0x60A4 0
+Put32 0x60B0 0
+Put32 0x60B4 0
+Put32 0x60B8 0
+$guestPathBytes.CopyTo($b,0x6100)
+[Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
+[Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
 New-Item -ItemType Directory -Force -Path $testDir | Out-Null
 $xbe = Join-Path $testDir "xboxruntime-diagnostic.xbe"
@@ -627,7 +628,7 @@ $pipe = [IO.Pipes.NamedPipeServerStream]::new(
 $pipePath = "\\.\pipe\$name"
 $proc = Start-Process -FilePath $guest -ArgumentList @(
     "--pipe",$pipePath,"--xbe",$xbe,"--eeprom",$eeprom,
-    "--report-va","0x10002600"
+    "--report-va","0x10006000"
 ) -PassThru -NoNewWindow
 try {
     $task = $pipe.WaitForConnectionAsync()
