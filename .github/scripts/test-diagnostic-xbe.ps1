@@ -59,9 +59,11 @@ function EmitCallImport([int]$ordinal) {
     EmitLoadEax $slot
     EmitByte 0xFF; EmitByte 0xD0
 }
-function EmitCheckEqual([uint32]$expected) {
+function EmitCheckEqual([long]$expected) {
     $script:checkIndex++
-    EmitByte 0x3D; Emit32 $expected
+    # PowerShell parses high-bit hex literals as signed Int32 values.
+    # Mask through Int64 before encoding the intended unsigned x86 value.
+    EmitByte 0x3D; Emit32 ([uint32]($expected -band 0xFFFFFFFFL))
     EmitByte 0x75; EmitByte 8
     EmitIncrement $script:passedAddress
     EmitByte 0xEB; EmitByte 16
