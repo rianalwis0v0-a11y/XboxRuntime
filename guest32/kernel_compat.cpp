@@ -844,6 +844,81 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
     if (!h || h == INVALID_HANDLE_VALUE || !out) return statusInvalidParameter;
 
+    GuestDvdFile dvdFile{};
+    if (FindDvdFile(h, dvdFile)) {
+        auto writeField = [out](ULONG offset, const void* value, ULONG bytes) {
+            std::memcpy(static_cast<uint8_t*>(out) + offset, value, bytes);
+        };
+        ULONG information = 0;
+        switch (infoClass) {
+        case 1: { // FileFsVolumeInformation: XDVDFS has no label in this descriptor.
+            constexpr ULONG labelOffset = 18;
+            if (length < labelOffset) return statusInfoLengthMismatch;
+            const LARGE_INTEGER creationTime{};
+            const ULONG serial = 0;
+            const ULONG labelLength = 0;
+            const BOOLEAN supportsObjects = FALSE;
+            std::memset(out, 0, labelOffset);
+            writeField(0, &creationTime, sizeof(creationTime));
+            writeField(8, &serial, sizeof(serial));
+            writeField(12, &labelLength, sizeof(labelLength));
+            writeField(16, &supportsObjects, sizeof(supportsObjects));
+            information = labelOffset;
+            break;
+        }
+        case 3: { // FileFsSizeInformation: read-only 2048-byte sectors.
+            constexpr ULONG required = 24;
+            if (length < required) return statusInfoLengthMismatch;
+            LARGE_INTEGER total{};
+            total.QuadPart = static_cast<LONGLONG>(g_dvdInfo.imageSize / 2048u);
+            LARGE_INTEGER available{};
+            const ULONG sectorsPerAllocationUnit = 1;
+            const ULONG bytesPerSector = 2048;
+            std::memset(out, 0, required);
+            writeField(0, &total, sizeof(total));
+            writeField(8, &available, sizeof(available));
+            writeField(16, &sectorsPerAllocationUnit, sizeof(sectorsPerAllocationUnit));
+            writeField(20, &bytesPerSector, sizeof(bytesPerSector));
+            information = required;
+            break;
+        }
+        case 4: { // FileFsDeviceInformation
+            constexpr ULONG required = 8;
+            if (length < required) return statusInfoLengthMismatch;
+            const ULONG deviceType = 2; // FILE_DEVICE_CD_ROM
+            const ULONG characteristics = 0x00000001u | 0x00000002u;
+            writeField(0, &deviceType, sizeof(deviceType));
+            writeField(4, &characteristics, sizeof(characteristics));
+            information = required;
+            break;
+        }
+        case 5: { // FileFsAttributeInformation
+            constexpr ULONG nameOffset = 12;
+            constexpr wchar_t fileSystemName[] = L"XDVDFS";
+            constexpr ULONG nameBytes = (static_cast<ULONG>(_countof(fileSystemName)) - 1) * sizeof(WCHAR);
+            if (length < nameOffset) return statusInfoLengthMismatch;
+            const ULONG attributes = 0;
+            const ULONG maximumComponent = 255;
+            const ULONG copiedBytes = (std::min)(nameBytes, length - nameOffset) & ~ULONG(1);
+            std::memset(out, 0, nameOffset + copiedBytes);
+            writeField(0, &attributes, sizeof(attributes));
+            writeField(4, &maximumComponent, sizeof(maximumComponent));
+            writeField(8, &nameBytes, sizeof(nameBytes));
+            if (copiedBytes) writeField(nameOffset, fileSystemName, copiedBytes);
+            information = nameOffset + copiedBytes;
+            if (copiedBytes != nameBytes) {
+                if (io) { io->Status = statusBufferOverflow; io->Information = information; }
+                return statusBufferOverflow;
+            }
+            break;
+        }
+        default:
+            return LONG(0xC0000003u);
+        }
+        if (io) { io->Status = 0; io->Information = information; }
+        return 0;
+    }
+
     WCHAR finalPath[MAX_PATH * 4]{};
     const DWORD pathLength = GetFinalPathNameByHandleW(
         h, finalPath, static_cast<DWORD>(_countof(finalPath)), FILE_NAME_NORMALIZED);
