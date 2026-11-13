@@ -37,6 +37,9 @@ jobs:
       - name: Test FATX, NV2A, controller input, and XDVDFS host subsystems
         run: ctest --test-dir build -C Release --output-on-failure -R "fatx_smoke|nv2a_smoke|nv2a_hlsl_smoke|nv2a_render_capture|input_smoke|xdvdfs_smoke"
 
+      - name: Report NV2A render capture driver and frame counts
+        run: .\\build\\out\\nv2a_render_capture.exe
+
       - name: Upload NV2A ten-frame render preview
         if: always()
         uses: actions/upload-artifact@v4
