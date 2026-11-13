@@ -492,3 +492,8 @@ The NV4-style DMA pusher now maintains a 16-entry return-address stack instead o
 ## Correct NV2A vertex microcode decoding
 
 The pinned xboxrecomp D3D8 HLSL translator previously read opcode/source/destination fields from the wrong DWORD positions, so real NV2A instructions could be parsed as NOPs. On Windows, CMake now applies a small idempotent patch to the pinned submodule source before building: opcodes and shared indices are decoded from DWORD1; source muxes/swizzles/registers from DWORD2/3; and the independent MAC-temp, ILU-temp and output masks plus output routing from DWORD3. The destination structure now retains separate temp and output write masks. The HLSL smoke test uses the actual NV2A DWORD layout and checks exact input masks for MOV v0, ADD v5+v5 and MOV c[17] before compiling the generated VS 5.0 bytecode. The patch is local to the checked-out submodule worktree and does not alter the pinned submodule commit.
+
+
+## Parallel MAC/ILU source semantics
+
+When both execution units are active in one NV2A instruction slot, the hardware reads A, B and C before either unit commits a destination. The HLSL lowering now snapshots all three source vectors into unique per-instruction temporaries before emitting MAC and ILU writes. The regression test pairs a MAC MOV that overwrites R1 with an ILU RCP that reads the old R1.x, and asserts the generated HLSL snapshots R1 before the MAC write and uses the snapshot for the ILU operation.
