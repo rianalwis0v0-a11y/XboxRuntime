@@ -13,8 +13,13 @@ constexpr std::size_t kMinimumCertificateSize = 0x0D0;
 constexpr std::size_t kSectionHeaderSize = 0x38;
 constexpr std::uint32_t kRetailEntryXor = 0xA8FC57ABu;
 constexpr std::uint32_t kDebugEntryXor = 0x94859D4Bu;
+constexpr std::uint32_t kChihiroEntryXor = 0x40B5C16Eu;
 constexpr std::uint32_t kRetailThunkXor = 0x5B6D40B6u;
 constexpr std::uint32_t kDebugThunkXor = 0xEFB1F152u;
+constexpr std::uint32_t kChihiroThunkXor = 0x2290059Du;
+constexpr std::uint32_t kChihiroEntryTypeMask = 0xF0000000u;
+constexpr std::uint32_t kChihiroEntryTypeValue = 0x40000000u;
+constexpr std::uint32_t kDebugThunkTypeMask = 0x80000000u;
 constexpr std::uint32_t kMaximumSections = 96;
 constexpr std::uint32_t kMaximumImageSize = 512u * 1024u * 1024u;
 
@@ -66,6 +71,7 @@ struct Image {
     std::uint32_t tlsAddress = 0;
     std::uint32_t kernelThunkAddress = 0;
     bool debugImage = false;
+    bool chihiroImage = false;
     Section sections[kMaximumSections]{};
 };
 
