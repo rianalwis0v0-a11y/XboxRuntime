@@ -1722,9 +1722,14 @@ static void sync_surface_to_vram(void)
     if (!g_surface_bound)
         return;
 
-    if (g_color_surface &&
-        copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
-        mark_all_textures_dirty();
+    if (g_color_surface) {
+        if (copy_surface_to_vram(g_color_surface, &g_bound_surface_info))
+            mark_all_textures_dirty();
+        else
+            fprintf(stderr, "[NV2A-SURFACE] render-target readback to VRAM failed\\n");
+    } else {
+        fprintf(stderr, "[NV2A-SURFACE] flush has no bound color surface\\n");
+    }
 
     if (g_zeta_surface)
         (void)copy_zeta_surface_to_vram(g_zeta_surface, &g_bound_surface_info);
