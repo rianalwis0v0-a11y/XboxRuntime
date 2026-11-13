@@ -37,7 +37,11 @@ backend's responsibility.
 The parser validates the XBEH header, versioned certificate extent (including legacy v1), section table and
 section ranges and names, retail/debug entry-point and thunk decoding, bounded
 kernel thunk-table termination, TLS bounds, and library-version table bounds.
-The Windows integration test loads a synthetic XBE through a fake backend and
-checks reserve/map/import/start/stop/release ordering; it validates the DLL ABI
-and lifecycle, not real Xbox kernel execution or a retail game boot. The 256-byte RSA signature is retained in the
+The Windows integration tests load both a synthetic XBE and an NXDK-built
+homebrew XBE through the x64 DLL and a fake ABI v2 backend. The NXDK fixture is
+built in CI from the pinned XboxDev/nxdk revision and its `samples/hello`
+source; the generated `default.xbe` is passed to `LoadXbe`. These tests check
+real-file parsing, exact-base reservation requests, section mapping, backend
+handoff, and stop/release ordering. The fake backend does not execute Xbox
+instructions, so this is not a guest CPU execution test or a retail game boot. The 256-byte RSA signature is retained in the
 mapped header but is not cryptographically verified by this module.
