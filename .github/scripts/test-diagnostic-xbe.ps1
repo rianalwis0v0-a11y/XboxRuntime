@@ -22,6 +22,11 @@ $ioStatusVa = [uint32]($reportVa + 0xB0)
 $fileHandleVa = [uint32]($reportVa + 0xB8)
 $readBufferVa = [uint32]($reportVa + 0xC0)
 $fileOffsetVa = [uint32]($reportVa + 0xD0)
+$directoryUnicodeVa = [uint32]($reportVa + 0x200)
+$directoryObjectAttributesVa = [uint32]($reportVa + 0x220)
+$directoryHandleVa = [uint32]($reportVa + 0x240)
+$directoryPathVa = [uint32]($reportVa + 0x300)
+$directoryInfoVa = [uint32]($reportVa + 0x600)
 $testPathVa = [uint32]($reportVa + 0x100)
 $numberTextVa = [uint32]($reportVa + 0x140)
 $numberValueVa = [uint32]($reportVa + 0x148)
@@ -29,7 +34,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$ordinals = @(8,14,17,19,20,21,23,32,33,34,45,50,53,218,207,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -179,7 +184,7 @@ EmitPush $vmBaseVa
 EmitCallImport 199
 EmitCheckEqual 0
 
-# Host-file mapping, NT open/read/close, using the XBE title directory as CD-ROM.
+# XDVDFS file open/read/metadata, using a mounted synthetic optical disc.
 EmitPush 0
 EmitPush 1
 EmitPush $ioStatusVa
@@ -283,6 +288,71 @@ EmitLoadEax ([uint32]($volumeAttributesVa + 8))
 EmitCheckNonZero
 
 EmitPushMemory $fileHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+# Open the optical root and enumerate both directory entries one at a time.
+EmitPush 1
+EmitPush 0
+EmitPush 1
+EmitPush 1
+EmitPush 512
+EmitPush $directoryInfoVa
+EmitPush $ioStatusVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $directoryHandleVa
+EmitCallImport 202
+EmitCheckEqual 0
+EmitPush 1
+EmitPush 0
+EmitPush 1
+EmitPush 1
+EmitPush 512
+EmitPush $directoryInfoVa
+EmitPush $ioStatusVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $directoryHandleVa
+EmitCallImport 207
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($directoryInfoVa + 64))
+EmitCheckEqual 0x004F0046 # "FO"
+EmitLoadEax ([uint32]($directoryInfoVa + 56))
+EmitCheckEqual 0x10 # FILE_ATTRIBUTE_DIRECTORY
+EmitPush 0
+EmitPush 0
+EmitPush 1
+EmitPush 1
+EmitPush 512
+EmitPush $directoryInfoVa
+EmitPush $ioStatusVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $directoryHandleVa
+EmitCallImport 207
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($directoryInfoVa + 64))
+EmitCheckEqual 0x00450054 # "TE"
+EmitLoadEax ([uint32]($directoryInfoVa + 56))
+EmitCheckEqual 0x20 # FILE_ATTRIBUTE_ARCHIVE
+EmitPush 0
+EmitPush 0
+EmitPush 1
+EmitPush 1
+EmitPush 512
+EmitPush $directoryInfoVa
+EmitPush $ioStatusVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $directoryHandleVa
+EmitCallImport 207
+EmitCheckEqual 0x80000006 # STATUS_NO_MORE_FILES
+EmitPushMemory $directoryHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
 
@@ -896,6 +966,18 @@ Put32 0x60B0 0
 Put32 0x60B4 0
 Put32 0x60B8 0
 $guestPathBytes.CopyTo($b,0x6100)
+$directoryPath = "\\Device\\Cdrom0"
+$directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
+$directoryPathLength = [uint32]($directoryPath.Length * 2)
+Put32 0x6200 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
+Put32 0x6204 $directoryPathVa
+Put32 0x6220 24
+Put32 0x6224 0
+Put32 0x6228 $directoryUnicodeVa
+Put32 0x622C 0
+Put32 0x6230 0
+Put32 0x6234 0
+$directoryPathBytes.CopyTo($b,0x6300)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
