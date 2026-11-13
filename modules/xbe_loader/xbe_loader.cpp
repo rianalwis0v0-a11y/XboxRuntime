@@ -17,7 +17,6 @@ constexpr std::uint64_t kMaximumXbeFileSize = 512ull * 1024ull * 1024ull;
 std::mutex g_lock;
 bool g_initialized = false;
 bool g_imageActive = false;
-std::vector<std::uint8_t> g_file;
 std::uint8_t* g_guestImage = nullptr;
 XBE_EXECUTION_BACKEND g_backend{};
 
@@ -44,7 +43,6 @@ void ReleaseActiveImage() {
         g_backend.releaseImage(g_guestImage, g_backend.context);
     g_guestImage = nullptr;
     g_imageActive = false;
-    g_file.clear();
 }
 
 bool ReadWholeFile(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
@@ -194,7 +192,6 @@ extern "C" int __cdecl LoadXbe(const wchar_t* path) {
         return 10;
     }
 
-    g_file = std::move(file);
     g_guestImage = guestImage;
     g_imageActive = true;
     Log(L"XBE mapped and guest execution backend accepted entry point.");
