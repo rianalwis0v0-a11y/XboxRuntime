@@ -1,4 +1,3 @@
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
@@ -685,19 +684,74 @@ int main() {
         return 1;
     }
 
-    /* PFIFO reports the NV1A single-level CALL/RETURN faults in DMA_STATE. */
-    const uint32_t nestedCallStream[] = {
-        0x00000012u, 0u, 0u, 0u, 0x0000001Eu
+    /* Nested CALL/RETURN must unwind correctly through three PGRAPH DMA binds. */
+    const uint32_t nestedDmaCallStream[] = {
+        0x0000001Au,                         /* Main CALL -> outer routine at +24 */
+        (1u << 18) | 0x0180u, dmaHandle,    /* Main continuation: bind DMA_A */
+        0u, 0u, 0u,                          /* Padding before outer routine */
+        0x0000002Au,                         /* Outer CALL -> inner routine at +40 */
+        (1u << 18) | 0x0184u, dmaHandle,    /* Outer continuation: bind DMA_B */
+        0x00020000u,                         /* Return from outer routine */
+        (1u << 18) | 0x0188u, dmaHandle,    /* Inner routine: bind DMA_C */
+        0x00020000u                          /* Return from inner routine */
     };
-    const uint32_t invalidCallTargetStream[] = { 0xFFFFFFFEu };
-    const uint32_t inactiveReturnStream[] = { 0x00020000u };
-    if (writeVram(0x1000u, nestedCallStream, sizeof(nestedCallStream)) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, sizeof(nestedCallStream),
-                      &dmaGet, &dmaMethods) == 0 ||
+    DmaInfo nestedA{}, nestedB{}, nestedC{};
+    if (writeVram(0x1000u, nestedDmaCallStream, sizeof(nestedDmaCallStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 12u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 12u || dmaMethods != 3u ||
+        getDmaContext(channel, 0u, 0x0180u, &nestedA) != 0 ||
+        getDmaContext(channel, 0u, 0x0184u, &nestedB) != 0 ||
+        getDmaContext(channel, 0u, 0x0188u, &nestedC) != 0 ||
+        nestedA.handle != dmaHandle || nestedB.handle != dmaHandle ||
+        nestedC.handle != dmaHandle) {
+        std::cerr << "FAIL: nested NV2A DMA CALL/RETURN execution\\n";
+        stop();
+        return 1;
+    }
+
+    /* Exactly 16 nested calls are accepted; a 17th level reports CALL_ACTIVE. */
+    std::vector<uint32_t> maxCallDepthStream(33u, 0u);
+    maxCallDepthStream[0] = 0x0000000Au; /* CALL +8 -> first subroutine */
+    maxCallDepthStream[1] = 0x00000009u; /* After unwind, jump to PUT (+8) */
+    for (uint32_t depth = 1u; depth < 16u; ++depth) {
+        const uint32_t callIndex = depth * 2u;
+        maxCallDepthStream[callIndex] = ((callIndex + 2u) * 4u) | 2u;
+        maxCallDepthStream[callIndex + 1u] = 0x00020000u;
+    }
+    maxCallDepthStream[32] = 0x00020000u;
+    if (writeVram(0x1000u, maxCallDepthStream.data(),
+                  (uint32_t)(maxCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 8u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 8u || dmaMethods != 0u) {
+        std::cerr << "FAIL: NV2A DMA CALL stack rejected the supported 16-level depth\\n";
+        stop();
+        return 1;
+    }
+
+    std::vector<uint32_t> overflowCallDepthStream(35u, 0u);
+    overflowCallDepthStream[0] = 0x0000000Au;
+    overflowCallDepthStream[1] = 0x00000009u;
+    for (uint32_t depth = 1u; depth < 17u; ++depth) {
+        const uint32_t callIndex = depth * 2u;
+        overflowCallDepthStream[callIndex] = ((callIndex + 2u) * 4u) | 2u;
+        overflowCallDepthStream[callIndex + 1u] = 0x00020000u;
+    }
+    overflowCallDepthStream[34] = 0x00020000u;
+    if (writeVram(0x1000u, overflowCallDepthStream.data(),
+                  (uint32_t)(overflowCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 8u, &dmaGet, &dmaMethods) == 0 ||
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
         (read(0x3228u, 4u) >> 29) != 1u ||
-        write(0x2100u, 0x1000u, 4u) != 0 ||
-        writeVram(0x1000u, invalidCallTargetStream, sizeof(invalidCallTargetStream)) != 0 ||
+        write(0x2100u, 0x1000u, 4u) != 0) {
+        std::cerr << "FAIL: NV2A DMA CALL stack overflow protection / PFIFO error reporting\\n";
+        stop();
+        return 1;
+    }
+
+    /* Invalid CALL targets and RETURN without an active call remain faults. */
+    const uint32_t invalidCallTargetStream[] = { 0xFFFFFFFEu };
+    const uint32_t inactiveReturnStream[] = { 0x00020000u };
+    if (writeVram(0x1000u, invalidCallTargetStream, sizeof(invalidCallTargetStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, sizeof(invalidCallTargetStream),
                       &dmaGet, &dmaMethods) == 0 ||
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
@@ -709,7 +763,7 @@ int main() {
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
         (read(0x3228u, 4u) >> 29) != 3u ||
         write(0x2100u, 0x1000u, 4u) != 0) {
-        std::cerr << "FAIL: PFIFO CALL/RETURN error state and interrupt reporting\\n";
+        std::cerr << "FAIL: PFIFO invalid CALL target / inactive RETURN error reporting\\n";
         stop();
         return 1;
     }
