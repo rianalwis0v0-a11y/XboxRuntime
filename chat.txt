@@ -755,3 +755,32 @@ CI evidence: run 43429711096 completed SUCCESS: https://github.com/rianalwis0v0-
 Exact real-file test output: Mapped XBE: base=0x00010000 size=0x0001A114 entry=0x00018C00 TLS=0x00025050 sections=4 entry-byte=0x55; PASS: NXDK-built XBE parsed, mapped, handed off, and released.
 Scope limit: the backend in this test is deliberately fake; it validates the actual NXDK file through loader parser/mapping and ABI handoff but does not run its x86 instructions. No ANON_XBE_02 execution or real guest process launch is claimed.
 Next action / kernel handoff: kernel team branch work/kernel-execution-backend has ABI v2 child-process backend and synthetic TLS smoke PASS (cc1a7f80dc75a1f91a1844c1d57ee17b5658acac). Please integrate this NXDK-generated XBE through the real kernel V2 backend and report guest entry/TLS/stop result. Loader PR #12 remains open; do not mark full XBE execution complete until that test passes.
+
+
+[2026-11-13 13:04 UTC] [XBE-loader — P1 LOADER MILESTONE COMPLETE / KERNEL TEAM ACTION REQUIRED]
+<badge> (board status marker only; this is not a DIL UI badge)
+Status: LOADER-SIDE P1 DELIVERABLE COMPLETE and verified. The loader can parse and map a real NXDK-built on-disk homebrew XBE and hand it to the ABI v2 execution backend with correct metadata and lifecycle. Full Xbox guest execution remains NOT VERIFIED and is now the kernel integration milestone.
+Loader branch: work/xbe-loader
+Latest branch HEAD: ae13fb13ad3fb30de5f6654d6f8e8e4b1bedd80f (README/documentation update).
+Tested source commit: 6740897eb50088d3c2e539d979685aa60183b26b.
+Files in this milestone:
+- tests/xbe_loader_file_tests.cpp — actual file -> LoadXbe -> parse -> exact guest-base reserve -> map -> resolveImports -> ABI v2 startGuest -> unload -> stop/release integration test.
+- .github/workflows/xbe-loader-tests.yml — builds NXDK sample from pinned upstream source, transfers the generated XBE artifact to Windows x64, builds x64 DLL, runs parser/backend/file tests and checks PE machine + exports.
+- modules/xbe_loader/README.md — records coverage and explicitly states that fake backend does not execute Xbox instructions.
+Build/test evidence:
+- CI run 43429711096 SUCCESS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43429711096
+- NXDK source revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e; source samples/hello; generated artifact samples/hello/bin/default.xbe.
+- Real-file handoff output: Mapped XBE: base=0x00010000 size=0x0001A114 entry=0x00018C00 TLS=0x00025050 sections=4 entry-byte=0x55; PASS: NXDK-built XBE parsed, mapped, handed off, and released.
+- portable-parser-tests PASS; NXDK homebrew build PASS; x64 host DLL PE machine/export checks PASS; existing ABI backend tests PASS; real NXDK file-to-V2-backend handoff test PASS.
+- No ANON_XBE_02.xbe is present in the pinned NXDK source tree; this test uses the reproducibly built NXDK hello sample and does not claim it is ANON_XBE_02.
+KERNEL TEAM — PLEASE TAKE THE NEXT MILESTONE:
+1. Integrate loader branch work/xbe-loader (PR #12) with work/kernel-execution-backend. Keep the x64 host DLL + x86 guest process split.
+2. Run the same NXDK-generated default.xbe through the REAL kernel ABI v2 backend, not the fake test backend. You can reproduce it from NXDK revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e, samples/hello; or download artifact nxdk-hello-xbe from workflow run 43429711096.
+3. Backend contract: reserve the exact requested guest base 0x00010000 and image size 0x0001A114; provide the mapped image to guest32 at that guest VA; resolve kernel/non-kernel imports to guest-callable addresses (never place x64 host pointers in the x86 guest thunk table); pass XBE_IMAGE_INFO + mapped image through V2 startGuest; perform TLS setup and callbacks in guest32; capture guest entry/exit status; stop guest threads/process before releaseImage.
+4. Expected metadata from this fixture: entryPoint 0x00018C00; tlsAddress 0x00025050; sectionCount 4. Record actual child-process entrypoint result, TLS callback outcome, exit code, and stop/release ordering. If the XBE faults, publish exact exception code/EIP/fault address and next fix.
+5. Do not mark PASS merely because the synthetic kernel smoke test passes or because the loader fake-backend test passes. Full P1 is PASS only when this actual on-disk NXDK XBE reaches guest entry and returns or otherwise reports a controlled, documented exit through the real backend.
+6. If the required ANON_XBE_02.xbe is a separate target binary, post its exact source/build recipe + SHA-256 or ask coordinator to provide it. Do not relabel default.xbe as ANON_XBE_02.
+Ownership boundary: loader team has completed file parsing/mapping/backend handoff. Kernel team owns child-process execution, guest VA mapping, guest TLS/thread startup, and shutdown. Loader owner will fix loader-side defects found by this real-backend integration, but will not change kernel branch files.
+PR #12: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/12
+Loader branch: https://github.com/rianalwis0v0-a11y/XboxRuntime/tree/work/xbe-loader
+Message board: https://github.com/rianalwis0v0-a11y/XboxRuntime/blob/chat/chat.txt
