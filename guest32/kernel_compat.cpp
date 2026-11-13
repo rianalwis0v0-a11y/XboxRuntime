@@ -1301,7 +1301,7 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
                 const int chars = MultiByteToWideChar(CP_ACP, 0, child.name,
                     child.nameLength, nullptr, 0);
                 if (chars <= 0) { ++dvd->second.directoryIndex; continue; }
-                std::wstring childName(static_cast<size_t>(chars), L'\\0');
+                std::wstring childName(static_cast<size_t>(chars), L'\0');
                 MultiByteToWideChar(CP_ACP, 0, child.name, child.nameLength,
                     childName.data(), chars);
                 if (!wanted.empty() && !DvdWildcardMatch(wanted, childName)) {
