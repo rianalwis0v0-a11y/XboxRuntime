@@ -26,20 +26,7 @@ using SetStateFn = DWORD (WINAPI*)(DWORD, WIN_VIBRATION*);
 
 constexpr DWORD ERROR_SUCCESS_VALUE = 0;
 constexpr DWORD ERROR_DEVICE_NOT_CONNECTED_VALUE = 1167;
-constexpr WORD XINPUT_DPAD_UP = 0x0001;
-constexpr WORD XINPUT_DPAD_DOWN = 0x0002;
-constexpr WORD XINPUT_DPAD_LEFT = 0x0004;
-constexpr WORD XINPUT_DPAD_RIGHT = 0x0008;
-constexpr WORD XINPUT_START = 0x0010;
-constexpr WORD XINPUT_BACK = 0x0020;
-constexpr WORD XINPUT_LTHUMB = 0x0040;
-constexpr WORD XINPUT_RTHUMB = 0x0080;
-constexpr WORD XINPUT_LSHOULDER = 0x0100;
-constexpr WORD XINPUT_RSHOULDER = 0x0200;
-constexpr WORD XINPUT_A = 0x1000;
-constexpr WORD XINPUT_B = 0x2000;
-constexpr WORD XINPUT_X = 0x4000;
-constexpr WORD XINPUT_Y = 0x8000;
+constexpr DWORD ERROR_INVALID_PARAMETER_VALUE = 87;
 
 HMODULE g_xinput = nullptr;
 GetStateFn g_getState = nullptr;
@@ -67,6 +54,32 @@ bool LoadXInput() {
     Log(L"[XboxRuntime:Input] No Windows XInput provider found; input stays disconnected.\n");
     return false;
 }
+}
+
+extern "C" uint32_t __cdecl XboxInput_TranslateHostState(
+    uint32_t packetNumber, uint16_t hostButtons,
+    uint8_t leftTrigger, uint8_t rightTrigger,
+    int16_t thumbLX, int16_t thumbLY, int16_t thumbRX, int16_t thumbRY,
+    XBOX_INPUT_STATE* output) {
+    if (!output) return ERROR_INVALID_PARAMETER_VALUE;
+    std::memset(output, 0, sizeof(*output));
+    output->dwPacketNumber = packetNumber;
+
+    // Windows XInput digital button masks share the original Xbox bit values.
+    output->Gamepad.wButtons = hostButtons;
+    output->Gamepad.bAnalogButtons[0] = (hostButtons & 0x1000) ? 0xFF : 0;
+    output->Gamepad.bAnalogButtons[1] = (hostButtons & 0x2000) ? 0xFF : 0;
+    output->Gamepad.bAnalogButtons[2] = (hostButtons & 0x4000) ? 0xFF : 0;
+    output->Gamepad.bAnalogButtons[3] = (hostButtons & 0x8000) ? 0xFF : 0;
+    output->Gamepad.bAnalogButtons[4] = (hostButtons & 0x0100) ? 0xFF : 0; // Black
+    output->Gamepad.bAnalogButtons[5] = (hostButtons & 0x0200) ? 0xFF : 0; // White
+    output->Gamepad.bAnalogButtons[6] = leftTrigger;
+    output->Gamepad.bAnalogButtons[7] = rightTrigger;
+    output->Gamepad.sThumbLX = thumbLX;
+    output->Gamepad.sThumbLY = thumbLY;
+    output->Gamepad.sThumbRX = thumbRX;
+    output->Gamepad.sThumbRY = thumbRY;
+    return ERROR_SUCCESS_VALUE;
 }
 
 extern "C" int __cdecl ModuleStart(void) {
@@ -103,38 +116,11 @@ extern "C" uint32_t __cdecl XboxInput_GetState(uint32_t userIndex, XBOX_INPUT_ST
     const DWORD result = g_getState(userIndex, &host);
     if (result != ERROR_SUCCESS_VALUE) return result;
 
-    output->dwPacketNumber = static_cast<uint32_t>(host.dwPacketNumber);
-    const WORD b = host.Gamepad.wButtons;
-    WORD mapped = 0;
-    if (b & 0x0001) mapped |= XINPUT_DPAD_UP;
-    if (b & 0x0002) mapped |= XINPUT_DPAD_DOWN;
-    if (b & 0x0004) mapped |= XINPUT_DPAD_LEFT;
-    if (b & 0x0008) mapped |= XINPUT_DPAD_RIGHT;
-    if (b & 0x0010) mapped |= XINPUT_START;
-    if (b & 0x0020) mapped |= XINPUT_BACK;
-    if (b & 0x0040) mapped |= XINPUT_LTHUMB;
-    if (b & 0x0080) mapped |= XINPUT_RTHUMB;
-    if (b & 0x0100) mapped |= XINPUT_LSHOULDER; // Xbox Black
-    if (b & 0x0200) mapped |= XINPUT_RSHOULDER; // Xbox White
-    if (b & 0x1000) mapped |= XINPUT_A;
-    if (b & 0x2000) mapped |= XINPUT_B;
-    if (b & 0x4000) mapped |= XINPUT_X;
-    if (b & 0x8000) mapped |= XINPUT_Y;
-
-    output->Gamepad.wButtons = mapped;
-    output->Gamepad.bAnalogButtons[0] = (b & 0x1000) ? 0xFF : 0;
-    output->Gamepad.bAnalogButtons[1] = (b & 0x2000) ? 0xFF : 0;
-    output->Gamepad.bAnalogButtons[2] = (b & 0x4000) ? 0xFF : 0;
-    output->Gamepad.bAnalogButtons[3] = (b & 0x8000) ? 0xFF : 0;
-    output->Gamepad.bAnalogButtons[4] = (b & 0x0100) ? 0xFF : 0;
-    output->Gamepad.bAnalogButtons[5] = (b & 0x0200) ? 0xFF : 0;
-    output->Gamepad.bAnalogButtons[6] = host.Gamepad.bLeftTrigger;
-    output->Gamepad.bAnalogButtons[7] = host.Gamepad.bRightTrigger;
-    output->Gamepad.sThumbLX = host.Gamepad.sThumbLX;
-    output->Gamepad.sThumbLY = host.Gamepad.sThumbLY;
-    output->Gamepad.sThumbRX = host.Gamepad.sThumbRX;
-    output->Gamepad.sThumbRY = host.Gamepad.sThumbRY;
-    return ERROR_SUCCESS_VALUE;
+    return XboxInput_TranslateHostState(
+        static_cast<uint32_t>(host.dwPacketNumber), host.Gamepad.wButtons,
+        host.Gamepad.bLeftTrigger, host.Gamepad.bRightTrigger,
+        host.Gamepad.sThumbLX, host.Gamepad.sThumbLY,
+        host.Gamepad.sThumbRX, host.Gamepad.sThumbRY, output);
 }
 
 extern "C" uint32_t __cdecl XboxInput_SetState(uint32_t userIndex, const XBOX_INPUT_VIBRATION* vibration) {
