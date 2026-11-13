@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include "xdvdfs.h"
 
@@ -215,7 +216,7 @@ extern "C" int __cdecl XDVDFS_ListDirectory(
         if (key.size() <= prefix.size() ||
             key.compare(0, prefix.size(), prefix) != 0)
             continue;
-        const std::string& remainder = key.substr(prefix.size());
+        const std::string remainder = key.substr(prefix.size());
         if (remainder.find('/') != std::string::npos) continue;
         children.emplace_back(remainder, &item.second);
     }
