@@ -78,7 +78,55 @@ int main() {
     }
     XSocketClose(receiver);
     XSocketClose(sender);
+
+    // Exercise TCP bind/listen/connect/accept/send/recv on an ephemeral port.
+    const SOCKET listener = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const SOCKET client = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET || client == INVALID_SOCKET) {
+        if (listener != INVALID_SOCKET) XSocketClose(listener);
+        if (client != INVALID_SOCKET) XSocketClose(client);
+        XNetCleanup();
+        return 11;
+    }
+    sockaddr_in listenAddress{};
+    listenAddress.sin_family = AF_INET;
+    listenAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (XSocketBind(listener, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0 ||
+        XSocketListen(listener, 1) != 0) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 12;
+    }
+    int listenLength = sizeof(listenAddress);
+    if (XSocketGetSockName(listener, reinterpret_cast<sockaddr*>(&listenAddress), &listenLength) != 0 ||
+        XSocketConnect(client, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 13;
+    }
+    const SOCKET accepted = XSocketAccept(listener, nullptr, nullptr);
+    if (accepted == INVALID_SOCKET) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 14;
+    }
+    const char tcpPayload[] = "xnet-tcp-loopback";
+    if (XSocketSend(client, tcpPayload, sizeof(tcpPayload), 0) != sizeof(tcpPayload)) {
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 15;
+    }
+    char tcpReceived[64]{};
+    const int tcpBytes = XSocketRecv(accepted, tcpReceived, sizeof(tcpReceived), 0);
+    if (tcpBytes != sizeof(tcpPayload) ||
+        std::memcmp(tcpReceived, tcpPayload, sizeof(tcpPayload)) != 0) {
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 16;
+    }
+    XSocketClose(accepted);
+    XSocketClose(listener);
+    XSocketClose(client);
+
+    if (XSocketHTONL(0x01020304ul) != htonl(0x01020304ul) ||
+        XSocketNTOHL(htonl(0x01020304ul)) != 0x01020304ul ||
+        XSocketHTONS(0x1234u) != htons(0x1234u) ||
+        XSocketNTOHS(htons(0x1234u)) != 0x1234u) {
+        XNetCleanup();
+        return 17;
+    }
+
     XNetCleanup();
-    std::puts("network_smoke: XNet startup/DNS event, XSocket UDP loopback, TCP/UDP token lifecycle passed");
+    std::puts("network_smoke: XNet startup/DNS event, XSocket UDP/TCP loopback, byte-order helpers passed");
     return 0;
 }
