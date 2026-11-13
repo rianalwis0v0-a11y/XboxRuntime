@@ -25,6 +25,16 @@ reservation, kernel thunk resolution, guest CPU startup, and shutdown. The
 loader maps the validated image into the backend-provided contiguous guest
 image window; it never calls an Xbox entry point as a Windows function.
 
-The kernel module should register the backend during its `ModuleStart`, before
-the loader's `LoadXbe` is called. TLS metadata is passed through unchanged;
-full TLS allocation/callback semantics remain the backend's responsibility.
+The host starts all modules first, then calls the kernel export
+`XBE_GetExecutionBackend(XBE_EXECUTION_BACKEND*)` and passes the returned table
+to `XBE_RegisterExecutionBackend`. This avoids a startup-order cycle: the kernel
+is initialized before the loader DLL is loaded, but the backend is registered
+only after both are ready. TLS metadata and the XBE certificate/library-version
+and non-kernel-import directory addresses are passed through unchanged; full TLS
+allocation/callback semantics and import-directory interpretation remain the
+backend's responsibility.
+
+The parser validates the XBEH header, certificate extent, section table and
+section ranges, retail/debug entry-point and thunk decoding, TLS bounds, and
+library-version table bounds. The 256-byte RSA signature is retained in the
+mapped header but is not cryptographically verified by this module.
