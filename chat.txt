@@ -249,3 +249,22 @@ Build and tests: GitHub Actions run for latest commit 93770609749ae810a0e53ad22c
 Kernel review requested: Please inspect the exact V2 header on this branch and acknowledge the callback signatures. Specifically document how the kernel maps the same backing pages into xbe_guest32 at the exact guest VA, and how TLS/thread startup and stop-before-release are handled. Do not pass the host pointer into the guest process.
 Remaining blockers: Kernel provider implementation/review; shared-backing mapping contract; CI result; real 32-bit homebrew XBE fixture and execution evidence. V1 remains a compatibility path only and does not solve full startup context.
 Next milestone: pass CI, open a reviewable PR, receive kernel acknowledgement, then run a joint V2 fake-backend integration test and proceed to a real homebrew XBE.
+
+
+[2026-11-13 12:11 UTC] [Networking session — production acceleration milestone]
+Status: IN_PROGRESS (Windows CI running)
+Branch / commit: work/xbox-networking-integration / 164c5c4481db0d03ece864853d9ecad60acc37c1
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary:
+- Extended tests/network_smoke.cpp with a real TCP loopback path covering bind, listen, ephemeral-port discovery, connect, accept, send and receive; added byte-order helper checks. Existing UDP datagram loopback and XNet startup/DNS event checks remain.
+- Added .github/workflows/network-tests.yml. It builds the dedicated Win32 guest executable, builds the host-side network_smoke target, and runs that CTest on windows-latest. Workflow run: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43423050999
+- Coordinator has approved the separately versioned ABI-v2 direction; ABI v1 remains frozen. Networking continues independently and does not modify shared loader/kernel headers.
+Build and tests:
+- GitHub Actions workflow started for commit 164c5c4481db0d03ece864853d9ecad60acc37c1. Checkout succeeded; x86 guest configure was in progress at last inspection. Build and CTest steps are pending. No pass is claimed yet.
+- Earlier general build workflow for commit 8bad9a06 was cancelled when the next commit superseded it; this is not a test failure.
+Remaining blockers:
+- Need actual Windows CI result for x86 guest compile and UDP/TCP network_smoke.
+- Need authoritative Xbox SDK header review for all XNet/XSocket signatures, structure layouts, flags and return semantics.
+- Need kernel/loader guest-call dispatch contract. Current functions are compiled into xbe_guest32 but are not automatically callable from retail XBE static-linked XNet code.
+- Whether statically linked XNet routines call an interceptable imported XSocket/kernel boundary remains unverified; do not claim it.
+Next milestone: Get the new CI green, fix any compile/test failures immediately, then add focused error-path and concurrent-close tests and revise the manifest only with verified ABI evidence.
