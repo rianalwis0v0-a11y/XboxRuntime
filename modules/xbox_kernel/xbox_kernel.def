@@ -5,3 +5,4 @@ EXPORTS
     XBE_GetExecutionBackend
     XBE_GetExecutionBackendV2
     XboxKernelSetGuestTitlePath
+    XboxKernelWaitForGuestExit
