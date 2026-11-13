@@ -506,6 +506,10 @@ extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     return 0;
 }
 
+extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
+    if (context) RtlCaptureContext(context);
+}
+
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
@@ -1650,6 +1654,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je mm_free_system
                 cmp eax, 49
         je hal_return_firmware
+        cmp eax, 265
+        je rtl_capture_context
         cmp eax, 264
         je rtl_assert
                 cmp eax, 9
@@ -2052,6 +2058,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
     rtl_callers_address: jmp K_RtlGetCallersAddress
     rtl_walk_frame: jmp K_RtlWalkFrameChain
