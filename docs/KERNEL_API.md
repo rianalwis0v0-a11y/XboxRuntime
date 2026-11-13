@@ -53,6 +53,12 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## Timer arming
+
+- Ordinal 229, `NtSetTimerEx`, forwards timer scheduling to the host NT `NtSetTimer` routine after validating the handle, due time, and period.
+- The Xbox APC mode field is accepted but not used when no APC is requested. Guest APC routine/context pointers are rejected with `STATUS_NOT_SUPPORTED`; passing guest addresses as host callback pointers would be unsafe.
+- The previous timer state is returned by the native routine. The diagnostic XBE arms a created timer with a short relative due time and verifies the call and previous-state output.
+
 ## File attribute query
 
 - Ordinal 210, `NtQueryFullAttributesFile`, translates absolute Xbox device paths through the guest title path mapping and queries the host file metadata.
