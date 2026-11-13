@@ -32,7 +32,7 @@ jobs:
         run: cmake -S modules/xbox_kernel -B build-kernel-host -A x64
 
       - name: Build host kernel backend
-        run: cmake --build build-kernel-host --config Release --target xbox_kernel
+        run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke
 
       - name: Configure main runtime module
         run: cmake -S main -B build-main -A x64
@@ -68,6 +68,9 @@ jobs:
       - name: Stage guest process beside host kernel
         shell: pwsh
         run: Copy-Item "build-guest32/out/xbe_guest32.exe" "build-kernel-host/out/xbe_guest32.exe" -Force
+
+      - name: Run shared-memory guest execution smoke test
+        run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R kernel_guest_backend_smoke
 
       - name: Verify backend pair
         shell: pwsh
