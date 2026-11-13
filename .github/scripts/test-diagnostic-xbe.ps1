@@ -933,9 +933,9 @@ EmitMovMemoryImmediate $progressVa 2
 $directoryUnicodeVa = [uint32]($base + 0x6500)
 $directoryObjectAttributesVa = [uint32]($base + 0x6510)
 $directoryPathVa = [uint32]($base + 0x6540)
-$directoryHandleVa = [uint32]($reportVa + 0x7B0)
-$directoryInfoVa = [uint32]($reportVa + 0x700)
-$directoryIoVa = [uint32]($reportVa + 0x7A0)
+$directoryHandleVa = [uint32]($base + 0x6710)
+$directoryInfoVa = [uint32]($base + 0x6600)
+$directoryIoVa = [uint32]($base + 0x6700)
 EmitPush 1
 EmitPush 7
 EmitPush 0
@@ -943,8 +943,9 @@ EmitPush $directoryObjectAttributesVa
 EmitPush 2147483648
 EmitPush $directoryHandleVa
 EmitCallImport 202
-EmitCheckEqual 0
 EmitMovMemoryImmediate $progressVa 21
+EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 22
 EmitPush 1
 EmitPush 0
 EmitPush 1
@@ -958,15 +959,15 @@ EmitPushMemory $directoryHandleVa
 EmitCallImport 207
 Write-Host "directory query check #$script:checkIndex"
 EmitCheckEqual 0
-EmitMovMemoryImmediate $progressVa 22
+EmitMovMemoryImmediate $progressVa 23
 EmitLoadEax ([uint32]($directoryInfoVa + 60))
 Write-Host "directory name length check #$script:checkIndex"
 EmitCheckNonZero
-EmitMovMemoryImmediate $progressVa 23
+EmitMovMemoryImmediate $progressVa 24
 EmitLoadEax ([uint32]($directoryInfoVa + 56))
 Write-Host "directory attributes check #$script:checkIndex"
 EmitCheckNonZero
-EmitMovMemoryImmediate $progressVa 24
+EmitMovMemoryImmediate $progressVa 25
 EmitPushMemory $directoryHandleVa
 EmitCallImport 187
 EmitCheckEqual 0
