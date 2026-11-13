@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -512,10 +513,13 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         g_gpu->pgraph.regs[method/4u]=parameter;++g_pgraph_custom_methods;return;
     }
     if (method == NV097_DRAW_ARRAYS) {
-        if (draw_nv2a_arrays(channel, subchannel, parameter) == 0) {
+        const int draw_result = draw_nv2a_arrays(channel, subchannel, parameter);
+        if (draw_result == 0) {
             g_gpu->pgraph.regs[method / 4u] = parameter;
             return;
         }
+        fprintf(stderr, "[NV2A-DRAW] DRAW_ARRAYS rejected result=%d channel=%u sub=%u parameter=%08X mode=%u\\n",
+            draw_result, channel, subchannel, parameter, g_primitive_mode[channel][subchannel]);
         pgraph_method(g_gpu, subchannel, method, parameter);
         return;
     }
@@ -2273,10 +2277,19 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
         if (!instruction_count ||
             !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
             return 0;
-        if (XboxNV2A_ValidateVertexProgram(
-                &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
-                instruction_count, &metadata) != 0)
+        const int validation_result = XboxNV2A_ValidateVertexProgram(
+            &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
+            instruction_count, &metadata);
+        if (validation_result != 0) {
+            fprintf(stderr, "[NV2A-DRAW] vertex program validation failed=%d instructions=%u first=%08X/%08X/%08X/%08X last=%08X\\n",
+                validation_result, instruction_count,
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][1],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][2],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot][3],
+                g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3]);
             return 0;
+        }
         g_nv2a_vsh_input_mask = metadata.input_mask;
         uint32_t hash = 2166136261u;
         const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
@@ -2291,16 +2304,24 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
                 (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
                 g_nv2a_vsh_handle = 0;
             }
-            if (FAILED(nv2a_vsh_create_shader(
-                    words, (int)instruction_count, &g_nv2a_vsh_handle)))
+            const HRESULT create_result = nv2a_vsh_create_shader(
+                words, (int)instruction_count, &g_nv2a_vsh_handle);
+            if (FAILED(create_result)) {
+                fprintf(stderr, "[NV2A-DRAW] D3D8 VSH create failed hr=0x%08lX instructions=%u\\n",
+                    (unsigned long)create_result, instruction_count);
                 return 0;
+            }
             g_nv2a_vsh_program_hash = hash;
             g_nv2a_vsh_dirty = 0;
         }
     }
     /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
      * compiles it on cache miss, and binds the cached GPU vertex shader. */
-    return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
+    const HRESULT bind_result = device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle);
+    if (FAILED(bind_result))
+        fprintf(stderr, "[NV2A-DRAW] D3D8 programmable shader bind failed hr=0x%08lX handle=%08lX\\n",
+            (unsigned long)bind_result, (unsigned long)g_nv2a_vsh_handle);
+    return SUCCEEDED(bind_result);
 }
 
 /* Match d3d8_vsh.c's ATTR input-layout order exactly. CPU work here is
@@ -2408,7 +2429,7 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     const uint32_t mode=g_primitive_mode[channel][subchannel];
     if(!indices||!count||count>NV2A_MAX_BATCH_VERTICES||mode==NV097_SET_BEGIN_END_OP_END)return 1;
     XboxNV2A_VERTEX v[NV2A_MAX_BATCH_VERTICES],x[NV2A_MAX_BATCH_VERTICES * 2u]; uint32_t stride=0,fvf=0;
-    if(XboxNV2A_BuildIndexedVertexStream(channel,subchannel,indices,count,v,sizeof(v),&stride,&fvf)!=0)return 2;
+    if(XboxNV2A_BuildIndexedVertexStream(channel,subchannel,indices,count,v,sizeof(v),&stride,&fvf)!=0){fprintf(stderr,"[NV2A-DRAW] vertex stream build failed channel=%u count=%u\\n",channel,count);return 2;}
     const XboxNV2A_VERTEX* draw=v; uint32_t draw_count=count,pc=0; D3DPRIMITIVETYPE pt=D3DPT_TRIANGLELIST;
     switch(mode){
     case NV097_SET_BEGIN_END_OP_POINTS: pt=D3DPT_POINTLIST;pc=count;break;
@@ -2435,21 +2456,18 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
     if ((g_transform_execution_mode & 3u) == 2u) {
         /* Select the FVF so the D3D11 translator builds the matching ATTR
          * input layout, then bind the cached programmable vertex shader. */
-        if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
-            return 6;
+        if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) { fprintf(stderr,"[NV2A-DRAW] FVF bind failed fvf=%08X\\n",fvf); return 6; }
         nv2a_flush_vertex_constants();
-        if (!nv2a_prepare_gpu_vertex_shader(d))
-            return 9;
+        if (!nv2a_prepare_gpu_vertex_shader(d)) { fprintf(stderr,"[NV2A-DRAW] GPU vertex shader preparation failed\\n"); return 9; }
         const uint8_t* packed = NULL;
         if (!nv2a_pack_gpu_vertex_stream(draw, draw_count,
-                g_nv2a_vsh_input_mask, &packed, &draw_stride))
-            return 10;
+                g_nv2a_vsh_input_mask, &packed, &draw_stride)) { fprintf(stderr,"[NV2A-DRAW] GPU vertex stream pack failed input-mask=%04X\\n",g_nv2a_vsh_input_mask); return 10; }
         draw_data = packed;
     } else if (FAILED(d->lpVtbl->SetVertexShader(d,fvf))) {
         return 6;
     }
-    if(bind_nv2a_textures(channel,subchannel,d)!=0)return 8;
-    if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride)))return 7;
+    if(bind_nv2a_textures(channel,subchannel,d)!=0){fprintf(stderr,"[NV2A-DRAW] texture binding failed\\n");return 8;}
+    { HRESULT draw_hr=d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride); if(FAILED(draw_hr)){fprintf(stderr,"[NV2A-DRAW] DrawPrimitiveUP failed hr=0x%08lX primitive=%u count=%u stride=%u\\n",(unsigned long)draw_hr,(unsigned)pt,pc,draw_stride);return 7;} }
     ++g_pgraph_custom_methods;++g_pgraph_custom_draws;g_pgraph_custom_vertices+=count;(void)draw_count;return 0;
 }
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)
