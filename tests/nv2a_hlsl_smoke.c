@@ -82,9 +82,9 @@ int main(void)
     {
         const DWORD instruction[4] = {
             0u,
-            (3u << 21) | (5u << 9),
-            (2u << 26) | (2u << 11),
-            (0xFu << 12) | (1u << 11) | 1u
+            (3u << 21) | (5u << 9) | 0x1Bu,
+            (2u << 26) | (0x1Bu << 2),
+            (2u << 28) | (0xFu << 12) | (1u << 11) | 1u
         };
         const int result = compile_program(
             "nv2a_vsh_input_add", instruction, 1,
