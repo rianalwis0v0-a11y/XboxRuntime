@@ -1,0 +1,28 @@
+name: Windows x86 build and smoke tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - integration/cxbx-reloaded-gpl-port
+      - feature/audio-runtime-module
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source and pinned submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure 32-bit Windows build
+        run: cmake -S . -B build -A Win32
+      - name: Build all runtime modules and guest
+        run: cmake --build build --config Release --parallel
+      - name: Run smoke tests
+        run: ctest --test-dir build -C Release --output-on-failure
