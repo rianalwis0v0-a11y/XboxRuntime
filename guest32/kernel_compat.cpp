@@ -23,6 +23,7 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -2552,7 +2553,9 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
     if (!DecodeVa(encoded, kRetailThunk, thunk) &&
         !DecodeVa(encoded, kDebugThunk, thunk)) {
         // An absent kernel thunk table is valid only when the header field is zero.
-        return encoded == 0 || encoded == kRetailThunk || encoded == kDebugThunk;
+        return (encoded == 0 || encoded == kRetailThunk || encoded == kDebugThunk) &&
+            XboxGuestResolveNonKernelImports(g_base, g_size,
+                image.nonKernelImportDirectoryAddress);
     }
 
     g_stubPage = VirtualAlloc(nullptr, 0x2000, MEM_RESERVE | MEM_COMMIT,
@@ -2564,7 +2567,8 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
         const uint32_t value = table[i];
         if (value == 0) {
             FlushInstructionCache(GetCurrentProcess(), g_stubPage, g_stubCount * 10u);
-            return true;
+            return XboxGuestResolveNonKernelImports(g_base, g_size,
+                image.nonKernelImportDirectoryAddress);
         }
         if ((value & 0x80000000u) == 0) return false;
         const uint32_t ordinal = value & 0x7FFFFFFFu;
