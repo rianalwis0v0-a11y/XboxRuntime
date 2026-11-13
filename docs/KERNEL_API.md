@@ -53,6 +53,12 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## NT dispatcher-object query APIs
+
+- Ordinals 209, 213, 214, and 216: `NtQueryEvent`, `NtQueryMutant`, `NtQuerySemaphore`, and `NtQueryTimer` forward the Xbox basic-information query ABI to the corresponding Windows NT native query routines. Native NTSTATUS values and required-buffer/return-length behavior are preserved.
+- The guest diagnostic XBE creates and queries a signaled event, a 2/5 semaphore, an unowned mutant, and an unsignaled timer, then closes each object.
+- `NtCreateSemaphore` now accepts the full five-argument Xbox ABI (output handle, access mask, object attributes, initial count, maximum count). The previous wrapper omitted the access-mask argument and shifted every later argument.
+
 ## Filesystem volume information
 
 - Ordinal 218: `NtQueryVolumeInformationFile` supports `FileFsVolumeInformation`, `FileFsSizeInformation`, `FileFsDeviceInformation`, and `FileFsAttributeInformation` for host-backed files. It obtains volume labels, serial numbers, allocation-unit counts, sector geometry, device type, filesystem flags, and filesystem names from the Windows volume APIs.
