@@ -144,7 +144,7 @@ int main() {
         /* MAC MOV from c[17], with instruction-wide relative addressing enabled. */
         std::memset(words, 0, sizeof(words));
         words[1] = (1u << 21) | (17u << 13);
-        words[2] = (1u << 26);
+        words[2] = (2u << 26);
         words[3] = (1u << 1) | 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.uses_relative_constants != 1 ||
@@ -182,7 +182,7 @@ int main() {
         std::memset(words, 0, sizeof(words));
         words[1] = (4u << 21) | (9u << 13) | (2u << 9);
         words[2] = (1u << 11); /* A=temp, B=input */
-        words[3] = (3u << 28) | 1u; /* C=constant */
+        words[3] = (2u << 28) | 1u; /* C=constant */
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.input_mask != (1u << 2) ||
             !(info.constant_mask[0] & (UINT64_C(1) << 9))) {
@@ -193,7 +193,7 @@ int main() {
         /* ARL reads only A; ILU LIT reads only C. */
         std::memset(words, 0, sizeof(words));
         words[1] = (13u << 21) | (1u << 9);
-        words[2] = (2u << 26);
+        words[2] = (1u << 26);
         words[3] = 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             !(info.input_mask & (1u << 1))) {
@@ -209,7 +209,7 @@ int main() {
             FreeLibrary(module); return 1;
         }
 
-        /* Mux 0 is reserved/unknown and must not be accepted as a constant. */
+        /* Mux 3 is reserved/unknown and must not be accepted. */
         std::memset(words, 0, sizeof(words));
         words[1] = (1u << 21); /* MAC MOV */
         words[2] = (3u << 26); /* A mux=3 is reserved */
