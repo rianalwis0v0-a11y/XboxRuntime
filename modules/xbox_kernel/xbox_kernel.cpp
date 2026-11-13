@@ -219,8 +219,57 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         ResetContextHandles(context);
         return 8;
     }
-    BOOL connected = ConnectNamedPipe(context.pipe, nullptr);
-    if (!connected && GetLastError() != ERROR_PIPE_CONNECTED) {
+    // Use nonblocking server mode while waiting for the child. A synchronous
+    // ConnectNamedPipe can wait forever if the guest exits before opening its
+    // pipe (for example, after a failed shared-view mapping).
+    DWORD pipeMode = PIPE_READMODE_BYTE | PIPE_NOWAIT;
+    if (!SetNamedPipeHandleState(context.pipe, &pipeMode, nullptr, nullptr)) {
+        StopGuestProcessLocked(context);
+        ResetContextHandles(context);
+        return 9;
+    }
+    const ULONGLONG connectDeadline = GetTickCount64() + 10000ull;
+    bool connected = false;
+    for (;;) {
+        if (ConnectNamedPipe(context.pipe, nullptr)) {
+            connected = true;
+            break;
+        }
+        const DWORD connectError = GetLastError();
+        if (connectError == ERROR_PIPE_CONNECTED) {
+            connected = true;
+            break;
+        }
+        if (connectError != ERROR_PIPE_LISTENING &&
+            connectError != ERROR_NO_DATA) {
+            Log(L"Named-pipe connection failed with an unexpected error.");
+            StopGuestProcessLocked(context);
+            ResetContextHandles(context);
+            return 9;
+        }
+
+        if (WaitForSingleObject(context.process.hProcess, 0) == WAIT_OBJECT_0) {
+            DWORD childExitCode = ERROR_GEN_FAILURE;
+            GetExitCodeProcess(context.process.hProcess, &childExitCode);
+            wchar_t diagnostic[128]{};
+            swprintf_s(diagnostic, L"xbe_guest32.exe exited before pipe connect (exit=0x%08X).",
+                       childExitCode);
+            Log(diagnostic);
+            ResetContextHandles(context);
+            return 9;
+        }
+        if (GetTickCount64() >= connectDeadline) {
+            Log(L"Timed out waiting 10 seconds for xbe_guest32.exe to connect.");
+            TerminateProcess(context.process.hProcess, ERROR_TIMEOUT);
+            WaitForSingleObject(context.process.hProcess, 5000);
+            ResetContextHandles(context);
+            return 9;
+        }
+        Sleep(10);
+    }
+    pipeMode = PIPE_READMODE_BYTE | PIPE_WAIT;
+    if (!connected ||
+        !SetNamedPipeHandleState(context.pipe, &pipeMode, nullptr, nullptr)) {
         StopGuestProcessLocked(context);
         ResetContextHandles(context);
         return 9;
