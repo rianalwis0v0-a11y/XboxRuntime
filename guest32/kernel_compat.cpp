@@ -1498,6 +1498,27 @@ extern "C" LONG __stdcall K_NtCancelTimer(HANDLE timer, BOOL* previous) {
     return ok ? 0 : LONG(0xC0000008u);
 }
 
+using NtSetTimerFn = LONG (NTAPI*)(HANDLE, const LARGE_INTEGER*, void*, void*, BOOLEAN, LONG, BOOLEAN*);
+extern "C" LONG __stdcall K_NtSetTimerEx(
+    HANDLE timer, const LARGE_INTEGER* dueTime, void* apcRoutine, ULONG apcMode,
+    void* apcContext, BOOLEAN wakeTimer, LONG period, BOOLEAN* previousState) {
+    if (previousState) *previousState = FALSE;
+    if (!timer || timer == INVALID_HANDLE_VALUE || !dueTime || period < 0)
+        return LONG(0xC000000Du);
+    // Xbox APC dispatch/context translation is not implemented. Do not pass an
+    // Xbox guest callback into the host process as though it were a host pointer.
+    if (apcRoutine || apcContext) return LONG(0xC00000BBu);
+    FARPROC address = ResolveNtQueryRoutine("NtSetTimer");
+    if (!address) return LONG(0xC0000002u);
+    auto setTimer = reinterpret_cast<NtSetTimerFn>(address);
+    BOOLEAN oldState = FALSE;
+    const LONG status = setTimer(timer, dueTime, nullptr, nullptr,
+                                 wakeTimer, period, &oldState);
+    if (previousState) *previousState = oldState;
+    (void)apcMode;
+    return status;
+}
+
 extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
     if (!out) return LONG(0xC000000Du);
     HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
@@ -1802,6 +1823,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_yield
         cmp eax, 218
         je nt_query_volume_information_file
+        cmp eax, 229
+        je nt_set_timer_ex
         cmp eax, 210
         je nt_query_full_attributes_file
         cmp eax, 211
@@ -2089,6 +2112,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
+    nt_set_timer_ex: jmp K_NtSetTimerEx
     nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
