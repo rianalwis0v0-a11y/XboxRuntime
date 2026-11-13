@@ -6,7 +6,7 @@
 
 #define XBE_EXECUTION_BACKEND_VERSION 1u
 
-typedef struct XBE_IMAGE_INFO {
+struct XBE_IMAGE_INFO {
     std::uint32_t baseAddress;
     std::uint32_t imageSize;
     std::uint32_t headerSize;
@@ -27,7 +27,7 @@ typedef struct XBE_IMAGE_INFO {
 // contiguous host view of the guest VA range [guestBase, guestBase+imageSize).
 // Callbacks return zero on success. The kernel owns guest memory and x86 CPU
 // execution; XBE entry points are never called as native Windows functions.
-typedef struct XBE_EXECUTION_BACKEND {
+struct XBE_EXECUTION_BACKEND {
     std::uint32_t size;
     std::uint32_t version;
     void* context;
@@ -40,7 +40,7 @@ typedef struct XBE_EXECUTION_BACKEND {
     int (__cdecl* startGuest)(std::uint32_t entryPoint,
                               std::uint32_t tlsAddress, void* context);
     void (__cdecl* stopGuest)(void* context);
-} XBE_EXECUTION_BACKEND;
+};
 
 // Implemented by xbox_kernel.dll. The host calls this after every module has
 // started and before loading the dashboard XBE.
