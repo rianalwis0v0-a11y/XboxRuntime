@@ -582,3 +582,8 @@ Validation:
 Blocker / next action:
 - This fixes the architecture mismatch in the loader build pipeline, not the kernel startup crash. Kernel must provide the approved ABI v2 backend in the x64 host and map the shared image backing into xbe_guest32 at the exact guest VA, then initialize TLS/thread/FS state.
 - P1 remains blocked on a reviewed NXDK-derived ANON_XBE_02.xbe fixture and an end-to-end load/execute result. Do not substitute generated fake XBE fixtures for the reviewed sample.
+
+[2026-11-13 12:36 UTC] [NV2A graphics subsystem session — expanded opcode matrix]
+Status: IN_PROGRESS; latest PR workflow 43426555813 is active.
+Branch / PR / latest commit: feature/nv2a-completion-v2 / PR #13 / d66b2466423596cde24fe6874a729ac5c71f44e8
+Expanded tests/nv2a_hlsl_smoke.c with actual four-DWORD microcode cases for MAC MUL, MAD, DP3, DPH, DP4, DST, MIN, MAX, SLT, SGE and ILU MOV, RCP, RCC, RSQ, EXP, LOG, LIT. The helper builds valid source mux/swizzle fields and asserts exact input-register metadata, expected emitted HLSL and successful VS 5.0 compilation. Updated docs/NV2A-INTEGRATION.md with the opcode coverage scope. Latest PR check run 43426555813 is running; no result for the new matrix claimed yet.
