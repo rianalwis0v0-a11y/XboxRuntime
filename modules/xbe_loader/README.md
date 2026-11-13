@@ -36,5 +36,8 @@ backend's responsibility.
 
 The parser validates the XBEH header, certificate extent, section table and
 section ranges and names, retail/debug entry-point and thunk decoding, bounded
-kernel thunk-table termination, TLS bounds, and library-version table bounds. The 256-byte RSA signature is retained in the
+kernel thunk-table termination, TLS bounds, and library-version table bounds.
+The Windows integration test loads a synthetic XBE through a fake backend and
+checks reserve/map/import/start/stop/release ordering; it validates the DLL ABI
+and lifecycle, not real Xbox kernel execution or a retail game boot. The 256-byte RSA signature is retained in the
 mapped header but is not cryptographically verified by this module.
