@@ -5,6 +5,7 @@
 #include "main.h"
 #include "../modules/xbe_loader/xbe_backend_api.h"
 
+#include <cwchar>
 #include <string>
 #include <vector>
 
