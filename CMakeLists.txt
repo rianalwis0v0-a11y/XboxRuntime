@@ -20,7 +20,18 @@ add_subdirectory(modules/input)
 add_subdirectory(modules/xdvdfs)
 
 # Build the dedicated 32-bit XBE guest process and its Winsock transport.
-add_subdirectory(guest32)
+# The host runtime may be x64, but XBE guest code must execute in a real x86
+# process: its absolute guest VAs and function pointers are 32-bit.
+include(ExternalProject)
+ExternalProject_Add(xbe_guest32_project
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/guest32"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/guest32-x86"
+    CMAKE_GENERATOR "Visual Studio 17 2022"
+    CMAKE_GENERATOR_PLATFORM Win32
+    CMAKE_ARGS
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${CMAKE_BINARY_DIR}/out"
+    BUILD_ALWAYS 1
+)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
