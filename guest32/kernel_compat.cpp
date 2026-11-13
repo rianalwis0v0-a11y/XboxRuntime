@@ -496,7 +496,6 @@ static LONG OpenDvdFile(HANDLE* output, const std::string& path,
     constexpr LONG statusDeviceNotReady = LONG(0xC00000A3u);
     constexpr LONG statusMediaWriteProtected = LONG(0xC00000A2u);
     constexpr LONG statusObjectNameNotFound = LONG(0xC0000034u);
-    constexpr LONG statusFileIsADirectory = LONG(0xC00000BAu);
     constexpr LONG statusInsufficientResources = LONG(0xC000009Au);
     if (!output) return LONG(0xC000000Du);
     if (!g_dvdReady) return statusDeviceNotReady;
@@ -605,6 +604,7 @@ extern "C" LONG __stdcall K_NtReadFile(
         std::unique_lock<std::mutex> dvdLock(g_dvdFileMutex);
         auto dvd = g_dvdFiles.find(h);
         if (dvd != g_dvdFiles.end()) {
+            if (dvd->second.directory) return LONG(0xC00000BAu);
             if (offset && offset->QuadPart < 0) return kInvalidParameter;
             const uint64_t start = offset
                 ? static_cast<uint64_t>(offset->QuadPart)
@@ -758,6 +758,7 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
                 p->AllocationSize.QuadPart =
                     (static_cast<LONGLONG>(dvdFile.size) + 2047) & ~LONGLONG(2047);
                 p->NumberOfLinks = 1;
+                p->Directory = dvdFile.directory ? TRUE : FALSE;
             } else if (infoClass == 6) {
                 static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
                     (static_cast<ULONGLONG>(dvdFile.startSector) << 32) | dvdFile.size;
