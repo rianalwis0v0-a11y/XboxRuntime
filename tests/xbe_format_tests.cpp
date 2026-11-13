@@ -114,6 +114,8 @@ int main() {
     Put32(v4Certificate, 0x118, 0x10178);
     Put32(v4Certificate, 0x120, 0x10364);
     Put32(v4Certificate, 0x178, 0x1EC);
+    std::memcpy(v4Certificate.data() + 0x364,
+                file.data() + 0x348, kSectionHeaderSize);
     Put32(v4Certificate, 0x364 + 0x0C, 0x600);
     std::memset(v4Certificate.data() + 0x600, 0xA5, 0x200);
     Image v4Image{};
