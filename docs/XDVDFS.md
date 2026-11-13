@@ -7,7 +7,7 @@ The `xdvdfs.dll` module reads original Xbox XDVDFS images without mounting them 
 - Open a raw XISO image or an original Xbox XGD1 image with the game partition at `0x18300000`.
 - Validate the 2048-byte volume descriptor at sector 32, including both `MICROSOFT*XBOX*MEDIA` signatures.
 - Parse the root directory and nested directory tables.
-- Walk each directory's serialized binary-search-tree entries with bounds and cycle checks.
+- Walk each directory's serialized binary-search-tree entries with bounds, alignment, cycle, alias, and repeated-directory-range checks.
 - Look up paths case-insensitively.
 - Read file contents by offset; reads are clamped to the file's declared size.
 - Read-only: no file creation, deletion, or disc-image modification.
@@ -29,7 +29,7 @@ Paths are relative to the disc root, for example `default.xbe` or `media\default
 - Physical DVD drive sector access is not implemented.
 - XGD2/XGD3 Xbox 360 layouts are intentionally not treated as original Xbox media.
 - Filename decoding currently preserves the on-disc single-byte bytes; it does not perform full OEM code-page conversion.
-- A malformed image is rejected; no repair or recovery mode is provided.
+- A malformed image, including aliased directory-tree nodes or repeated directory ranges, is rejected; no repair or recovery mode is provided.
 
 ## Format references
 
