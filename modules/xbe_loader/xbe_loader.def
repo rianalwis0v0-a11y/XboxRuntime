@@ -1,0 +1,8 @@
+LIBRARY xbe_loader
+EXPORTS
+    ModuleStart
+    ModuleStop
+    XBE_RegisterExecutionBackend
+    XBE_RegisterExecutionBackendV2
+    LoadXbe
+    UnloadXbe
