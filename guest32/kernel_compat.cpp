@@ -1498,6 +1498,7 @@ extern "C" LONG __stdcall K_NtCancelTimer(HANDLE timer, BOOL* previous) {
     return ok ? 0 : LONG(0xC0000008u);
 }
 
+static FARPROC ResolveNtQueryRoutine(const char* name);
 using NtSetTimerFn = LONG (NTAPI*)(HANDLE, const LARGE_INTEGER*, void*, void*, BOOLEAN, LONG, BOOLEAN*);
 extern "C" LONG __stdcall K_NtSetTimerEx(
     HANDLE timer, const LARGE_INTEGER* dueTime, void* apcRoutine, ULONG apcMode,
