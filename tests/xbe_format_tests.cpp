@@ -67,6 +67,28 @@ int main() {
     assert(mapped[0x1200] == 0x00); // zero-fill remainder of section
     assert(mapped[0x2FFF] == 0x00);
 
+    auto debugFile = file;
+    Put32(debugFile, 0x128, 0x00011020 ^ kDebugEntryXor);
+    Put32(debugFile, 0x158, kDebugThunkXor);
+    Image debugImage{};
+    result = Parse(debugFile.data(), debugFile.size(), &debugImage);
+    assert(result);
+    assert(debugImage.debugImage);
+    assert(debugImage.entryPoint == 0x11020);
+    assert(debugImage.kernelThunkAddress == 0);
+
+    auto invalidTls = file;
+    Put32(invalidTls, 0x12C, 0x00012FF0);
+    assert(Parse(invalidTls.data(), invalidTls.size(), &image).error ==
+           Error::InvalidSection);
+
+    Image forged = image;
+    forged.headerSize = forged.imageSize + 1;
+    std::vector<std::uint8_t> forgedTarget(forged.imageSize, 0);
+    assert(MapImage(file.data(), file.size(), forged,
+                    forgedTarget.data(), forgedTarget.size()).error ==
+           Error::InvalidImageSize);
+
     auto badMagic = file;
     badMagic[0] = 0;
     assert(Parse(badMagic.data(), badMagic.size(), &image).error == Error::BadMagic);
