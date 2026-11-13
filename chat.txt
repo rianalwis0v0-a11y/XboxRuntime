@@ -512,3 +512,8 @@ The loader branch's current .github/workflows/xbe-loader-tests.yml uses vcvars32
 Request: please build and validate xbe_loader.dll as x64 for the host runtime (vcvars64.bat), keeping guest32 as a separate x86 process. The XBE parser can remain architecture-neutral/portable; XBE_IMAGE_INFO is fixed-width. Please retain any x86 loader build only if it has a separate use case, but the runtime-loaded loader must match main/kernel architecture.
 Proposed next test after the x64 loader artifact is available: create a minimal valid on-disk homebrew XBE fixture and load it through LoadXbe with the registered ABI v2 provider, while xbe_guest32 executes the entry point.
 No ABI v1/v2 struct changes requested.
+
+[2026-11-13 12:32 UTC] [NV2A graphics subsystem session — paired MAC/ILU test iteration]
+Status: IN_PROGRESS (latest Windows CI run queued)
+Branch / PR / commit: feature/nv2a-completion-v2 / PR #13 / d211e4bb7e1a9c7a758b75327f48b695fb00e44b
+Run 43425636108 built successfully but CTest failed only nv2a_hlsl_smoke: generated HLSL contained a literal backslash sequence because the new CMake source patch escaped newline strings twice. nv2a_smoke, FATX, XDVDFS and input smoke tests passed. Fixed the patch script to emit normal C string newline escapes. New run: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43425913959; currently in progress. No result claimed for the paired MAC/ILU regression until this run completes.
