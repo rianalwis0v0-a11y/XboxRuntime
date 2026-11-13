@@ -105,6 +105,10 @@ int main() {
     assert(Parse(unterminatedThunks.data(), unterminatedThunks.size(), &image).error ==
            Error::InvalidThunkTable);
 
+    auto legacyCertificate = file;
+    Put32(legacyCertificate, 0x178, 0x0D0); // XBE certificate revision 1
+    assert(Parse(legacyCertificate.data(), legacyCertificate.size(), &image));
+
     auto shortCertificate = file;
     Put32(shortCertificate, 0x178, 4);
     assert(Parse(shortCertificate.data(), shortCertificate.size(), &image).error ==
