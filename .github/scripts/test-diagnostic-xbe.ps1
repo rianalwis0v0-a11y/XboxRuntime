@@ -967,6 +967,9 @@ EmitCheckEqual 0
 EmitIncrement $skippedVa
 EmitIncrement $skippedVa
 EmitIncrement $skippedVa
+EmitByte 0x31; EmitByte 0xC0
+EmitCheckEqual 0
+Write-Host "Generated diagnostic assertions: $script:checkIndex"
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
 $dataOffset = 0x6000
