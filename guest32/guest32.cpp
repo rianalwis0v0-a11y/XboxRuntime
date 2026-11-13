@@ -158,7 +158,7 @@ int wmain(int argc, wchar_t** argv) {
         } else if (message.command == XboxGuestWaitForExit) {
             XboxGuestExitReply exitReply{
                 XBOX_GUEST_PROTOCOL_MAGIC, XboxGuestWaitForExit,
-                ERROR_INVALID_STATE, 0, 0, 0, 0, 0
+                ERROR_INVALID_STATE, 0, 0, 0, 0, 0, 0, 0
             };
             if (guestThread) {
                 const DWORD timeout = message.imageBase ? message.imageBase : INFINITE;
@@ -193,7 +193,8 @@ int wmain(int argc, wchar_t** argv) {
                         exitReply.tlsIndexCleared = tlsCleared ? 1u : 0u;
                         XboxKernelGetLastExceptionDiagnostic(
                             nullptr, &exitReply.exceptionInstruction,
-                            &exitReply.accessType, &exitReply.faultAddress);
+                            &exitReply.accessType, &exitReply.faultAddress,
+                            &exitReply.faultProtection, &exitReply.faultState);
                         XboxKernelShutdownTitle();
                     } else {
                         exitReply.status = GetLastError();
