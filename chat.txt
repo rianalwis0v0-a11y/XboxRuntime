@@ -314,3 +314,23 @@ Known issues / next steps:
 - The guest API functions are compiled into xbe_guest32 but are not yet automatically callable from arbitrary retail XBEs. No fake kernel ordinals or guessed static-code patches will be added.
 - Continue by verifying the XNet/XSocket ABI against authoritative compatible headers, adding missing safe socket operations (select/overlapped semantics only when correctly implemented), and coordinating a verified guest API dispatch/interception boundary with loader/kernel owners.
 - QoS, key/security registration, NAT traversal, online XNADDR identity, system-link/broadcast, VDP voice, and Insignia title sign-in/connectivity remain unimplemented or unverified. No full networking or Insignia compatibility claim is made.
+
+
+[2026-11-13 12:xx UTC] [Networking team — CI result / board report]
+Status: IN_PROGRESS — targeted networking CI passed; production networking is NOT complete.
+Branch / latest networking code commit: work/xbox-networking-integration / fad6af6ad3bb71970ec56bff9bf8fa17c55f88b5
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/10
+Summary:
+- Fixed XboxWSACleanup's invalid comparison of the void-returning XboxNetCleanup helper. The wrapper now calls cleanup and returns Winsock success (0).
+- The fix has now passed the dedicated Windows guest-networking workflow: run 43424064443, job 131880944225. Successful steps include x86 guest configure/build, host networking smoke target configure/build, and execution of network_smoke.
+- The associated full XboxRuntime build workflow also passed: run 43424064635, job 131880945146. It built the x64 host modules and native x86 guest and completed its listed subsystem tests and diagnostic XBE steps. This is general integration CI evidence, not proof of retail Xbox networking or Insignia connectivity.
+- Earlier network_smoke coverage includes TCP loopback bind/listen/connect/accept/send/receive, UDP datagram loopback, byte-order helpers, XNet startup and DNS event checks.
+Files changed by networking fix: guest32/xnet_compat.cpp. Shared board update: chat.txt only.
+Build and tests (commands + results): GitHub Actions run 43424064443 — SUCCESS; dedicated x86 guest and host networking smoke build/test steps all passed. GitHub Actions run 43424064635 — SUCCESS; full host/x86 guest integration workflow passed. No local Windows/MSVC build claimed.
+Remaining work / blockers:
+1. Verify title-facing XNet/XSocket signatures, structure packing/sizes, flags and error semantics against authoritative Xbox SDK-compatible headers.
+2. Agree with kernel/loader owners on the guest API registration/dispatch boundary. Current compatibility functions are compiled into xbe_guest32; that does not automatically make them callable from arbitrary retail XBE statically linked XNet code.
+3. Investigate static XNet call paths and implement interception only at a verified imported boundary or with a separately reviewed instruction-safe mechanism. Do not invent kernel ordinals or patch guessed signatures.
+4. Implement and test missing services as supported by evidence: XNet identity/addressing, QoS, key/security registration, NAT traversal, system-link/broadcast and voice/VDP as applicable.
+5. Run an actual homebrew/title networking test and then validate Insignia DNS/sign-in/session connectivity. No such end-to-end test has passed yet.
+Next milestone: ABI audit + focused API/error-path tests, then coordinate guest dispatch with kernel/loader. Keep PR #10 open and do not merge/declare complete until integration and compatibility evidence exists.
