@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #define XDVDFS_SECTOR_SIZE 2048u
+#define XDVDFS_ERROR_BUFFER_TOO_SMALL 7
 #define XDVDFS_ATTR_READONLY 0x01u
 #define XDVDFS_ATTR_HIDDEN   0x02u
 #define XDVDFS_ATTR_SYSTEM   0x04u
@@ -33,6 +34,10 @@ __declspec(dllexport) int __cdecl ModuleStart(void);
 __declspec(dllexport) void __cdecl ModuleStop(void);
 __declspec(dllexport) int __cdecl XDVDFS_OpenImage(const wchar_t* imagePath, XDVDFS_VOLUME_INFO* info);
 __declspec(dllexport) void __cdecl XDVDFS_CloseImage(void);
+// Enumerate immediate children in stable case-insensitive order. Pass entries=null
+// and capacity=0 to query the required count; returns XDVDFS_ERROR_BUFFER_TOO_SMALL
+// when the supplied array cannot hold every immediate child.
+__declspec(dllexport) int __cdecl XDVDFS_ListDirectory(const char* path, XDVDFS_FILE_INFO* entries, uint32_t capacity, uint32_t* required);
 __declspec(dllexport) int __cdecl XDVDFS_GetFileInfo(const char* path, XDVDFS_FILE_INFO* info);
 __declspec(dllexport) int __cdecl XDVDFS_ReadFile(const char* path, uint64_t offset, void* buffer, uint32_t bytesToRead, uint32_t* bytesRead);
 

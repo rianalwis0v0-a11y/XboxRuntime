@@ -60,7 +60,15 @@ int StartGuest(const wchar_t*xbe){
  HANDLE pipe=CreateNamedPipeW(pipeName,PIPE_ACCESS_DUPLEX,PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_NOWAIT,1,256,256,0,nullptr);
  if(pipe==INVALID_HANDLE_VALUE)return XBE_E_PIPE;
  std::wstring eeprom=EepromPath();if(eeprom.empty()){CloseHandle(pipe);return XBE_E_START;}
- std::wstring cmd=Quote(exe)+L" --pipe "+Quote(pipeName)+L" --xbe "+Quote(xbe)+L" --eeprom "+Quote(eeprom);
+ std::wstring extension;
+ const std::wstring selectedPath(xbe);
+ size_t dot=selectedPath.find_last_of(L'.');
+ if(dot!=std::wstring::npos)extension=selectedPath.substr(dot);
+ const bool discImage=
+  CompareStringOrdinal(extension.c_str(),-1,L".iso",-1,TRUE)==CSTR_EQUAL||
+  CompareStringOrdinal(extension.c_str(),-1,L".xiso",-1,TRUE)==CSTR_EQUAL;
+ std::wstring cmd=Quote(exe)+L" --pipe "+Quote(pipeName)+
+  (discImage?L" --dvd-image ":L" --xbe ")+Quote(xbe)+L" --eeprom "+Quote(eeprom);
  STARTUPINFOW si{};si.cb=sizeof(si);PROCESS_INFORMATION pi{};
  if(!CreateProcessW(exe.c_str(),cmd.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,dir.c_str(),&si,&pi)){CloseHandle(pipe);return XBE_E_START;}
  g.process=pi.hProcess;g.thread=pi.hThread;g.pipe=pipe;

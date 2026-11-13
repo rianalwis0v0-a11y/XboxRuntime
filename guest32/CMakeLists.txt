@@ -3,7 +3,14 @@ project(XboxGuest32 LANGUAGES CXX)
 if(NOT WIN32 OR NOT MSVC)
   message(FATAL_ERROR "XboxGuest32 currently requires the MSVC Windows toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp)
+add_executable(xbe_guest32
+  guest32.cpp
+  kernel_compat.cpp
+  ../modules/xdvdfs/xdvdfs.cpp
+)
+target_include_directories(xbe_guest32 PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
+)
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
