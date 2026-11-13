@@ -144,7 +144,7 @@ int main() {
         /* MAC MOV from c[17], with instruction-wide relative addressing enabled. */
         std::memset(words, 0, sizeof(words));
         words[1] = (1u << 21) | (17u << 13);
-        words[2] = (2u << 26);
+        words[2] = (3u << 26);
         words[3] = (1u << 1) | 1u;
         if (validateVertexProgram(words, 1, &info) != 0 ||
             info.uses_relative_constants != 1 ||
