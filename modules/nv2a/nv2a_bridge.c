@@ -622,12 +622,25 @@ void __cdecl ModuleStop(void)
     release_texture_cache();
     pgraph_d3d11_shutdown();
     release_surface_targets();
+    xbox_SetD3DDevice(NULL);
 
     // The upstream NV2A singleton currently has no public destroy/reset API.
     // Keep its backing allocation alive until the host process exits; freeing
     // it here would leave the singleton's VRAM/RAMIN pointers dangling.
     g_started = 0;
     OutputDebugStringW(L"[XboxRuntime:NV2A] Translator stopped. GPU memory retained until process exit.\n");
+}
+
+int __cdecl XboxNV2A_SetD3DDevice(void* device)
+{
+    IDirect3DDevice8* d3d_device = (IDirect3DDevice8*)device;
+    if (device && (!d3d_device->lpVtbl ||
+        !d3d_device->lpVtbl->AddRef || !d3d_device->lpVtbl->Release))
+        return 1;
+    xbox_SetD3DDevice(d3d_device);
+    if (g_started && d3d_device)
+        pgraph_d3d11_init();
+    return 0;
 }
 
 uint64_t __cdecl XboxNV2A_ReadRegister(
