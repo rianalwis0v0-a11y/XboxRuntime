@@ -193,6 +193,51 @@ extern "C" int __cdecl XDVDFS_GetFileInfo(const char* path, XDVDFS_FILE_INFO* in
     std::memcpy(info->name, e.name.data(), info->nameLength);
     return 0;
 }
+extern "C" int __cdecl XDVDFS_ListDirectory(
+    const char* path, XDVDFS_FILE_INFO* output,
+    uint32_t capacity, uint32_t* required) {
+    if (!path || !required || (capacity && !output)) return 1;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_started || !g_volume.open) return 2;
+
+    const std::string directory = Normalize(path);
+    if (!directory.empty()) {
+        const auto dir = g_volume.entries.find(directory);
+        if (dir == g_volume.entries.end()) return 3;
+        if (!dir->second.directory) return 4;
+    }
+
+    const std::string prefix = directory.empty() ? std::string() : directory + "/";
+    std::vector<std::pair<std::string, const Entry*>> children;
+    for (const auto& item : g_volume.entries) {
+        const std::string& key = item.first;
+        if (key.size() <= prefix.size() ||
+            key.compare(0, prefix.size(), prefix) != 0)
+            continue;
+        const std::string& remainder = key.substr(prefix.size());
+        if (remainder.find('/') != std::string::npos) continue;
+        children.emplace_back(remainder, &item.second);
+    }
+
+    std::sort(children.begin(), children.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+    *required = static_cast<uint32_t>(children.size());
+    if (capacity < children.size()) return 7;
+
+    for (uint32_t i = 0; i < *required; ++i) {
+        const Entry& source = *children[i].second;
+        XDVDFS_FILE_INFO& target = output[i];
+        std::memset(&target, 0, sizeof(target));
+        target.startSector = source.sector;
+        target.size = source.size;
+        target.attributes = source.attributes;
+        target.nameLength = static_cast<uint8_t>(
+            (std::min)(children[i].first.size(), size_t(255)));
+        std::memcpy(target.name, children[i].first.data(), target.nameLength);
+    }
+    return 0;
+}
+
 extern "C" int __cdecl XDVDFS_ReadFile(const char* path, uint64_t offset, void* buffer, uint32_t bytesToRead, uint32_t* bytesRead) {
     if (bytesRead) *bytesRead = 0;
     if (!path || (!buffer && bytesToRead) || !bytesRead) return 1;
