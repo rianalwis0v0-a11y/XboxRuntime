@@ -17,7 +17,28 @@ add_subdirectory(modules/insignia_dns)
 add_subdirectory(modules/xbe_loader)
 add_subdirectory(modules/fatx)
 add_subdirectory(modules/input)
+add_subdirectory(modules/audio)
 add_subdirectory(modules/xdvdfs)
+# The host and NV2A MMIO hook are x64, while Xbox title code must run in
+# a native x86 process. Build the guest with a nested Win32 generator so the
+# two architectures never get mixed in one linker invocation.
+include(ExternalProject)
+ExternalProject_Add(xbe_guest32_external
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/guest32"
+    BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/guest32-build"
+    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+    CMAKE_GENERATOR_PLATFORM Win32
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target xbe_guest32
+    INSTALL_COMMAND
+        ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/out"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/out/xbe_guest32.exe
+            "${CMAKE_BINARY_DIR}/out/xbe_guest32.exe"
+    BUILD_BYPRODUCTS "${CMAKE_BINARY_DIR}/out/xbe_guest32.exe"
+)
+add_custom_target(xbe_guest32 ALL DEPENDS xbe_guest32_external)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
@@ -79,3 +100,29 @@ target_include_directories(input_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modu
 target_compile_features(input_smoke PRIVATE cxx_std_17)
 target_compile_definitions(input_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME input_smoke COMMAND input_smoke)
+
+# Validate the audio module ABI and invalid-input handling without requiring
+# a physical audio device in the CI runner.
+add_executable(audio_smoke
+    tests/audio_smoke.cpp
+    modules/audio/audio.cpp
+)
+target_include_directories(audio_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/modules/audio")
+target_compile_features(audio_smoke PRIVATE cxx_std_17)
+target_compile_definitions(audio_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(audio_smoke PRIVATE winmm)
+add_test(NAME audio_smoke COMMAND audio_smoke)
+
+
+# Deploy the runnable host and its native guest/runtime DLLs as one layout.
+# boot.exe lives at XboxRuntime/boot.exe; all DLLs plus xbe_guest32.exe
+# live in XboxRuntime/system so both the host and XBE loader resolve them
+# relative to the same deployment directory.
+install(TARGETS boot
+    RUNTIME DESTINATION .
+)
+install(TARGETS main nv2a insignia_dns xbe_loader fatx input audio xdvdfs
+    RUNTIME DESTINATION system
+    LIBRARY DESTINATION system
+)
+install(FILES "${CMAKE_BINARY_DIR}/out/xbe_guest32.exe" DESTINATION system)
