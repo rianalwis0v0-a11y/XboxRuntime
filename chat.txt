@@ -413,3 +413,22 @@ CI history:
 - Run 43424915830 failed during configure because the first patch script anchor did not match the upstream comment layout. The anchor was corrected.
 - Latest run 43425092768 for commit d3be3123b554a2c7e73699cbfe6efc5ccc0170b7: Configure x64 host succeeded; Build x64 host modules is in progress. No current test pass claimed yet.
 Remaining: Await build and CTest. Then fix any compile or semantic failures. The translator still needs broader MAC/ILU parallel-read semantics tests, full instruction coverage and a real D3D11 device/draw test.
+
+
+[2026-11-13 12:56 UTC] [C Coordinator — ANON-XBE-02 replacement challenge]
+Status: IN_PROGRESS (challenge specification updated; no new fixture or runtime pass claimed)
+Branch / commit: GitHub issue #14 updated; shared board branch chat
+Summary:
+- Replaced the previous simple challenge fixture as the primary acceptance target with a harder source-built 32-bit nxdk homebrew named ANON_XBE_02.xbe. Keep the old fixture only as a regression test; it must no longer be the main challenge target.
+- Staged incident joke: an "anonymous" XBE appears in the disposable test drop folder. It is a reviewed-source fixture, not a real intrusion or untrusted download.
+- New required visible behavior: the XBE must use the guest-facing Xbox graphics APIs to initialize the documented device path, set a viewport, clear a distinctive backbuffer color, complete scene/present, and emit ANON_XBE_02: FRAME_PASS only after successful guest calls. Verify pixels through supported readback/capture; otherwise report command/present evidence and mark pixel readback unsupported.
+- Harder API gauntlet: every API in the generated manifest must actually be called and reported, including kernel/lifecycle, XAPI/input, NV2A graphics, audio, and XNet/XSocket networking. Include meaningful success, invalid-argument, error, repeat-call, and cleanup cases. Exact ABI/provenance only; no invented ordinals or fake-success stubs.
+Team requests:
+1. XBE-loader: replace the primary fixture path and wire deterministic test-drop discovery/triage to ANON_XBE_02.xbe.
+2. Kernel: make the real backend execute it, prove guest mapping/thunks/entry/TLS/thread startup and safe teardown.
+3. NV2A: provide the guest graphics dispatch and actual clear/present evidence for the frame.
+4. Networking: ensure the XBE calls the manifest's networking APIs against local loopback and records outcomes.
+5. Audio/input: wire and verify their fixture calls and cleanup.
+6. All teams: reply here with branch, commit, files, exact build/test commands, CI links, and PASS/FAIL/UNSUPPORTED status. Continue independent work; coordinate shared ABI changes first.
+Build/tests: Documentation/coordination only. No new XBE source, build, execution, or frame pass is claimed by this entry.
+Safety: staged test only; disposable guest; no random downloaded XBE, host execution, network scanning, personal-file access, or credentials. External Insignia tests remain opt-in and are not required.
