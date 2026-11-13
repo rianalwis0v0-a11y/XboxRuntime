@@ -818,6 +818,154 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
     if(io){io->Status=0;io->Information=required;}
     return 0;
 }
+static bool DvdWildcardMatch(const std::wstring& pattern, const std::wstring& value) {
+    size_t p = 0, v = 0, star = std::wstring::npos, retry = 0;
+    while (v < value.size()) {
+        if (p < pattern.size() &&
+            (pattern[p] == L'?' || towupper(pattern[p]) == towupper(value[v]))) {
+            ++p; ++v;
+        } else if (p < pattern.size() && pattern[p] == L'*') {
+            star = p++;
+            retry = v;
+        } else if (star != std::wstring::npos) {
+            p = star + 1;
+            v = ++retry;
+        } else {
+            return false;
+        }
+    }
+    while (p < pattern.size() && pattern[p] == L'*') ++p;
+    return p == pattern.size();
+}
+
+extern "C" LONG __stdcall K_NtQueryDirectoryFile(
+    HANDLE h, HANDLE event, void*, void*, GuestIoStatusBlock* io,
+    void* output, ULONG length, ULONG infoClass, BOOLEAN single,
+    GuestUnicodeString* filter, BOOLEAN restart) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG statusInfoLengthMismatch = LONG(0xC0000004u);
+    constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
+    if (!io || !output || !length) return statusInvalidParameter;
+
+    ULONG nameOffset = 0;
+    switch (infoClass) {
+    case 1: nameOffset = 64; break; // FileDirectoryInformation
+    case 2: nameOffset = 68; break; // FileFullDirectoryInformation
+    case 3: nameOffset = 94; break; // FileBothDirectoryInformation
+    case 12: nameOffset = 12; break; // FileNamesInformation
+    default: return LONG(0xC0000003u);
+    }
+    if (length < nameOffset) return statusInfoLengthMismatch;
+
+    std::wstring wanted;
+    if (filter) {
+        if (!filter->Buffer || (filter->Length & 1u)) return statusInvalidParameter;
+        wanted.assign(filter->Buffer, filter->Length / sizeof(WCHAR));
+    }
+
+    std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+    auto found = g_dvdFiles.find(h);
+    if (found == g_dvdFiles.end()) return statusInvalidHandle;
+    GuestDvdFile& directory = found->second;
+    if (!directory.directory) return LONG(0xC0000103u); // STATUS_NOT_A_DIRECTORY
+    if (restart) directory.directoryIndex = 0;
+
+    auto write = [output](ULONG offset, const void* value, ULONG bytes) {
+        std::memcpy(static_cast<uint8_t*>(output) + offset, value, bytes);
+    };
+    ULONG written = 0;
+    ULONG previousOffset = 0;
+    bool havePrevious = false;
+
+    while (directory.directoryIndex < directory.children.size()) {
+        const uint32_t index = directory.directoryIndex;
+        const XDVDFS_FILE_INFO& child = directory.children[index];
+        const int chars = MultiByteToWideChar(CP_ACP, 0, child.name,
+            child.nameLength, nullptr, 0);
+        if (chars <= 0) {
+            ++directory.directoryIndex;
+            continue;
+        }
+        std::wstring name(static_cast<size_t>(chars), L'\0');
+        MultiByteToWideChar(CP_ACP, 0, child.name, child.nameLength,
+            name.data(), chars);
+        if (!wanted.empty() && !DvdWildcardMatch(wanted, name)) {
+            ++directory.directoryIndex;
+            continue;
+        }
+
+        const ULONG nameBytes = static_cast<ULONG>(chars * sizeof(WCHAR));
+        const ULONG entryBytes = (nameOffset + nameBytes + 7u) & ~7u;
+        if (entryBytes > length - written) {
+            if (!written) return statusInfoLengthMismatch;
+            break;
+        }
+
+        uint8_t* entry = static_cast<uint8_t*>(output) + written;
+        std::memset(entry, 0, entryBytes);
+        const ULONG fileIndex = index + 1;
+        write(written + 4, &fileIndex, sizeof(fileIndex));
+
+        if (infoClass == 12) {
+            write(written + 8, &nameBytes, sizeof(nameBytes));
+        } else {
+            LARGE_INTEGER zero{};
+            LARGE_INTEGER endOfFile{};
+            endOfFile.QuadPart = child.size;
+            LARGE_INTEGER allocation{};
+            allocation.QuadPart =
+                (static_cast<LONGLONG>(child.size) + 2047) & ~LONGLONG(2047);
+            ULONG attributes = 0;
+            if (child.attributes & XDVDFS_ATTR_DIRECTORY) attributes |= FILE_ATTRIBUTE_DIRECTORY;
+            if (child.attributes & XDVDFS_ATTR_READONLY) attributes |= FILE_ATTRIBUTE_READONLY;
+            if (child.attributes & XDVDFS_ATTR_HIDDEN) attributes |= FILE_ATTRIBUTE_HIDDEN;
+            if (child.attributes & XDVDFS_ATTR_SYSTEM) attributes |= FILE_ATTRIBUTE_SYSTEM;
+            if (child.attributes & XDVDFS_ATTR_ARCHIVE) attributes |= FILE_ATTRIBUTE_ARCHIVE;
+            if (!attributes) attributes = FILE_ATTRIBUTE_NORMAL;
+            write(written + 8, &zero, sizeof(zero));
+            write(written + 16, &zero, sizeof(zero));
+            write(written + 24, &zero, sizeof(zero));
+            write(written + 32, &zero, sizeof(zero));
+            write(written + 40, &endOfFile, sizeof(endOfFile));
+            write(written + 48, &allocation, sizeof(allocation));
+            write(written + 56, &attributes, sizeof(attributes));
+            write(written + 60, &nameBytes, sizeof(nameBytes));
+            if (infoClass == 2) {
+                const ULONG eaSize = 0;
+                write(written + 64, &eaSize, sizeof(eaSize));
+            } else if (infoClass == 3) {
+                const UCHAR shortNameLength = 0;
+                const UCHAR reserved = 0;
+                write(written + 64, &eaSize, sizeof(ULONG));
+                write(written + 68, &shortNameLength, sizeof(shortNameLength));
+                write(written + 69, &reserved, sizeof(reserved));
+            }
+        }
+        write(written + nameOffset, name.data(), nameBytes);
+        if (havePrevious) {
+            const ULONG next = written - previousOffset;
+            write(previousOffset, &next, sizeof(next));
+        }
+        previousOffset = written;
+        havePrevious = true;
+        written += entryBytes;
+        ++directory.directoryIndex;
+        if (single) break;
+    }
+
+    if (!written) {
+        io->Status = statusNoMoreFiles;
+        io->Information = 0;
+        if (event) SetEvent(event);
+        return statusNoMoreFiles;
+    }
+    io->Status = 0;
+    io->Information = written;
+    if (event) SetEvent(event);
+    return 0;
+}
+
 extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                      void* in, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
