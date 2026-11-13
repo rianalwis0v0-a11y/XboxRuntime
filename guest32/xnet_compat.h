@@ -7,7 +7,7 @@
 // Original Xbox XNet ABI structures. Keep these fixed-width: this file is
 // compiled only into the dedicated 32-bit guest process.
 #pragma pack(push, 4)
-struct XboxXNetStartupParams {
+struct XNetStartupParams {
     BYTE cfgSizeOfStruct;
     BYTE cfgFlags;
     BYTE cfgSockMaxDgramSockets;
@@ -22,31 +22,31 @@ struct XboxXNetStartupParams {
     BYTE cfgQosSrvMaxSimultaneousResponses;
     BYTE cfgQosPairWaitTimeInSeconds;
 };
-struct XboxXnAddr {
+struct XNADDR {
     IN_ADDR ina;
     IN_ADDR inaOnline;
     WORD wPortOnline;
     BYTE abEnet[6];
     BYTE abOnline[20];
 };
-struct XboxXnDns {
+struct XNDNS {
     INT iStatus;
     UINT cina;
     IN_ADDR aina[8];
 };
 #pragma pack(pop)
 
-static_assert(sizeof(XboxXNetStartupParams) == 13, "XNetStartupParams ABI size");
-static_assert(sizeof(XboxXnAddr) == 36, "XNADDR ABI size");
-static_assert(sizeof(XboxXnDns) == 40, "XNDNS ABI size");
+static_assert(sizeof(XNetStartupParams) == 13, "XNetStartupParams ABI size");
+static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
+static_assert(sizeof(XNDNS) == 40, "XNDNS ABI size");
 
 extern "C" {
-int WINAPI XboxXNetStartup(const XboxXNetStartupParams* params);
-int WINAPI XboxXNetCleanup();
-int WINAPI XboxXNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XboxXnDns** result);
-int WINAPI XboxXNetDnsRelease(XboxXnDns* result);
-int WINAPI XboxXNetInAddrToString(IN_ADDR address, char* buffer, int capacity);
-int WINAPI XboxXNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output);
-int WINAPI XboxXNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
-DWORD WINAPI XboxXNetGetEthernetLinkStatus();
+int WINAPI XNetStartup(const XNetStartupParams* params);
+int WINAPI XNetCleanup();
+int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** result);
+int WINAPI XNetDnsRelease(XNDNS* result);
+int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity);
+int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output);
+int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
+DWORD WINAPI XNetGetEthernetLinkStatus();
 }
