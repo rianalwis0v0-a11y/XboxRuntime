@@ -32,17 +32,16 @@ void StopGuest(){
  if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};releaseSent=false;
 }
 std::wstring EepromPath() {
- wchar_t windowsPath[32768]{};
- UINT n=GetWindowsDirectoryW(windowsPath,UINT(_countof(windowsPath)));
- if(!n||n>=_countof(windowsPath))return {};
- std::wstring win(windowsPath,n);size_t slash=win.find_last_of(L"\\\\");
- if(slash==std::wstring::npos)return {};
- std::wstring root=win.substr(0,slash);
- std::wstring runtime=root+L"\\\\XboxRuntime";
- std::wstring system=runtime+L"\\\\system";
+ /* EEPROM state is per-user data. Avoid writing to the system-drive root,
+  * which normally requires elevation on Windows. */
+ wchar_t localAppData[32768]{};
+ DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",localAppData,DWORD(_countof(localAppData)));
+ if(!n||n>=_countof(localAppData))return {};
+ std::wstring runtime=std::wstring(localAppData,n)+L"\\XboxRuntime";
+ std::wstring system=runtime+L"\\system";
  if(!CreateDirectoryW(runtime.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)return {};
  if(!CreateDirectoryW(system.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)return {};
- return system+L"\\\\eeprom.bin";
+ return system+L"\\eeprom.bin";
 }
 std::wstring ModuleDirectory(){
  HMODULE self=nullptr;
