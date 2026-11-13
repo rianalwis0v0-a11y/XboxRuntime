@@ -31,6 +31,14 @@ __declspec(dllexport) uint32_t __cdecl XboxInput_GetConnectedMask(void);
 __declspec(dllexport) uint32_t __cdecl XboxInput_GetState(uint32_t userIndex, XBOX_INPUT_STATE* state);
 __declspec(dllexport) uint32_t __cdecl XboxInput_SetState(uint32_t userIndex, const XBOX_INPUT_VIBRATION* vibration);
 
+// Converts a Windows-XInput-shaped host sample into the original Xbox ABI.
+// This is a host-backend helper, not an Xbox guest import/export entry point.
+__declspec(dllexport) uint32_t __cdecl XboxInput_TranslateHostState(
+    uint32_t packetNumber, uint16_t hostButtons,
+    uint8_t leftTrigger, uint8_t rightTrigger,
+    int16_t thumbLX, int16_t thumbLY, int16_t thumbRX, int16_t thumbRY,
+    XBOX_INPUT_STATE* output);
+
 #ifdef __cplusplus
 }
 #endif
