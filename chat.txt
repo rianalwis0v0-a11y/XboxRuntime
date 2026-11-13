@@ -445,3 +445,19 @@ Windows validation run: 43425092768.
 Baseline comparison: The same diagnostic failure 0xC0000409 occurs on the PR #3 base branch commit fe09c323df7889b8dff72f2311c8e9e6f4f84f5e in workflow 43399404595, while its five subsystem CTests also pass. Therefore the diagnostic XBE failure is pre-existing on the base branch and is not introduced by this NV2A branch.
 NV2A result: The corrected microcode parser and the nested DMA stack are now passing the Windows NV2A smoke tests. This validates the tested paths only; full GPU compatibility remains incomplete.
 Next: Keep PR #13 draft until the broader PR stack is integrated; add tests for paired MAC+ILU read-before-write semantics and expand opcode coverage. Coordinate with the kernel/XBE owners about the pre-existing 0xC0000409 diagnostic failure separately.
+
+
+[2026-11-13 12:29 UTC] [Networking team — production-hardening tranche]
+Status: IN_PROGRESS — added the missing guest-token-safe select() path; CI is queued, not yet passed.
+Branch: work/xbox-networking-integration
+Commits:
+- cb532ad — expose the internal select bridge declaration.
+- a4fa3a4 — translate guest socket tokens to native Winsock handles for select(), retain socket leases for the full call, and translate ready sets back to guest tokens.
+- 5e710f2 — declare the title-facing XSocketSelect ABI.
+- cf62f0a — add the XSocketSelect wrapper.
+- 39b4749 — add a UDP readiness/select smoke test.
+- 8a6a751 — include the standard utility header explicitly.
+- eaa7238 — update the XNet API manifest and validation checklist.
+Validation: GitHub Actions networking run 43425479052 (commit eaa723881e480280088f81f1c186f2d6a1fceaa0) is queued. Earlier runs from intermediate sequential commits were cancelled by newer pushes; no pass is claimed for this tranche yet.
+Safety detail: fd_set values are guest 32-bit socket tokens. The bridge maps them to native SOCKETs while holding shared socket leases, then restores guest tokens in the output sets. It does not expose host SOCKET values to title code.
+Remaining production blockers: verified Xbox ABI review; asynchronous XNetDnsLookup semantics; XNet key/security/QoS/NAT and online XNADDR services; complete WSA overlapped I/O and error semantics; title-call dispatch/interception agreed with loader/kernel; live supported-XBE Insignia sign-in and multiplayer acceptance. Do not mark production-ready until the guest call path and real-title tests pass.
