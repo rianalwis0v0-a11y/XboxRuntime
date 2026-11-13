@@ -39,11 +39,36 @@ static uint32_t g_nv2a_vsh_start_slot, g_nv2a_vsh_constant_load;
 static uint32_t g_nv2a_vsh_constant_word;
 static uint32_t g_nv2a_vsh_context_write;
 static DWORD g_nv2a_vsh_handle;
+static XboxNV2A_VSH_CREATE_SHADER_FN g_vsh_create_shader_callback;
+static XboxNV2A_VSH_DELETE_SHADER_FN g_vsh_delete_shader_callback;
+static XboxNV2A_VSH_SET_CONSTANT_FN g_vsh_set_constant_callback;
 static uint16_t g_nv2a_vsh_input_mask;
 static uint32_t g_nv2a_vsh_program_hash;
 static uint8_t* g_nv2a_gpu_vertex_stream;
 static size_t g_nv2a_gpu_vertex_capacity;
 static int g_nv2a_vsh_dirty = 1;
+static HRESULT nv2a_vsh_create_shader(const DWORD* microcode, int count, DWORD* handle)
+{
+    return g_vsh_create_shader_callback
+        ? g_vsh_create_shader_callback(microcode, count, handle)
+        : d3d8_vsh_create_shader(microcode, count, handle);
+}
+
+static HRESULT nv2a_vsh_delete_shader(DWORD handle)
+{
+    return g_vsh_delete_shader_callback
+        ? g_vsh_delete_shader_callback(handle)
+        : d3d8_vsh_delete_shader(handle);
+}
+
+static void nv2a_vsh_set_constant(int start_reg, const float* data, int count)
+{
+    if (g_vsh_set_constant_callback)
+        g_vsh_set_constant_callback(start_reg, data, count);
+    else
+        d3d8_vsh_set_constant(start_reg, data, count);
+}
+
 static uint32_t g_pgraph_fallback_methods;
 static uint32_t g_pgraph_custom_methods;
 static uint32_t g_pgraph_custom_draws;
@@ -592,7 +617,7 @@ int __cdecl ModuleStart(void)
     g_nv2a_vsh_context_write = 0;
     g_nv2a_vsh_program_hash = 0;
     if (g_nv2a_vsh_handle) {
-        (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+        (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
         g_nv2a_vsh_handle = 0;
     }
     g_nv2a_vsh_dirty = 1;
@@ -617,6 +642,10 @@ void __cdecl ModuleStop(void)
     if (!g_started)
         return;
 
+    if (g_nv2a_vsh_handle) {
+        (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
+        g_nv2a_vsh_handle = 0;
+    }
     pgraph_d3d11_flush();
     sync_surface_to_vram();
     release_texture_cache();
@@ -624,6 +653,9 @@ void __cdecl ModuleStop(void)
     release_surface_targets();
     xbox_SetD3D11Device(NULL, NULL);
     xbox_SetD3DDevice(NULL);
+    g_vsh_create_shader_callback = NULL;
+    g_vsh_delete_shader_callback = NULL;
+    g_vsh_set_constant_callback = NULL;
 
     // The upstream NV2A singleton currently has no public destroy/reset API.
     // Keep its backing allocation alive until the host process exits; freeing
@@ -651,6 +683,25 @@ int __cdecl XboxNV2A_SetD3D11Device(void* device, void* context)
     xbox_SetD3D11Device(device, context);
     if (g_started && device)
         pgraph_d3d11_init();
+    return 0;
+}
+
+int __cdecl XboxNV2A_SetD3D8VshCallbacks(
+    XboxNV2A_VSH_CREATE_SHADER_FN create_shader,
+    XboxNV2A_VSH_DELETE_SHADER_FN delete_shader,
+    XboxNV2A_VSH_SET_CONSTANT_FN set_constant)
+{
+    if (!create_shader && !delete_shader && !set_constant) {
+        g_vsh_create_shader_callback = NULL;
+        g_vsh_delete_shader_callback = NULL;
+        g_vsh_set_constant_callback = NULL;
+        return 0;
+    }
+    if (!create_shader || !delete_shader || !set_constant)
+        return 1;
+    g_vsh_create_shader_callback = create_shader;
+    g_vsh_delete_shader_callback = delete_shader;
+    g_vsh_set_constant_callback = set_constant;
     return 0;
 }
 
@@ -2237,10 +2288,10 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
             g_nv2a_vsh_dirty = 0;
         } else {
             if (g_nv2a_vsh_handle) {
-                (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+                (void)nv2a_vsh_delete_shader(g_nv2a_vsh_handle);
                 g_nv2a_vsh_handle = 0;
             }
-            if (FAILED(d3d8_vsh_create_shader(
+            if (FAILED(nv2a_vsh_create_shader(
                     words, (int)instruction_count, &g_nv2a_vsh_handle)))
                 return 0;
             g_nv2a_vsh_program_hash = hash;
@@ -2346,7 +2397,7 @@ static void nv2a_flush_vertex_constants(void)
         } while (reg < 192u &&
                  (g_nv2a_vsh_constant_dirty[reg >> 6] &
                   ((uint64_t)1u << (reg & 63u))));
-        d3d8_vsh_set_constant((int)first,
+        nv2a_vsh_set_constant((int)first,
             &g_nv2a_vsh_constants[first][0], (int)(reg - first));
     }
 }
