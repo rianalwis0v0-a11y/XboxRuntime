@@ -312,6 +312,18 @@ LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestI
 }
 extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
 extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
+    if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+    if (path.empty()) return LONG(0xC0000033u);
+    if (DeleteFileW(path.c_str())) return 0;
+    const DWORD error = GetLastError();
+    if (error == ERROR_ACCESS_DENIED) return LONG(0xC0000022u);
+    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return LONG(0xC0000034u);
+    if (error == ERROR_DIR_NOT_EMPTY) return LONG(0xC0000101u);
+    if (error == ERROR_DIRECTORY) return LONG(0xC0000103u);
+    return LONG(0xC0000001u);
+}
 extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
     if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
     DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
@@ -1338,6 +1350,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_yield
         cmp eax, 190
         je nt_create_file
+        cmp eax, 195
+        je nt_delete_file
         cmp eax, 202
         je nt_open_file
         cmp eax, 219
@@ -1596,6 +1610,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
     nt_create_file: jmp K_NtCreateFile
+    nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
     nt_read_file: jmp K_NtReadFile
     nt_write_file: jmp K_NtWriteFile
