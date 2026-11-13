@@ -35,8 +35,8 @@ namespace XboxRuntime
         { L"xbe_loader.dll" }
     };
 
-    static std::wstring systemDirectory;
     static std::wstring runtimeDirectory;
+    static std::wstring moduleDirectory;
 
     static bool running = false;
 
@@ -59,8 +59,6 @@ namespace XboxRuntime
         if (!length || length >= _countof(systemPath))
             return false;
 
-        systemDirectory.assign(systemPath, length);
-
         wchar_t windowsPath[32768]{};
 
         length = GetWindowsDirectoryW(
@@ -82,13 +80,25 @@ namespace XboxRuntime
         runtimeDirectory =
             windowsDirectory.substr(0, separator) +
             L"\\XboxRuntime";
+        // Runtime DLLs and xbe_guest32.exe are deployed together here.
+        // Loading them from Windows\\System32 prevented the host from
+        // finding the build's actual runtime modules and guest executable.
+        moduleDirectory = runtimeDirectory + L"\\system";
+
+        DWORD attributes = GetFileAttributesW(moduleDirectory.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        {
+            Log(L"XboxRuntime\\system directory is missing.");
+            return false;
+        }
 
         return true;
     }
 
     static std::wstring ModulePath(const wchar_t* name)
     {
-        return systemDirectory + L"\\" + name;
+        return moduleDirectory + L"\\" + name;
     }
 
     static bool LoadModule(Module& module)
