@@ -1007,6 +1007,31 @@ int main() {
         return 1;
     }
 
+    /* ARRAY_ELEMENT16 accumulation must not overflow at the old 255-index cap. */
+    {
+        Stats beforeBatch{}, afterBatch{};
+        if (getStats(&beforeBatch) != 0 ||
+            submit(0u, 0x17FCu, 5u) != 0) {
+            std::cerr << "FAIL: begin large indexed batch\\n";
+            stop();
+            return 1;
+        }
+        for (uint32_t i = 0; i < 300u; ++i) {
+            if (submit(0u, 0x1810u, i & 1u) != 0) {
+                std::cerr << "FAIL: submit large indexed batch element\\n";
+                stop();
+                return 1;
+            }
+        }
+        if (submit(0u, 0x17FCu, 0u) != 0 ||
+            getStats(&afterBatch) != 0 ||
+            afterBatch.methods_handled < beforeBatch.methods_handled + 300u) {
+            std::cerr << "FAIL: PGRAPH dropped indexed elements above 255\\n";
+            stop();
+            return 1;
+        }
+    }
+
     // Exercise PGRAPH method dispatch without requiring a window or a D3D device.
     if (submit(0, 0x01D4, 0xFF112233) != 0 ||
         submit(0, 0x17FC, 5) != 0 ||
