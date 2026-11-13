@@ -930,13 +930,22 @@ EmitCheckEqual 258
 EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
-# Open the title directory and enumerate a real fixture entry.
+# Validate the guest OBJECT_ATTRIBUTES and UNICODE_STRING fixture before NtOpenFile.
 $directoryUnicodeVa = [uint32]($base + 0x6500)
 $directoryObjectAttributesVa = [uint32]($base + 0x6510)
 $directoryPathVa = [uint32]($base + 0x6540)
 $directoryHandleVa = [uint32]($base + 0x6710)
 $directoryInfoVa = [uint32]($base + 0x6600)
 $directoryIoVa = [uint32]($base + 0x6700)
+EmitLoadEax ([uint32]($directoryObjectAttributesVa + 8))
+EmitCheckEqual $directoryUnicodeVa
+EmitLoadEax $directoryUnicodeVa
+EmitCheckEqual 0x001E001C
+EmitLoadEax ([uint32]($directoryUnicodeVa + 4))
+EmitCheckEqual $directoryPathVa
+EmitLoadEax $directoryPathVa
+EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x00
+EmitCheckEqual 92
 EmitPush 1
 EmitPush 7
 EmitPush 0
