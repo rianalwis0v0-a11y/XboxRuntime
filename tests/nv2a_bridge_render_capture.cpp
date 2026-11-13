@@ -1,5 +1,3 @@
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 #include <windows.h>
 #include <cstdint>
 #include <cstdio>
@@ -129,9 +127,9 @@ int main()
     pp.Windowed = TRUE;
     pp.EnableAutoDepthStencil = FALSE;
     pp.AutoDepthStencilFormat = D3DFMT_UNKNOWN;
-    pp.FullScreen_PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+    pp.FullScreen_PresentationInterval = 0x80000000u; /* D3DPRESENT_INTERVAL_IMMEDIATE */
     IDirect3DDevice8* device = nullptr;
-    HRESULT hr = d3d->lpVtbl->CreateDevice(d3d, 0u, D3DDEVTYPE_HAL,
+    HRESULT hr = d3d->lpVtbl->CreateDevice(d3d, 0u, 1u, /* D3DDEVTYPE_HAL */
         hwnd, 0u, &pp, &device);
     if (FAILED(hr) || !device) {
         std::fprintf(stderr, "FAIL: D3D8 CreateDevice HRESULT=0x%08lX\n",
