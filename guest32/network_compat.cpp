@@ -137,6 +137,38 @@ extern "C" int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uin
     return ::recv(socket, static_cast<char*>(data), static_cast<int>(capacity), 0);
 }
 
+extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t length, uint32_t ipv4, uint16_t port) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = ipv4;
+    address.sin_port = htons(port);
+    return ::sendto(socket, static_cast<const char*>(data), static_cast<int>(length), 0,
+        reinterpret_cast<sockaddr*>(&address), sizeof(address));
+}
+
+extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4, uint16_t* port) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
+    sockaddr_in address{};
+    int addressLength = sizeof(address);
+    int received = ::recvfrom(socket, static_cast<char*>(data), static_cast<int>(capacity), 0,
+        reinterpret_cast<sockaddr*>(&address), &addressLength);
+    if (received >= 0) {
+        if (ipv4) *ipv4 = address.sin_addr.s_addr;
+        if (port) *port = ntohs(address.sin_port);
+    }
+    return received;
+}
+
+extern "C" int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET) return -1;
+    u_long mode = enabled ? 1ul : 0ul;
+    return ioctlsocket(socket, FIONBIO, &mode) == 0 ? 0 : -1;
+}
+
 extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET) return -1;
