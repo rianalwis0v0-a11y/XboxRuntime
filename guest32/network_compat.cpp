@@ -251,10 +251,23 @@ extern "C" int __cdecl XboxNetSocketListen(uint32_t handle, int backlog) {
     return ::listen(socket, backlog) == 0 ? 0 : -1;
 }
 
-extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle) {
+extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddress, uint32_t* addressLength) {
     SOCKET listener = FindSocket(handle);
     if (listener == INVALID_SOCKET) return 0;
-    SOCKET accepted = ::accept(listener, nullptr, nullptr);
+    sockaddr_in peer{};
+    int peerLength = sizeof(peer);
+    SOCKET accepted = ::accept(listener,
+        rawAddress ? reinterpret_cast<sockaddr*>(&peer) : nullptr,
+        rawAddress ? &peerLength : nullptr);
+    if (accepted == INVALID_SOCKET) return 0;
+    if (rawAddress && addressLength) {
+        if (*addressLength < sizeof(peer)) {
+            closesocket(accepted);
+            return 0;
+        }
+        std::memcpy(rawAddress, &peer, sizeof(peer));
+        *addressLength = sizeof(peer);
+    }
     return StoreSocket(accepted);
 }
 
