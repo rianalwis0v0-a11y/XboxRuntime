@@ -70,14 +70,22 @@ int main(void)
     if (compile_program(instruction, 1u, "NV2A MOV input-to-oPos") != 0)
         return 2;
 
+    /* MAC ADD v5 + v5 -> oPos exercises a two-source arithmetic operation. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (3u << 21) | (5u << 9);
+    instruction[2] = (2u << 26) | (2u << 11);
+    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
+    if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
+        return 3;
+
     /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (1u << 21) | (5u << 13) | 0x1Bu;
     instruction[2] = 3u << 26;
     instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MOV constant-to-oPos") != 0)
-        return 3;
+        return 4;
 
-    puts("PASS: NV2A NOP, input MOV, and constant MOV shader translation");
+    puts("PASS: NV2A NOP, input MOV, input ADD, and constant MOV shader translation");
     return 0;
 }
