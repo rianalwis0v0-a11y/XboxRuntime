@@ -84,6 +84,32 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 add_test(NAME nv2a_render_capture COMMAND nv2a_render_capture)
 
+# Exercise the complete NV2A DLL -> D3D8 -> D3D11 bridge and capture ten frames.
+add_executable(nv2a_bridge_render_capture tests/nv2a_bridge_render_capture.cpp)
+target_include_directories(nv2a_bridge_render_capture PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/src/d3d"
+)
+target_compile_features(nv2a_bridge_render_capture PRIVATE cxx_std_17)
+target_compile_definitions(nv2a_bridge_render_capture PRIVATE
+    WIN32_LEAN_AND_MEAN NOMINMAX
+)
+target_link_libraries(nv2a_bridge_render_capture PRIVATE
+    xbox_d3d8 d3d11 dxgi d3dcompiler user32
+)
+set_target_properties(nv2a_bridge_render_capture PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+)
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(nv2a_bridge_render_capture PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out"
+    )
+endforeach()
+add_dependencies(nv2a_bridge_render_capture nv2a)
+add_test(NAME nv2a_bridge_render_capture COMMAND nv2a_bridge_render_capture)
+set_tests_properties(nv2a_bridge_render_capture PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+)
+
 # Exercise XDVDFS descriptor parsing, directory-tree lookup, and bounded file reads.
 add_executable(xdvdfs_smoke
     tests/xdvdfs_smoke.cpp
