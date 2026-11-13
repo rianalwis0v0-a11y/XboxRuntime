@@ -714,6 +714,11 @@ struct GuestFileStandardInformation {
     BOOLEAN DeletePending, Directory;
 };
 struct GuestFilePositionInformation { LARGE_INTEGER CurrentByteOffset; };
+struct GuestFileNetworkOpenInformation {
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    LARGE_INTEGER AllocationSize, EndOfFile;
+    ULONG FileAttributes;
+};
 struct GuestFileInternalInformation { LARGE_INTEGER IndexNumber; };
 struct GuestFileDispositionInformation { BOOLEAN DeleteFile; };
 struct GuestFileEndOfFileInformation { LARGE_INTEGER EndOfFile; };
@@ -729,6 +734,65 @@ static LONG FileStatusFromWin32(DWORD e) {
     default: return LONG(0xC0000001u);
     }
 }
+extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
+    GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* info) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusDeviceNotReady = LONG(0xC00000A3u);
+    constexpr LONG statusObjectNameNotFound = LONG(0xC0000034u);
+    if (!oa || !oa->ObjectName || !info) return statusInvalidParameter;
+    std::memset(info, 0, sizeof(*info));
+
+    std::string dvdPath;
+    if (DvdRelativePath(oa->ObjectName, dvdPath)) {
+        if (!g_dvdReady) return statusDeviceNotReady;
+        if (dvdPath.empty()) {
+            info->FileAttributes = FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY;
+            return 0;
+        }
+        XDVDFS_FILE_INFO entry{};
+        if (XDVDFS_GetFileInfo(dvdPath.c_str(), &entry) != 0)
+            return statusObjectNameNotFound;
+        info->EndOfFile.QuadPart = entry.size;
+        info->AllocationSize.QuadPart =
+            (static_cast<LONGLONG>(entry.size) + 2047) & ~LONGLONG(2047);
+        info->FileAttributes = FILE_ATTRIBUTE_READONLY;
+        if (entry.attributes & XDVDFS_ATTR_DIRECTORY)
+            info->FileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
+        else
+            info->FileAttributes |= FILE_ATTRIBUTE_ARCHIVE;
+        if (entry.attributes & XDVDFS_ATTR_HIDDEN)
+            info->FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+        if (entry.attributes & XDVDFS_ATTR_SYSTEM)
+            info->FileAttributes |= FILE_ATTRIBUTE_SYSTEM;
+        return 0;
+    }
+
+    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+    if (path.empty()) return statusObjectNameNotFound;
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
+        return FileStatusFromWin32(GetLastError());
+    auto toLarge = [](const FILETIME& value) {
+        ULARGE_INTEGER raw{};
+        raw.LowPart = value.dwLowDateTime;
+        raw.HighPart = value.dwHighDateTime;
+        LARGE_INTEGER result{};
+        result.QuadPart = static_cast<LONGLONG>(raw.QuadPart);
+        return result;
+    };
+    info->CreationTime = toLarge(data.ftCreationTime);
+    info->LastAccessTime = toLarge(data.ftLastAccessTime);
+    info->LastWriteTime = toLarge(data.ftLastWriteTime);
+    info->ChangeTime = info->LastWriteTime;
+    const ULONGLONG size =
+        (static_cast<ULONGLONG>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
+    info->EndOfFile.QuadPart = static_cast<LONGLONG>(size);
+    info->AllocationSize.QuadPart =
+        static_cast<LONGLONG>((size + 4095u) & ~ULONGLONG(4095u));
+    info->FileAttributes = data.dwFileAttributes;
+    return 0;
+}
+
 extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                        void* out, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
@@ -2288,6 +2352,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_volume_information_file
         cmp eax, 211
         je nt_query_information_file
+        cmp eax, 210
+        je nt_query_full_attributes_file
         cmp eax, 207
         je nt_query_directory_file
         cmp eax, 226
@@ -2574,6 +2640,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_yield: jmp K_NtYieldExecution
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
     nt_query_information_file: jmp K_NtQueryInformationFile
+    nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
     nt_query_directory_file: jmp K_NtQueryDirectoryFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
