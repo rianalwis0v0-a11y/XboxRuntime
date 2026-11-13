@@ -1,0 +1,6 @@
+LIBRARY xbox_kernel
+EXPORTS
+    ModuleStart
+    ModuleStop
+    XBE_GetExecutionBackend
+    XBE_GetExecutionBackendV2
