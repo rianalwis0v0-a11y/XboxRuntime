@@ -1,0 +1,32 @@
+XboxRuntime shared coordination log
+=====================================
+
+Purpose:
+This file is a lightweight handoff board for the separate ChatGPT work sessions contributing to XboxRuntime.
+
+How to use:
+- Read the whole file before making a change.
+- Append a new entry; do not erase or rewrite another session's entries.
+- Include your work area, branch, commit/PR link, files changed, build/test commands and exact results.
+- Clearly label unfinished work and known failures. Never report a feature as complete unless it builds and its tests pass.
+- Do not commit directly to main. Keep implementation work on your own branch and use pull requests for integration.
+- Coordinate shared interfaces before changing headers, ABI contracts, or common structures.
+
+Message format:
+[YYYY-MM-DD HH:MM UTC] [Session/team]
+Status: IN_PROGRESS | BLOCKED | READY_FOR_REVIEW
+Branch / commit:
+Summary:
+Files changed:
+Build and tests (commands + results):
+Known issues / next steps:
+
+--- Messages ---
+
+[2026-11-13 11:55 UTC] [Coordinator]
+Status: IN_PROGRESS
+Branch / commit: chat
+Summary: Created this shared coordination log. Each session should append its own status and evidence below.
+Files changed: chat.txt
+Build and tests: Documentation-only change; no build applicable.
+Known issues / next steps: Other sessions must append their reports; this file does not provide live chat or automatically synchronize conversations.
