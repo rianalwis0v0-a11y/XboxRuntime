@@ -231,25 +231,29 @@ extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostnam
 }
 
 extern "C" int __cdecl XboxNetSocketConnectAddress(uint32_t handle, const void* rawAddress, uint32_t length) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || !rawAddress || length < sizeof(sockaddr_in)) return -1;
     return ::connect(socket, static_cast<const sockaddr*>(rawAddress), static_cast<int>(length));
 }
 
 extern "C" int __cdecl XboxNetSocketBindAddress(uint32_t handle, const void* rawAddress, uint32_t length) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || !rawAddress || length < sizeof(sockaddr_in)) return -1;
     return ::bind(socket, static_cast<const sockaddr*>(rawAddress), static_cast<int>(length));
 }
 
 extern "C" int __cdecl XboxNetSocketShutdown(uint32_t handle, int how) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET) return -1;
     return ::shutdown(socket, how);
 }
 
 extern "C" int __cdecl XboxNetSocketGetName(uint32_t handle, void* rawAddress, uint32_t* length) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || !rawAddress || !length || *length < sizeof(sockaddr_in)) return -1;
     int nativeLength = sizeof(sockaddr_in);
     const int result = getsockname(socket, static_cast<sockaddr*>(rawAddress), &nativeLength);
@@ -258,7 +262,8 @@ extern "C" int __cdecl XboxNetSocketGetName(uint32_t handle, void* rawAddress, u
 }
 
 extern "C" int __cdecl XboxNetSocketGetPeerName(uint32_t handle, void* rawAddress, uint32_t* length) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || !rawAddress || !length || *length < sizeof(sockaddr_in)) return -1;
     int nativeLength = sizeof(sockaddr_in);
     const int result = getpeername(socket, static_cast<sockaddr*>(rawAddress), &nativeLength);
@@ -267,19 +272,22 @@ extern "C" int __cdecl XboxNetSocketGetPeerName(uint32_t handle, void* rawAddres
 }
 
 extern "C" int __cdecl XboxNetSocketSetOption(uint32_t handle, int level, int option, const char* value, int length) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || (!value && length) || length < 0) return -1;
     return setsockopt(socket, level, option, value, length);
 }
 
 extern "C" int __cdecl XboxNetSocketGetOption(uint32_t handle, int level, int option, char* value, int* length) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || !value || !length) return -1;
     return getsockopt(socket, level, option, value, length);
 }
 
 extern "C" int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET) return -1;
     sockaddr_in address{};
     address.sin_family = AF_INET;
@@ -289,7 +297,8 @@ extern "C" int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port) {
 }
 
 extern "C" int __cdecl XboxNetSocketListen(uint32_t handle, int backlog) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || backlog < 0) return -1;
     return ::listen(socket, backlog) == 0 ? 0 : -1;
 }
@@ -316,19 +325,22 @@ extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddres
 }
 
 extern "C" int32_t __cdecl XboxNetSocketSend(uint32_t handle, const void* data, uint32_t length, int flags) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
     return ::send(socket, static_cast<const char*>(data), static_cast<int>(length), flags);
 }
 
 extern "C" int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capacity, int flags) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
     return ::recv(socket, static_cast<char*>(data), static_cast<int>(capacity), flags);
 }
 
 extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t length, uint32_t ipv4, uint16_t port, int flags) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
     sockaddr_in address{};
     address.sin_family = AF_INET;
@@ -339,7 +351,8 @@ extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data
 }
 
 extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4, uint16_t* port, int flags) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
     sockaddr_in address{};
     int addressLength = sizeof(address);
@@ -353,14 +366,16 @@ extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data,
 }
 
 extern "C" int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET) return -1;
     u_long mode = enabled ? 1ul : 0ul;
     return ioctlsocket(socket, FIONBIO, &mode) == 0 ? 0 : -1;
 }
 
 extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds) {
-    SOCKET socket = FindSocket(handle);
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET) return -1;
     DWORD timeout = milliseconds;
     return setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO,
@@ -370,15 +385,11 @@ extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t millise
 }
 
 extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
-    SOCKET socket = INVALID_SOCKET;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto it = g_sockets.find(handle);
-        if (it == g_sockets.end()) return -1;
-        socket = it->second;
-        g_sockets.erase(it);
-    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto it = g_sockets.find(handle);
+    if (it == g_sockets.end()) return -1;
     // Erasing the registry entry invalidates the guest handle immediately.
-    // Any in-flight operation retains its lease until it safely completes.
+    // In-flight operations keep a shared lease until they safely complete.
+    g_sockets.erase(it);
     return 0;
 }
