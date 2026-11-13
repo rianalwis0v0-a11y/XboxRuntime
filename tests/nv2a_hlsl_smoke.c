@@ -106,6 +106,39 @@ int main(void)
         if (result) return 30 + result;
     }
 
-    puts("PASS: NV2A input MOV, input ADD, and constant MOV shader translation");
+
+    /* Paired MAC+ILU reads source C before either destination is written.
+     * MAC overwrites R1 while ILU RCP reads old R1.x; HLSL must snapshot it. */
+    {
+        const DWORD instruction[4] = {
+            0u,
+            (1u << 21) | (2u << 25) | (17u << 13) | 0x1Bu,
+            (3u << 26) | (0x1Bu << 2),
+            (1u << 30) | (1u << 28) | (0xFu << 24) | (1u << 20) |
+                (0x8u << 16) | (0xFu << 12) | (1u << 11) | 1u
+        };
+        const int result = compile_program(
+            "nv2a_vsh_paired_mac_ilu", instruction, 1,
+            "_vsh_src2 = R1", 0);
+        if (result) return 40 + result;
+
+        NV2AVshProgram program;
+        char hlsl[16384];
+        memset(&program, 0, sizeof(program));
+        d3d8_vsh_parse(instruction, 1, &program);
+        const int length = d3d8_vsh_generate_hlsl(&program, hlsl, (int)sizeof(hlsl));
+        if (length <= 0 || length >= (int)sizeof(hlsl)) return 50;
+        const char* snapshot = strstr(hlsl, "float4 _vsh_src2 = R1;");
+        const char* mac_write = strstr(hlsl, "R1 = (c[17])");
+        const char* ilu_read = strstr(hlsl, "1.0 / _vsh_src2.x");
+        if (!snapshot || !mac_write || !ilu_read ||
+            !(snapshot < mac_write && mac_write < ilu_read)) {
+            fputs("FAIL: paired MAC/ILU source C was not snapshotted before destination writes\\n", stderr);
+            fputs(hlsl, stderr);
+            return 51;
+        }
+    }
+
+    puts("PASS: NV2A MOV, ADD, constant, and paired MAC/ILU shader translation");
     return 0;
 }
