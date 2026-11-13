@@ -25,7 +25,7 @@ file(READ "${_vsh_c}" _vsh_src)
 string(FIND "${_vsh_src}" "XBOXRUNTIME_NV2A_VSH_LAYOUT_PATCH" _src_patched)
 if(_src_patched LESS 0)
     set(_layout_note [=[
-/* XBOXRUNTIME_NV2A_VSH_LAYOUT_PATCH
+ * XBOXRUNTIME_NV2A_VSH_LAYOUT_PATCH
  * NV2A vertex microcode is four DWORDs. DWORD0 is unused; opcode and
  * shared indices live in DWORD1, source muxes/registers in DWORD2/3,
  * and destination masks/output routing/final flag in DWORD3.
@@ -33,7 +33,7 @@ if(_src_patched LESS 0)
 
 /* ================================================================
 ]=])
-    _replace_range(_vsh_src "/* NV2A Instruction Bit Field Extraction" " * Module State" _layout_note _vsh_src)
+    _replace_range(_vsh_src " * NV2A Instruction Bit Field Extraction" " * Module State" _layout_note _vsh_src)
 
     set(_parser_block [=[
 /* Decode one NV2A source using the hardware DWORD layout.
