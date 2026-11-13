@@ -49,6 +49,7 @@ int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity);
 int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output);
 int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
 DWORD WINAPI XNetGetEthernetLinkStatus();
+DWORD WINAPI XNetGetTitleXnAddr(XNADDR* address);
 }
 
 extern "C" {
