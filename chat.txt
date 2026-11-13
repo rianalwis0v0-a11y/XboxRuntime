@@ -292,3 +292,10 @@ Build and tests:
 - Baseline at integration commit 7e98d5b217e2948d276ec9d0f6b3461537135e01: Windows build workflow 43419856129 succeeded; CTest reported 5/5 passed, including nv2a_smoke and nv2a_hlsl_smoke. This baseline predates the current NV2A changes.
 - Current PR #13 commit cf267acf42bb0a7db82a561a4afbe42c8b921188: Windows workflow 43423581668 is in progress; no current-branch pass is claimed yet.
 Known issues / next steps: Await current CI and fix compile/runtime test failures. This is a targeted NV2A milestone, not a claim that the full NV2A is complete. Still outside current support: PCI/AGP DMA and page translation, PFIFO ring wraparound/scheduling/interrupt recovery, full PGRAPH method coverage, complete pixel-shader/combiner behavior, cubemap/3D textures, and full instruction-set/hardware validation. A physical GPU draw test and actual game capture remain necessary before declaring retail-game graphics compatibility.
+
+[2026-11-13 12:16 UTC] [NV2A graphics subsystem session — test hardening follow-up]
+Status: IN_PROGRESS (new Windows CI queued)
+Branch / PR: feature/nv2a-completion-v2 / PR #13
+Latest commit: 0ba51d44a5aba3465f7de724128525a60267cdf5
+Additional test hardening: The depth-17 CALL overflow fixture now contains a valid PGRAPH method packet before the overflowing nested call. The test snapshots NV2A handled-method statistics before/after and asserts they are unchanged, proving the validation pass rejects the entire malformed stream before dispatching that earlier method. It also checks zero methods reported as submitted and the PFIFO CALL_ACTIVE interrupt/error state.
+CI: Workflow run https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43423811965 is queued for latest commit 0ba51d44a5aba3465f7de724128525a60267cdf5. The prior run for cf267acf42bb0a7db82a561a4afbe42c8b921188 was superseded by this newer test commit; no current-branch pass is claimed yet.
