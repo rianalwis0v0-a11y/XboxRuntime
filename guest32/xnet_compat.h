@@ -101,6 +101,8 @@ u_short WINAPI XSocketNTOHS(u_short value);
 // registry maps the original symbol names to these addresses, avoiding symbol
 // collisions with the host process's ws2_32 imports.
 extern "C" {
+int WINAPI XboxWSAStartup(WORD versionRequested, LPWSADATA data);
+int WINAPI XboxWSACleanup();
 WSAEVENT WINAPI XboxWSACreateEvent();
 BOOL WINAPI XboxWSACloseEvent(WSAEVENT eventHandle);
 BOOL WINAPI XboxWSASetEvent(WSAEVENT eventHandle);
