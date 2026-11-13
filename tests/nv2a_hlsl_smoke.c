@@ -15,7 +15,7 @@ static int compile_program(const char* name, const DWORD* words, int instruction
     memset(&program, 0, sizeof(program));
     d3d8_vsh_parse(words, instruction_count, &program);
 
-    if ((program.inputs_read & expected_inputs) != expected_inputs) {
+    if (program.inputs_read != expected_inputs) {
         fprintf(stderr, "FAIL: %s input-register metadata mismatch (got 0x%04X, expected mask 0x%04X)\n",
                 name, program.inputs_read, expected_inputs);
         return 1;
