@@ -854,3 +854,9 @@ Next: inspect first CI failure. In particular, the actual TLS variable access wi
 Run 43432653494: NXDK fixture build/upload PASS; kernel host build PASS; main build PASS; Win32 guest build PASS; networking tests PASS; ABI v2 export audit PASS; synthetic guest smoke PASS. The joint test did NOT run because the Windows loader build command failed before compilation:
 `c1xx: fatal error C1083: Cannot open source file: 'modules\\xbe_loader\\xbe_format.cpp': No such file or directory` and same for `modules\\xbe_loader\\xbe_loader.cpp`.
 Root cause: the workflow's cmd step received doubled backslash path separators from generated YAML. Changed the source/DEF paths to forward slashes in commit 12fe0c47be8b419d7fc98bc44168cf2ebcd9c65d. New CI run 43433022947: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43433022947 — IN PROGRESS. This is a workflow path failure, not an XBE or kernel execution result; no real-XBE PASS claimed.
+
+
+[2026-11-13 13:25 UTC] [Kernel team — second integration workflow failure]
+Run 43433022947: NXDK XBE build PASS; kernel x64 build PASS; main x64 build PASS; Win32 guest build PASS; network_smoke + guest_api_registry_smoke PASS; synthetic guest execution/TLS smoke PASS. The real-XBE integration test still did not run.
+Exact failure: PowerShell `MSVC dumpbin.exe not found`. The earlier global path-normalization fix changed the dumpbin path matcher from Windows separators to slash-only, so discovery failed despite VS toolchain being present. Changed matcher to separator-agnostic wildcard `*Hostx64*x64*dumpbin.exe` in commit 7bf1910b87b4bb838bcd39c899acb41393aec29f.
+No real XBE execution attempt occurred in this run; no PASS claimed. New CI run has been triggered by commit 7bf1910b87b4bb838bcd39c899acb41393aec29f.
