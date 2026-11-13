@@ -784,15 +784,23 @@ int main() {
 
     /* The actual MMIO DMA_PUT write must kick the same wrapped pusher
      * and publish DMA_GET after both sides of the ring have executed. */
-    if (write(0x3200u, 1u, 4u) != 0 ||
-        write(0x3204u, channel | (1u << 8), 4u) != 0 ||
-        write(0x3220u, 1u, 4u) != 0 ||
-        write(0x322Cu, 0x10u, 4u) != 0 ||
-        write(0x3244u, 16u, 4u) != 0 ||
-        write(0x3240u, 12u, 4u) != 0 ||
-        read(0x3244u, 4u) != 12u ||
-        read(0x401D90u, 4u) != 0xFF99AABBu) {
-        std::cerr << "FAIL: PFIFO MMIO DMA_PUT did not execute wrapped ring\\n";
+    const int push0Write = write(0x3200u, 1u, 4u);
+    const int push1Write = write(0x3204u, channel | (1u << 8), 4u);
+    const int dmaPushWrite = write(0x3220u, 1u, 4u);
+    const int dmaInstanceWrite = write(0x322Cu, 0x10u, 4u);
+    const int dmaGetWrite = write(0x3244u, 16u, 4u);
+    const int dmaPutWrite = write(0x3240u, 12u, 4u);
+    const uint64_t mmioGet = read(0x3244u, 4u);
+    const uint64_t mmioClearColor = read(0x401D90u, 4u);
+    if (push0Write != 0 || push1Write != 0 || dmaPushWrite != 0 ||
+        dmaInstanceWrite != 0 || dmaGetWrite != 0 || dmaPutWrite != 0 ||
+        mmioGet != 12u || mmioClearColor != 0xFF99AABBu) {
+        std::cerr << "FAIL: PFIFO MMIO DMA_PUT wrap"
+                  << " writes=" << push0Write << "," << push1Write << ","
+                  << dmaPushWrite << "," << dmaInstanceWrite << ","
+                  << dmaGetWrite << "," << dmaPutWrite
+                  << " GET=0x" << std::hex << mmioGet
+                  << " COLOR=0x" << mmioClearColor << std::dec << "\\n";
         stop();
         return 1;
     }
