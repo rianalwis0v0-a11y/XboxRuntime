@@ -106,3 +106,34 @@ verified XNet/XSocket interception and ABI work above.
 
 Build/runtime status: implementation committed, but no Windows/MSVC build or
 live DNS query test has been run in this environment.
+
+
+## XNet/XSocket compatibility layer (initial API tranche)
+
+Added guest-side ABI declarations and implementations in
+`guest32/xnet_compat.h/.cpp`, based on documented/original-Xbox-compatible
+structure definitions and cross-checked against public XNet/XSocket
+implementations. The current tranche includes:
+
+- `XNetStartup` / `XNetCleanup` with the 13-byte startup-parameter layout,
+  reference counting, and Winsock transport lifecycle.
+- `XNetDnsLookup` / `XNetDnsRelease` with the 40-byte `XNDNS` result layout.
+  Lookup currently completes synchronously and signals the supplied WSA event.
+  It uses the guest resolver, which tries Insignia DNS first for fully qualified
+  names.
+- Address conversion helpers and an Ethernet-link status placeholder.
+- Core `XSocket` create/close, bind/connect/listen/accept, shutdown, nonblocking,
+  send/receive, sendto/recvfrom, socket options, local/peer address queries, and
+  byte-order helpers. Guest-visible socket values are 32-bit tokens, not raw
+  host `SOCKET` handles.
+
+The `network_smoke` target now includes an XNet startup/DNS-event check and a
+real UDP loopback send/receive test through the XSocket wrapper.
+
+**Not complete:** This is an initial API tranche, not a full XDK port. QoS,
+secure address/key registration, NAT traversal, VDP voice encryption,
+broadcast/system-link emulation, overlapped I/O, and the remaining XNet/XSocket
+functions are not implemented. The current XBE loader still does not hook
+statically linked XNet/XSocket code inside retail titles, so these routines
+are not yet automatically invoked by arbitrary XBEs. A passing build and
+runtime test are still required; no Windows/MSVC build has been run here.
