@@ -17,6 +17,7 @@ int main() {
         XboxNetCleanup();
         return 3;
     }
+    if (XboxNetSocketSetNonBlocking(udp, 1) != 0) { XboxNetSocketClose(tcp); XboxNetSocketClose(udp); XboxNetCleanup(); return 4; }
     XboxNetSocketClose(tcp);
     XboxNetSocketClose(udp);
     XboxNetCleanup();
