@@ -974,8 +974,6 @@ EmitIncrement $skippedVa
 EmitMovMemoryImmediate $progressVa 4
 EmitByte 0x31; EmitByte 0xC0
 EmitCheckEqual 0
-Write-HostEmitByte 0x31; EmitByte 0xC0
-EmitCheckEqual 0
 Write-Host "Generated diagnostic assertions: $script:checkIndex"
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
