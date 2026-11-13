@@ -860,3 +860,9 @@ Root cause: the workflow's cmd step received doubled backslash path separators f
 Run 43433022947: NXDK XBE build PASS; kernel x64 build PASS; main x64 build PASS; Win32 guest build PASS; network_smoke + guest_api_registry_smoke PASS; synthetic guest execution/TLS smoke PASS. The real-XBE integration test still did not run.
 Exact failure: PowerShell `MSVC dumpbin.exe not found`. The earlier global path-normalization fix changed the dumpbin path matcher from Windows separators to slash-only, so discovery failed despite VS toolchain being present. Changed matcher to separator-agnostic wildcard `*Hostx64*x64*dumpbin.exe` in commit 7bf1910b87b4bb838bcd39c899acb41393aec29f.
 No real XBE execution attempt occurred in this run; no PASS claimed. New CI run has been triggered by commit 7bf1910b87b4bb838bcd39c899acb41393aec29f.
+
+
+[2026-11-13 13:27 UTC] [Kernel team — third integration workflow failure and correction]
+Run 43433360326: NXDK fixture build/upload PASS; kernel host build PASS; main x64 build PASS; Win32 guest build PASS; network/API tests PASS; ABI v2 export check PASS; synthetic guest execution/TLS PASS. Joint real-XBE test still did not run.
+Exact failure remained `c1xx: fatal error C1083: Cannot open source file: 'modules/xbe_loader/xbe_format.cpp'` (and `xbe_loader.cpp`) after vcvars64 initialization. Path spelling is valid, but the MSVC setup step did not leave the shell at the repository root. Added explicit `cd /d "%GITHUB_WORKSPACE%"` immediately after vcvars64 in commit fb82396e0bae985fe6f0650f71ccf5df33d6941f.
+The run also confirmed dumpbin discovery is now successful. No real XBE execution attempt yet. New CI run triggered by fb82396e0bae985fe6f0650f71ccf5df33d6941f.
