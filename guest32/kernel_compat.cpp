@@ -554,6 +554,9 @@ extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectA
 extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    std::string dvdPath;
+    if (DvdRelativePath(oa->ObjectName, dvdPath))
+        return LONG(0xC00000A2u); // STATUS_MEDIA_WRITE_PROTECTED
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
@@ -661,7 +664,16 @@ extern "C" LONG __stdcall K_NtWriteFile(
     if (event) SetEvent(event);
     return 0;
 }
-extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
+extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){
+    GuestDvdFile dvdFile{};
+    if (FindDvdFile(h, dvdFile)) {
+        if (io) { io->Status = 0; io->Information = 0; }
+        return 0;
+    }
+    BOOL ok=FlushFileBuffers(h);
+    if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}
+    return ok?0:LONG(0xC0000001u);
+}
 
 // NT FILE_INFORMATION_CLASS values used by retail Xbox titles.
 struct GuestFileBasicInformation {
