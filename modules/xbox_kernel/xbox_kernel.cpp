@@ -76,15 +76,13 @@ bool ModuleDirectory(std::wstring& directory) {
     return true;
 }
 bool RuntimeEepromPath(std::wstring& path) {
-    wchar_t windows[32768]{};
-    const UINT length = GetWindowsDirectoryW(windows, _countof(windows));
-    if (!length || length >= _countof(windows)) return false;
-    std::wstring root(windows, length);
-    const std::size_t slash = root.find_last_of(L"\\/");
-    if (slash == std::wstring::npos) return false;
-    root.resize(slash);
-    path = root + L"\\XboxRuntime\\eeprom.bin";
-    const std::wstring directory = root + L"\\XboxRuntime";
+    wchar_t localAppData[32768]{};
+    const DWORD length = GetEnvironmentVariableW(
+        L"LOCALAPPDATA", localAppData, _countof(localAppData));
+    if (!length || length >= _countof(localAppData)) return false;
+    const std::wstring directory =
+        std::wstring(localAppData, length) + L"\\XboxRuntime";
+    path = directory + L"\\eeprom.bin";
     if (!CreateDirectoryW(directory.c_str(), nullptr) &&
         GetLastError() != ERROR_ALREADY_EXISTS)
         return false;
