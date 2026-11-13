@@ -127,6 +127,8 @@ extern "C" int __cdecl XBE_RegisterExecutionBackend(
     std::lock_guard<std::mutex> guard(g_lock);
     if (!g_initialized || g_imageActive) return 2;
     g_backend = *backend;
+    g_backendV2 = {};
+    g_useBackendV2 = false;
     return 0;
 }
 
