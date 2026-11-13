@@ -20,6 +20,7 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "xdvdfs.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -37,6 +38,17 @@ std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
 std::mutex g_eepromMutex;
 std::mutex g_fileIoMutex;
+XDVDFS_VOLUME_INFO g_dvdInfo{};
+bool g_dvdReady = false;
+struct GuestDvdFile {
+    std::string path;
+    uint32_t size = 0;
+    uint32_t startSector = 0;
+    uint8_t attributes = 0;
+    uint64_t position = 0;
+};
+std::mutex g_dvdFileMutex;
+std::unordered_map<HANDLE, GuestDvdFile> g_dvdFiles;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
@@ -2218,8 +2230,39 @@ void XboxKernelFlushEeprom() {
     CloseHandle(f);
 }
 
-void XboxKernelSetTitlePath(const wchar_t* path){
-    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
+void XboxKernelSetTitlePath(const wchar_t* path) {
+    g_titleDirectory.clear();
+    if (!path) return;
+    g_titleDirectory = path;
+    const size_t separator = g_titleDirectory.find_last_of(L"\\/");
+    if (separator != std::wstring::npos) g_titleDirectory.resize(separator);
+}
+
+bool XboxKernelMountDvdImage(const wchar_t* path) {
+    if (!path || !*path || g_dvdReady) return false;
+    if (::ModuleStart() != 0) return false;
+    if (XDVDFS_OpenImage(path, &g_dvdInfo) != 0) {
+        ::ModuleStop();
+        g_dvdInfo = {};
+        return false;
+    }
+    g_dvdReady = true;
+    OutputDebugStringW(L"[XboxKernel] XDVDFS disc image mounted in guest process.\\n");
+    return true;
+}
+
+void XboxKernelUnmountDvdImage() {
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        for (const auto& item : g_dvdFiles) CloseHandle(item.first);
+        g_dvdFiles.clear();
+    }
+    if (g_dvdReady) {
+        XDVDFS_CloseImage();
+        ::ModuleStop();
+        g_dvdReady = false;
+        g_dvdInfo = {};
+    }
 }
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
