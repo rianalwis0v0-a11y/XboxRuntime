@@ -789,6 +789,7 @@ EmitCheckEqual 0
 EmitCallImport 103
 EmitCheckEqual 0
 EmitCallImport 129
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0xC0
 EmitCheckEqual 0
 EmitCallImport 103
 EmitCheckEqual 2
@@ -799,6 +800,7 @@ EmitCheckEqual 0
 EmitCallImport 101
 EmitCallImport 122
 EmitCallImport 130
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0xC0
 EmitCheckEqual 0
 EmitCallImport 103
 EmitCheckEqual 1
@@ -942,6 +944,7 @@ EmitPush 2147483648
 EmitPush $directoryHandleVa
 EmitCallImport 202
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 21
 EmitPush 1
 EmitPush 0
 EmitPush 1
