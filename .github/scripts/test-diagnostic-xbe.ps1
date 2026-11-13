@@ -966,7 +966,7 @@ Put32 0x60B0 0
 Put32 0x60B4 0
 Put32 0x60B8 0
 $guestPathBytes.CopyTo($b,0x6100)
-$directoryPath = "\\Device\\Cdrom0"
+$directoryPath = "\Device\Cdrom0"
 $directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
 $directoryPathLength = [uint32]($directoryPath.Length * 2)
 Put32 0x6200 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
