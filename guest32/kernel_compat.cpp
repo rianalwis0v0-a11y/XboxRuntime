@@ -1131,7 +1131,8 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
             LARGE_INTEGER allocation{};
             allocation.QuadPart =
                 (static_cast<LONGLONG>(child.size) + 2047) & ~LONGLONG(2047);
-            ULONG attributes = 0;
+            // XDVDFS is mounted as read-only optical media.
+            ULONG attributes = FILE_ATTRIBUTE_READONLY;
             if (child.attributes & XDVDFS_ATTR_DIRECTORY) attributes |= FILE_ATTRIBUTE_DIRECTORY;
             if (child.attributes & XDVDFS_ATTR_READONLY) attributes |= FILE_ATTRIBUTE_READONLY;
             if (child.attributes & XDVDFS_ATTR_HIDDEN) attributes |= FILE_ATTRIBUTE_HIDDEN;
