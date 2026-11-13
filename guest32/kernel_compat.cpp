@@ -518,7 +518,7 @@ static LONG OpenDvdFile(HANDLE* output, const std::string& path,
         isDirectory = (info.attributes & XDVDFS_ATTR_DIRECTORY) != 0;
     }
 
-    HANDLE handle = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HANDLE handle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     if (!handle) return statusInsufficientResources;
     GuestDvdFile file{};
     file.path = path;
