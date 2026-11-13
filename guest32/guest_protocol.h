@@ -44,9 +44,12 @@ struct XboxGuestExitReply {
     std::uint32_t status;
     std::uint32_t exitCode;
     std::uint32_t tlsIndexCleared;
+    std::uint32_t exceptionInstruction;
+    std::uint32_t accessType;
+    std::uint32_t faultAddress;
 };
 
 static_assert(sizeof(XboxGuestHello) == 20, "guest hello wire size");
 static_assert(sizeof(XboxGuestCommandMessage) == 40, "guest command wire size");
 static_assert(sizeof(XboxGuestCommandReply) == 12, "guest reply wire size");
-static_assert(sizeof(XboxGuestExitReply) == 20, "guest exit reply wire size");
+static_assert(sizeof(XboxGuestExitReply) == 32, "guest exit reply wire size");
