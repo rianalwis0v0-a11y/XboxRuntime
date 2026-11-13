@@ -41,7 +41,16 @@ static int compile_program(const DWORD* instructions, unsigned count,
         (program.insns[0].mac_op != NV2A_VSH_MAC_MAD ||
          program.insns[0].mac_src[0].reg_type != NV2A_VSH_REG_TEMP ||
          program.insns[0].mac_src[1].reg_type != NV2A_VSH_REG_INPUT ||
+         program.insns[0].mac_src[1].negate != 1 ||
+         program.insns[0].mac_src[1].swizzle.x != 3 ||
+         program.insns[0].mac_src[1].swizzle.y != 2 ||
+         program.insns[0].mac_src[1].swizzle.z != 1 ||
+         program.insns[0].mac_src[1].swizzle.w != 0 ||
          program.insns[0].mac_src[2].reg_type != NV2A_VSH_REG_CONST ||
+         program.insns[0].mac_src[2].swizzle.x != 0 ||
+         program.insns[0].mac_src[2].swizzle.y != 1 ||
+         program.insns[0].mac_src[2].swizzle.z != 2 ||
+         program.insns[0].mac_src[2].swizzle.w != 3 ||
          program.inputs_read != (1u << 2) ||
          program.insns[0].mac_dst.output_reg != NV2A_VSH_OUT_POS ||
          program.insns[0].mac_dst.output_write_mask != 0xFu)) {
@@ -70,6 +79,16 @@ static int compile_program(const DWORD* instructions, unsigned count,
     if (length <= 0 || length >= (int)sizeof(hlsl)) {
         fprintf(stderr, "FAIL: %s HLSL generation failed\\n", label);
         return 1;
+    }
+    if (strstr(label, "swizzle negate") &&
+        !strstr(hlsl, "(-v0.wzyx)")) {
+        fprintf(stderr, "FAIL: %s lost the A-source negate/swizzle\\n", label);
+        return 12;
+    }
+    if (strstr(label, "MAD A+B+C") &&
+        !strstr(hlsl, "(-v2.wzyx)")) {
+        fprintf(stderr, "FAIL: %s lost the B-source negate/swizzle\\n", label);
+        return 13;
     }
     if (strstr(label, "paired snapshot") &&
         (!strstr(hlsl, "R_pre[0] = R0;") ||
@@ -145,7 +164,9 @@ int main(void)
     /* MAC MAD R0 * v2 + c9 -> oPos exercises all three source fields. */
     memset(instruction, 0, sizeof(instruction));
     instruction[1] = (4u << 21) | (9u << 13) | (2u << 9);
-    instruction[2] = (1u << 26) | (2u << 11);
+    instruction[2] = (1u << 26) | (2u << 11) | (1u << 25) |
+                       (3u << 23) | (2u << 21) | (1u << 19) |
+                       (1u << 6) | (2u << 4) | (3u << 2);
     instruction[3] = (3u << 28) | (0xFu << 12) | (1u << 11) | 1u;
     if (compile_program(instruction, 1u, "NV2A MAD A+B+C") != 0)
         return 4;
@@ -157,6 +178,15 @@ int main(void)
                      (1u << 2) | 1u;
     if (compile_program(instruction, 1u, "NV2A ILU LIT C") != 0)
         return 5;
+
+    /* MAC MOV -v0.wzyx -> oPos tests A-source swizzle and negate fields. */
+    memset(instruction, 0, sizeof(instruction));
+    instruction[1] = (1u << 21) | (1u << 8) |
+                     (3u << 6) | (2u << 4) | (1u << 2);
+    instruction[2] = (2u << 26);
+    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
+    if (compile_program(instruction, 1u, "NV2A swizzle negate") != 0)
+        return 6;
 
     /* Paired MAC/ILU must both read R0 before MAC overwrites it. */
     memset(instruction, 0, sizeof(instruction));
