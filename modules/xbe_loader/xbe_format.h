@@ -54,6 +54,7 @@ struct Image {
     std::uint32_t certificateAddress = 0;
     std::uint32_t sectionCount = 0;
     std::uint32_t entryPoint = 0;
+    std::uint32_t tlsAddress = 0;
     std::uint32_t kernelThunkAddress = 0;
     bool debugImage = false;
     Section sections[kMaximumSections]{};
