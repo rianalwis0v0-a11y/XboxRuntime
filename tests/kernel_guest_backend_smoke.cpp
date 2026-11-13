@@ -95,7 +95,8 @@ int main() {
     constexpr std::uint32_t tlsCallbacksOffset = 0x3200u;
     constexpr std::uint32_t attachMarkerOffset = 0x3300u;
     constexpr std::uint32_t detachMarkerOffset = 0x3304u;
-    constexpr std::uint32_t tlsCheckMarkerOffset = 0x3308u;\n    constexpr std::uint32_t tlsIndexMarkerOffset = 0x330Cu;
+    constexpr std::uint32_t tlsCheckMarkerOffset = 0x3308u;
+    constexpr std::uint32_t tlsIndexMarkerOffset = 0x330Cu;
     constexpr std::uint32_t tlsIndexVa = guestBase + tlsDirectoryOffset + 8u;
     std::uint32_t tlsDirectory[6] = {
         guestBase + tlsTemplateOffset,
@@ -141,6 +142,7 @@ int main() {
     emit8(0x64); emit8(0xA1); emit32(0x2Cu);                       // mov eax,fs:[2c]
     emit8(0x8B); emit8(0x0D); emit32(tlsIndexVa);                 // mov ecx,[tlsIndex]
     emit8(0x8B); emit8(0x04); emit8(0x88);                        // mov eax,[eax+ecx*4]
+    emit8(0x89); emit8(0x0D); emit32(guestBase + tlsIndexMarkerOffset); // save allocated TLS index
     emit8(0x81); emit8(0x38); emit32(templateValue);              // cmp [eax],template
     const std::size_t badTemplate = branch();
     emit8(0x83); emit8(0x78); emit8(0x04); emit8(0x00);           // cmp [eax+4],0
@@ -169,7 +171,8 @@ int main() {
     info.headerSize = headerSize;
     info.entryPoint = entryPoint;
     info.sectionCount = 1;
-    info.tlsAddress = guestBase + tlsDirectoryOffset;\n    info.kernelThunkAddress = 0; // No kernel imports in this minimal image.
+    info.tlsAddress = guestBase + tlsDirectoryOffset;
+    info.kernelThunkAddress = 0; // No kernel imports in this minimal image.
     info.nonKernelImportDirectoryAddress = 0;
 
     const int resolve = backend.resolveImports(image, &info, backend.context);
