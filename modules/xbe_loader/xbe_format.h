@@ -15,6 +15,7 @@ constexpr std::uint32_t kDebugEntryXor = 0x94859D4Bu;
 constexpr std::uint32_t kRetailThunkXor = 0x5B6D40B6u;
 constexpr std::uint32_t kDebugThunkXor = 0xEFB1F152u;
 constexpr std::uint32_t kMaximumSections = 96;
+constexpr std::uint32_t kMaximumImageSize = 512u * 1024u * 1024u;
 
 enum class Error {
     None = 0,
