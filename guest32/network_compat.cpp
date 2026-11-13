@@ -235,6 +235,27 @@ extern "C" int __cdecl XboxNetSocketShutdown(uint32_t handle, int how) {
     return ::shutdown(socket, how);
 }
 
+extern "C" int __cdecl XboxNetSocketGetName(uint32_t handle, void* rawAddress, uint32_t* length) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || !rawAddress || !length || *length < sizeof(sockaddr_in)) return -1;
+    int nativeLength = sizeof(sockaddr_in);
+    const int result = getsockname(socket, static_cast<sockaddr*>(rawAddress), &nativeLength);
+    if (result == 0) *length = static_cast<uint32_t>(nativeLength);
+    return result;
+}
+
+extern "C" int __cdecl XboxNetSocketSetOption(uint32_t handle, int level, int option, const char* value, int length) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || (!value && length) || length < 0) return -1;
+    return setsockopt(socket, level, option, value, length);
+}
+
+extern "C" int __cdecl XboxNetSocketGetOption(uint32_t handle, int level, int option, char* value, int* length) {
+    SOCKET socket = FindSocket(handle);
+    if (socket == INVALID_SOCKET || !value || !length) return -1;
+    return getsockopt(socket, level, option, value, length);
+}
+
 extern "C" int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET) return -1;
@@ -271,19 +292,19 @@ extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddres
     return StoreSocket(accepted);
 }
 
-extern "C" int32_t __cdecl XboxNetSocketSend(uint32_t handle, const void* data, uint32_t length) {
+extern "C" int32_t __cdecl XboxNetSocketSend(uint32_t handle, const void* data, uint32_t length, int flags) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
-    return ::send(socket, static_cast<const char*>(data), static_cast<int>(length), 0);
+    return ::send(socket, static_cast<const char*>(data), static_cast<int>(length), flags);
 }
 
-extern "C" int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capacity) {
+extern "C" int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capacity, int flags) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
-    return ::recv(socket, static_cast<char*>(data), static_cast<int>(capacity), 0);
+    return ::recv(socket, static_cast<char*>(data), static_cast<int>(capacity), flags);
 }
 
-extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t length, uint32_t ipv4, uint16_t port) {
+extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data, uint32_t length, uint32_t ipv4, uint16_t port, int flags) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
     sockaddr_in address{};
@@ -291,16 +312,16 @@ extern "C" int32_t __cdecl XboxNetSocketSendTo(uint32_t handle, const void* data
     address.sin_addr.s_addr = ipv4;
     address.sin_port = htons(port);
     return ::sendto(socket, static_cast<const char*>(data), static_cast<int>(length), 0,
-        reinterpret_cast<sockaddr*>(&address), sizeof(address));
+        reinterpret_cast<sockaddr*>(&address), sizeof(address), flags);
 }
 
-extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4, uint16_t* port) {
+extern "C" int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t capacity, uint32_t* ipv4, uint16_t* port, int flags) {
     SOCKET socket = FindSocket(handle);
     if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
     sockaddr_in address{};
     int addressLength = sizeof(address);
     int received = ::recvfrom(socket, static_cast<char*>(data), static_cast<int>(capacity), 0,
-        reinterpret_cast<sockaddr*>(&address), &addressLength);
+        reinterpret_cast<sockaddr*>(&address), &addressLength, flags);
     if (received >= 0) {
         if (ipv4) *ipv4 = address.sin_addr.s_addr;
         if (port) *port = ntohs(address.sin_port);
