@@ -161,7 +161,7 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
         }
     }
     if (adapter->PhysicalAddressLength >= sizeof(output->abEnet)) std::memcpy(output->abEnet, adapter->PhysicalAddress, sizeof(output->abEnet));
-    DWORD flags = 0x00000002u;
+    DWORD flags = adapter->Dhcpv4Enabled ? 0x00000002u : 0x00000001u;
     if (adapter->FirstGatewayAddress) flags |= 0x00000020u;
     if (adapter->FirstDnsServerAddress) flags |= 0x00000040u;
     return flags;
