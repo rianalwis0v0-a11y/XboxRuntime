@@ -29,7 +29,7 @@ namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
-static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0;
+static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0,g_headerSize=0,g_sectionCount=0;\nstatic HANDLE g_startupEvent=nullptr;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
@@ -2528,58 +2528,228 @@ void XboxKernelFlushEeprom() {
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
-bool XboxKernelResolveImports(const XboxKernelState& image){
-    g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
-    if(!g_image||!InImage(g_entry))return false;
-    const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
-    uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
-        // Some homebrew images have no kernel imports.
-        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return true;return false;
+bool XboxKernelResolveImports(const XboxKernelState& image) {
+    if (g_stubPage) {
+        VirtualFree(g_stubPage, 0, MEM_RELEASE);
+        g_stubPage = nullptr;
     }
-    g_stubPage=VirtualAlloc(nullptr,0x2000,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
-    if(!g_stubPage)return false;
-    uint32_t* table=reinterpret_cast<uint32_t*>(uintptr_t(thunk));
-    for(uint32_t i=0;i<kThunkMax;i++){
-        if(!InImage(thunk+i*4,4))return false;
-        uint32_t v=table[i];if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return true;}
-        if((v&0x80000000u)==0)return false;
-        uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;
-        void* target=DataFor(ordinal);
-        if(!target)target=StubFor(ordinal);
-        if(!target)return false;
-        table[i]=uint32_t(reinterpret_cast<uintptr_t>(target));
+    g_stubCount = 0;
+    g_image = reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));
+    g_base = image.imageBase;
+    g_size = image.imageSize;
+    g_headerSize = image.headerSize;
+    g_entry = image.entryPoint;
+    g_tls = image.tlsAddress;
+    g_sectionCount = image.sectionCount;
+    if (!g_image || !g_base || !g_size || !g_headerSize ||
+        !InImage(g_entry) || g_sectionCount == 0 || g_sectionCount > 96 ||
+        !InImage(g_base + 0x158, 4))
+        return false;
+
+    const uint32_t encoded = *reinterpret_cast<uint32_t*>(g_image + 0x158);
+    uint32_t thunk = 0;
+    if (!DecodeVa(encoded, kRetailThunk, thunk) &&
+        !DecodeVa(encoded, kDebugThunk, thunk)) {
+        // An absent kernel thunk table is valid only when the header field is zero.
+        return encoded == 0;
     }
-    return false;
+
+    g_stubPage = VirtualAlloc(nullptr, 0x2000, MEM_RESERVE | MEM_COMMIT,
+                              PAGE_EXECUTE_READWRITE);
+    if (!g_stubPage) return false;
+    uint32_t* table = reinterpret_cast<uint32_t*>(uintptr_t(thunk));
+    for (uint32_t i = 0; i < kThunkMax; ++i) {
+        if (!InImage(thunk + i * 4u, 4)) return false;
+        const uint32_t value = table[i];
+        if (value == 0) {
+            FlushInstructionCache(GetCurrentProcess(), g_stubPage, g_stubCount * 10u);
+            return true;
+        }
+        if ((value & 0x80000000u) == 0) return false;
+        const uint32_t ordinal = value & 0x7FFFFFFFu;
+        if (ordinal >= kThunkMax) return false;
+        void* target = DataFor(ordinal);
+        if (!target) target = StubFor(ordinal);
+        if (!target) return false;
+        table[i] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(target));
+    }
+    return false; // no terminating zero thunk within the bounded table
 }
-DWORD WINAPI XboxKernelStartXbe(void*){
-    if(!g_entry)return ERROR_INVALID_ADDRESS;
-    DWORD tlsIndex=TLS_OUT_OF_INDEXES;void* tlsBlock=nullptr;
-    if(g_tls){
-        struct TlsDirectory { uint32_t start,end,index,callbacks,zeroFill,characteristics; };
-        if(!InImage(g_tls,sizeof(TlsDirectory)))return ERROR_INVALID_ADDRESS;
-        auto*t=reinterpret_cast<TlsDirectory*>(uintptr_t(g_tls));
-        if(t->end<t->start||!InImage(t->start,t->end-t->start)||!InImage(t->index,4))return ERROR_INVALID_ADDRESS;
-        tlsIndex=TlsAlloc();if(tlsIndex==TLS_OUT_OF_INDEXES)return ERROR_NOT_ENOUGH_MEMORY;
-        uint64_t total=uint64_t(t->end-t->start)+t->zeroFill;
-        if(total>0x1000000){TlsFree(tlsIndex);return ERROR_INVALID_DATA;}
-        tlsBlock=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,size_t(total?total:1));
-        if(!tlsBlock){TlsFree(tlsIndex);return ERROR_NOT_ENOUGH_MEMORY;}
-        if(t->end>t->start)std::memcpy(tlsBlock,reinterpret_cast<void*>(uintptr_t(t->start)),t->end-t->start);
-        *reinterpret_cast<uint32_t*>(uintptr_t(t->index))=tlsIndex;
-        if(!TlsSetValue(tlsIndex,tlsBlock)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return GetLastError();}
-        if(t->callbacks){
-            if(!InImage(t->callbacks,4)){HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);return ERROR_INVALID_ADDRESS;}
-            auto callbacks=reinterpret_cast<uint32_t*>(uintptr_t(t->callbacks));
-            for(uint32_t i=0;i<64&&InImage(t->callbacks+i*4,4)&&callbacks[i];++i){
-                using Callback=void (NTAPI*)(void*,DWORD,void*);
-                reinterpret_cast<Callback>(uintptr_t(callbacks[i]))(g_image,DLL_PROCESS_ATTACH,nullptr);
+
+bool XboxKernelProtectImage() {
+    if (!g_image || !g_headerSize || !g_sectionCount ||
+        !InImage(g_base + 0x120, 4))
+        return false;
+    const uint32_t tableVa = *reinterpret_cast<uint32_t*>(g_image + 0x120);
+    const uint64_t tableBytes = uint64_t(g_sectionCount) * 56u;
+    if (!InImage(tableVa, static_cast<uint32_t>(tableBytes))) return false;
+
+#pragma pack(push, 1)
+    struct SectionProtection {
+        uint32_t flags, virtualAddress, virtualSize, rawAddress, rawSize;
+        uint32_t nameAddress, refs, head, tail;
+        uint8_t digest[20];
+    };
+#pragma pack(pop)
+    static_assert(sizeof(SectionProtection) == 56, "XBE section header size");
+    for (uint32_t i = 0; i < g_sectionCount; ++i) {
+        SectionProtection section{};
+        std::memcpy(&section,
+            reinterpret_cast<const void*>(uintptr_t(tableVa + i * 56u)),
+            sizeof(section));
+        if (!section.virtualSize || section.virtualAddress < g_base ||
+            uint64_t(section.virtualAddress) + section.virtualSize >
+                uint64_t(g_base) + g_size)
+            return false;
+        DWORD protection = (section.flags & 4u)
+            ? ((section.flags & 1u) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ)
+            : ((section.flags & 1u) ? PAGE_READWRITE : PAGE_READONLY);
+        const uint64_t first = uint64_t(section.virtualAddress) & ~uint64_t(0xFFFu);
+        const uint64_t last = (uint64_t(section.virtualAddress) +
+            section.virtualSize + 0xFFFu) & ~uint64_t(0xFFFu);
+        const uint64_t imageEnd = uint64_t(g_base) + g_size;
+        const uint64_t boundedFirst = (std::max)(first, uint64_t(g_base));
+        const uint64_t boundedLast = (std::min)(last, imageEnd);
+        if (boundedLast > boundedFirst) {
+            DWORD oldProtection = 0;
+            if (!VirtualProtect(reinterpret_cast<void*>(uintptr_t(boundedFirst)),
+                SIZE_T(boundedLast - boundedFirst), protection, &oldProtection))
+                return false;
+        }
+    }
+    DWORD oldProtection = 0;
+    return VirtualProtect(g_image, g_headerSize, PAGE_READONLY, &oldProtection) != FALSE;
+}
+
+void XboxKernelSetStartupEvent(HANDLE eventHandle) {
+    g_startupEvent = eventHandle;
+}
+
+void XboxKernelShutdownTitle() {
+    g_startupEvent = nullptr;
+    if (g_stubPage) {
+        VirtualFree(g_stubPage, 0, MEM_RELEASE);
+        g_stubPage = nullptr;
+    }
+    g_stubCount = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
+        for (auto& item : g_kernelObjects) if (item.second) CloseHandle(item.second);
+        g_kernelObjects.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_directorySearchMutex);
+        for (auto& item : g_directorySearches)
+            if (item.second.search != INVALID_HANDLE_VALUE) FindClose(item.second.search);
+        g_directorySearches.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_stringAllocationMutex);
+        for (void* allocation : g_stringAllocations)
+            if (allocation) HeapFree(GetProcessHeap(), 0, allocation);
+        g_stringAllocations.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_rwLockMapMutex);
+        g_rwLocks.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_dpcMutex);
+        g_dpcs.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_guestQueueMapMutex);
+        g_guestQueues.clear();
+    }
+    g_image = nullptr;
+    g_base = g_size = g_entry = g_tls = g_headerSize = g_sectionCount = 0;
+    g_titleDirectory.clear();
+}
+
+DWORD WINAPI XboxKernelStartXbe(void*) {
+    if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
+    DWORD tlsIndex = TLS_OUT_OF_INDEXES;
+    void* tlsBlock = nullptr;
+    uint32_t* callbacks = nullptr;
+    uint32_t callbackCount = 0;
+    struct TlsDirectory {
+        uint32_t start, end, index, callbacks, zeroFill, characteristics;
+    };
+    if (g_tls) {
+        if (!InImage(g_tls, sizeof(TlsDirectory))) return ERROR_INVALID_ADDRESS;
+        auto* tls = reinterpret_cast<TlsDirectory*>(uintptr_t(g_tls));
+        if (tls->end < tls->start ||
+            !InImage(tls->start, tls->end - tls->start) ||
+            !InImage(tls->index, 4))
+            return ERROR_INVALID_ADDRESS;
+        const uint64_t total = uint64_t(tls->end - tls->start) + tls->zeroFill;
+        if (total > 0x1000000u) return ERROR_INVALID_DATA;
+        tlsIndex = TlsAlloc();
+        if (tlsIndex == TLS_OUT_OF_INDEXES) return ERROR_NOT_ENOUGH_MEMORY;
+        tlsBlock = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                             size_t(total ? total : 1));
+        if (!tlsBlock) {
+            TlsFree(tlsIndex);
+            return ERROR_NOT_ENOUGH_MEMORY;
+        }
+        if (tls->end > tls->start)
+            std::memcpy(tlsBlock, reinterpret_cast<void*>(uintptr_t(tls->start)),
+                        tls->end - tls->start);
+        *reinterpret_cast<uint32_t*>(uintptr_t(tls->index)) = tlsIndex;
+        if (!TlsSetValue(tlsIndex, tlsBlock)) {
+            HeapFree(GetProcessHeap(), 0, tlsBlock);
+            TlsFree(tlsIndex);
+            return GetLastError();
+        }
+        if (tls->callbacks) {
+            if (!InImage(tls->callbacks, 4)) {
+                TlsSetValue(tlsIndex, nullptr);
+                HeapFree(GetProcessHeap(), 0, tlsBlock);
+                TlsFree(tlsIndex);
+                return ERROR_INVALID_ADDRESS;
+            }
+            callbacks = reinterpret_cast<uint32_t*>(uintptr_t(tls->callbacks));
+            bool terminated = false;
+            for (; callbackCount < 64; ++callbackCount) {
+                if (!InImage(tls->callbacks + callbackCount * 4u, 4)) break;
+                const uint32_t callback = callbacks[callbackCount];
+                if (!callback) { terminated = true; break; }
+                if (!InImage(callback, 1)) break;
+                using Callback = void (NTAPI*)(void*, DWORD, void*);
+                reinterpret_cast<Callback>(uintptr_t(callback))(
+                    g_image, DLL_PROCESS_ATTACH, nullptr);
+            }
+            if (!terminated) {
+                TlsSetValue(tlsIndex, nullptr);
+                HeapFree(GetProcessHeap(), 0, tlsBlock);
+                TlsFree(tlsIndex);
+                return ERROR_INVALID_ADDRESS;
             }
         }
     }
-    using Entry=void(__cdecl*)();
-    DWORD result=0;
-    __try { reinterpret_cast<Entry>(uintptr_t(g_entry))(); }
-    __except(EXCEPTION_EXECUTE_HANDLER){OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\n");result=GetExceptionCode();}
-    if(tlsIndex!=TLS_OUT_OF_INDEXES){TlsSetValue(tlsIndex,nullptr);if(tlsBlock)HeapFree(GetProcessHeap(),0,tlsBlock);TlsFree(tlsIndex);}
+
+    // The guest process signals readiness only after TLS has been initialized.
+    if (g_startupEvent) SetEvent(g_startupEvent);
+    DWORD result = 0;
+    using Entry = void (__cdecl*)();
+    __try {
+        reinterpret_cast<Entry>(uintptr_t(g_entry))();
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        OutputDebugStringW(L"[XboxKernel] XBE entry raised a structured exception.\\n");
+        result = GetExceptionCode();
+    }
+
+    // Detach callbacks run in reverse order before the thread TLS block is freed.
+    while (callbackCount) {
+        const uint32_t callback = callbacks[--callbackCount];
+        using Callback = void (NTAPI*)(void*, DWORD, void*);
+        reinterpret_cast<Callback>(uintptr_t(callback))(
+            g_image, DLL_PROCESS_DETACH, nullptr);
+    }
+    if (tlsIndex != TLS_OUT_OF_INDEXES) {
+        TlsSetValue(tlsIndex, nullptr);
+        if (tlsBlock) HeapFree(GetProcessHeap(), 0, tlsBlock);
+        TlsFree(tlsIndex);
+    }
     return result;
 }
