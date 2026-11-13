@@ -453,6 +453,113 @@ extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestI
     if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
 }
 extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
+
+// NT FILE_INFORMATION_CLASS values used by retail Xbox titles.
+struct GuestFileBasicInformation {
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    ULONG FileAttributes;
+};
+struct GuestFileStandardInformation {
+    LARGE_INTEGER AllocationSize, EndOfFile;
+    ULONG NumberOfLinks;
+    BOOLEAN DeletePending, Directory;
+};
+struct GuestFilePositionInformation { LARGE_INTEGER CurrentByteOffset; };
+struct GuestFileInternalInformation { LARGE_INTEGER IndexNumber; };
+struct GuestFileDispositionInformation { BOOLEAN DeleteFile; };
+struct GuestFileEndOfFileInformation { LARGE_INTEGER EndOfFile; };
+struct GuestFileNameInformation { ULONG FileNameLength; WCHAR FileName[1]; };
+
+static LONG FileStatusFromWin32(DWORD e) {
+    switch (e) {
+    case ERROR_FILE_NOT_FOUND: case ERROR_PATH_NOT_FOUND: return LONG(0xC0000034u);
+    case ERROR_ACCESS_DENIED: return LONG(0xC0000022u);
+    case ERROR_INVALID_HANDLE: return LONG(0xC0000008u);
+    case ERROR_INVALID_PARAMETER: return LONG(0xC000000Du);
+    case ERROR_DISK_FULL: return LONG(0xC000007Fu);
+    default: return LONG(0xC0000001u);
+    }
+}
+extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
+                                                       void* out, ULONG length, ULONG infoClass) {
+    if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
+    ULONG required = 0;
+    switch (infoClass) {
+    case 4: required = sizeof(GuestFileBasicInformation); break;
+    case 5: required = sizeof(GuestFileStandardInformation); break;
+    case 6: required = sizeof(GuestFileInternalInformation); break;
+    case 9: required = sizeof(ULONG); break;
+    case 14: required = sizeof(GuestFilePositionInformation); break;
+    default: return LONG(0xC0000003u);
+    }
+    if (length < required) return LONG(0xC0000004u);
+    std::memset(out, 0, length);
+    FILETIME creation{}, access{}, write{};
+    BY_HANDLE_FILE_INFORMATION native{};
+    if (!GetFileInformationByHandle(h, &native)) return FileStatusFromWin32(GetLastError());
+    auto toLarge = [](const FILETIME& ft) { ULARGE_INTEGER v{}; v.LowPart=ft.dwLowDateTime; v.HighPart=ft.dwHighDateTime; LARGE_INTEGER r{}; r.QuadPart=static_cast<LONGLONG>(v.QuadPart); return r; };
+    if (infoClass == 4) {
+        auto* p = static_cast<GuestFileBasicInformation*>(out);
+        p->CreationTime=toLarge(native.ftCreationTime); p->LastAccessTime=toLarge(native.ftLastAccessTime);
+        p->LastWriteTime=toLarge(native.ftLastWriteTime); p->ChangeTime=p->LastWriteTime;
+        p->FileAttributes=native.dwFileAttributes;
+    } else if (infoClass == 5) {
+        auto* p = static_cast<GuestFileStandardInformation*>(out);
+        LARGE_INTEGER size{};
+        if (!GetFileSizeEx(h, &size)) return FileStatusFromWin32(GetLastError());
+        p->EndOfFile=size; p->AllocationSize.QuadPart=(size.QuadPart+4095)&~LONGLONG(4095);
+        p->NumberOfLinks=native.nNumberOfLinks; p->Directory=(native.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)!=0;
+    } else if (infoClass == 6) {
+        static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
+            (static_cast<ULONGLONG>(native.nFileIndexHigh)<<32)|native.nFileIndexLow;
+    } else if (infoClass == 9) {
+        auto* p=static_cast<GuestFileNameInformation*>(out);
+        WCHAR path[MAX_PATH*4]{};
+        DWORD n=GetFinalPathNameByHandleW(h,path,static_cast<DWORD>(sizeof(path)/sizeof(path[0])),FILE_NAME_NORMALIZED);
+        if (!n || n>=sizeof(path)/sizeof(path[0])) return FileStatusFromWin32(GetLastError());
+        std::wstring name(path,n); const size_t slash=name.find_last_of(L"\\/");
+        if(slash!=std::wstring::npos) name.erase(0,slash+1);
+        const ULONG bytes=static_cast<ULONG>(name.size()*sizeof(WCHAR));
+        if(length<sizeof(ULONG)+bytes) return LONG(0xC0000004u);
+        p->FileNameLength=bytes; std::memcpy(p->FileName,name.data(),bytes);
+        required=sizeof(ULONG)+bytes;
+    } else {
+        LARGE_INTEGER zero{}, position{};
+        if (!SetFilePointerEx(h, zero, &position, FILE_CURRENT)) return FileStatusFromWin32(GetLastError());
+        static_cast<GuestFilePositionInformation*>(out)->CurrentByteOffset=position;
+    }
+    if(io){io->Status=0;io->Information=required;}
+    return 0;
+}
+extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
+                                                     void* in, ULONG length, ULONG infoClass) {
+    if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
+    BOOL ok=FALSE;
+    if(infoClass==4) {
+        if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
+        auto* p=static_cast<GuestFileBasicInformation*>(in);
+        FILETIME c{DWORD(p->CreationTime.QuadPart),DWORD(ULONGLONG(p->CreationTime.QuadPart)>>32)};
+        FILETIME a{DWORD(p->LastAccessTime.QuadPart),DWORD(ULONGLONG(p->LastAccessTime.QuadPart)>>32)};
+        FILETIME w{DWORD(p->LastWriteTime.QuadPart),DWORD(ULONGLONG(p->LastWriteTime.QuadPart)>>32)};
+        ok=SetFileTime(h,p->CreationTime.QuadPart?&c:nullptr,p->LastAccessTime.QuadPart?&a:nullptr,p->LastWriteTime.QuadPart?&w:nullptr);
+        if(ok && p->FileAttributes) ok=SetFileAttributesW(L"",p->FileAttributes); // attributes require a path; timestamps are still applied.
+    } else if(infoClass==13) {
+        if(length<sizeof(GuestFileDispositionInformation)) return LONG(0xC0000004u);
+        FILE_DISPOSITION_INFO native{}; native.DeleteFile=static_cast<GuestFileDispositionInformation*>(in)->DeleteFile;
+        ok=SetFileInformationByHandle(h,FileDispositionInfo,&native,sizeof(native));
+    } else if(infoClass==14) {
+        if(length<sizeof(GuestFilePositionInformation)) return LONG(0xC0000004u);
+        LARGE_INTEGER position=static_cast<GuestFilePositionInformation*>(in)->CurrentByteOffset;
+        ok=SetFilePointerEx(h,position,nullptr,FILE_BEGIN);
+    } else if(infoClass==20) {
+        if(length<sizeof(GuestFileEndOfFileInformation)) return LONG(0xC0000004u);
+        LARGE_INTEGER size=static_cast<GuestFileEndOfFileInformation*>(in)->EndOfFile;
+        ok=SetFilePointerEx(h,size,nullptr,FILE_BEGIN) && SetEndOfFile(h);
+    } else return LONG(0xC0000003u);
+    if(!ok){LONG status=FileStatusFromWin32(GetLastError());if(io){io->Status=status;io->Information=0;}return status;}
+    if(io){io->Status=0;io->Information=0;}
+    return 0;
+}
 extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
@@ -1478,6 +1585,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_free_vm
         cmp eax, 238
         je nt_yield
+        cmp eax, 211
+        je nt_query_information_file
+        cmp eax, 226
+        je nt_set_information_file
         cmp eax, 190
         je nt_create_file
         cmp eax, 195
@@ -1747,6 +1858,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_alloc_vm: jmp K_NtAllocateVirtualMemory
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
+    nt_query_information_file: jmp K_NtQueryInformationFile
+    nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
     nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
