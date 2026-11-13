@@ -29,7 +29,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,23,45,50,53,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$ordinals = @(8,14,17,23,32,33,34,45,50,53,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -538,6 +538,37 @@ EmitPush 256
 EmitPushMemory $systemMemoryVa
 EmitCallImport 172
 EmitCheckNonZero
+
+# Interlocked doubly-linked list operations use a guest spin lock.
+$listHeadVa = [uint32]($reportVa + 0x300)
+$listEntryAVa = [uint32]($reportVa + 0x310)
+$listEntryBVa = [uint32]($reportVa + 0x320)
+$listLockVa = [uint32]($reportVa + 0x330)
+EmitMovMemoryImmediate $listHeadVa $listHeadVa
+EmitMovMemoryImmediate ([uint32]($listHeadVa + 4)) $listHeadVa
+EmitMovMemoryImmediate $listLockVa 0
+EmitPush $listLockVa
+EmitPush $listEntryAVa
+EmitPush $listHeadVa
+EmitCallImport 32
+EmitCheckEqual 0
+EmitPush $listLockVa
+EmitPush $listEntryBVa
+EmitPush $listHeadVa
+EmitCallImport 33
+EmitCheckEqual $listEntryAVa
+EmitPush $listLockVa
+EmitPush $listHeadVa
+EmitCallImport 34
+EmitCheckEqual $listEntryAVa
+EmitPush $listLockVa
+EmitPush $listHeadVa
+EmitCallImport 34
+EmitCheckEqual $listEntryBVa
+EmitPush $listLockVa
+EmitPush $listHeadVa
+EmitCallImport 34
+EmitCheckEqual 0
 
 # Interlocked singly-linked list push, pop, and flush.
 $slistHeaderVa = [uint32]($reportVa + 0x280)
