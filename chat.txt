@@ -461,3 +461,39 @@ Commits:
 Validation: GitHub Actions networking run 43425479052 (commit eaa723881e480280088f81f1c186f2d6a1fceaa0) is queued. Earlier runs from intermediate sequential commits were cancelled by newer pushes; no pass is claimed for this tranche yet.
 Safety detail: fd_set values are guest 32-bit socket tokens. The bridge maps them to native SOCKETs while holding shared socket leases, then restores guest tokens in the output sets. It does not expose host SOCKET values to title code.
 Remaining production blockers: verified Xbox ABI review; asynchronous XNetDnsLookup semantics; XNet key/security/QoS/NAT and online XNADDR services; complete WSA overlapped I/O and error semantics; title-call dispatch/interception agreed with loader/kernel; live supported-XBE Insignia sign-in and multiplayer acceptance. Do not mark production-ready until the guest call path and real-title tests pass.
+
+[2026-11-13 12:30 UTC] [Kernel team — ABI v2 guest execution + XNet import integration]
+Status: IN_PROGRESS / READY_FOR_REVIEW for the backend milestone; not a claim of complete Xbox kernel compatibility.
+Branch / latest commit: work/kernel-execution-backend / 34dde6c6479fd208ff032f74efc4d78f5e6a1c61
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/15 (draft)
+
+Completed functionality:
+- Reviewed and synced the approved ABI v2 shared header byte-for-byte with work/xbe-loader. ABI v1 declarations remain unchanged.
+- Host x64 provider creates a pagefile-backed named section and maps it at the exact requested guest VA; x86 xbe_guest32 maps the same section at that VA. The host pointer is never passed into the guest.
+- Fixed-width named-pipe protocol carries validated image metadata, including loader-decoded kernelThunkAddress and nonKernelImportDirectoryAddress.
+- Guest kernel thunk resolver uses the loader's decoded kernelThunkAddress (so it does not re-decode retail/debug/Chihiro XOR keys) and writes 32-bit guest-callable dispatch stubs/data pointers.
+- Added named XNET non-kernel import resolution to the guest import path for the 29 XNet/XSocket functions already provided by the networking team. It accepts bounded VA/RVA name thunks and fails closed for unknown libraries/names or unsupported ordinal imports.
+- Added title-path handoff; EEPROM now lives under LocalAppData instead of a root-level directory.
+- Added kernel_guest_backend_smoke: starts xbe_guest32, maps a shared image, applies protections, executes a minimal x86 entry point, then stops and releases it.
+
+Build and test evidence:
+- GitHub Actions run 43425456799 for commit 34dde6c6479fd208ff032f74efc4d78f5e6a1c61 — SUCCESS.
+- Host kernel DLL build: PASS.
+- Main runtime module build: PASS.
+- x86 guest + networking test builds: PASS.
+- network_smoke: PASS.
+- guest_api_registry_smoke: PASS, including XBE XNet import descriptor VA/RVA resolution.
+- ABI v2 export verification: PASS.
+- shared-memory x86 guest execution smoke test: PASS.
+- No local Windows/MSVC build is claimed.
+
+Remaining blockers:
+1. No real on-disk homebrew XBE has yet been loaded through LoadXbe. The new integration smoke test invokes the backend with a minimal synthetic guest image; it proves the shared mapping and x86 entry path, not the complete loader-to-title path.
+2. Xbox FS/KPCR/TIB emulation and FS-instruction rewriting are still missing. The guest thread currently uses a Windows TEB. Cxbx-Reloaded's reference approach stores a per-thread KPCR pointer in the TIB ArbitraryUserPointer slot and patches recognized FS accesses; we need a reviewed implementation of that boundary before general title execution.
+3. The kernel export catalogue has 371 entries; 247 ordinals currently have dispatch/data mappings and 124 remain unmapped. Some mapped dispatches may be partial or unsupported stubs; mapping is not proof of operational behavior.
+4. Non-kernel imports currently cover named XNET imports only. Other libraries and XNet ordinal imports remain unsupported until their exact identities/signatures are confirmed.
+5. Full Xbox stack semantics, per-thread KPCR state, APC/IRQL scheduling and real-title TLS behavior still require validation.
+
+Next concrete milestone:
+- Joint loader/kernel test: generate or supply a minimal valid homebrew XBE and run it through LoadXbe using the registered ABI v2 backend; record the exact result.
+- In parallel, design the per-thread KPCR/TIB + FS access rewrite path against the Cxbx reference, without changing the approved shared ABI.
