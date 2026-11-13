@@ -19,7 +19,26 @@ add_subdirectory(modules/fatx)
 add_subdirectory(modules/input)
 add_subdirectory(modules/audio)
 add_subdirectory(modules/xdvdfs)
-add_subdirectory(guest32)
+# The host and NV2A MMIO hook are x64, while Xbox title code must run in
+# a native x86 process. Build the guest with a nested Win32 generator so the
+# two architectures never get mixed in one linker invocation.
+include(ExternalProject)
+ExternalProject_Add(xbe_guest32_external
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/guest32"
+    BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/guest32-build"
+    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+    CMAKE_GENERATOR_PLATFORM Win32
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target xbe_guest32
+    INSTALL_COMMAND
+        ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/out"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            <BINARY_DIR>/out/xbe_guest32.exe
+            "${CMAKE_BINARY_DIR}/out/xbe_guest32.exe"
+    BUILD_BYPRODUCTS "${CMAKE_BINARY_DIR}/out/xbe_guest32.exe"
+)
+add_custom_target(xbe_guest32 ALL DEPENDS xbe_guest32_external)
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
 add_subdirectory(main)
@@ -102,7 +121,8 @@ add_test(NAME audio_smoke COMMAND audio_smoke)
 install(TARGETS boot
     RUNTIME DESTINATION .
 )
-install(TARGETS main nv2a insignia_dns xbe_loader fatx input audio xdvdfs xbe_guest32
+install(TARGETS main nv2a insignia_dns xbe_loader fatx input audio xdvdfs
     RUNTIME DESTINATION system
     LIBRARY DESTINATION system
 )
+install(FILES "${CMAKE_BINARY_DIR}/out/xbe_guest32.exe" DESTINATION system)
