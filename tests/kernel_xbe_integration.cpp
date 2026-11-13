@@ -15,6 +15,7 @@ using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
 using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*);
+using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
@@ -82,6 +83,8 @@ int wmain(int argc, wchar_t** argv) {
         GetProcAddress(kernel, "XBE_GetExecutionBackendV2"));
     auto waitForExit = reinterpret_cast<WaitForGuestExit>(
         GetProcAddress(kernel, "XboxKernelWaitForGuestExit"));
+    auto getReserveDiagnostic = reinterpret_cast<GetReserveDiagnostic>(
+        GetProcAddress(kernel, "XboxKernelGetLastReserveDiagnostic"));
     auto loaderStart = reinterpret_cast<ModuleStart>(GetProcAddress(loader, "ModuleStart"));
     auto loaderStop = reinterpret_cast<ModuleStop>(GetProcAddress(loader, "ModuleStop"));
     auto registerBackend = reinterpret_cast<RegisterBackendV2>(
@@ -89,7 +92,7 @@ int wmain(int argc, wchar_t** argv) {
     auto loadXbe = reinterpret_cast<LoadXbe>(GetProcAddress(loader, "LoadXbe"));
     auto unloadXbe = reinterpret_cast<UnloadXbe>(GetProcAddress(loader, "UnloadXbe"));
     if (!kernelStart || !kernelStop || !getBackend || !waitForExit ||
-        !loaderStart || !loaderStop || !registerBackend || !loadXbe || !unloadXbe) {
+        !getReserveDiagnostic || !loaderStart || !loaderStop || !registerBackend || !loadXbe || !unloadXbe) {
         std::fprintf(stderr, "FAIL: required kernel/loader export missing\n");
         FreeLibrary(loader);
         FreeLibrary(kernel);
