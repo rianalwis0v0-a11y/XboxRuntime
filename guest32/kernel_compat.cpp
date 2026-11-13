@@ -40,6 +40,21 @@ std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
 std::unordered_map<void*, HANDLE> g_kernelObjects;
+struct GuestDirectorySearch {
+    HANDLE search = INVALID_HANDLE_VALUE;
+    WIN32_FIND_DATAW current{};
+    bool currentValid = false;
+};
+std::mutex g_directorySearchMutex;
+std::unordered_map<HANDLE, GuestDirectorySearch> g_directorySearches;
+static void CloseGuestDirectorySearch(HANDLE file) {
+    std::lock_guard<std::mutex> lock(g_directorySearchMutex);
+    auto it = g_directorySearches.find(file);
+    if (it != g_directorySearches.end()) {
+        if (it->second.search != INVALID_HANDLE_VALUE) FindClose(it->second.search);
+        g_directorySearches.erase(it);
+    }
+}
 std::mutex g_rwLockMapMutex;
 std::unordered_map<void*, std::unique_ptr<SRWLOCK>> g_rwLocks;
 thread_local std::unordered_map<void*, bool> g_heldRwLocks;
@@ -751,7 +766,7 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
@@ -766,6 +781,131 @@ extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, cons
     return LONG(0xC0000008u);
 }
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+
+struct GuestFileDirectoryInformation {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    LARGE_INTEGER EndOfFile, AllocationSize;
+    ULONG FileAttributes;
+    ULONG FileNameLength;
+    CHAR FileName[1];
+};
+static_assert(offsetof(GuestFileDirectoryInformation, FileName) == 64,
+              "Xbox FILE_DIRECTORY_INFORMATION filename offset must be 0x40");
+static bool SkipDotDirectoryEntries(HANDLE search, WIN32_FIND_DATAW& data) {
+    while (wcscmp(data.cFileName, L".") == 0 || wcscmp(data.cFileName, L"..") == 0) {
+        if (!FindNextFileW(search, &data)) return false;
+    }
+    return true;
+}
+static LONG SetDirectoryIoStatus(GuestIoStatusBlock* io, LONG status, ULONG information = 0) {
+    if (io) { io->Status = status; io->Information = information; }
+    return status;
+}
+extern "C" LONG __stdcall K_NtQueryDirectoryFile(
+    HANDLE file, HANDLE event, void* apcRoutine, void*, GuestIoStatusBlock* io,
+    void* information, ULONG length, ULONG informationClass,
+    GuestAnsiString* fileMask, BOOLEAN restartScan) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG statusNotSupported = LONG(0xC00000BBu);
+    constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
+    constexpr LONG statusBufferOverflow = LONG(0x80000005u);
+    if (!file || file == INVALID_HANDLE_VALUE) return SetDirectoryIoStatus(io, statusInvalidHandle);
+    if (!information || informationClass != 1 || length < 64)
+        return SetDirectoryIoStatus(io, informationClass != 1 ? LONG(0xC0000003u) : statusInvalidParameter);
+    if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
+    if (fileMask && ((fileMask->Length && !fileMask->Buffer) ||
+                     fileMask->Length > fileMask->MaximumLength))
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    std::wstring directory;
+    WCHAR pathBuffer[32768]{};
+    const DWORD pathLength = GetFinalPathNameByHandleW(file, pathBuffer, _countof(pathBuffer), FILE_NAME_NORMALIZED);
+    if (!pathLength || pathLength >= _countof(pathBuffer))
+        return SetDirectoryIoStatus(io, statusInvalidHandle);
+    directory.assign(pathBuffer, pathLength);
+    if (directory.rfind(L"\\\\?\\UNC\\", 0) == 0)
+        directory = L"\\\\" + directory.substr(8);
+    else if (directory.rfind(L"\\\\?\\", 0) == 0)
+        directory.erase(0, 4);
+    if (directory.empty()) return SetDirectoryIoStatus(io, LONG(0xC000003Au));
+
+    std::wstring mask = L"*";
+    if (fileMask && fileMask->Length) {
+        const int chars = MultiByteToWideChar(CP_ACP, 0, fileMask->Buffer, fileMask->Length, nullptr, 0);
+        if (chars <= 0) return SetDirectoryIoStatus(io, statusInvalidParameter);
+        mask.resize(chars);
+        if (!MultiByteToWideChar(CP_ACP, 0, fileMask->Buffer, fileMask->Length, mask.data(), chars))
+            return SetDirectoryIoStatus(io, statusInvalidParameter);
+    }
+    if (directory.back() != L'\\' && directory.back() != L'/') directory.push_back(L'\\');
+    const std::wstring pattern = directory + mask;
+
+    std::lock_guard<std::mutex> lock(g_directorySearchMutex);
+    auto it = g_directorySearches.find(file);
+    if (restartScan && it != g_directorySearches.end()) {
+        if (it->second.search != INVALID_HANDLE_VALUE) FindClose(it->second.search);
+        g_directorySearches.erase(it);
+        it = g_directorySearches.end();
+    }
+    if (it == g_directorySearches.end()) {
+        GuestDirectorySearch state{};
+        state.search = FindFirstFileW(pattern.c_str(), &state.current);
+        if (state.search == INVALID_HANDLE_VALUE) {
+            const DWORD error = GetLastError();
+            if (error == ERROR_FILE_NOT_FOUND || error == ERROR_NO_MORE_FILES)
+                return SetDirectoryIoStatus(io, statusNoMoreFiles);
+            if (error == ERROR_PATH_NOT_FOUND)
+                return SetDirectoryIoStatus(io, LONG(0xC000003Au));
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+        }
+        state.currentValid = SkipDotDirectoryEntries(state.search, state.current);
+        if (!state.currentValid) {
+            FindClose(state.search);
+            return SetDirectoryIoStatus(io, statusNoMoreFiles);
+        }
+        it = g_directorySearches.emplace(file, std::move(state)).first;
+    } else if (!it->second.currentValid) {
+        if (!FindNextFileW(it->second.search, &it->second.current) ||
+            !SkipDotDirectoryEntries(it->second.search, it->second.current)) {
+            FindClose(it->second.search);
+            g_directorySearches.erase(it);
+            return SetDirectoryIoStatus(io, statusNoMoreFiles);
+        }
+        it->second.currentValid = true;
+    }
+
+    GuestDirectorySearch& state = it->second;
+    const size_t nameChars = wcslen(state.current.cFileName);
+    const int nameBytes = nameChars ? WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+        static_cast<int>(nameChars), nullptr, 0, nullptr, nullptr) : 0;
+    if (nameBytes < 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    const size_t required = offsetof(GuestFileDirectoryInformation, FileName) + static_cast<size_t>(nameBytes);
+    if (required > length) return SetDirectoryIoStatus(io, statusBufferOverflow, static_cast<ULONG>(required));
+
+    auto* out = static_cast<GuestFileDirectoryInformation*>(information);
+    std::memset(out, 0, required);
+    out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
+    out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
+    out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
+    out->ChangeTime = out->LastWriteTime;
+    ULARGE_INTEGER size{};
+    size.HighPart = state.current.nFileSizeHigh;
+    size.LowPart = state.current.nFileSizeLow;
+    out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+    out->AllocationSize = out->EndOfFile;
+    out->FileAttributes = state.current.dwFileAttributes;
+    out->FileNameLength = static_cast<ULONG>(nameBytes);
+    if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+        static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+        return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    state.currentValid = false;
+    if (event) SetEvent(event);
+    return SetDirectoryIoStatus(io, 0, static_cast<ULONG>(required));
+}
+
 
 static bool ParseUnsigned(const char* text, ULONG base, ULONG* value) {
     if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
@@ -1838,6 +1978,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_volume_information_file
         cmp eax, 229
         je nt_set_timer_ex
+        cmp eax, 207
+        je nt_query_directory_file
         cmp eax, 210
         je nt_query_full_attributes_file
         cmp eax, 211
@@ -2128,6 +2270,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_yield: jmp K_NtYieldExecution
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
     nt_set_timer_ex: jmp K_NtSetTimerEx
+    nt_query_directory_file: jmp K_NtQueryDirectoryFile
     nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile

@@ -53,6 +53,12 @@ These operate on the guest's circular doubly-linked `LIST_ENTRY` layout and acqu
 
 These implementations are newly routed, but still need guest-side behavioural coverage and comparison against retail Xbox timing/queue edge cases.
 
+## Directory enumeration
+
+- Ordinal 207, `NtQueryDirectoryFile`, supports synchronous single-entry `FileDirectoryInformation` queries against opened host-backed directory handles.
+- Xbox's directory record uses a 64-byte header and an ANSI filename. The adapter translates the handle path, applies an optional ANSI wildcard mask, skips `.` and `..`, preserves enumeration state between calls, and releases that state when `NtClose` closes the directory handle.
+- Event signaling and `IO_STATUS_BLOCK` completion are synchronous. Guest APC callbacks and other information classes are explicitly unsupported.
+
 ## I/O invalid-device dispatch
 
 - Ordinal 74, `IoInvalidDeviceRequest`, returns `STATUS_INVALID_DEVICE_REQUEST` (0xC0000010), the documented fallback status for an unsupported device request.
