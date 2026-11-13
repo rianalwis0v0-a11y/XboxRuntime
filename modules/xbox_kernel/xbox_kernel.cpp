@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -303,6 +304,27 @@ extern "C" void __cdecl ModuleStop() {
     StopGuestProcessLocked(g_context);
     ResetContextHandles(g_context);
     Log(L"Guest x86 kernel backend stopped.");
+}
+extern "C" std::uint32_t __cdecl XboxKernelGetGuestApiAddress(const char* symbolName) {
+    if (!symbolName) return 0;
+    const std::size_t length = std::strlen(symbolName);
+    if (!length || length >= sizeof(XboxGuestCommandMessage::symbolName)) return 0;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    BackendContext& context = g_context;
+    if (context.pipe == INVALID_HANDLE_VALUE || !context.process.hProcess ||
+        WaitForSingleObject(context.process.hProcess, 0) != WAIT_TIMEOUT)
+        return 0;
+    XboxGuestCommandMessage message{};
+    message.magic = XBOX_GUEST_PROTOCOL_MAGIC;
+    message.command = XboxGuestLookupApi;
+    std::memcpy(message.symbolName, symbolName, length);
+    XboxGuestCommandReply reply{};
+    if (!WriteExact(context.pipe, &message, sizeof(message)) ||
+        !ReadExact(context.pipe, &reply, sizeof(reply)) ||
+        reply.magic != XBOX_GUEST_PROTOCOL_MAGIC ||
+        reply.command != XboxGuestLookupApi || reply.status != ERROR_SUCCESS)
+        return 0;
+    return reply.value;
 }
 extern "C" int __cdecl XBE_GetExecutionBackendV2(XBE_EXECUTION_BACKEND_V2* backend) {
     if (!backend || backend->size < sizeof(XBE_EXECUTION_BACKEND_V2)) return 1;
