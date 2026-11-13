@@ -14,6 +14,9 @@
 #include <cwctype>
 #include <string>
 #include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <chrono>
 #include <array>
 #include <unordered_set>
 #include <unordered_map>
@@ -40,6 +43,24 @@ std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
 std::unordered_map<void*, HANDLE> g_kernelObjects;
+struct GuestDirectorySearch {
+    HANDLE search = INVALID_HANDLE_VALUE;
+    WIN32_FIND_DATAW current{};
+    bool currentValid = false;
+};
+std::mutex g_directorySearchMutex;
+std::unordered_map<HANDLE, GuestDirectorySearch> g_directorySearches;
+std::mutex g_symbolicLinkMutex;
+std::unordered_map<std::wstring, std::wstring> g_symbolicLinks;
+std::unordered_map<HANDLE, std::wstring> g_symbolicLinkHandles;
+static void CloseGuestDirectorySearch(HANDLE file) {
+    std::lock_guard<std::mutex> lock(g_directorySearchMutex);
+    auto it = g_directorySearches.find(file);
+    if (it != g_directorySearches.end()) {
+        if (it->second.search != INVALID_HANDLE_VALUE) FindClose(it->second.search);
+        g_directorySearches.erase(it);
+    }
+}
 std::mutex g_rwLockMapMutex;
 std::unordered_map<void*, std::unique_ptr<SRWLOCK>> g_rwLocks;
 thread_local std::unordered_map<void*, bool> g_heldRwLocks;
@@ -97,9 +118,25 @@ void StoreKernelObject(void* object, HANDLE handle) {
 DWORD KernelTimeout(const LARGE_INTEGER* timeout) {
     if (!timeout) return INFINITE;
     const LONGLONG ticks = timeout->QuadPart;
-    if (ticks >= 0) return 0;
-    const ULONGLONG ms = (ULONGLONG(-(ticks + 1)) + 1) / 10000ull;
-    return DWORD(ms > MAXDWORD ? MAXDWORD : ms);
+    ULONGLONG remaining100ns = 0;
+    if (ticks < 0) {
+        // Relative NT intervals are negative 100-ns units.
+        remaining100ns = ULONGLONG(-(ticks + 1)) + 1;
+    } else if (ticks > 0) {
+        // Absolute NT time is measured from 1601-01-01, like FILETIME.
+        FILETIME ft{};
+        GetSystemTimeAsFileTime(&ft);
+        ULARGE_INTEGER now{};
+        now.LowPart = ft.dwLowDateTime;
+        now.HighPart = ft.dwHighDateTime;
+        const ULONGLONG deadline = static_cast<ULONGLONG>(ticks);
+        if (deadline <= now.QuadPart) return 0;
+        remaining100ns = deadline - now.QuadPart;
+    }
+    if (!remaining100ns) return 0;
+    // Round up: a positive sub-millisecond interval must not become a poll.
+    const ULONGLONG ms = (remaining100ns + 9999ull) / 10000ull;
+    return DWORD(ms > MAXDWORD - 1ull ? MAXDWORD - 1ull : ms);
 }
 void TrackStringAllocation(void* p) {
     if (!p) return;
@@ -171,17 +208,284 @@ void* DataFor(uint32_t ordinal){
 extern "C" void* __stdcall K_ExAllocatePool(uint32_t n){return HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,n?n:1);}
 extern "C" void* __stdcall K_ExAllocatePoolWithTag(uint32_t n,uint32_t){return K_ExAllocatePool(n);}
 extern "C" void __stdcall K_ExFreePool(void*p){if(p)HeapFree(GetProcessHeap(),0,p);}
+
+
+
 extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(GetProcessHeap(),0,p):0xFFFFFFFFu;}
 extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
 extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
 
 struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
+
+struct GuestDispatcherHeader {
+    UCHAR Type, Absolute, Size, Inserted;
+    LONG SignalState;
+    GuestListEntry WaitListHead;
+};
+struct GuestKQueue {
+    GuestDispatcherHeader Header;
+    GuestListEntry EntryListHead;
+    ULONG CurrentCount;
+    ULONG MaximumCount;
+    GuestListEntry ThreadListHead;
+};
+struct GuestQueueState {
+    std::mutex mutex;
+    std::condition_variable changed;
+};
+static std::mutex g_guestQueueMapMutex;
+static std::unordered_map<void*, std::shared_ptr<GuestQueueState>> g_guestQueues;
+static thread_local std::unordered_set<void*> g_activeGuestQueues;
+static void InitializeGuestList(GuestListEntry* head) {
+    head->Flink = head;
+    head->Blink = head;
+}
+static std::shared_ptr<GuestQueueState> GetGuestQueueState(GuestKQueue* queue, bool create) {
+    if (!queue) return {};
+    std::lock_guard<std::mutex> lock(g_guestQueueMapMutex);
+    auto it = g_guestQueues.find(queue);
+    if (it != g_guestQueues.end()) return it->second;
+    if (!create) return {};
+    auto state = std::make_shared<GuestQueueState>();
+    g_guestQueues.emplace(queue, state);
+    return state;
+}
+extern "C" void __stdcall K_KeInitializeQueue(GuestKQueue* queue, ULONG count) {
+    if (!queue) return;
+    auto state = GetGuestQueueState(queue, true);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    queue->Header.Type = 4; // QueueObject
+    queue->Header.Absolute = 0;
+    queue->Header.Size = static_cast<UCHAR>(sizeof(GuestKQueue) / sizeof(ULONG));
+    queue->Header.Inserted = 0;
+    queue->Header.SignalState = 0;
+    InitializeGuestList(&queue->Header.WaitListHead);
+    InitializeGuestList(&queue->EntryListHead);
+    queue->CurrentCount = 0;
+    queue->MaximumCount = count > 1 ? count : 1;
+    InitializeGuestList(&queue->ThreadListHead);
+    g_activeGuestQueues.erase(queue);
+}
+static LONG InsertGuestQueueEntry(GuestKQueue* queue, GuestListEntry* entry, bool atHead) {
+    if (!queue || !entry) return 0;
+    auto state = GetGuestQueueState(queue, true);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    GuestListEntry* head = &queue->EntryListHead;
+    const LONG previous = queue->Header.SignalState;
+    if (atHead) {
+        entry->Flink = head->Flink;
+        entry->Blink = head;
+        head->Flink->Blink = entry;
+        head->Flink = entry;
+    } else {
+        entry->Flink = head;
+        entry->Blink = head->Blink;
+        head->Blink->Flink = entry;
+        head->Blink = entry;
+    }
+    if (queue->Header.SignalState < LONG(0x7FFFFFFF)) ++queue->Header.SignalState;
+    state->changed.notify_one();
+    return previous;
+}
+extern "C" LONG __stdcall K_KeInsertQueue(GuestKQueue* queue, GuestListEntry* entry) {
+    return InsertGuestQueueEntry(queue, entry, false);
+}
+extern "C" LONG __stdcall K_KeInsertHeadQueue(GuestKQueue* queue, GuestListEntry* entry) {
+    return InsertGuestQueueEntry(queue, entry, true);
+}
+extern "C" GuestListEntry* __stdcall K_KeRemoveQueue(
+    GuestKQueue* queue, ULONG, const LARGE_INTEGER* timeout) {
+    if (!queue) return reinterpret_cast<GuestListEntry*>(uintptr_t(0xC000000Du));
+    auto state = GetGuestQueueState(queue, true);
+    std::unique_lock<std::mutex> lock(state->mutex);
+    if (g_activeGuestQueues.erase(queue)) {
+        if (queue->CurrentCount) --queue->CurrentCount;
+        state->changed.notify_all();
+    }
+    auto available = [&]() {
+        return queue->Header.SignalState > 0 &&
+               queue->EntryListHead.Flink != &queue->EntryListHead &&
+               queue->CurrentCount < queue->MaximumCount;
+    };
+    if (!available()) {
+        if (!timeout) {
+            state->changed.wait(lock, available);
+        } else {
+            const DWORD milliseconds = KernelTimeout(timeout);
+            if (!milliseconds || !state->changed.wait_for(
+                    lock, std::chrono::milliseconds(milliseconds), available))
+                return reinterpret_cast<GuestListEntry*>(uintptr_t(0x00000102u)); // STATUS_TIMEOUT
+        }
+    }
+    if (!available())
+        return reinterpret_cast<GuestListEntry*>(uintptr_t(0xC0000001u));
+    GuestListEntry* head = &queue->EntryListHead;
+    GuestListEntry* entry = head->Flink;
+    GuestListEntry* next = entry->Flink;
+    head->Flink = next;
+    next->Blink = head;
+    entry->Flink = nullptr;
+    entry->Blink = nullptr;
+    --queue->Header.SignalState;
+    ++queue->CurrentCount;
+    g_activeGuestQueues.insert(queue);
+    return entry;
+}
+
 static void GuestAcquireSpinLock(volatile LONG* lock) {
     while (InterlockedExchange(lock, 1) != 0) YieldProcessor();
 }
 static void GuestReleaseSpinLock(volatile LONG* lock) {
     MemoryBarrier();
     InterlockedExchange(lock, 0);
+}
+
+extern "C" LARGE_INTEGER __stdcall K_ExInterlockedAddLargeInteger(
+    LARGE_INTEGER* addend, LARGE_INTEGER increment, volatile LONG* lock) {
+    LARGE_INTEGER previous{};
+    if (!addend || !lock) return previous;
+    GuestAcquireSpinLock(lock);
+    previous = *addend;
+    addend->QuadPart += increment.QuadPart;
+    GuestReleaseSpinLock(lock);
+    return previous;
+}
+
+extern "C" void __fastcall K_ExInterlockedAddLargeStatistic(
+    LARGE_INTEGER* addend, ULONG increment) {
+    if (!addend) return;
+    volatile LONGLONG* target = &addend->QuadPart;
+    LONGLONG observed = *target;
+    for (;;) {
+        const LONGLONG desired = observed + static_cast<LONGLONG>(increment);
+        const LONGLONG actual = InterlockedCompareExchange64(target, desired, observed);
+        if (actual == observed) return;
+        observed = actual;
+    }
+}
+
+extern "C" LONGLONG __fastcall K_ExInterlockedCompareExchange64(
+    volatile LONGLONG* destination, const LONGLONG* exchange, const LONGLONG* comparand) {
+    if (!destination || !exchange || !comparand) return 0;
+    return InterlockedCompareExchange64(destination, *exchange, *comparand);
+}
+
+// Xbox KDEVICE_QUEUE/KDEVICE_QUEUE_ENTRY are 32-bit guest structures.
+// One host mutex serializes the queue family, including RemoveEntry (which
+// receives only an entry pointer and therefore cannot locate its queue lock).
+struct GuestDeviceQueue {
+    SHORT Type;
+    SHORT Size;
+    GuestListEntry DeviceListHead;
+    volatile LONG Lock;
+    UCHAR Busy;
+    UCHAR Reserved[3];
+};
+struct GuestDeviceQueueEntry {
+    GuestListEntry DeviceListEntry;
+    ULONG SortKey;
+    UCHAR Inserted;
+    UCHAR Reserved[3];
+};
+static std::mutex g_deviceQueueMutex;
+
+extern "C" void __stdcall K_KeInitializeDeviceQueue(GuestDeviceQueue* queue) {
+    if (!queue) return;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    queue->Type = 4;
+    queue->Size = sizeof(*queue);
+    queue->DeviceListHead.Flink = &queue->DeviceListHead;
+    queue->DeviceListHead.Blink = &queue->DeviceListHead;
+    queue->Lock = 0;
+    queue->Busy = FALSE;
+    std::memset(queue->Reserved, 0, sizeof(queue->Reserved));
+}
+extern "C" BOOL __stdcall K_KeInsertDeviceQueue(GuestDeviceQueue* queue, GuestDeviceQueueEntry* entry) {
+    if (!queue || !entry) return FALSE;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    if (entry->Inserted) return FALSE;
+    if (!queue->Busy) {
+        queue->Busy = TRUE;
+        return FALSE; // caller owns the device; entry was not queued
+    }
+    GuestListEntry* tail = queue->DeviceListHead.Blink;
+    entry->DeviceListEntry.Flink = &queue->DeviceListHead;
+    entry->DeviceListEntry.Blink = tail;
+    tail->Flink = &entry->DeviceListEntry;
+    queue->DeviceListHead.Blink = &entry->DeviceListEntry;
+    entry->Inserted = TRUE;
+    return TRUE;
+}
+extern "C" BOOL __stdcall K_KeInsertByKeyDeviceQueue(GuestDeviceQueue* queue, GuestDeviceQueueEntry* entry, ULONG key) {
+    if (!queue || !entry) return FALSE;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    if (entry->Inserted) return FALSE;
+    if (!queue->Busy) {
+        queue->Busy = TRUE;
+        return FALSE;
+    }
+    entry->SortKey = key;
+    GuestListEntry* cursor = queue->DeviceListHead.Flink;
+    while (cursor != &queue->DeviceListHead) {
+        auto* current = reinterpret_cast<GuestDeviceQueueEntry*>(cursor);
+        if (key < current->SortKey) break;
+        cursor = cursor->Flink;
+    }
+    entry->DeviceListEntry.Flink = cursor;
+    entry->DeviceListEntry.Blink = cursor->Blink;
+    cursor->Blink->Flink = &entry->DeviceListEntry;
+    cursor->Blink = &entry->DeviceListEntry;
+    entry->Inserted = TRUE;
+    return TRUE;
+}
+extern "C" GuestDeviceQueueEntry* __stdcall K_KeRemoveDeviceQueue(GuestDeviceQueue* queue) {
+    if (!queue) return nullptr;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    GuestListEntry* first = queue->DeviceListHead.Flink;
+    if (first == &queue->DeviceListHead) {
+        queue->Busy = FALSE;
+        return nullptr;
+    }
+    first->Flink->Blink = &queue->DeviceListHead;
+    queue->DeviceListHead.Flink = first->Flink;
+    auto* entry = reinterpret_cast<GuestDeviceQueueEntry*>(first);
+    entry->DeviceListEntry.Flink = nullptr;
+    entry->DeviceListEntry.Blink = nullptr;
+    entry->Inserted = FALSE;
+    return entry;
+}
+extern "C" GuestDeviceQueueEntry* __stdcall K_KeRemoveByKeyDeviceQueue(GuestDeviceQueue* queue, ULONG key) {
+    if (!queue) return nullptr;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    GuestListEntry* head = &queue->DeviceListHead;
+    GuestListEntry* selected = nullptr;
+    for (GuestListEntry* p = head->Flink; p != head; p = p->Flink) {
+        auto* entry = reinterpret_cast<GuestDeviceQueueEntry*>(p);
+        if (entry->SortKey >= key) { selected = p; break; }
+    }
+    if (!selected) selected = head->Flink;
+    if (selected == head) {
+        queue->Busy = FALSE;
+        return nullptr;
+    }
+    selected->Blink->Flink = selected->Flink;
+    selected->Flink->Blink = selected->Blink;
+    auto* entry = reinterpret_cast<GuestDeviceQueueEntry*>(selected);
+    entry->DeviceListEntry.Flink = nullptr;
+    entry->DeviceListEntry.Blink = nullptr;
+    entry->Inserted = FALSE;
+    return entry;
+}
+extern "C" BOOL __stdcall K_KeRemoveEntryDeviceQueue(GuestDeviceQueueEntry* entry) {
+    if (!entry) return FALSE;
+    std::lock_guard<std::mutex> guard(g_deviceQueueMutex);
+    if (!entry->Inserted || !entry->DeviceListEntry.Flink || !entry->DeviceListEntry.Blink) return FALSE;
+    entry->DeviceListEntry.Blink->Flink = entry->DeviceListEntry.Flink;
+    entry->DeviceListEntry.Flink->Blink = entry->DeviceListEntry.Blink;
+    entry->DeviceListEntry.Flink = nullptr;
+    entry->DeviceListEntry.Blink = nullptr;
+    entry->Inserted = FALSE;
+    return TRUE;
 }
 extern "C" GuestListEntry* __stdcall K_ExfInterlockedInsertHeadList(
     GuestListEntry* head, GuestListEntry* entry, volatile LONG* lock) {
@@ -241,12 +545,12 @@ extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return 
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
-extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t,BOOL, const LARGE_INTEGER* interval){
-    if(!interval){Sleep(0);return 0;}
-    LONGLONG ticks=interval->QuadPart;
-    if(ticks<0){ULONGLONG ms=ULONGLONG(-ticks)/10000ull;Sleep(DWORD(ms>MAXDWORD?MAXDWORD:ms));}
-    else Sleep(0);
-    return 0;
+extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t, BOOL alertable, const LARGE_INTEGER* interval) {
+    if (!interval) { SwitchToThread(); return 0; }
+    const DWORD timeout = KernelTimeout(interval);
+    const DWORD result = SleepEx(timeout, alertable ? TRUE : FALSE);
+    // STATUS_USER_APC is returned when an alertable delay is interrupted.
+    return result == WAIT_IO_COMPLETION ? LONG(0x000000C0u) : 0;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
     LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
@@ -270,6 +574,66 @@ extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
 struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
+static std::wstring CanonicalObjectName(const GuestUnicodeString* name) {
+    if (!name || !name->Buffer || !name->Length || (name->Length & 1)) return {};
+    std::wstring value(name->Buffer, name->Length / sizeof(wchar_t));
+    for (wchar_t& ch : value) ch = static_cast<wchar_t>(towlower(ch));
+    return value;
+}
+static void CloseGuestSymbolicLinkHandle(HANDLE handle) {
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    g_symbolicLinkHandles.erase(handle);
+}
+extern "C" LONG __stdcall K_IoCreateSymbolicLink(
+    const GuestUnicodeString* linkName, const GuestUnicodeString* deviceName) {
+    if (!linkName || !deviceName || !deviceName->Buffer || !deviceName->Length || (deviceName->Length & 1))
+        return LONG(0xC000000Du);
+    const std::wstring key = CanonicalObjectName(linkName);
+    if (key.empty()) return LONG(0xC0000033u);
+    const std::wstring target(deviceName->Buffer, deviceName->Length / sizeof(wchar_t));
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    if (g_symbolicLinks.find(key) != g_symbolicLinks.end()) return LONG(0xC0000035u);
+    g_symbolicLinks.emplace(key, target);
+    return 0;
+}
+extern "C" LONG __stdcall K_IoDeleteSymbolicLink(const GuestUnicodeString* linkName) {
+    const std::wstring key = CanonicalObjectName(linkName);
+    if (key.empty()) return LONG(0xC0000033u);
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    return g_symbolicLinks.erase(key) ? 0 : LONG(0xC0000034u);
+}
+extern "C" LONG __stdcall K_NtOpenSymbolicLinkObject(
+    HANDLE* out, ULONG, GuestObjectAttributes* oa) {
+    if (!out || !oa || !oa->ObjectName) return LONG(0xC000000Du);
+    const std::wstring key = CanonicalObjectName(oa->ObjectName);
+    if (key.empty()) return LONG(0xC0000033u);
+    std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+    if (g_symbolicLinks.find(key) == g_symbolicLinks.end()) return LONG(0xC0000034u);
+    HANDLE handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!handle) return LONG(0xC0000001u);
+    g_symbolicLinkHandles.emplace(handle, g_symbolicLinks.find(key)->second);
+    *out = handle;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtQuerySymbolicLinkObject(
+    HANDLE handle, GuestUnicodeString* output, ULONG* returnedLength) {
+    if (!output || !output->Buffer) return LONG(0xC000000Du);
+    std::wstring target;
+    {
+        std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
+        const auto opened = g_symbolicLinkHandles.find(handle);
+        if (opened == g_symbolicLinkHandles.end()) return LONG(0xC0000008u);
+        target = opened->second;
+    }
+    const ULONG required = static_cast<ULONG>(target.size() * sizeof(wchar_t));
+    if (returnedLength) *returnedLength = required;
+    if (output->MaximumLength < required) return LONG(0xC0000023u);
+    if (required) memcpy(output->Buffer, target.data(), required);
+    output->Length = static_cast<USHORT>(required);
+    if (output->MaximumLength >= required + sizeof(wchar_t))
+        output->Buffer[target.size()] = L'\\0';
+    return 0;
+}
 std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     if(!name||!name->Buffer||!name->Length)return {};
     std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
@@ -296,6 +660,69 @@ LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestI
 }
 extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
 extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+struct GuestFileNetworkOpenInformation {
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    LARGE_INTEGER AllocationSize, EndOfFile;
+    ULONG FileAttributes;
+};
+static LARGE_INTEGER FileTimeToLarge(const FILETIME& value) {
+    ULARGE_INTEGER v{};
+    v.LowPart = value.dwLowDateTime;
+    v.HighPart = value.dwHighDateTime;
+    LARGE_INTEGER result{};
+    result.QuadPart = static_cast<LONGLONG>(v.QuadPart);
+    return result;
+}
+extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
+    GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* out) {
+    if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
+        return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
+    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+    if (path.empty()) return LONG(0xC0000033u);
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) {
+        const DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
+            return LONG(0xC0000034u);
+        if (error == ERROR_ACCESS_DENIED) return LONG(0xC0000022u);
+        return LONG(0xC0000001u);
+    }
+    GuestFileNetworkOpenInformation value{};
+    value.CreationTime = FileTimeToLarge(data.ftCreationTime);
+    value.LastAccessTime = FileTimeToLarge(data.ftLastAccessTime);
+    value.LastWriteTime = FileTimeToLarge(data.ftLastWriteTime);
+    value.ChangeTime = value.LastWriteTime;
+    ULARGE_INTEGER size{};
+    size.HighPart = data.nFileSizeHigh;
+    size.LowPart = data.nFileSizeLow;
+    value.EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+    value.AllocationSize = value.EndOfFile;
+    value.FileAttributes = data.dwFileAttributes;
+    *out = value;
+    return 0;
+}
+
+extern "C" LONG __stdcall K_IoInvalidDeviceRequest(void*, void*) {
+    return LONG(0xC0000010u); // STATUS_INVALID_DEVICE_REQUEST
+}
+
+extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
+    if (context) RtlCaptureContext(context);
+}
+
+extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
+    if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+    if (path.empty()) return LONG(0xC0000033u);
+    if (DeleteFileW(path.c_str())) return 0;
+    const DWORD error = GetLastError();
+    if (error == ERROR_ACCESS_DENIED) return LONG(0xC0000022u);
+    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return LONG(0xC0000034u);
+    if (error == ERROR_DIR_NOT_EMPTY) return LONG(0xC0000101u);
+    if (error == ERROR_DIRECTORY) return LONG(0xC0000103u);
+    return LONG(0xC0000001u);
+}
 extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
     if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
     DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
@@ -307,17 +734,360 @@ extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestI
     if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
 }
 extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
-extern "C" LONG __stdcall K_NtClose(HANDLE h){return CloseHandle(h)?0:LONG(0xC0000008u);}
+
+// NT FILE_INFORMATION_CLASS values used by retail Xbox titles.
+struct GuestFileBasicInformation {
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    ULONG FileAttributes;
+};
+struct GuestFileStandardInformation {
+    LARGE_INTEGER AllocationSize, EndOfFile;
+    ULONG NumberOfLinks;
+    BOOLEAN DeletePending, Directory;
+};
+struct GuestFilePositionInformation { LARGE_INTEGER CurrentByteOffset; };
+struct GuestFileInternalInformation { LARGE_INTEGER IndexNumber; };
+struct GuestFileDispositionInformation { BOOLEAN DeleteFile; };
+struct GuestFileEndOfFileInformation { LARGE_INTEGER EndOfFile; };
+struct GuestFileNameInformation { ULONG FileNameLength; WCHAR FileName[1]; };
+
+static LONG FileStatusFromWin32(DWORD e) {
+    switch (e) {
+    case ERROR_FILE_NOT_FOUND: case ERROR_PATH_NOT_FOUND: return LONG(0xC0000034u);
+    case ERROR_ACCESS_DENIED: return LONG(0xC0000022u);
+    case ERROR_INVALID_HANDLE: return LONG(0xC0000008u);
+    case ERROR_INVALID_PARAMETER: return LONG(0xC000000Du);
+    case ERROR_DISK_FULL: return LONG(0xC000007Fu);
+    default: return LONG(0xC0000001u);
+    }
+}
+extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
+                                                       void* out, ULONG length, ULONG infoClass) {
+    if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
+    ULONG required = 0;
+    switch (infoClass) {
+    case 4: required = sizeof(GuestFileBasicInformation); break;
+    case 5: required = sizeof(GuestFileStandardInformation); break;
+    case 6: required = sizeof(GuestFileInternalInformation); break;
+    case 9: required = sizeof(ULONG); break;
+    case 14: required = sizeof(GuestFilePositionInformation); break;
+    default: return LONG(0xC0000003u);
+    }
+    if (length < required) return LONG(0xC0000004u);
+    std::memset(out, 0, required);
+    FILETIME creation{}, access{}, write{};
+    BY_HANDLE_FILE_INFORMATION native{};
+    if (!GetFileInformationByHandle(h, &native)) return FileStatusFromWin32(GetLastError());
+    auto toLarge = [](const FILETIME& ft) { ULARGE_INTEGER v{}; v.LowPart=ft.dwLowDateTime; v.HighPart=ft.dwHighDateTime; LARGE_INTEGER r{}; r.QuadPart=static_cast<LONGLONG>(v.QuadPart); return r; };
+    if (infoClass == 4) {
+        auto* p = static_cast<GuestFileBasicInformation*>(out);
+        p->CreationTime=toLarge(native.ftCreationTime); p->LastAccessTime=toLarge(native.ftLastAccessTime);
+        p->LastWriteTime=toLarge(native.ftLastWriteTime); p->ChangeTime=p->LastWriteTime;
+        p->FileAttributes=native.dwFileAttributes;
+    } else if (infoClass == 5) {
+        auto* p = static_cast<GuestFileStandardInformation*>(out);
+        LARGE_INTEGER size{};
+        if (!GetFileSizeEx(h, &size)) return FileStatusFromWin32(GetLastError());
+        p->EndOfFile=size; p->AllocationSize.QuadPart=(size.QuadPart+4095)&~LONGLONG(4095);
+        p->NumberOfLinks=native.nNumberOfLinks; p->Directory=(native.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)!=0;
+    } else if (infoClass == 6) {
+        static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
+            (static_cast<ULONGLONG>(native.nFileIndexHigh)<<32)|native.nFileIndexLow;
+    } else if (infoClass == 9) {
+        auto* p=static_cast<GuestFileNameInformation*>(out);
+        WCHAR path[MAX_PATH*4]{};
+        DWORD n=GetFinalPathNameByHandleW(h,path,static_cast<DWORD>(sizeof(path)/sizeof(path[0])),FILE_NAME_NORMALIZED);
+        if (!n || n>=sizeof(path)/sizeof(path[0])) return FileStatusFromWin32(GetLastError());
+        std::wstring name(path,n); const size_t slash=name.find_last_of(L"\\/");
+        if(slash!=std::wstring::npos) name.erase(0,slash+1);
+        const ULONG bytes=static_cast<ULONG>(name.size()*sizeof(WCHAR));
+        if(length<sizeof(ULONG)+bytes) return LONG(0xC0000004u);
+        p->FileNameLength=bytes; std::memcpy(p->FileName,name.data(),bytes);
+        required=sizeof(ULONG)+bytes;
+    } else {
+        LARGE_INTEGER zero{}, position{};
+        if (!SetFilePointerEx(h, zero, &position, FILE_CURRENT)) return FileStatusFromWin32(GetLastError());
+        static_cast<GuestFilePositionInformation*>(out)->CurrentByteOffset=position;
+    }
+    if(io){io->Status=0;io->Information=required;}
+    return 0;
+}
+extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
+                                                     void* in, ULONG length, ULONG infoClass) {
+    if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
+    BOOL ok=FALSE;
+    if(infoClass==4) {
+        if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
+        auto* p=static_cast<GuestFileBasicInformation*>(in);
+        FILETIME c{DWORD(p->CreationTime.QuadPart),DWORD(ULONGLONG(p->CreationTime.QuadPart)>>32)};
+        FILETIME a{DWORD(p->LastAccessTime.QuadPart),DWORD(ULONGLONG(p->LastAccessTime.QuadPart)>>32)};
+        FILETIME w{DWORD(p->LastWriteTime.QuadPart),DWORD(ULONGLONG(p->LastWriteTime.QuadPart)>>32)};
+        ok=SetFileTime(h,p->CreationTime.QuadPart?&c:nullptr,p->LastAccessTime.QuadPart?&a:nullptr,p->LastWriteTime.QuadPart?&w:nullptr);
+        if(ok && p->FileAttributes) {
+            WCHAR path[MAX_PATH*4]{};
+            DWORD n=GetFinalPathNameByHandleW(h,path,static_cast<DWORD>(sizeof(path)/sizeof(path[0])),FILE_NAME_NORMALIZED);
+            if(!n || n>=sizeof(path)/sizeof(path[0])) ok=FALSE;
+            else ok=SetFileAttributesW(path,p->FileAttributes);
+        }
+    } else if(infoClass==13) {
+        if(length<sizeof(GuestFileDispositionInformation)) return LONG(0xC0000004u);
+        FILE_DISPOSITION_INFO native{}; native.DeleteFile=static_cast<GuestFileDispositionInformation*>(in)->DeleteFile;
+        ok=SetFileInformationByHandle(h,FileDispositionInfo,&native,sizeof(native));
+    } else if(infoClass==14) {
+        if(length<sizeof(GuestFilePositionInformation)) return LONG(0xC0000004u);
+        LARGE_INTEGER position=static_cast<GuestFilePositionInformation*>(in)->CurrentByteOffset;
+        ok=SetFilePointerEx(h,position,nullptr,FILE_BEGIN);
+    } else if(infoClass==20) {
+        if(length<sizeof(GuestFileEndOfFileInformation)) return LONG(0xC0000004u);
+        LARGE_INTEGER size=static_cast<GuestFileEndOfFileInformation*>(in)->EndOfFile;
+        ok=SetFilePointerEx(h,size,nullptr,FILE_BEGIN) && SetEndOfFile(h);
+    } else return LONG(0xC0000003u);
+    if(!ok){LONG status=FileStatusFromWin32(GetLastError());if(io){io->Status=status;io->Information=0;}return status;}
+    if(io){io->Status=0;io->Information=0;}
+    return 0;
+}
+extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
+    HANDLE h, GuestIoStatusBlock* io, void* out, ULONG length, ULONG infoClass) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInfoLengthMismatch = LONG(0xC0000004u);
+    constexpr LONG statusBufferOverflow = LONG(0x80000005u);
+    if (!h || h == INVALID_HANDLE_VALUE || !out) return statusInvalidParameter;
+
+    WCHAR finalPath[MAX_PATH * 4]{};
+    const DWORD pathLength = GetFinalPathNameByHandleW(
+        h, finalPath, static_cast<DWORD>(_countof(finalPath)), FILE_NAME_NORMALIZED);
+    if (!pathLength || pathLength >= std::size(finalPath))
+        return FileStatusFromWin32(GetLastError());
+
+    WCHAR volumeRoot[MAX_PATH * 4]{};
+    if (!GetVolumePathNameW(finalPath, volumeRoot, static_cast<DWORD>(_countof(volumeRoot))))
+        return FileStatusFromWin32(GetLastError());
+
+    WCHAR volumeLabel[MAX_PATH]{};
+    WCHAR fileSystemName[MAX_PATH]{};
+    DWORD serial = 0, maximumComponent = 0, fileSystemFlags = 0;
+    if (!GetVolumeInformationW(volumeRoot, volumeLabel, static_cast<DWORD>(_countof(volumeLabel)),
+                               &serial, &maximumComponent, &fileSystemFlags,
+                               fileSystemName, static_cast<DWORD>(_countof(fileSystemName))))
+        return FileStatusFromWin32(GetLastError());
+
+    auto writeField = [out](ULONG offset, const void* value, ULONG bytes) {
+        std::memcpy(static_cast<uint8_t*>(out) + offset, value, bytes);
+    };
+    ULONG information = 0;
+    switch (infoClass) {
+    case 1: { // FileFsVolumeInformation
+        constexpr ULONG labelOffset = 18;
+        if (length < labelOffset) return statusInfoLengthMismatch;
+        const ULONG labelBytes = static_cast<ULONG>(wcslen(volumeLabel) * sizeof(WCHAR));
+        const ULONG copiedBytes = std::min(labelBytes, length - labelOffset) & ~ULONG(1);
+        LARGE_INTEGER creationTime{};
+        const ULONG labelLength = labelBytes;
+        const BOOLEAN supportsObjects = FALSE;
+        std::memset(out, 0, labelOffset + copiedBytes);
+        writeField(0, &creationTime, sizeof(creationTime));
+        writeField(8, &serial, sizeof(serial));
+        writeField(12, &labelLength, sizeof(labelLength));
+        writeField(16, &supportsObjects, sizeof(supportsObjects));
+        if (copiedBytes) writeField(labelOffset, volumeLabel, copiedBytes);
+        information = labelOffset + copiedBytes;
+        if (copiedBytes != labelBytes) {
+            if (io) { io->Status = statusBufferOverflow; io->Information = information; }
+            return statusBufferOverflow;
+        }
+        break;
+    }
+    case 3: { // FileFsSizeInformation
+        constexpr ULONG required = 24;
+        if (length < required) return statusInfoLengthMismatch;
+        DWORD sectorsPerCluster = 0, bytesPerSector = 0, freeClusters = 0, totalClusters = 0;
+        if (!GetDiskFreeSpaceW(volumeRoot, &sectorsPerCluster, &bytesPerSector,
+                               &freeClusters, &totalClusters))
+            return FileStatusFromWin32(GetLastError());
+        LARGE_INTEGER total{}; total.QuadPart = static_cast<LONGLONG>(totalClusters);
+        LARGE_INTEGER available{}; available.QuadPart = static_cast<LONGLONG>(freeClusters);
+        std::memset(out, 0, required);
+        writeField(0, &total, sizeof(total));
+        writeField(8, &available, sizeof(available));
+        writeField(16, &sectorsPerCluster, sizeof(sectorsPerCluster));
+        writeField(20, &bytesPerSector, sizeof(bytesPerSector));
+        information = required;
+        break;
+    }
+    case 4: { // FileFsDeviceInformation
+        constexpr ULONG required = 8;
+        if (length < required) return statusInfoLengthMismatch;
+        const ULONG deviceType = 7; // FILE_DEVICE_DISK
+        const ULONG characteristics = 0;
+        writeField(0, &deviceType, sizeof(deviceType));
+        writeField(4, &characteristics, sizeof(characteristics));
+        information = required;
+        break;
+    }
+    case 5: { // FileFsAttributeInformation
+        constexpr ULONG nameOffset = 12;
+        if (length < nameOffset) return statusInfoLengthMismatch;
+        const ULONG nameBytes = static_cast<ULONG>(wcslen(fileSystemName) * sizeof(WCHAR));
+        const ULONG copiedBytes = std::min(nameBytes, length - nameOffset) & ~ULONG(1);
+        std::memset(out, 0, nameOffset + copiedBytes);
+        writeField(0, &fileSystemFlags, sizeof(fileSystemFlags));
+        writeField(4, &maximumComponent, sizeof(maximumComponent));
+        writeField(8, &nameBytes, sizeof(nameBytes));
+        if (copiedBytes) writeField(nameOffset, fileSystemName, copiedBytes);
+        information = nameOffset + copiedBytes;
+        if (copiedBytes != nameBytes) {
+            if (io) { io->Status = statusBufferOverflow; io->Information = information; }
+            return statusBufferOverflow;
+        }
+        break;
+    }
+    default:
+        return LONG(0xC0000003u); // STATUS_INVALID_INFO_CLASS
+    }
+    if (io) { io->Status = 0; io->Information = information; }
+    return 0;
+}
+
+extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);CloseGuestSymbolicLinkHandle(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
 extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
-extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h,BOOL alertable,const LARGE_INTEGER*timeout){
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=WaitForSingleObject(h,ms);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, const LARGE_INTEGER* timeout) {
+    if (!h || h == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    const DWORD result = WaitForSingleObjectEx(h, KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) return 0;
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
+    return LONG(0xC0000008u);
 }
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+
+struct GuestFileDirectoryInformation {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    LARGE_INTEGER EndOfFile, AllocationSize;
+    ULONG FileAttributes;
+    ULONG FileNameLength;
+    CHAR FileName[1];
+};
+static_assert(offsetof(GuestFileDirectoryInformation, FileName) == 64,
+              "Xbox FILE_DIRECTORY_INFORMATION filename offset must be 0x40");
+static bool SkipDotDirectoryEntries(HANDLE search, WIN32_FIND_DATAW& data) {
+    while (wcscmp(data.cFileName, L".") == 0 || wcscmp(data.cFileName, L"..") == 0) {
+        if (!FindNextFileW(search, &data)) return false;
+    }
+    return true;
+}
+static LONG SetDirectoryIoStatus(GuestIoStatusBlock* io, LONG status, ULONG information = 0) {
+    if (io) { io->Status = status; io->Information = information; }
+    return status;
+}
+extern "C" LONG __stdcall K_NtQueryDirectoryFile(
+    HANDLE file, HANDLE event, void* apcRoutine, void*, GuestIoStatusBlock* io,
+    void* information, ULONG length, ULONG informationClass,
+    GuestAnsiString* fileMask, BOOLEAN restartScan) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG statusNotSupported = LONG(0xC00000BBu);
+    constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
+    constexpr LONG statusBufferOverflow = LONG(0x80000005u);
+    if (!file || file == INVALID_HANDLE_VALUE) return SetDirectoryIoStatus(io, statusInvalidHandle);
+    if (!information || informationClass != 1 || length < 64)
+        return SetDirectoryIoStatus(io, informationClass != 1 ? LONG(0xC0000003u) : statusInvalidParameter);
+    if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
+    if (fileMask && ((fileMask->Length && !fileMask->Buffer) ||
+                     fileMask->Length > fileMask->MaximumLength))
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    std::wstring directory;
+    WCHAR pathBuffer[32768]{};
+    const DWORD pathLength = GetFinalPathNameByHandleW(file, pathBuffer, _countof(pathBuffer), FILE_NAME_NORMALIZED);
+    if (!pathLength || pathLength >= _countof(pathBuffer))
+        return SetDirectoryIoStatus(io, statusInvalidHandle);
+    directory.assign(pathBuffer, pathLength);
+    if (directory.rfind(L"\\\\?\\UNC\\", 0) == 0)
+        directory = L"\\\\" + directory.substr(8);
+    else if (directory.rfind(L"\\\\?\\", 0) == 0)
+        directory.erase(0, 4);
+    if (directory.empty()) return SetDirectoryIoStatus(io, LONG(0xC000003Au));
+
+    std::wstring mask = L"*";
+    if (fileMask && fileMask->Length) {
+        const int chars = MultiByteToWideChar(CP_ACP, 0, fileMask->Buffer, fileMask->Length, nullptr, 0);
+        if (chars <= 0) return SetDirectoryIoStatus(io, statusInvalidParameter);
+        mask.resize(chars);
+        if (!MultiByteToWideChar(CP_ACP, 0, fileMask->Buffer, fileMask->Length, mask.data(), chars))
+            return SetDirectoryIoStatus(io, statusInvalidParameter);
+    }
+    if (directory.back() != L'\\' && directory.back() != L'/') directory.push_back(L'\\');
+    const std::wstring pattern = directory + mask;
+
+    std::lock_guard<std::mutex> lock(g_directorySearchMutex);
+    auto it = g_directorySearches.find(file);
+    if (restartScan && it != g_directorySearches.end()) {
+        if (it->second.search != INVALID_HANDLE_VALUE) FindClose(it->second.search);
+        g_directorySearches.erase(it);
+        it = g_directorySearches.end();
+    }
+    if (it == g_directorySearches.end()) {
+        GuestDirectorySearch state{};
+        state.search = FindFirstFileW(pattern.c_str(), &state.current);
+        if (state.search == INVALID_HANDLE_VALUE) {
+            const DWORD error = GetLastError();
+            if (error == ERROR_FILE_NOT_FOUND || error == ERROR_NO_MORE_FILES)
+                return SetDirectoryIoStatus(io, statusNoMoreFiles);
+            if (error == ERROR_PATH_NOT_FOUND)
+                return SetDirectoryIoStatus(io, LONG(0xC000003Au));
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+        }
+        state.currentValid = SkipDotDirectoryEntries(state.search, state.current);
+        if (!state.currentValid) {
+            FindClose(state.search);
+            return SetDirectoryIoStatus(io, statusNoMoreFiles);
+        }
+        it = g_directorySearches.emplace(file, std::move(state)).first;
+    } else if (!it->second.currentValid) {
+        if (!FindNextFileW(it->second.search, &it->second.current) ||
+            !SkipDotDirectoryEntries(it->second.search, it->second.current)) {
+            FindClose(it->second.search);
+            g_directorySearches.erase(it);
+            return SetDirectoryIoStatus(io, statusNoMoreFiles);
+        }
+        it->second.currentValid = true;
+    }
+
+    GuestDirectorySearch& state = it->second;
+    const size_t nameChars = wcslen(state.current.cFileName);
+    const int nameBytes = nameChars ? WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+        static_cast<int>(nameChars), nullptr, 0, nullptr, nullptr) : 0;
+    if (nameBytes < 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    const size_t required = offsetof(GuestFileDirectoryInformation, FileName) + static_cast<size_t>(nameBytes);
+    if (required > length) return SetDirectoryIoStatus(io, statusBufferOverflow, static_cast<ULONG>(required));
+
+    auto* out = static_cast<GuestFileDirectoryInformation*>(information);
+    std::memset(out, 0, required);
+    out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
+    out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
+    out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
+    out->ChangeTime = out->LastWriteTime;
+    ULARGE_INTEGER size{};
+    size.HighPart = state.current.nFileSizeHigh;
+    size.LowPart = state.current.nFileSizeLow;
+    out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+    out->AllocationSize = out->EndOfFile;
+    out->FileAttributes = state.current.dwFileAttributes;
+    out->FileNameLength = static_cast<ULONG>(nameBytes);
+    if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+        static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+        return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    state.currentValid = false;
+    if (event) SetEvent(event);
+    return SetDirectoryIoStatus(io, 0, static_cast<ULONG>(required));
+}
+
 
 static bool ParseUnsigned(const char* text, ULONG base, ULONG* value) {
     if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
@@ -647,23 +1417,60 @@ extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* base,ULONG infoClass,void
     if(returned)*returned=ULONG(n);if(length<sizeof(info))return LONG(0xC0000023u);
     std::memcpy(out,&info,sizeof(info));return 0;
 }
-extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out,void*,LONG initial,LONG maximum){
+extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK, void*, LONG initial, LONG maximum){
     if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
     HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
+}
+
+using NtQueryObjectInfoFn = LONG (NTAPI*)(HANDLE, ULONG, void*, ULONG, ULONG*);
+static FARPROC ResolveNtQueryRoutine(const char* name) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? GetProcAddress(ntdll, name) : nullptr;
+}
+static LONG QueryNativeObject(HANDLE handle, ULONG infoClass, void* info,
+                              ULONG length, ULONG* returnLength, const char* routine) {
+    if (!handle || handle == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    FARPROC address = ResolveNtQueryRoutine(routine);
+    if (!address) return LONG(0xC0000002u); // STATUS_NOT_IMPLEMENTED
+    auto query = reinterpret_cast<NtQueryObjectInfoFn>(address);
+    return query(handle, infoClass, info, length, returnLength);
+}
+extern "C" LONG __stdcall K_NtQueryEvent(HANDLE event, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(event, infoClass, info, length, returnLength, "NtQueryEvent");
+}
+extern "C" LONG __stdcall K_NtQueryMutant(HANDLE mutant, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(mutant, infoClass, info, length, returnLength, "NtQueryMutant");
+}
+extern "C" LONG __stdcall K_NtQuerySemaphore(HANDLE semaphore, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(semaphore, infoClass, info, length, returnLength, "NtQuerySemaphore");
+}
+extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(timer, infoClass, info, length, returnLength, "NtQueryTimer");
 }
 extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
     if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count,const HANDLE* handles,ULONG waitType,BOOL alertable,const LARGE_INTEGER* timeout,void*){
-    if(!handles||!count||count>MAXIMUM_WAIT_OBJECTS||waitType>1)return LONG(0xC000000Du);
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=WaitForMultipleObjects(count,handles,waitType==0,ms);if(r>=WAIT_OBJECT_0&&r<WAIT_OBJECT_0+count)return 0;
-    if(r>=WAIT_ABANDONED_0&&r<WAIT_ABANDONED_0+count)return LONG(0x80);
-    return r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* handles, ULONG waitType, BOOL alertable, const LARGE_INTEGER* timeout, void*) {
+    if (!handles || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
+    for (ULONG i = 0; i < count; ++i)
+        if (!handles[i] || handles[i] == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    const DWORD result = WaitForMultipleObjectsEx(count, handles, waitType == 0,
+                                                   KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count)
+        return waitType == 0 ? LONG(result - WAIT_OBJECT_0) : 0;
+    if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + count) return LONG(0x80);
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
+    return LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal,HANDLE wait,BOOL alertable,const LARGE_INTEGER* timeout){
-    DWORD ms=INFINITE;if(timeout){LONGLONG t=timeout->QuadPart;if(t<0){ULONGLONG v=ULONGLONG(-t)/10000ull;ms=DWORD(v>MAXDWORD?MAXDWORD:v);}else ms=0;}
-    DWORD r=SignalObjectAndWait(signal,wait,ms,FALSE);return r==WAIT_OBJECT_0?0:r==WAIT_TIMEOUT?LONG(0x102):LONG(0xC0000008u);
+extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE wait, BOOL alertable, const LARGE_INTEGER* timeout) {
+    if (!signal || !wait || signal == INVALID_HANDLE_VALUE || wait == INVALID_HANDLE_VALUE)
+        return LONG(0xC0000008u);
+    const DWORD result = SignalObjectAndWait(signal, wait, KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) return 0;
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
+    return LONG(0xC0000008u);
 }
 extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG type) {
     if (!base || !*base) return LONG(0xC000000Du);
@@ -1021,6 +1828,28 @@ extern "C" LONG __stdcall K_NtCancelTimer(HANDLE timer, BOOL* previous) {
     return ok ? 0 : LONG(0xC0000008u);
 }
 
+static FARPROC ResolveNtQueryRoutine(const char* name);
+using NtSetTimerFn = LONG (NTAPI*)(HANDLE, const LARGE_INTEGER*, void*, void*, BOOLEAN, LONG, BOOLEAN*);
+extern "C" LONG __stdcall K_NtSetTimerEx(
+    HANDLE timer, const LARGE_INTEGER* dueTime, void* apcRoutine, ULONG apcMode,
+    void* apcContext, BOOLEAN wakeTimer, LONG period, BOOLEAN* previousState) {
+    if (previousState) *previousState = FALSE;
+    if (!timer || timer == INVALID_HANDLE_VALUE || !dueTime || period < 0)
+        return LONG(0xC000000Du);
+    // Xbox APC dispatch/context translation is not implemented. Do not pass an
+    // Xbox guest callback into the host process as though it were a host pointer.
+    if (apcRoutine || apcContext) return LONG(0xC00000BBu);
+    FARPROC address = ResolveNtQueryRoutine("NtSetTimer");
+    if (!address) return LONG(0xC0000002u);
+    auto setTimer = reinterpret_cast<NtSetTimerFn>(address);
+    BOOLEAN oldState = FALSE;
+    const LONG status = setTimer(timer, dueTime, nullptr, nullptr,
+                                 wakeTimer, period, &oldState);
+    if (previousState) *previousState = oldState;
+    (void)apcMode;
+    return status;
+}
+
 extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
     if (!out) return LONG(0xC000000Du);
     HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
@@ -1083,6 +1912,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je pool_alloc_tag
         cmp eax, 17
         je pool_free
+        cmp eax, 19
+        je ex_interlocked_add_large_integer
+        cmp eax, 20
+        je ex_interlocked_add_large_statistic
+        cmp eax, 21
+        je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
         cmp eax, 45
@@ -1099,6 +1934,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
+        cmp eax, 74
+        je io_invalid_device_request
         cmp eax, 361
         je rtl_snprintf
         cmp eax, 362
@@ -1145,6 +1982,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je mm_free_system
                 cmp eax, 49
         je hal_return_firmware
+        cmp eax, 265
+        je rtl_capture_context
         cmp eax, 264
         je rtl_assert
                 cmp eax, 9
@@ -1193,6 +2032,26 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_bugcheck
         cmp eax, 96
         je ke_bugcheck_ex
+        cmp eax, 111
+        je ke_init_queue
+        cmp eax, 116
+        je ke_insert_head_queue
+        cmp eax, 117
+        je ke_insert_queue
+        cmp eax, 136
+        je ke_remove_queue
+        cmp eax, 106
+        je ke_init_device_queue
+        cmp eax, 114
+        je ke_insert_by_key_device_queue
+        cmp eax, 115
+        je ke_insert_device_queue
+        cmp eax, 133
+        je ke_remove_by_key_device_queue
+        cmp eax, 134
+        je ke_remove_device_queue
+        cmp eax, 135
+        je ke_remove_entry_device_queue
         cmp eax, 107
         je ke_init_dpc
         cmp eax, 119
@@ -1305,8 +2164,30 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_free_vm
         cmp eax, 238
         je nt_yield
+        cmp eax, 218
+        je nt_query_volume_information_file
+        cmp eax, 229
+        je nt_set_timer_ex
+        cmp eax, 207
+        je nt_query_directory_file
+        cmp eax, 210
+        je nt_query_full_attributes_file
+        cmp eax, 211
+        je nt_query_information_file
+        cmp eax, 226
+        je nt_set_information_file
         cmp eax, 190
         je nt_create_file
+        cmp eax, 195
+        je nt_delete_file
+        cmp eax, 67
+        je io_create_symbolic_link
+        cmp eax, 69
+        je io_delete_symbolic_link
+        cmp eax, 203
+        je nt_open_symbolic_link
+        cmp eax, 215
+        je nt_query_symbolic_link
         cmp eax, 202
         je nt_open_file
         cmp eax, 219
@@ -1324,6 +2205,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         cmp eax, 186
         je nt_clear_event
         cmp eax, 233
+        je nt_wait
+        cmp eax, 234
         je nt_wait
         cmp eax, 261
         je rtl_append_a
@@ -1443,6 +2326,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_wait_multiple
         cmp eax, 230
         je nt_signal_wait
+        cmp eax, 209
+        je nt_query_event
+        cmp eax, 213
+        je nt_query_mutant
+        cmp eax, 214
+        je nt_query_semaphore
+        cmp eax, 216
+        je nt_query_timer
         push eax
         call K_Unsupported
         add esp, 4
@@ -1455,6 +2346,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     pool_alloc: jmp K_ExAllocatePool
     pool_alloc_tag: jmp K_ExAllocatePoolWithTag
     pool_free: jmp K_ExFreePool
+    ex_interlocked_add_large_integer: jmp K_ExInterlockedAddLargeInteger
+    ex_interlocked_add_large_statistic: jmp K_ExInterlockedAddLargeStatistic
+    ex_interlocked_compare_exchange64: jmp K_ExInterlockedCompareExchange64
     pool_size: jmp K_ExQueryPoolBlockSize
     smbus_read: jmp K_HalReadSMBusValue
     smbus_write: jmp K_HalWriteSMBusValue
@@ -1510,6 +2404,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    io_invalid_device_request: jmp K_IoInvalidDeviceRequest
+    rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
     rtl_callers_address: jmp K_RtlGetCallersAddress
     rtl_walk_frame: jmp K_RtlWalkFrameChain
@@ -1520,6 +2416,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_acquire_rw_shared: jmp K_ExAcquireReadWriteLockShared
     ex_init_rw: jmp K_ExInitializeReadWriteLock
     ex_release_rw: jmp K_ExReleaseReadWriteLock
+    ke_init_queue: jmp K_KeInitializeQueue
+    ke_insert_head_queue: jmp K_KeInsertHeadQueue
+    ke_insert_queue: jmp K_KeInsertQueue
+    ke_remove_queue: jmp K_KeRemoveQueue
+    ke_init_device_queue: jmp K_KeInitializeDeviceQueue
+    ke_insert_by_key_device_queue: jmp K_KeInsertByKeyDeviceQueue
+    ke_insert_device_queue: jmp K_KeInsertDeviceQueue
+    ke_remove_by_key_device_queue: jmp K_KeRemoveByKeyDeviceQueue
+    ke_remove_device_queue: jmp K_KeRemoveDeviceQueue
+    ke_remove_entry_device_queue: jmp K_KeRemoveEntryDeviceQueue
     ke_init_dpc: jmp K_KeInitializeDpc
     ke_insert_dpc: jmp K_KeInsertQueueDpc
     ke_remove_dpc: jmp K_KeRemoveQueueDpc
@@ -1564,8 +2470,19 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_alloc_vm: jmp K_NtAllocateVirtualMemory
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
+    nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
+    nt_set_timer_ex: jmp K_NtSetTimerEx
+    nt_query_directory_file: jmp K_NtQueryDirectoryFile
+    nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
+    nt_query_information_file: jmp K_NtQueryInformationFile
+    nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
+    nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
+    io_create_symbolic_link: jmp K_IoCreateSymbolicLink
+    io_delete_symbolic_link: jmp K_IoDeleteSymbolicLink
+    nt_open_symbolic_link: jmp K_NtOpenSymbolicLinkObject
+    nt_query_symbolic_link: jmp K_NtQuerySymbolicLinkObject
     nt_read_file: jmp K_NtReadFile
     nt_write_file: jmp K_NtWriteFile
     nt_flush: jmp K_NtFlushBuffersFile
@@ -1634,6 +2551,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_release_semaphore: jmp K_NtReleaseSemaphore
     nt_wait_multiple: jmp K_NtWaitForMultipleObjects
     nt_signal_wait: jmp K_NtSignalAndWaitForSingleObject
+    nt_query_event: jmp K_NtQueryEvent
+    nt_query_mutant: jmp K_NtQueryMutant
+    nt_query_semaphore: jmp K_NtQuerySemaphore
+    nt_query_timer: jmp K_NtQueryTimer
     }
 }
 namespace {

@@ -8,8 +8,11 @@ $base = [uint32]0x10000000
 $entryVa = [uint32]0x10001000
 $reportVa = [uint32]0x10006000
 $passedVa = [uint32]($reportVa + 4)
+$progressVa = [uint32]($reportVa + 0x14)
 $failedVa = [uint32]($reportVa + 8)
 $failedCheckVa = [uint32]($reportVa + 0x10)
+$directoryOpenStatusVa = [uint32]($reportVa + 0x18)
+$directoryUnicodeValueVa = [uint32]($reportVa + 0x1C)
 $skippedVa = [uint32]($reportVa + 12)
 $poolVa = [uint32]($reportVa + 0x20)
 $vmBaseVa = [uint32]($reportVa + 0x24)
@@ -29,7 +32,7 @@ $smbusValueVa = [uint32]($reportVa + 0x3C)
 $interlockedVa = [uint32]($reportVa + 0x40)
 $contiguousVa = [uint32]($reportVa + 0x44)
 $thunkVa = [uint32]0x10006800
-$ordinals = @(8,14,17,23,32,33,34,45,50,53,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,199,202,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320)
+$ordinals = @(67,69,203,215,8,14,17,19,20,21,23,32,33,34,45,50,53,218,281,282,283,125,126,127,128,151,165,171,174,179,180,184,187,189,192,193,194,199,202,209,213,214,216,219,238,12,13,18,28,56,57,58,97,101,108,110,112,113,122,123,129,130,131,132,138,145,149,150,158,159,160,161,167,172,267,268,274,276,277,278,284,287,292,293,291,294,295,296,299,300,270,271,279,280,289,290,301,307,309,310,311,314,315,316,317,318,320,210,229,265,74,207,111,116,117,136,103,106,114,115,133,134,135,211,226)
 $ordIndex = @{}
 for ($i=0; $i -lt $ordinals.Count; $i++) { $ordIndex[[int]$ordinals[$i]] = $i }
 
@@ -58,7 +61,9 @@ function EmitCheckEqual([uint32]$expected) {
     EmitByte 0x3D; Emit32 $expected
     EmitByte 0x75; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 16
+    EmitByte 0xEB; EmitByte 25
+    EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
+    EmitByte 0x75; EmitByte 10
     EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
@@ -67,16 +72,20 @@ function EmitCheckNonZero {
     EmitByte 0x85; EmitByte 0xC0
     EmitByte 0x74; EmitByte 8
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 16
+    EmitByte 0xEB; EmitByte 25
+    EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
+    EmitByte 0x75; EmitByte 10
     EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
 function EmitCheckAtLeast([uint32]$minimum) {
     $script:checkIndex++
     EmitByte 0x3D; Emit32 $minimum
-    EmitByte 0x72; EmitByte 8
+    EmitByte 0x72; EmitByte 6
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 16
+    EmitByte 0xEB; EmitByte 25
+    EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
+    EmitByte 0x75; EmitByte 10
     EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
@@ -85,9 +94,11 @@ function EmitCheckPoolSize {
     EmitByte 0x3D; Emit32 ([uint32]4294967295)
     EmitByte 0x74; EmitByte 15
     EmitByte 0x3D; Emit32 ([uint32]64)
-    EmitByte 0x72; EmitByte 8
+    EmitByte 0x72; EmitByte 6
     EmitIncrement $script:passedAddress
-    EmitByte 0xEB; EmitByte 16
+    EmitByte 0xEB; EmitByte 25
+    EmitByte 0x83; EmitByte 0x3D; Emit32 $script:failedAddress; EmitByte 0
+    EmitByte 0x75; EmitByte 10
     EmitMovMemoryImmediate $script:failedCheckAddress ([uint32]$script:checkIndex)
     EmitIncrement $script:failedAddress
 }
@@ -119,6 +130,7 @@ EmitPushMemory $poolVa
 EmitCallImport 17
 EmitIncrement $passedVa
 
+EmitMovMemoryImmediate $progressVa 10
 # Performance counter/frequency, interrupt time, system time, stall, and yield.
 EmitCallImport 127
 EmitCheckNonZero
@@ -137,6 +149,7 @@ EmitIncrement $passedVa
 EmitCallImport 238
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 20
 # EEPROM SMBus read followed by a write-back of the exact byte just read.
 EmitPush $smbusValueVa
 EmitPush 0
@@ -151,6 +164,51 @@ EmitPush 0xA8
 EmitCallImport 50
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 26
+# Symbolic links: create, open, unlink, query through the live handle, and close.
+$symNameVa = [uint32]($base + 0x6300)
+$symTargetVa = [uint32]($base + 0x6310)
+$symObjectAttributesVa = [uint32]($base + 0x6320)
+$symOutputVa = [uint32]($base + 0x6340)
+$symReturnedLengthVa = [uint32]($base + 0x6350)
+$symHandleVa = [uint32]($base + 0x6354)
+$symNameBufferVa = [uint32]($base + 0x6400)
+$symTargetBufferVa = [uint32]($base + 0x6460)
+$symOutputBufferVa = [uint32]($base + 0x64A0)
+$symName = "\Device\XboxRuntimeDiagnosticLink"
+$symTarget = "\Device\Cdrom0"
+$symNameBytes = [Text.Encoding]::Unicode.GetBytes($symName + [char]0)
+$symTargetBytes = [Text.Encoding]::Unicode.GetBytes($symTarget + [char]0)
+$symNameLength = [uint32]($symName.Length * 2)
+$symTargetLength = [uint32]($symTarget.Length * 2)
+EmitPush $symTargetVa
+EmitPush $symNameVa
+EmitCallImport 67
+EmitCheckEqual 0
+EmitPush $symObjectAttributesVa
+EmitPush 1
+EmitPush $symHandleVa
+EmitCallImport 203
+EmitCheckEqual 0
+# Unlink while the handle remains open; the referenced target must still be queryable.
+EmitPush $symNameVa
+EmitCallImport 69
+EmitCheckEqual 0
+EmitPush $symReturnedLengthVa
+EmitPush $symOutputVa
+EmitPushMemory $symHandleVa
+EmitCallImport 215
+EmitCheckEqual 0
+EmitLoadEax $symReturnedLengthVa
+EmitCheckEqual $symTargetLength
+EmitLoadEax $symOutputBufferVa
+EmitByte 0x25; Emit32 0x0000FFFF
+EmitCheckEqual 92
+EmitPushMemory $symHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+EmitMovMemoryImmediate $progressVa 30
 # Virtual memory allocate/query/free.
 EmitMovMemoryImmediate $vmBaseVa 0
 EmitMovMemoryImmediate $vmSizeVa 4096
@@ -179,6 +237,7 @@ EmitPush $vmBaseVa
 EmitCallImport 199
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 40
 # Host-file mapping, NT open/read/close, using the XBE title directory as CD-ROM.
 EmitPush 0
 EmitPush 1
@@ -187,7 +246,9 @@ EmitPush $objectAttributesVa
 EmitPush ([uint32]2147483648)
 EmitPush $fileHandleVa
 EmitCallImport 202
+Write-Host "directory open check #$script:checkIndex"
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 21
 EmitPush 0
 EmitPush $fileOffsetVa
 EmitPush 8
@@ -203,10 +264,99 @@ EmitLoadEax $readBufferVa
 EmitCheckEqual 0x46545258
 EmitLoadEax ([uint32]($readBufferVa + 4))
 EmitCheckEqual 0x21454C49
+
+EmitMovMemoryImmediate $progressVa 50
+# Query FILE_STANDARD_INFORMATION and verify the eight-byte diagnostic file size.
+$fileInfoVa = [uint32]($reportVa + 0x380)
+EmitPush 5
+EmitPush 24
+EmitPush $fileInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 211
+EmitMovMemoryImmediate $progressVa 51
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($fileInfoVa + 8))
+EmitCheckEqual 8
+EmitMovMemoryImmediate $progressVa 52
+
+# Set the file pointer to zero, then query FILE_POSITION_INFORMATION.
+EmitMovMemoryImmediate $fileInfoVa 0
+EmitMovMemoryImmediate ([uint32]($fileInfoVa + 4)) 0
+EmitPush 14
+EmitPush 8
+EmitPush $fileInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 226
+EmitMovMemoryImmediate $progressVa 53
+EmitCheckEqual 0
+EmitPush 14
+EmitPush 8
+EmitPush $fileInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 211
+EmitMovMemoryImmediate $progressVa 54
+EmitCheckEqual 0
+EmitLoadEax $fileInfoVa
+EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 55
+
+EmitMovMemoryImmediate $progressVa 60
+# Query the mounted volume's volume, size, device, and filesystem metadata.
+$volumeInfoVa = [uint32]($reportVa + 0x400)
+$volumeSizeVa = [uint32]($reportVa + 0x480)
+$volumeDeviceVa = [uint32]($reportVa + 0x4A0)
+$volumeAttributesVa = [uint32]($reportVa + 0x4C0)
+EmitPush 1
+EmitPush 256
+EmitPush $volumeInfoVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 218
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($ioStatusVa + 4))
+EmitCheckAtLeast 18
+EmitPush 3
+EmitPush 24
+EmitPush $volumeSizeVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 218
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($volumeSizeVa + 16))
+EmitCheckNonZero
+EmitLoadEax ([uint32]($volumeSizeVa + 20))
+EmitCheckNonZero
+EmitPush 4
+EmitPush 8
+EmitPush $volumeDeviceVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 218
+EmitCheckEqual 0
+EmitLoadEax $volumeDeviceVa
+EmitCheckEqual 7
+EmitPush 5
+EmitPush 128
+EmitPush $volumeAttributesVa
+EmitPush $ioStatusVa
+EmitPushMemory $fileHandleVa
+EmitCallImport 218
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($volumeAttributesVa + 4))
+EmitCheckNonZero
+EmitLoadEax ([uint32]($volumeAttributesVa + 8))
+EmitCheckNonZero
+
 EmitPushMemory $fileHandleVa
 EmitCallImport 187
+Write-Host "directory close check #$script:checkIndex"
 EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 25
 
+EmitMovMemoryImmediate $progressVa 70
 # Contiguous memory allocation, address validation, and free.
 EmitPush 4096
 EmitCallImport 165
@@ -218,6 +368,37 @@ EmitCheckNonZero
 EmitPushMemory $contiguousVa
 EmitCallImport 171
 EmitIncrement $passedVa
+
+EmitMovMemoryImmediate $progressVa 80
+# 64-bit interlocked operations: atomic add and compare/exchange.
+$largeIntegerVa = [uint32]($reportVa + 0x4E0)
+$exchangeVa = [uint32]($reportVa + 0x4F0)
+$comparandVa = [uint32]($reportVa + 0x4F8)
+$destinationVa = [uint32]($reportVa + 0x500)
+EmitMovMemoryImmediate $largeIntegerVa 10
+EmitMovMemoryImmediate ([uint32]($largeIntegerVa + 4)) 0
+EmitByte 0xB9; Emit32 $largeIntegerVa
+EmitByte 0xBA; Emit32 5
+EmitCallImport 20
+EmitLoadEax $largeIntegerVa
+EmitCheckEqual 15
+EmitLoadEax ([uint32]($largeIntegerVa + 4))
+EmitCheckEqual 0
+EmitMovMemoryImmediate $destinationVa 15
+EmitMovMemoryImmediate ([uint32]($destinationVa + 4)) 0
+EmitMovMemoryImmediate $exchangeVa 99
+EmitMovMemoryImmediate ([uint32]($exchangeVa + 4)) 0
+EmitMovMemoryImmediate $comparandVa 15
+EmitMovMemoryImmediate ([uint32]($comparandVa + 4)) 0
+EmitByte 0xB9; Emit32 $destinationVa
+EmitByte 0xBA; Emit32 $exchangeVa
+EmitPush $comparandVa
+EmitCallImport 21
+EmitCheckEqual 15
+EmitLoadEax $destinationVa
+EmitCheckEqual 99
+EmitLoadEax ([uint32]($destinationVa + 4))
+EmitCheckEqual 0
 
 # Interlocked primitive and byte/character conversion helpers.
 EmitMovMemoryImmediate $interlockedVa 0
@@ -268,6 +449,7 @@ EmitPush 12
 EmitCallImport 283
 EmitCheckEqual 4
 
+EmitMovMemoryImmediate $progressVa 90
 # UnicodeString descriptor at report+0x150; its buffer is report+0x180.
 $unicodeDescriptorVa = [uint32]($reportVa + 0x150)
 $unicodeBufferVa = [uint32]($reportVa + 0x1A0)
@@ -366,7 +548,8 @@ EmitPush $letterVa
 EmitCallImport 268
 EmitCheckEqual 1
 
-$createdUnicodeVa = [uint32]($reportVa + 0x1D0)
+$createdUnicodeVa = [uint32]($reportVa + 0x2A0)
+EmitMovMemoryImmediate ([uint32]($unicodeBufferVa + 2)) 0
 EmitPush $unicodeBufferVa
 EmitPush $createdUnicodeVa
 EmitCallImport 274
@@ -377,7 +560,7 @@ EmitPush $createdUnicodeVa
 EmitCallImport 287
 EmitIncrement $passedVa
 
-# RtlUpperString: lowercase "ff" in formattedVa becomes "FF".
+# RtlUpperString: uppercase the existing one-character "A" ANSI fixture.
 $ansiSourceVa = [uint32]($reportVa + 0x1E0)
 $ansiDestVa = [uint32]($reportVa + 0x1F0)
 EmitMovMemoryImmediate $ansiSourceVa 0x00020002
@@ -389,7 +572,7 @@ EmitPush $ansiDestVa
 EmitCallImport 317
 EmitLoadEax $caseOutputBufferVa
 EmitByte 0x25; Emit32 0xFF
-EmitCheckEqual 0x46
+EmitCheckEqual 0x41
 
 # Upcase Unicode-to-multibyte conversion.
 EmitPush 2
@@ -410,7 +593,7 @@ EmitPush $letterVa
 EmitPush $extraAnsiDescVa
 EmitCallImport 289
 EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $extraAnsiDescVa
-EmitCheckEqual 2
+EmitCheckEqual 1
 EmitPush 0
 EmitPush $extraAnsiDescVa
 EmitPush $extraAnsiDescVa
@@ -444,6 +627,7 @@ EmitCallImport 301
 EmitCheckEqual 87
 
 
+EmitMovMemoryImmediate $progressVa 100
 # Kernel dispatcher event lifecycle: initialize, signal, wait, reset, timeout.
 $eventObjectVa = [uint32]($reportVa + 0x220)
 $zeroTimeoutVa = [uint32]($reportVa + 0x230)
@@ -476,11 +660,182 @@ EmitPush $eventObjectVa
 EmitCallImport 159
 EmitCheckEqual 0x102
 
+EmitMovMemoryImmediate $progressVa 110
+# NT object query APIs: verify event, semaphore, mutant, and timer state.
+$nativeObjectHandleVa = [uint32]($reportVa + 0x520)
+$nativeObjectInfoVa = [uint32]($reportVa + 0x530)
+$nativeReturnLengthVa = [uint32]($reportVa + 0x550)
+
+# Create a signaled notification event and query EVENT_BASIC_INFORMATION.
+EmitPush 1
+EmitPush 0
+EmitPush 0
+EmitPush 0x1F0003
+EmitPush $nativeObjectHandleVa
+EmitCallImport 189
+EmitCheckEqual 0
+EmitPush $nativeReturnLengthVa
+EmitPush 8
+EmitPush $nativeObjectInfoVa
+EmitPush 0
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 209
+EmitCheckEqual 0
+EmitLoadEax ([uint32]($nativeObjectInfoVa + 4))
+EmitCheckEqual 1
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+# Query semaphore count and maximum after creating it at 2/5.
+EmitPush 5
+EmitPush 2
+EmitPush 0
+EmitPush 0
+EmitPush $nativeObjectHandleVa
+EmitCallImport 193
+EmitCheckEqual 0
+EmitPush $nativeReturnLengthVa
+EmitPush 8
+EmitPush $nativeObjectInfoVa
+EmitPush 0
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 214
+EmitCheckEqual 0
+EmitLoadEax $nativeObjectInfoVa
+EmitCheckEqual 2
+EmitLoadEax ([uint32]($nativeObjectInfoVa + 4))
+EmitCheckEqual 5
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+# An unowned mutant reports count 1 and false owner/abandoned flags.
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $nativeObjectHandleVa
+EmitCallImport 192
+EmitCheckEqual 0
+EmitPush $nativeReturnLengthVa
+EmitPush 8
+EmitPush $nativeObjectInfoVa
+EmitPush 0
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 213
+EmitCheckEqual 0
+EmitLoadEax $nativeObjectInfoVa
+EmitCheckEqual 1
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0x05; Emit32 ([uint32]($nativeObjectInfoVa + 4))
+EmitCheckEqual 0
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0x05; Emit32 ([uint32]($nativeObjectInfoVa + 5))
+EmitCheckEqual 0
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+# A newly created notification timer is not signaled.
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $nativeObjectHandleVa
+EmitCallImport 194
+EmitCheckEqual 0
+EmitPush $nativeReturnLengthVa
+EmitPush 16
+EmitPush $nativeObjectInfoVa
+EmitPush 0
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 216
+EmitCheckEqual 0
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0x05; Emit32 ([uint32]($nativeObjectInfoVa + 8))
+EmitCheckEqual 0
+# Arm the timer for a short relative due time; APC callbacks are deliberately null.
+$timerDueVa = [uint32]($reportVa + 0x580)
+$timerPreviousVa = [uint32]($reportVa + 0x590)
+EmitMovMemoryImmediate $timerDueVa 4294957296
+EmitMovMemoryImmediate ([uint32]($timerDueVa + 4)) 4294967295
+EmitMovMemoryImmediate $timerPreviousVa 0
+EmitPush $timerPreviousVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPush $timerDueVa
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 229
+EmitCheckEqual 0
+EmitLoadEax $timerPreviousVa
+EmitCheckEqual 0
+EmitPushMemory $nativeObjectHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+EmitMovMemoryImmediate $progressVa 120
+# Executive device queue lifecycle and keyed ordering.
+$deviceQueueVa = [uint32]($reportVa + 0x300)
+$deviceEntry1Va = [uint32]($reportVa + 0x340)
+$deviceEntry2Va = [uint32]($reportVa + 0x350)
+$deviceEntry3Va = [uint32]($reportVa + 0x360)
+EmitPush $deviceQueueVa
+EmitCallImport 106
+# First insertion claims an idle device and is not queued.
+EmitPush $deviceEntry1Va
+EmitPush $deviceQueueVa
+EmitCallImport 115
+EmitCheckEqual 0
+# A second entry is queued and can be removed.
+EmitPush $deviceEntry2Va
+EmitPush $deviceQueueVa
+EmitCallImport 115
+EmitCheckEqual 1
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual $deviceEntry2Va
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual 0
+
+# Keyed insertion is stable in ascending key order; remove-by-key selects
+# the first key >= requested key, then falls back to the head.
+EmitPush $deviceQueueVa
+EmitCallImport 106
+EmitPush 0
+EmitPush $deviceEntry1Va
+EmitPush $deviceQueueVa
+EmitCallImport 114
+EmitCheckEqual 0
+EmitPush 20
+EmitPush $deviceEntry2Va
+EmitPush $deviceQueueVa
+EmitCallImport 114
+EmitCheckEqual 1
+EmitPush 10
+EmitPush $deviceEntry3Va
+EmitPush $deviceQueueVa
+EmitCallImport 114
+EmitCheckEqual 1
+EmitPush 15
+EmitPush $deviceQueueVa
+EmitCallImport 133
+EmitCheckEqual $deviceEntry2Va
+EmitPush $deviceEntry2Va
+EmitCallImport 135
+EmitCheckEqual 0
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual $deviceEntry3Va
+EmitPush $deviceQueueVa
+EmitCallImport 134
+EmitCheckEqual 0
+
 
 # IRQL and critical-region bookkeeping.
 EmitCallImport 103
 EmitCheckEqual 0
 EmitCallImport 129
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0xC0
 EmitCheckEqual 0
 EmitCallImport 103
 EmitCheckEqual 2
@@ -491,6 +846,7 @@ EmitCheckEqual 0
 EmitCallImport 101
 EmitCallImport 122
 EmitCallImport 130
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0xC0
 EmitCheckEqual 0
 EmitCallImport 103
 EmitCheckEqual 1
@@ -500,6 +856,7 @@ EmitCallImport 103
 EmitCheckEqual 0
 
 
+EmitMovMemoryImmediate $progressVa 130
 # Executive read-write lock: exclusive and shared acquisition/release.
 $rwLockVa = [uint32]($reportVa + 0x250)
 EmitPush $rwLockVa
@@ -527,6 +884,7 @@ EmitCallImport 295
 EmitIncrement $passedVa
 
 
+EmitMovMemoryImmediate $progressVa 140
 # System-memory allocation and release.
 $systemMemoryVa = [uint32]($reportVa + 0x270)
 EmitPush 4
@@ -539,6 +897,7 @@ EmitPushMemory $systemMemoryVa
 EmitCallImport 172
 EmitCheckNonZero
 
+EmitMovMemoryImmediate $progressVa 150
 # Interlocked doubly-linked list operations use a guest spin lock.
 $listHeadVa = [uint32]($reportVa + 0x300)
 $listEntryAVa = [uint32]($reportVa + 0x310)
@@ -570,6 +929,137 @@ EmitPush $listHeadVa
 EmitCallImport 34
 EmitCheckEqual 0
 
+EmitMovMemoryImmediate $progressVa 1
+# Initialize a KQUEUE, insert at tail/head, remove in FIFO order, then time out.
+$queueVa = [uint32]($reportVa + 0xA00)
+$queueTailEntryVa = [uint32]($reportVa + 0xA40)
+$queueHeadEntryVa = [uint32]($reportVa + 0xA48)
+$queueTimeoutVa = [uint32]($reportVa + 0xA60)
+EmitPush 1
+EmitPush $queueVa
+EmitCallImport 111
+EmitPush $queueTailEntryVa
+EmitPush $queueVa
+EmitCallImport 117
+Write-Host "queue tail check #$script:checkIndex"
+EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 11
+EmitPush $queueHeadEntryVa
+EmitPush $queueVa
+EmitCallImport 116
+Write-Host "queue head check #$script:checkIndex"
+EmitCheckEqual 1
+EmitMovMemoryImmediate $progressVa 12
+EmitPush 0
+EmitPush 0
+EmitPush $queueVa
+EmitCallImport 136
+Write-Host "queue first remove check #$script:checkIndex"
+EmitCheckEqual $queueHeadEntryVa
+EmitMovMemoryImmediate $progressVa 13
+EmitPush 0
+EmitPush 0
+EmitPush $queueVa
+EmitCallImport 136
+Write-Host "queue second remove check #$script:checkIndex"
+EmitCheckEqual $queueTailEntryVa
+EmitMovMemoryImmediate $progressVa 14
+EmitMovMemoryImmediate $queueTimeoutVa 4294957296
+EmitMovMemoryImmediate ([uint32]($queueTimeoutVa + 4)) 4294967295
+EmitPush $queueTimeoutVa
+EmitPush 0
+EmitPush $queueVa
+EmitCallImport 136
+Write-Host "queue timeout check #$script:checkIndex"
+EmitCheckEqual 258
+EmitMovMemoryImmediate $progressVa 15
+
+EmitMovMemoryImmediate $progressVa 2
+# Validate the guest OBJECT_ATTRIBUTES and UNICODE_STRING fixture before NtOpenFile.
+$directoryUnicodeVa = [uint32]($base + 0x6B00)
+$directoryObjectAttributesVa = [uint32]($base + 0x6B10)
+$directoryPathVa = [uint32]($base + 0x6B40)
+$directoryHandleVa = [uint32]($base + 0x6710)
+$directoryInfoVa = [uint32]($base + 0x6600)
+$directoryIoVa = [uint32]($base + 0x6700)
+EmitLoadEax ([uint32]($directoryObjectAttributesVa + 8))
+EmitCheckEqual $directoryUnicodeVa
+EmitLoadEax $directoryUnicodeVa
+EmitStoreEax $directoryUnicodeValueVa
+EmitCheckEqual 0x001E001C
+EmitLoadEax ([uint32]($directoryUnicodeVa + 4))
+EmitCheckEqual $directoryPathVa
+EmitLoadEax $directoryPathVa
+EmitByte 0x25; Emit32 0x0000FFFF
+EmitStoreEax $directoryUnicodeValueVa
+EmitCheckEqual 92
+EmitPush 1
+EmitPush 7
+EmitPush $directoryIoVa
+EmitPush $directoryObjectAttributesVa
+EmitPush 2147483648
+EmitPush $directoryHandleVa
+EmitCallImport 202
+EmitStoreEax $directoryOpenStatusVa
+EmitMovMemoryImmediate $progressVa 21
+EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 22
+EmitPush 1
+EmitPush 0
+EmitPush 1
+EmitPush 256
+EmitPush $directoryInfoVa
+EmitPush $directoryIoVa
+EmitPush 0
+EmitPush 0
+EmitPush 0
+EmitPushMemory $directoryHandleVa
+EmitCallImport 207
+Write-Host "directory query check #$script:checkIndex"
+EmitCheckEqual 0
+EmitMovMemoryImmediate $progressVa 23
+EmitLoadEax ([uint32]($directoryInfoVa + 60))
+Write-Host "directory name length check #$script:checkIndex"
+EmitCheckNonZero
+EmitMovMemoryImmediate $progressVa 24
+EmitLoadEax ([uint32]($directoryInfoVa + 56))
+Write-Host "directory attributes check #$script:checkIndex"
+EmitCheckNonZero
+EmitMovMemoryImmediate $progressVa 25
+EmitPushMemory $directoryHandleVa
+EmitCallImport 187
+EmitCheckEqual 0
+
+EmitMovMemoryImmediate $progressVa 3
+# The generic invalid-device dispatch routine must return its documented status.
+EmitPush 0
+EmitPush 0
+EmitCallImport 74
+EmitCheckEqual 3221225488
+
+# Capture the live x86 guest context; EIP and ESP must be populated.
+$guestContextVa = [uint32]($reportVa + 0x600)
+EmitPush $guestContextVa
+EmitCallImport 265
+EmitLoadEax ([uint32]($guestContextVa + 184))
+EmitCheckNonZero
+EmitLoadEax ([uint32]($guestContextVa + 196))
+EmitCheckNonZero
+
+# Query full file attributes through the Xbox object-attributes path.
+$fullAttributesVa = [uint32]($reportVa + 0x570)
+$objectAttributesVa = [uint32]($base + 0x6090)
+EmitPush $fullAttributesVa
+EmitPush $objectAttributesVa
+EmitCallImport 210
+EmitCheckEqual 0
+# FILE_NETWORK_OPEN_INFORMATION.EndOfFile is at byte offset 40.
+EmitLoadEax ([uint32]($fullAttributesVa + 40))
+EmitCheckEqual 8
+# The test file must be reported as a nonzero-attribute regular file.
+EmitLoadEax ([uint32]($fullAttributesVa + 48))
+EmitCheckNonZero
+
 # Interlocked singly-linked list push, pop, and flush.
 $slistHeaderVa = [uint32]($reportVa + 0x280)
 $slistEntryVa = [uint32]($reportVa + 0x290)
@@ -592,6 +1082,10 @@ EmitCheckEqual 0
 EmitIncrement $skippedVa
 EmitIncrement $skippedVa
 EmitIncrement $skippedVa
+EmitMovMemoryImmediate $progressVa 255
+EmitByte 0x31; EmitByte 0xC0
+EmitCheckEqual 0
+Write-Host "Generated diagnostic assertions: $script:checkIndex"
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
 $dataOffset = 0x6000
@@ -638,6 +1132,37 @@ Put32 0x60B4 0
 Put32 0x60B8 0
 $guestPathBytes.CopyTo($b,0x6100)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
+$directoryPath = "\Device\Cdrom0"
+$directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
+$directoryPathLength = [uint32]($directoryPath.Length * 2)
+$directoryPathVa = [uint32]($base + 0x6B40)
+Put32 0x6B00 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
+Put32 0x6B04 $directoryPathVa
+Put32 0x6B10 24
+Put32 0x6B14 0
+Put32 0x6B18 $directoryUnicodeVa
+Put32 0x6B1C 0
+Put32 0x6B20 0
+Put32 0x6B24 0
+$directoryPathBytes.CopyTo($b,0x6B40)
+# Guest OBJECT_ATTRIBUTES and UNICODE_STRING records for the symbolic-link test.
+Put32 0x6300 ([uint32]($symNameLength -bor (($symNameLength + 2) -shl 16)))
+Put32 0x6304 $symNameBufferVa
+Put32 0x6310 ([uint32]($symTargetLength -bor (($symTargetLength + 2) -shl 16)))
+Put32 0x6314 $symTargetBufferVa
+Put32 0x6320 24
+Put32 0x6324 0
+Put32 0x6328 $symNameVa
+Put32 0x632C 0
+Put32 0x6330 0
+Put32 0x6334 0
+Put32 0x6340 ([uint32](0 -bor (128 -shl 16)))
+Put32 0x6344 $symOutputBufferVa
+Put32 0x6350 0
+Put32 0x6354 0
+$symNameBytes.CopyTo($b,0x6400)
+$symTargetBytes.CopyTo($b,0x6460)
+
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
 New-Item -ItemType Directory -Force -Path $testDir | Out-Null
@@ -683,7 +1208,7 @@ try {
         $exit = if ($proc.HasExited) { $proc.ExitCode } else { "still running" }
         throw "Guest pipe closed before diagnostic release; process exit=$exit. $($_.Exception.Message)"
     }
-    $report = [byte[]]::new(20)
+    $report = [byte[]]::new(32)
     $read = 0
     while ($read -lt $report.Length) {
         $n = $pipe.Read($report,$read,$report.Length-$read)
@@ -699,9 +1224,13 @@ try {
     $failed = [BitConverter]::ToUInt32($report,8)
     $skipped = [BitConverter]::ToUInt32($report,12)
     $failedCheck = [BitConverter]::ToUInt32($report,16)
+    $progress = [BitConverter]::ToUInt32($report,20)
+    $directoryOpenStatus = [BitConverter]::ToUInt32($report,24)
+    $directoryUnicodeValue = [BitConverter]::ToUInt32($report,28)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
-    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck"
-    if ($failed -ne 0 -or $passed -lt 20 -or $skipped -ne 3) {
+    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus); directory first wchar 0x$('{0:X8}' -f $directoryUnicodeValue)"
+    if ($progress -ne 255) { throw "Diagnostic XBE stopped before the final test group (progress marker $progress)." }
+    if ($failed -ne 0 -or $passed -lt 20 -or $skipped -gt 3) {
         throw "Diagnostic XBE reported an unexpected result."
     }
     if (!$proc.WaitForExit(10000)) { throw "x86 guest did not exit after diagnostic completion." }
