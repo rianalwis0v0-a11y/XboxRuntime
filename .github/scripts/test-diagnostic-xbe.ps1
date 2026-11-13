@@ -841,7 +841,7 @@ EmitLoadEax ([uint32]($fullAttributesVa + 40))
 EmitCheckEqual 8
 # The test file must be reported as a nonzero-attribute regular file.
 EmitLoadEax ([uint32]($fullAttributesVa + 48))
-EmitCheckNotEqual 0
+EmitCheckNonZero
 
 # Interlocked singly-linked list push, pop, and flush.
 $slistHeaderVa = [uint32]($reportVa + 0x280)
