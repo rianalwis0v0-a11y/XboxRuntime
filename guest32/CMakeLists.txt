@@ -10,7 +10,7 @@ add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp network_compat.cpp xnet
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
-target_link_libraries(xbe_guest32 PRIVATE ws2_32 iphlpapi)
+target_link_libraries(xbe_guest32 PRIVATE ws2_32 iphlpapi bcrypt)
 target_link_options(xbe_guest32 PRIVATE /BASE:0x70000000 /DYNAMICBASE:NO)
 target_link_options(xbe_guest32 PRIVATE /LARGEADDRESSAWARE)
 set_target_properties(xbe_guest32 PROPERTIES OUTPUT_NAME "xbe_guest32"
