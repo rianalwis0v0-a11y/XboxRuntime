@@ -206,7 +206,7 @@ int wmain(int argc,wchar_t**argv){
  }
  if(xbeThread){WaitForSingleObject(xbeThread,INFINITE);CloseHandle(xbeThread);}
  struct DiagnosticReport { uint32_t magic,passed,failed,skipped,firstFailedCheck,progress,dvdOpenStatus,dvdQueryStatus,dvdNameLength,dvdAttributes,dvdCloseStatus; } report{};
- if(reportVa && g_image && reportVa>=r.imageBase && uint64_t(reportVa)+sizeof(report)<=uint64_t(r.imageBase)+r.imageSize){
+ if(reportVa && g_image && reportVa>=r.imageBase && uint64_t(reportVa)+sizeof(report)<=uint64_t(r.imageBase)+r.imageSize && uint64_t(reportVa)+0x5B0+20<=uint64_t(r.imageBase)+r.imageSize){
   std::memcpy(&report,reinterpret_cast<const void*>(uintptr_t(reportVa)),24);
   std::memcpy(&report.dvdOpenStatus,reinterpret_cast<const void*>(uintptr_t(reportVa + 0x5B0)),20);
   if(report.magic==0x54535258u)WriteExact(pipe,&report,sizeof(report));
