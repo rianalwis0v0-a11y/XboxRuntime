@@ -20,9 +20,12 @@
 #include <array>
 #include <unordered_set>
 #include <unordered_map>
+#include <vector>
+#include <utility>
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "xdvdfs.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -39,6 +42,21 @@ ULONG g_fileCacheSize = 1024 * 1024;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
 std::mutex g_eepromMutex;
+std::mutex g_fileIoMutex;
+XDVDFS_VOLUME_INFO g_dvdInfo{};
+bool g_dvdReady = false;
+struct GuestDvdFile {
+    std::string path;
+    uint32_t size = 0;
+    uint32_t startSector = 0;
+    uint8_t attributes = 0;
+    uint64_t position = 0;
+    bool directory = false;
+    uint32_t directoryIndex = 0;
+    std::vector<XDVDFS_FILE_INFO> children;
+};
+std::mutex g_dvdFileMutex;
+std::unordered_map<HANDLE, GuestDvdFile> g_dvdFiles;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
@@ -584,10 +602,123 @@ std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     }else if(p[0]==L'\\')p=g_titleDirectory+p;
     return p;
 }
+static bool DvdRelativePath(const GuestUnicodeString* name, std::string& relative) {
+    if (!name || !name->Buffer || (name->Length & 1u)) return false;
+    const std::wstring value(name->Buffer, name->Length / sizeof(WCHAR));
+    constexpr wchar_t devicePrefix[] = L"\\Device\\Cdrom0";
+    size_t start = std::wstring::npos;
+    if (value.size() >= _countof(devicePrefix) - 1 &&
+        _wcsnicmp(value.c_str(), devicePrefix, _countof(devicePrefix) - 1) == 0) {
+        start = _countof(devicePrefix) - 1;
+    } else if (value.size() >= 2 &&
+        (value[0] == L'D' || value[0] == L'd') && value[1] == L':') {
+        start = 2;
+    } else {
+        return false;
+    }
+    while (start < value.size() && (value[start] == L'\\' || value[start] == L'/')) ++start;
+    const std::wstring tail = value.substr(start);
+    if (tail.empty()) { relative.clear(); return true; }
+    const int needed = WideCharToMultiByte(CP_ACP, 0, tail.data(),
+        static_cast<int>(tail.size()), nullptr, 0, nullptr, nullptr);
+    if (needed <= 0) return false;
+    relative.resize(static_cast<size_t>(needed));
+    return WideCharToMultiByte(CP_ACP, 0, tail.data(),
+        static_cast<int>(tail.size()), relative.data(), needed, nullptr, nullptr) == needed;
+}
+
+static bool FindDvdFile(HANDLE handle, GuestDvdFile& file) {
+    std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+    const auto found = g_dvdFiles.find(handle);
+    if (found == g_dvdFiles.end()) return false;
+    file.path = found->second.path;
+    file.size = found->second.size;
+    file.startSector = found->second.startSector;
+    file.attributes = found->second.attributes;
+    file.position = found->second.position;
+    file.directory = found->second.directory;
+    return true;
+}
+
+static LONG OpenDvdFile(HANDLE* output, const std::string& path,
+    uint32_t access, uint32_t disposition, GuestIoStatusBlock* io) {
+    constexpr LONG statusDeviceNotReady = LONG(0xC00000A3u);
+    constexpr LONG statusMediaWriteProtected = LONG(0xC00000A2u);
+    constexpr LONG statusObjectNameNotFound = LONG(0xC0000034u);
+    constexpr LONG statusInsufficientResources = LONG(0xC000009Au);
+    if (!output) return LONG(0xC000000Du);
+    if (!g_dvdReady) return statusDeviceNotReady;
+    constexpr uint32_t writeMask = 0x40000000u | 0x10000000u | 0x00000002u |
+        0x00000004u | 0x00000010u | 0x00000100u | 0x00010000u |
+        0x00040000u | 0x00080000u;
+    if ((access & writeMask) || disposition != 1u) return statusMediaWriteProtected;
+
+    XDVDFS_FILE_INFO info{};
+    bool isDirectory = path.empty();
+    if (!path.empty()) {
+        if (XDVDFS_GetFileInfo(path.c_str(), &info) != 0)
+            return statusObjectNameNotFound;
+        isDirectory = (info.attributes & XDVDFS_ATTR_DIRECTORY) != 0;
+    }
+
+    HANDLE handle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!handle) return statusInsufficientResources;
+    GuestDvdFile file{};
+    file.path = path;
+    file.size = isDirectory ? 0 : info.size;
+    file.startSector = info.startSector;
+    file.attributes = isDirectory ? XDVDFS_ATTR_DIRECTORY : info.attributes;
+    file.directory = isDirectory;
+    if (isDirectory) {
+        uint32_t required = 0;
+        const int sizing = XDVDFS_ListDirectory(path.c_str(), nullptr, 0, &required);
+        if (sizing != 0 && sizing != XDVDFS_ERROR_BUFFER_TOO_SMALL) {
+            CloseHandle(handle);
+            return statusObjectNameNotFound;
+        }
+        if (required > 100000u) { CloseHandle(handle); return statusInsufficientResources; }
+        try { file.children.resize(required); }
+        catch (...) { CloseHandle(handle); return statusInsufficientResources; }
+        if (required && XDVDFS_ListDirectory(path.c_str(), file.children.data(),
+            required, &required) != 0) {
+            CloseHandle(handle);
+            return statusObjectNameNotFound;
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        g_dvdFiles.emplace(handle, std::move(file));
+    }
+    *output = handle;
+    if (io) { io->Status = 0; io->Information = 1; }
+    return 0;
+}
+
+static bool DvdWildcardMatch(const std::wstring& pattern, const std::wstring& value) {
+    size_t p = 0, v = 0, star = std::wstring::npos, retry = 0;
+    while (v < value.size()) {
+        if (p < pattern.size() &&
+            (pattern[p] == L'?' || towupper(pattern[p]) == towupper(value[v]))) {
+            ++p; ++v;
+        } else if (p < pattern.size() && pattern[p] == L'*') {
+            star = p++;
+            retry = v;
+        } else if (star != std::wstring::npos) {
+            p = star + 1;
+            v = ++retry;
+        } else return false;
+    }
+    while (p < pattern.size() && pattern[p] == L'*') ++p;
+    return p == pattern.size();
+}
+
 DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
 LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
     if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    std::string dvdPath;
+    if (DvdRelativePath(oa->ObjectName, dvdPath))
+        return OpenDvdFile(out, dvdPath, access, disposition, io);
     std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
     DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
     if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
@@ -615,6 +746,28 @@ extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
         return LONG(0xC000000Du);
     if (oa->RootDirectory) return LONG(0xC00000BBu);
+    std::string dvdPath;
+    if (DvdRelativePath(oa->ObjectName, dvdPath)) {
+        if (!g_dvdReady) return LONG(0xC00000A3u);
+        GuestFileNetworkOpenInformation value{};
+        if (dvdPath.empty()) {
+            value.FileAttributes = FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY;
+        } else {
+            XDVDFS_FILE_INFO entry{};
+            if (XDVDFS_GetFileInfo(dvdPath.c_str(), &entry) != 0)
+                return LONG(0xC0000034u);
+            value.EndOfFile.QuadPart = entry.size;
+            value.AllocationSize.QuadPart =
+                (static_cast<LONGLONG>(entry.size) + 2047) & ~LONGLONG(2047);
+            value.FileAttributes = FILE_ATTRIBUTE_READONLY;
+            if (entry.attributes & XDVDFS_ATTR_DIRECTORY) value.FileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
+            else value.FileAttributes |= FILE_ATTRIBUTE_ARCHIVE;
+            if (entry.attributes & XDVDFS_ATTR_HIDDEN) value.FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+            if (entry.attributes & XDVDFS_ATTR_SYSTEM) value.FileAttributes |= FILE_ATTRIBUTE_SYSTEM;
+        }
+        *out = value;
+        return 0;
+    }
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     WIN32_FILE_ATTRIBUTE_DATA data{};
@@ -650,6 +803,9 @@ extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
 
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    std::string dvdPath;
+    if (DvdRelativePath(oa->ObjectName, dvdPath))
+        return g_dvdReady ? LONG(0xC00000A2u) : LONG(0xC00000A3u);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
@@ -661,16 +817,56 @@ extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     return LONG(0xC0000001u);
 }
 extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
-    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
-    DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
+    {
+        std::unique_lock<std::mutex> lock(g_dvdFileMutex);
+        auto dvd = g_dvdFiles.find(h);
+        if (dvd != g_dvdFiles.end()) {
+            if (dvd->second.directory) return LONG(0xC00000BAu);
+            if (offset && offset->QuadPart < 0) return LONG(0xC000000Du);
+            const uint64_t start = offset ? static_cast<uint64_t>(offset->QuadPart) : dvd->second.position;
+            if (start > dvd->second.size) {
+                if (io) { io->Status = LONG(0xC0000011u); io->Information = 0; }
+                if (event) SetEvent(event);
+                return LONG(0xC0000011u);
+            }
+            DWORD received = 0;
+            const int result = XDVDFS_ReadFile(dvd->second.path.c_str(), start, buffer, length, &received);
+            if (result != 0) {
+                if (io) { io->Status = LONG(0xC0000001u); io->Information = 0; }
+                return LONG(0xC0000001u);
+            }
+            dvd->second.position = start + received;
+            if (io) { io->Status = (received || !length) ? 0 : LONG(0xC0000011u); io->Information = received; }
+            if (event) SetEvent(event);
+            return io ? io->Status : (received || !length ? 0 : LONG(0xC0000011u));
+        }
+    }
+    std::lock_guard<std::mutex> fileLock(g_fileIoMutex);
+    if(offset){if(offset->QuadPart<0)return LONG(0xC000000Du);LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return FileStatusFromWin32(GetLastError());}
+    DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){LONG status=FileStatusFromWin32(GetLastError());if(io){io->Status=status;io->Information=0;}return status;}
     if(io){io->Status=read?0:LONG(0xC0000011u);io->Information=read;}if(event)SetEvent(event);return read?0:LONG(0xC0000011u);
 }
 extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
-    if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
-    DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        if (g_dvdFiles.find(h) != g_dvdFiles.end()) {
+            constexpr LONG status = LONG(0xC00000A2u);
+            if (io) { io->Status = status; io->Information = 0; }
+            if (event) SetEvent(event);
+            return status;
+        }
+    }
+    std::lock_guard<std::mutex> fileLock(g_fileIoMutex);
+    if(offset){if(offset->QuadPart<0)return LONG(0xC000000Du);LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return FileStatusFromWin32(GetLastError());}
+    DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){LONG status=FileStatusFromWin32(GetLastError());if(io){io->Status=status;io->Information=0;}return status;}
     if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
 }
-extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
+extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){
+    GuestDvdFile dvd{};
+    if (FindDvdFile(h, dvd)) { if(io){io->Status=0;io->Information=0;} return 0; }
+    std::lock_guard<std::mutex> fileLock(g_fileIoMutex);
+    BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);
+}
 
 // NT FILE_INFORMATION_CLASS values used by retail Xbox titles.
 struct GuestFileBasicInformation {
@@ -701,6 +897,52 @@ static LONG FileStatusFromWin32(DWORD e) {
 extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                        void* out, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
+    GuestDvdFile dvdFile{};
+    if (FindDvdFile(h, dvdFile)) {
+        ULONG required = 0;
+        switch (infoClass) {
+        case 4: required = sizeof(GuestFileBasicInformation); break;
+        case 5: required = sizeof(GuestFileStandardInformation); break;
+        case 6: required = sizeof(GuestFileInternalInformation); break;
+        case 9: required = sizeof(ULONG); break;
+        case 14: required = sizeof(GuestFilePositionInformation); break;
+        default: return LONG(0xC0000003u);
+        }
+        if (infoClass == 9) {
+            const int chars = dvdFile.path.empty() ? 0 : MultiByteToWideChar(CP_ACP, 0,
+                dvdFile.path.data(), static_cast<int>(dvdFile.path.size()), nullptr, 0);
+            if (chars < 0) return LONG(0xC0000001u);
+            const ULONG bytes = static_cast<ULONG>(chars * sizeof(WCHAR));
+            required = sizeof(ULONG) + bytes;
+            if (length < required) return LONG(0xC0000004u);
+            std::memset(out, 0, required);
+            auto* p = static_cast<GuestFileNameInformation*>(out);
+            p->FileNameLength = bytes;
+            if (bytes) MultiByteToWideChar(CP_ACP, 0, dvdFile.path.data(),
+                static_cast<int>(dvdFile.path.size()), p->FileName, chars);
+        } else {
+            if (length < required) return LONG(0xC0000004u);
+            std::memset(out, 0, required);
+            if (infoClass == 4) {
+                static_cast<GuestFileBasicInformation*>(out)->FileAttributes =
+                    FILE_ATTRIBUTE_READONLY | (dvdFile.directory ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_ARCHIVE);
+            } else if (infoClass == 5) {
+                auto* p = static_cast<GuestFileStandardInformation*>(out);
+                p->EndOfFile.QuadPart = dvdFile.size;
+                p->AllocationSize.QuadPart = (static_cast<LONGLONG>(dvdFile.size) + 2047) & ~LONGLONG(2047);
+                p->NumberOfLinks = 1;
+                p->Directory = dvdFile.directory ? TRUE : FALSE;
+            } else if (infoClass == 6) {
+                static_cast<GuestFileInternalInformation*>(out)->IndexNumber.QuadPart =
+                    (static_cast<ULONGLONG>(dvdFile.startSector) << 32) | dvdFile.size;
+            } else {
+                static_cast<GuestFilePositionInformation*>(out)->CurrentByteOffset.QuadPart =
+                    static_cast<LONGLONG>(dvdFile.position);
+            }
+        }
+        if (io) { io->Status = 0; io->Information = required; }
+        return 0;
+    }
     ULONG required = 0;
     switch (infoClass) {
     case 4: required = sizeof(GuestFileBasicInformation); break;
@@ -752,6 +994,22 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
 extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                      void* in, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        auto dvd = g_dvdFiles.find(h);
+        if (dvd != g_dvdFiles.end()) {
+            if (infoClass == 14) {
+                if (length < sizeof(GuestFilePositionInformation)) return LONG(0xC0000004u);
+                const LONGLONG position = static_cast<GuestFilePositionInformation*>(in)->CurrentByteOffset.QuadPart;
+                if (position < 0) return LONG(0xC000000Du);
+                dvd->second.position = static_cast<uint64_t>(position);
+                if (io) { io->Status = 0; io->Information = 0; }
+                return 0;
+            }
+            if (io) { io->Status = LONG(0xC00000A2u); io->Information = 0; }
+            return LONG(0xC00000A2u);
+        }
+    }
     BOOL ok=FALSE;
     if(infoClass==4) {
         if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
@@ -789,6 +1047,72 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     constexpr LONG statusInfoLengthMismatch = LONG(0xC0000004u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
     if (!h || h == INVALID_HANDLE_VALUE || !out) return statusInvalidParameter;
+
+    GuestDvdFile dvdFile{};
+    if (FindDvdFile(h, dvdFile)) {
+        auto writeField = [out](ULONG offset, const void* value, ULONG bytes) {
+            std::memcpy(static_cast<uint8_t*>(out) + offset, value, bytes);
+        };
+        ULONG information = 0;
+        switch (infoClass) {
+        case 1: {
+            constexpr ULONG labelOffset = 18;
+            if (length < labelOffset) return statusInfoLengthMismatch;
+            const LARGE_INTEGER creationTime{};
+            const ULONG serial = 0, labelLength = 0;
+            const BOOLEAN supportsObjects = FALSE;
+            std::memset(out, 0, labelOffset);
+            writeField(0, &creationTime, sizeof(creationTime));
+            writeField(8, &serial, sizeof(serial));
+            writeField(12, &labelLength, sizeof(labelLength));
+            writeField(16, &supportsObjects, sizeof(supportsObjects));
+            information = labelOffset;
+            break;
+        }
+        case 3: {
+            constexpr ULONG required = 24;
+            if (length < required) return statusInfoLengthMismatch;
+            LARGE_INTEGER total{}; total.QuadPart = static_cast<LONGLONG>(g_dvdInfo.imageSize / 2048u);
+            LARGE_INTEGER available{};
+            const ULONG sectorsPerAllocationUnit = 1, bytesPerSector = 2048;
+            std::memset(out, 0, required);
+            writeField(0, &total, sizeof(total)); writeField(8, &available, sizeof(available));
+            writeField(16, &sectorsPerAllocationUnit, sizeof(sectorsPerAllocationUnit));
+            writeField(20, &bytesPerSector, sizeof(bytesPerSector));
+            information = required;
+            break;
+        }
+        case 4: {
+            constexpr ULONG required = 8;
+            if (length < required) return statusInfoLengthMismatch;
+            const ULONG deviceType = 2, characteristics = 3;
+            writeField(0, &deviceType, sizeof(deviceType)); writeField(4, &characteristics, sizeof(characteristics));
+            information = required;
+            break;
+        }
+        case 5: {
+            constexpr ULONG nameOffset = 12;
+            constexpr wchar_t fsName[] = L"XDVDFS";
+            constexpr ULONG nameBytes = (static_cast<ULONG>(_countof(fsName)) - 1) * sizeof(WCHAR);
+            if (length < nameOffset) return statusInfoLengthMismatch;
+            const ULONG attributes = 0, maximumComponent = 255;
+            const ULONG copiedBytes = (std::min)(nameBytes, length - nameOffset) & ~ULONG(1);
+            std::memset(out, 0, nameOffset + copiedBytes);
+            writeField(0, &attributes, sizeof(attributes)); writeField(4, &maximumComponent, sizeof(maximumComponent));
+            writeField(8, &nameBytes, sizeof(nameBytes));
+            if (copiedBytes) writeField(nameOffset, fsName, copiedBytes);
+            information = nameOffset + copiedBytes;
+            if (copiedBytes != nameBytes) {
+                if (io) { io->Status = statusBufferOverflow; io->Information = information; }
+                return statusBufferOverflow;
+            }
+            break;
+        }
+        default: return LONG(0xC0000003u);
+        }
+        if (io) { io->Status = 0; io->Information = information; }
+        return 0;
+    }
 
     WCHAR finalPath[MAX_PATH * 4]{};
     const DWORD pathLength = GetFinalPathNameByHandleW(
@@ -885,7 +1209,16 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h){
+    bool dvdHandle = false;
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        auto found = g_dvdFiles.find(h);
+        if (found != g_dvdFiles.end()) { g_dvdFiles.erase(found); dvdHandle = true; }
+    }
+    CloseGuestDirectorySearch(h);
+    return CloseHandle(h) ? 0 : LONG(0xC0000008u);
+}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
@@ -938,6 +1271,62 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     if (fileMask && ((fileMask->Length && !fileMask->Buffer) ||
                      fileMask->Length > fileMask->MaximumLength))
         return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        auto dvd = g_dvdFiles.find(file);
+        if (dvd != g_dvdFiles.end()) {
+            if (!dvd->second.directory) return SetDirectoryIoStatus(io, LONG(0xC0000103u));
+            if (restartScan) dvd->second.directoryIndex = 0;
+            std::wstring wanted;
+            if (fileMask && fileMask->Length) {
+                const int chars = MultiByteToWideChar(CP_ACP, 0, fileMask->Buffer,
+                    fileMask->Length, nullptr, 0);
+                if (chars <= 0) return SetDirectoryIoStatus(io, statusInvalidParameter);
+                wanted.resize(static_cast<size_t>(chars));
+                if (!MultiByteToWideChar(CP_ACP, 0, fileMask->Buffer,
+                    fileMask->Length, wanted.data(), chars))
+                    return SetDirectoryIoStatus(io, statusInvalidParameter);
+                if (wanted == L"*.*") wanted = L"*";
+            }
+            while (dvd->second.directoryIndex < dvd->second.children.size()) {
+                const uint32_t index = dvd->second.directoryIndex;
+                const XDVDFS_FILE_INFO& child = dvd->second.children[index];
+                const int chars = MultiByteToWideChar(CP_ACP, 0, child.name,
+                    child.nameLength, nullptr, 0);
+                if (chars <= 0) { ++dvd->second.directoryIndex; continue; }
+                std::wstring childName(static_cast<size_t>(chars), L'\\0');
+                MultiByteToWideChar(CP_ACP, 0, child.name, child.nameLength,
+                    childName.data(), chars);
+                if (!wanted.empty() && !DvdWildcardMatch(wanted, childName)) {
+                    ++dvd->second.directoryIndex;
+                    continue;
+                }
+                const size_t required = offsetof(GuestFileDirectoryInformation, FileName) + child.nameLength;
+                if (required > length)
+                    return SetDirectoryIoStatus(io, statusBufferOverflow, static_cast<ULONG>(required));
+                auto* out = static_cast<GuestFileDirectoryInformation*>(information);
+                std::memset(out, 0, required);
+                out->FileIndex = index + 1;
+                out->EndOfFile.QuadPart = child.size;
+                out->AllocationSize.QuadPart =
+                    (static_cast<LONGLONG>(child.size) + 2047) & ~LONGLONG(2047);
+                out->FileAttributes = 0;
+                if (child.attributes & XDVDFS_ATTR_DIRECTORY) out->FileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
+                if (child.attributes & XDVDFS_ATTR_READONLY) out->FileAttributes |= FILE_ATTRIBUTE_READONLY;
+                if (child.attributes & XDVDFS_ATTR_HIDDEN) out->FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+                if (child.attributes & XDVDFS_ATTR_SYSTEM) out->FileAttributes |= FILE_ATTRIBUTE_SYSTEM;
+                if (child.attributes & XDVDFS_ATTR_ARCHIVE) out->FileAttributes |= FILE_ATTRIBUTE_ARCHIVE;
+                if (!out->FileAttributes) out->FileAttributes = FILE_ATTRIBUTE_NORMAL;
+                out->FileNameLength = child.nameLength;
+                if (child.nameLength) std::memcpy(out->FileName, child.name, child.nameLength);
+                ++dvd->second.directoryIndex;
+                if (event) SetEvent(event);
+                return SetDirectoryIoStatus(io, 0, static_cast<ULONG>(required));
+            }
+            return SetDirectoryIoStatus(io, statusNoMoreFiles);
+        }
+    }
 
     std::wstring directory;
     WCHAR pathBuffer[32768]{};
@@ -2525,8 +2914,39 @@ void XboxKernelFlushEeprom() {
     CloseHandle(f);
 }
 
-void XboxKernelSetTitlePath(const wchar_t* path){
-    g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
+void XboxKernelSetTitlePath(const wchar_t* path) {
+    g_titleDirectory.clear();
+    if (!path) return;
+    g_titleDirectory = path;
+    const size_t separator = g_titleDirectory.find_last_of(L"\\/");
+    if (separator != std::wstring::npos) g_titleDirectory.resize(separator);
+}
+
+bool XboxKernelMountDvdImage(const wchar_t* path) {
+    if (!path || !*path || g_dvdReady) return false;
+    if (::ModuleStart() != 0) return false;
+    if (XDVDFS_OpenImage(path, &g_dvdInfo) != 0) {
+        ::ModuleStop();
+        g_dvdInfo = {};
+        return false;
+    }
+    g_dvdReady = true;
+    OutputDebugStringW(L"[XboxKernel] XDVDFS disc image mounted in guest process.\\n");
+    return true;
+}
+
+void XboxKernelUnmountDvdImage() {
+    {
+        std::lock_guard<std::mutex> lock(g_dvdFileMutex);
+        for (const auto& item : g_dvdFiles) CloseHandle(item.first);
+        g_dvdFiles.clear();
+    }
+    if (g_dvdReady) {
+        XDVDFS_CloseImage();
+        ::ModuleStop();
+        g_dvdReady = false;
+        g_dvdInfo = {};
+    }
 }
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
