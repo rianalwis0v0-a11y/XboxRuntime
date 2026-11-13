@@ -192,7 +192,7 @@ int wmain(int argc, wchar_t** argv) {
                         exitReply.exitCode = exitCode;
                         exitReply.tlsIndexCleared = tlsCleared ? 1u : 0u;
                         XboxKernelGetLastExceptionDiagnostic(
-                            &g_lastExceptionCode, &exitReply.exceptionInstruction,
+                            nullptr, &exitReply.exceptionInstruction,
                             &exitReply.accessType, &exitReply.faultAddress);
                         XboxKernelShutdownTitle();
                     } else {
