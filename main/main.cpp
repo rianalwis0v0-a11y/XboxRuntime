@@ -5,6 +5,7 @@
 
 #include "main.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -49,15 +50,7 @@ namespace XboxRuntime
 
     static bool FindDirectories()
     {
-        wchar_t systemPath[32768]{};
-
-        UINT length = GetSystemDirectoryW(
-            systemPath,
-            static_cast<UINT>(_countof(systemPath))
-        );
-
-        if (!length || length >= _countof(systemPath))
-            return false;
+        UINT length = 0;
 
         wchar_t windowsPath[32768]{};
 
