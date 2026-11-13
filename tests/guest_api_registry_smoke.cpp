@@ -71,4 +71,4 @@ int main() {
     assert(!XboxGuestResolveNonKernelImports(base, sizeof(image), va(0x100)));
 
     return 0;
-
+}
