@@ -2384,8 +2384,11 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     uint32_t validation_engines[8];
     memcpy(validation_engines, g_bound_engine[channel], sizeof(validation_engines));
     int non_incrementing = 0;
-    int subroutine_active = 0;
-    uint32_t subroutine_return = 0;
+    /* NV4 CALL/RETURN is a stack, not a single saved return address. Keep
+     * the depth bounded so recursive/malicious streams cannot exhaust host
+     * memory or bypass the command-step budget. */
+    uint32_t subroutine_returns[16];
+    uint32_t call_depth = 0;
 
     if ((get & 3u) || (put & 3u) || get > put || put > mapped_length)
         return 1;
@@ -2427,17 +2430,15 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
             get = target;
         } else if ((word & 3u) == 2u) {
             const uint32_t target = word & 0xFFFFFFFCu;
-            if (subroutine_active)
-                return 5;
+            if (call_depth >= (uint32_t)(sizeof(subroutine_returns) / sizeof(subroutine_returns[0])))
+                return 5; /* CALL_ACTIVE / bounded stack overflow. */
             if (target >= mapped_length)
                 return 4; /* Invalid target is a protection fault, not CALL_ACTIVE. */
-            subroutine_return = get;
-            subroutine_active = 1;
+            subroutine_returns[call_depth++] = get;
             get = target;
         } else if (word == 0x00020000u) {
-            if (!subroutine_active) return 6;
-            get = subroutine_return;
-            subroutine_active = 0;
+            if (!call_depth) return 6;
+            get = subroutine_returns[--call_depth];
         } else if ((word & 0xE0030003u) == 0u) {
             method = ((word >> 2) & 0x7FFu) * 4u;
             subchannel = (word >> 13) & 7u;
@@ -2460,7 +2461,7 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
         }
     }
 
-    if (remaining || subroutine_active) return 9;
+    if (remaining || call_depth) return 9;
     if (final_get) *final_get = get;
     if (methods_submitted) *methods_submitted = methods;
     return 0;
