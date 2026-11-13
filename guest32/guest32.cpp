@@ -23,6 +23,7 @@
 #include <vector>
 #include <algorithm>
 #include "kernel_compat.h"
+#include "xdvdfs.h"
 
 namespace {
 constexpr uint32_t kHeaderMin=0x178, kSectionSize=56;
@@ -39,17 +40,8 @@ uint32_t U32(const std::vector<uint8_t>& b,size_t o){uint32_t v=0;std::memcpy(&v
 bool Fits(uint64_t o,uint64_t n,uint64_t lim){return o<=lim&&n<=lim-o;}
 bool VaOffset(uint32_t va,uint32_t base,uint32_t size,uint32_t& out){if(va<base)return false;uint64_t d=uint64_t(va)-base;if(d>=size)return false;out=uint32_t(d);return true;}
 void Release(){if(g_image)VirtualFree(g_image,0,MEM_RELEASE);g_image=nullptr;}
-uint32_t Load(const wchar_t* path,Reply& reply){
- HANDLE f=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,nullptr);
- if(f==INVALID_HANDLE_VALUE)return IO;
- LARGE_INTEGER fs{};
- if(!GetFileSizeEx(f,&fs)||fs.QuadPart<kHeaderMin||fs.QuadPart>0xFFFFFFFFll){CloseHandle(f);return FORMAT;}
- std::vector<uint8_t>b;try{b.resize(size_t(fs.QuadPart));}catch(...){CloseHandle(f);return MEMORY;}
- size_t pos=0;
- while(pos<b.size()){DWORD got=0,ask=DWORD(std::min<size_t>(b.size()-pos,1u<<20));if(!ReadFile(f,b.data()+pos,ask,&got,nullptr)||!got){CloseHandle(f);return IO;}pos+=got;}
- CloseHandle(f);
- if(std::memcmp(b.data(),"XBEH",4))return FORMAT;
-
+uint32_t LoadBytes(const std::vector<uint8_t>& b, Reply& reply) {
+ if (b.size() < kHeaderMin || std::memcmp(b.data(), "XBEH", 4)) return FORMAT;
  // Xbe::Header fields used by Cxbx-Reloaded (Xbe.h). All file and VA
  // conversions are range checked before any allocation or guest mapping.
  const uint32_t base=U32(b,0x104),headers=U32(b,0x108),image=U32(b,0x10C),headerImage=U32(b,0x110);
@@ -137,21 +129,65 @@ uint32_t Load(const wchar_t* path,Reply& reply){
  if(!VirtualProtect(mem,headers,PAGE_READONLY,&old)){VirtualFree(mem,0,MEM_RELEASE);return MEMORY;}
  g_image=mem;reply={kReplyMagic,1,OK,base,image,entry,count};return OK;
 }
+uint32_t LoadFile(const wchar_t* path, Reply& reply) {
+ HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+ if (f == INVALID_HANDLE_VALUE) return IO;
+ LARGE_INTEGER fs{};
+ if (!GetFileSizeEx(f, &fs) || fs.QuadPart < kHeaderMin ||
+     fs.QuadPart > 0xFFFFFFFFll) { CloseHandle(f); return FORMAT; }
+ std::vector<uint8_t> bytes;
+ try { bytes.resize(static_cast<size_t>(fs.QuadPart)); }
+ catch (...) { CloseHandle(f); return MEMORY; }
+ size_t position = 0;
+ while (position < bytes.size()) {
+     DWORD got = 0;
+     const DWORD ask = DWORD((std::min)(bytes.size() - position, size_t(1u << 20)));
+     if (!ReadFile(f, bytes.data() + position, ask, &got, nullptr) || !got) {
+         CloseHandle(f);
+         return IO;
+     }
+     position += got;
+ }
+ CloseHandle(f);
+ return LoadBytes(bytes, reply);
+}
+
+uint32_t LoadFromDisc(const wchar_t* imagePath, Reply& reply) {
+ if (!XboxKernelMountDvdImage(imagePath)) return IO;
+ XDVDFS_FILE_INFO xbe{};
+ if (XDVDFS_GetFileInfo("default.xbe", &xbe) != 0 ||
+     (xbe.attributes & XDVDFS_ATTR_DIRECTORY) || xbe.size < kHeaderMin) {
+     XboxKernelUnmountDvdImage();
+     return FORMAT;
+ }
+ std::vector<uint8_t> bytes;
+ try { bytes.resize(xbe.size); }
+ catch (...) { XboxKernelUnmountDvdImage(); return MEMORY; }
+ uint32_t received = 0;
+ if (XDVDFS_ReadFile("default.xbe", 0, bytes.data(), xbe.size, &received) != 0 ||
+     received != xbe.size) {
+     XboxKernelUnmountDvdImage();
+     return IO;
+ }
+ return LoadBytes(bytes, reply);
+}
+
 bool ReadExact(HANDLE h,void*p,DWORD n){DWORD d=0;while(d<n){DWORD got=0;if(!ReadFile(h,static_cast<char*>(p)+d,n-d,&got,nullptr)||!got)return false;d+=got;}return true;}
 bool WriteExact(HANDLE h,const void*p,DWORD n){DWORD d=0;while(d<n){DWORD sent=0;if(!WriteFile(h,static_cast<const char*>(p)+d,n-d,&sent,nullptr)||!sent)return false;d+=sent;}return true;}
 }
 int wmain(int argc,wchar_t**argv){
- const wchar_t*pipeName=nullptr;const wchar_t*xbePath=nullptr;const wchar_t*eepromPath=nullptr;uint32_t reportVa=0;
- for(int i=1;i+1<argc;i++){if(!wcscmp(argv[i],L"--pipe"))pipeName=argv[++i];else if(!wcscmp(argv[i],L"--xbe"))xbePath=argv[++i];else if(!wcscmp(argv[i],L"--eeprom"))eepromPath=argv[++i];else if(!wcscmp(argv[i],L"--report-va"))reportVa=uint32_t(wcstoul(argv[++i],nullptr,0));}
- if(!pipeName||!xbePath||!eepromPath)return 2;
+ const wchar_t*pipeName=nullptr;const wchar_t*xbePath=nullptr;const wchar_t*dvdImagePath=nullptr;const wchar_t*eepromPath=nullptr;uint32_t reportVa=0;
+ for(int i=1;i+1<argc;i++){if(!wcscmp(argv[i],L"--pipe"))pipeName=argv[++i];else if(!wcscmp(argv[i],L"--xbe"))xbePath=argv[++i];else if(!wcscmp(argv[i],L"--dvd-image"))dvdImagePath=argv[++i];else if(!wcscmp(argv[i],L"--eeprom"))eepromPath=argv[++i];else if(!wcscmp(argv[i],L"--report-va"))reportVa=uint32_t(wcstoul(argv[++i],nullptr,0));}
+ if(!pipeName||(!xbePath&&!dvdImagePath)||!eepromPath)return 2;
  HANDLE pipe=CreateFileW(pipeName,GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);
  if(pipe==INVALID_HANDLE_VALUE)return 3;
- Reply r{};r.magic=kReplyMagic;r.version=1;r.status=Load(xbePath,r);
+ Reply r{};r.magic=kReplyMagic;r.version=1;r.status=dvdImagePath?LoadFromDisc(dvdImagePath,r):LoadFile(xbePath,r);
  HANDLE xbeThread=nullptr;
  if(r.status==OK){
   if(!XboxKernelInitializeEeprom(eepromPath))r.status=IO;
   else {
-   XboxKernelSetTitlePath(xbePath);
+   XboxKernelSetTitlePath(xbePath ? xbePath : dvdImagePath);
    XboxKernelState image{r.imageBase,r.imageSize,r.entry,r.sectionCount,*reinterpret_cast<uint32_t*>(uintptr_t(r.imageBase+0x12C))};
    if(!XboxKernelResolveImports(image))r.status=FORMAT;
   }
@@ -175,5 +211,6 @@ int wmain(int argc,wchar_t**argv){
   if(report.magic==0x54535258u)WriteExact(pipe,&report,sizeof(report));
  }
  XboxKernelFlushEeprom();
+ XboxKernelUnmountDvdImage();
  Release();CloseHandle(pipe);return ok?0:4;
 }
