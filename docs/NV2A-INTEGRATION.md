@@ -487,3 +487,8 @@ The NV2A HLSL smoke test exercises real microcode rather than only a terminated 
 ## Bounded nested DMA CALL/RETURN
 
 The NV4-style DMA pusher now maintains a 16-entry return-address stack instead of a single saved return address. Nested helper routines unwind in LIFO order. The validation pass and dispatch pass use the same bounded stack logic, so excessive nesting is rejected before any PGRAPH methods are dispatched. The smoke test covers a two-level nested routine that binds three DMA contexts, the maximum supported depth of 16, rejection of depth 17 with the PFIFO CALL_ACTIVE error, invalid call targets, and RETURN without an active call. This remains a bounded software pusher; it does not add DMA ring wraparound, nested-depth beyond 16, PCI/AGP DMA or full PFIFO scheduling.
+
+
+## Correct NV2A vertex microcode decoding
+
+The pinned xboxrecomp D3D8 HLSL translator previously read opcode/source/destination fields from the wrong DWORD positions, so real NV2A instructions could be parsed as NOPs. On Windows, CMake now applies a small idempotent patch to the pinned submodule source before building: opcodes and shared indices are decoded from DWORD1; source muxes/swizzles/registers from DWORD2/3; and the independent MAC-temp, ILU-temp and output masks plus output routing from DWORD3. The destination structure now retains separate temp and output write masks. The HLSL smoke test uses the actual NV2A DWORD layout and checks exact input masks for MOV v0, ADD v5+v5 and MOV c[17] before compiling the generated VS 5.0 bytecode. The patch is local to the checked-out submodule worktree and does not alter the pinned submodule commit.
