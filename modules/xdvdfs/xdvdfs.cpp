@@ -197,6 +197,7 @@ extern "C" int __cdecl XDVDFS_ListDirectory(
     const char* path, XDVDFS_FILE_INFO* output,
     uint32_t capacity, uint32_t* required) {
     if (!path || !required || (capacity && !output)) return 1;
+    *required = 0;
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_started || !g_volume.open) return 2;
 
@@ -232,8 +233,8 @@ extern "C" int __cdecl XDVDFS_ListDirectory(
         target.size = source.size;
         target.attributes = source.attributes;
         target.nameLength = static_cast<uint8_t>(
-            (std::min)(children[i].first.size(), size_t(255)));
-        std::memcpy(target.name, children[i].first.data(), target.nameLength);
+            (std::min)(source.name.size(), size_t(255)));
+        std::memcpy(target.name, source.name.data(), target.nameLength);
     }
     return 0;
 }
