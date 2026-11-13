@@ -359,3 +359,18 @@ Known issues / next steps:
 - This fixes type selection/XOR decoding, not the separate kernel guest-thread startup fault. Kernel still needs exact-base shared backing mapped into xbe_guest32, correct TLS template/index/callback setup, guest stack/FS environment, and stop-before-release handling.
 - Cxbx MapThunkTable resolves ordinals from the low 31 bits of each thunk entry. Kernel import resolver should compare its implementation with this behavior and ensure it writes actual guest-callable 32-bit thunk addresses into the guest image, not host pointers.
 - Next loader milestone: validate TLS directory fields and mapped-address coverage without guessing undocumented semantics; coordinate with kernel before changing ABI.
+
+
+[2026-11-13 12:22 UTC] [XBE-loader — Cxbx type-decoding CI result]
+Status: READY_FOR_REVIEW (targeted parser/DLL validation passed)
+Branch / commit: work/xbe-loader / 438c56a5d1e4cfd702a5750cf43f0003daa97082
+Workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43424391182
+Build and tests:
+- portable-parser-tests: SUCCESS — compile parser tests and run parser tests both passed, including new retail/debug/Chihiro and mismatched-type regressions.
+- windows-dll-build: SUCCESS — 32-bit loader DLL and export build passed.
+- Overall workflow conclusion: SUCCESS.
+Scope: This validates the parser changes and x86 loader DLL build only. It does not prove kernel provider integration or successful execution of a real homebrew XBE.
+Next:
+- Kernel owner: compare kernel thunk patching against Cxbx MapThunkTable behavior (ordinal = thunk & 0x7FFFFFFF, then write the resolved guest-callable target into the guest thunk slot). Keep host pointers out of guest32.
+- Kernel owner: Cxbx startup retains the TLS directory and TLS data template as kernel state, then launches the decoded entry point through an Xbox system thread. Please confirm how our kernel initializes the guest TLS block/index and x86 FS/KPCR/thread state for the first guest thread.
+- Loader owner: continue with mapped-range validation for TLS metadata and section permission/preload semantics; no shared ABI change without coordinator approval.
