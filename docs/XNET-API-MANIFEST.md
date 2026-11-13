@@ -33,8 +33,8 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 | `XNetInAddrToXnAddr` | `int WINAPI (const IN_ADDR, XNADDR*, XNKID*)` | Returns `WSAEOPNOTSUPP` until registered online address/key state exists. |
 | `XNetUnregisterInAddr` | `int WINAPI (const IN_ADDR)` | Returns `WSAEOPNOTSUPP`; no registration table exists yet. |
 | `XNetGetDebugXnAddr` | `DWORD WINAPI (XNADDR*)` | Returns no debug address (zero); devkit-only identity is not synthesized. |
-| `XNetGetEthernetLinkStatus` | `DWORD WINAPI ()` | Host adapter-derived flags. Bit definitions and Xbox equivalence are **provisional and require ABI verification**. |
-| `XNetGetTitleXnAddr` | `DWORD WINAPI (XNADDR*)` | Populates LAN IPv4/MAC where available; online identity fields remain zero. Returned flags are provisional. |
+| `XNetGetEthernetLinkStatus` | `DWORD WINAPI ()` | Host adapter-derived flags using the Xbox bit definitions: ACTIVE, 100MBPS/10MBPS and WIRELESS. Duplex is left clear because IP Helper does not expose it in this adapter record. |
+| `XNetGetTitleXnAddr` | `DWORD WINAPI (XNADDR*)` | Requires XNet startup; returns `XNET_GET_XNADDR_NONE` when unavailable. Populates LAN IPv4/MAC; reports verified DHCP/static, gateway and DNS flags. Online identity fields remain zero. |
 | `XSocketCreate` | `SOCKET WINAPI (int af, int type, int protocol)` | Opaque 32-bit token; `INVALID_SOCKET` on unsupported family/type or failure. TCP and UDP/IPv4 only. |
 | `XSocketClose` | `int WINAPI (SOCKET)` | 0 on registry removal; `SOCKET_ERROR` for invalid token. In-flight operations retain a native socket lease until completion. |
 | `XSocketBind` | `int WINAPI (SOCKET, const sockaddr*, int)` | Winsock-style 0 / `SOCKET_ERROR`; IPv4 only. |
@@ -53,6 +53,14 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 | `XSocketRecvFrom` | `int WINAPI (SOCKET, char*, int, int, sockaddr*, int*)` | Bytes received or `SOCKET_ERROR`; IPv4 source endpoint when output buffer is supplied. |
 | `XSocketHTONL` / `XSocketNTOHL` | `u_long WINAPI (u_long)` | Host/network 32-bit byte-order conversion. |
 | `XSocketHTONS` / `XSocketNTOHS` | `u_short WINAPI (u_short)` | Host/network 16-bit byte-order conversion. |
+
+## Verified status flags
+
+The header defines the Xbox status values used by the implementation:
+- `XNET_GET_XNADDR_NONE=0x1`, `ETHERNET=0x2`, `STATIC=0x4`, `DHCP=0x8`, `GATEWAY=0x20`, `DNS=0x40`, `ONLINE=0x80`, `TROUBLESHOOT=0x8000`.
+- `XNET_ETHERNET_LINK_ACTIVE=0x1`, `100MBPS=0x2`, `10MBPS=0x4`, `FULL_DUPLEX=0x8`, `HALF_DUPLEX=0x10`, `WIRELESS=0x20`.
+
+The host adapter query reports only properties it can observe. Duplex flags are intentionally not set because the Windows IP Helper adapter record does not expose duplex mode.
 
 ## Structure inventory
 
