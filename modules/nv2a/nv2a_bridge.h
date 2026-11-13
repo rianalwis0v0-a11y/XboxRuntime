@@ -15,6 +15,9 @@ extern "C" {
 // Standard XboxRuntime module lifecycle.
 __declspec(dllexport) int __cdecl ModuleStart(void);
 __declspec(dllexport) void __cdecl ModuleStop(void);
+/* Host passes its D3D8 device here because xbox_d3d8 is statically
+ * linked into each module and therefore has per-module singleton state. */
+__declspec(dllexport) int __cdecl XboxNV2A_SetD3DDevice(void* device);
 
 // NV2A register offsets are relative to the 0xFD000000 MMIO aperture.
 // Access sizes accepted by the upstream model are 1, 2, or 4 bytes.
