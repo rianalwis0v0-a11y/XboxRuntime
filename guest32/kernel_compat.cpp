@@ -175,6 +175,56 @@ extern "C" uint32_t __stdcall K_ExQueryPoolBlockSize(void*p){return p?HeapSize(G
 extern "C" void* __stdcall K_AvGetSavedDataAddress(){return g_savedAv;}
 extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
 
+struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
+static void GuestAcquireSpinLock(volatile LONG* lock) {
+    while (InterlockedExchange(lock, 1) != 0) YieldProcessor();
+}
+static void GuestReleaseSpinLock(volatile LONG* lock) {
+    MemoryBarrier();
+    InterlockedExchange(lock, 0);
+}
+extern "C" GuestListEntry* __stdcall K_ExfInterlockedInsertHeadList(
+    GuestListEntry* head, GuestListEntry* entry, volatile LONG* lock) {
+    if (!head || !entry || !lock || entry == head) return nullptr;
+    GuestAcquireSpinLock(lock);
+    GuestListEntry* old = head->Flink;
+    if (!old) { GuestReleaseSpinLock(lock); return nullptr; }
+    entry->Flink = old;
+    entry->Blink = head;
+    old->Blink = entry;
+    head->Flink = entry;
+    GuestReleaseSpinLock(lock);
+    return old == head ? nullptr : old;
+}
+extern "C" GuestListEntry* __stdcall K_ExfInterlockedInsertTailList(
+    GuestListEntry* head, GuestListEntry* entry, volatile LONG* lock) {
+    if (!head || !entry || !lock || entry == head) return nullptr;
+    GuestAcquireSpinLock(lock);
+    GuestListEntry* old = head->Blink;
+    if (!old) { GuestReleaseSpinLock(lock); return nullptr; }
+    entry->Flink = head;
+    entry->Blink = old;
+    old->Flink = entry;
+    head->Blink = entry;
+    GuestReleaseSpinLock(lock);
+    return old == head ? nullptr : old;
+}
+extern "C" GuestListEntry* __stdcall K_ExfInterlockedRemoveHeadList(
+    GuestListEntry* head, volatile LONG* lock) {
+    if (!head || !lock) return nullptr;
+    GuestAcquireSpinLock(lock);
+    GuestListEntry* first = head->Flink;
+    if (!first || first == head) { GuestReleaseSpinLock(lock); return nullptr; }
+    GuestListEntry* next = first->Flink;
+    if (!next) { GuestReleaseSpinLock(lock); return nullptr; }
+    head->Flink = next;
+    next->Blink = head;
+    first->Flink = nullptr;
+    first->Blink = nullptr;
+    GuestReleaseSpinLock(lock);
+    return first;
+}
+
 extern "C" PSLIST_ENTRY __fastcall K_InterlockedFlushSList(PSLIST_HEADER list) {
     return list ? InterlockedFlushSList(list) : nullptr;
 }
@@ -1083,6 +1133,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je interlocked_pop_slist
         cmp eax, 58
         je interlocked_push_slist
+        cmp eax, 32
+        je exf_insert_head
+        cmp eax, 33
+        je exf_insert_tail
+        cmp eax, 34
+        je exf_remove_head
                 cmp eax, 167
         je mm_alloc_system
         cmp eax, 172
@@ -1425,6 +1481,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     interlocked_flush_slist: jmp K_InterlockedFlushSList
     interlocked_pop_slist: jmp K_InterlockedPopEntrySList
     interlocked_push_slist: jmp K_InterlockedPushEntrySList
+    exf_insert_head: jmp K_ExfInterlockedInsertHeadList
+    exf_insert_tail: jmp K_ExfInterlockedInsertTailList
+    exf_remove_head: jmp K_ExfInterlockedRemoveHeadList
     hal_return_firmware: jmp K_HalReturnToFirmware
     rtl_assert: jmp K_RtlAssert
     hal_read_tray: jmp K_HalReadSMCTrayState
