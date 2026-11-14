@@ -2671,10 +2671,37 @@ std::uint32_t g_lastGuestAccessType = 0;
 std::uint32_t g_lastGuestFaultAddress = 0;
 std::uint32_t g_lastGuestFaultProtection = 0;
 std::uint32_t g_lastGuestFaultState = 0;
+XboxGuestFaultContext g_lastGuestFaultContext{};
 
 int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
     if (exception && exception->ExceptionRecord) {
         const auto* record = exception->ExceptionRecord;
+        if (exception->ContextRecord) {
+            const CONTEXT* cpu = exception->ContextRecord;
+            g_lastGuestFaultContext.eax = cpu->Eax;
+            g_lastGuestFaultContext.ebx = cpu->Ebx;
+            g_lastGuestFaultContext.ecx = cpu->Ecx;
+            g_lastGuestFaultContext.edx = cpu->Edx;
+            g_lastGuestFaultContext.esi = cpu->Esi;
+            g_lastGuestFaultContext.edi = cpu->Edi;
+            g_lastGuestFaultContext.ebp = cpu->Ebp;
+            g_lastGuestFaultContext.esp = cpu->Esp;
+            std::memset(g_lastGuestFaultContext.stack, 0,
+                        sizeof(g_lastGuestFaultContext.stack));
+            MEMORY_BASIC_INFORMATION stackMemory{};
+            const auto stack = static_cast<std::uintptr_t>(cpu->Esp);
+            if (cpu->Esp && VirtualQuery(reinterpret_cast<const void*>(stack),
+                    &stackMemory, sizeof(stackMemory)) == sizeof(stackMemory) &&
+                stackMemory.State == MEM_COMMIT &&
+                !(stackMemory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+                stack + sizeof(g_lastGuestFaultContext.stack) <=
+                    reinterpret_cast<std::uintptr_t>(stackMemory.BaseAddress) +
+                    stackMemory.RegionSize) {
+                std::memcpy(g_lastGuestFaultContext.stack,
+                    reinterpret_cast<const void*>(stack),
+                    sizeof(g_lastGuestFaultContext.stack));
+            }
+        }
         g_lastGuestExceptionCode = record->ExceptionCode;
         g_lastGuestExceptionInstruction =
             static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(
@@ -2710,6 +2737,9 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
     if (faultAddress) *faultAddress = g_lastGuestFaultAddress;
     if (faultProtection) *faultProtection = g_lastGuestFaultProtection;
     if (faultState) *faultState = g_lastGuestFaultState;
+}
+void XboxKernelGetLastExceptionContext(XboxGuestFaultContext* context) {
+    if (context) *context = g_lastGuestFaultContext;
 }
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
@@ -2808,6 +2838,7 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
     g_lastGuestFaultAddress = 0;
     g_lastGuestFaultProtection = 0;
     g_lastGuestFaultState = 0;
+    g_lastGuestFaultContext = {};
     DWORD result = 0;
     using Entry = void (__cdecl*)();
     __try {
