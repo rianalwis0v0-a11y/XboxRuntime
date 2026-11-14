@@ -17,6 +17,8 @@ namespace {
 std::mutex g_xnetMutex;
 unsigned g_xnetUsers = 0;
 XNetStartupParams g_startupParams{};
+struct RegisteredKey { XNKID id; XNKEY key; };
+std::vector<RegisteredKey> g_registeredKeys;
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -39,17 +41,16 @@ extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     std::memset(&g_startupParams, 0, sizeof(g_startupParams));
     if (params) std::memcpy(&g_startupParams, params, sizeof(g_startupParams));
     g_startupParams.cfgSizeOfStruct = sizeof(g_startupParams);
-    if (!g_startupParams.cfgSockMaxDgramSockets) g_startupParams.cfgSockMaxDgramSockets = 8;
-    if (!g_startupParams.cfgSockMaxStreamSockets) g_startupParams.cfgSockMaxStreamSockets = 32;
+    if (!g_startupParams.cfgPrivatePoolSizeInPages) g_startupParams.cfgPrivatePoolSizeInPages = 12;
+    if (!g_startupParams.cfgEnetReceiveQueueLength) g_startupParams.cfgEnetReceiveQueueLength = 8;
+    if (!g_startupParams.cfgIpFragMaxSimultaneous) g_startupParams.cfgIpFragMaxSimultaneous = 4;
+    if (!g_startupParams.cfgIpFragMaxPacketDiv256) g_startupParams.cfgIpFragMaxPacketDiv256 = 8;
+    if (!g_startupParams.cfgSockMaxSockets) g_startupParams.cfgSockMaxSockets = 64;
     if (!g_startupParams.cfgSockDefaultRecvBufsizeInK) g_startupParams.cfgSockDefaultRecvBufsizeInK = 16;
     if (!g_startupParams.cfgSockDefaultSendBufsizeInK) g_startupParams.cfgSockDefaultSendBufsizeInK = 16;
-    if (!g_startupParams.cfgKeyRegMax) g_startupParams.cfgKeyRegMax = 8;
+    if (!g_startupParams.cfgKeyRegMax) g_startupParams.cfgKeyRegMax = 4;
     if (!g_startupParams.cfgSecRegMax) g_startupParams.cfgSecRegMax = 32;
-    if (!g_startupParams.cfgQosDataLimitDiv4) g_startupParams.cfgQosDataLimitDiv4 = 64;
-    if (!g_startupParams.cfgQosProbeTimeoutInSeconds) g_startupParams.cfgQosProbeTimeoutInSeconds = 2;
-    if (!g_startupParams.cfgQosProbeRetries) g_startupParams.cfgQosProbeRetries = 3;
-    if (!g_startupParams.cfgQosSrvMaxSimultaneousResponses) g_startupParams.cfgQosSrvMaxSimultaneousResponses = 8;
-    if (!g_startupParams.cfgQosPairWaitTimeInSeconds) g_startupParams.cfgQosPairWaitTimeInSeconds = 2;
+    if (!g_startupParams.cfgQosDataLimitDiv4) g_startupParams.cfgQosDataLimitDiv4 = 128;
     g_xnetUsers = 1;
     Log(L"XNet startup complete (transport backend initialized).");
     return 0;
@@ -60,6 +61,8 @@ extern "C" int WINAPI XNetCleanup() {
     if (!g_xnetUsers) return 0;
     if (--g_xnetUsers == 0) {
         XboxNetCleanup();
+        for (auto& entry : g_registeredKeys) SecureZeroMemory(&entry, sizeof(entry));
+        g_registeredKeys.clear();
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup complete.");
     }
@@ -90,6 +93,62 @@ DWORD WINAPI CompleteDnsLookup(void* parameter) {
     XboxNetCleanup(); // Keep Winsock alive until the resolver has finished.
     return 0;
 }
+}
+
+extern "C" int WINAPI XNetCreateKey(XNKID* keyId, XNKEY* key) {
+    if (!keyId || !key) return WSAEFAULT;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, keyId->ab, sizeof(keyId->ab),
+            BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ||
+        !BCRYPT_SUCCESS(BCryptGenRandom(nullptr, key->ab, sizeof(key->ab),
+            BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+        SecureZeroMemory(keyId, sizeof(*keyId));
+        SecureZeroMemory(key, sizeof(*key));
+        return WSAENOBUFS;
+    }
+    // XDK XNetCreateKey creates a system-link (peer-to-peer) XNKID.
+    keyId->ab[0] &= static_cast<BYTE>(~0xF0u);
+    return 0;
+}
+
+extern "C" int WINAPI XNetRegisterKey(const XNKID* keyId, const XNKEY* key) {
+    if (!keyId || !key) return WSAEFAULT;
+    // The secure XNet peer registration path accepts system-link and online-peer
+    // identifiers. This backend currently implements only the system-link
+    // registration table; it does not claim to perform the XNet DH/security handshake.
+    if ((keyId->ab[0] & 0xC0u) != 0x00u) return WSAEINVAL;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    for (const auto& entry : g_registeredKeys) {
+        if (std::memcmp(entry.id.ab, keyId->ab, sizeof(keyId->ab)) == 0)
+            return WSAEALREADY;
+    }
+    const size_t limit = g_startupParams.cfgKeyRegMax ? g_startupParams.cfgKeyRegMax : 4;
+    if (g_registeredKeys.size() >= limit) return WSAENOMORE;
+    try {
+        RegisteredKey entry{};
+        entry.id = *keyId;
+        entry.key = *key;
+        g_registeredKeys.push_back(entry);
+    } catch (...) {
+        return WSAENOBUFS;
+    }
+    return 0;
+}
+
+extern "C" int WINAPI XNetUnregisterKey(const XNKID* keyId) {
+    if (!keyId) return WSAEFAULT;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    for (auto it = g_registeredKeys.begin(); it != g_registeredKeys.end(); ++it) {
+        if (std::memcmp(it->id.ab, keyId->ab, sizeof(keyId->ab)) == 0) {
+            SecureZeroMemory(&*it, sizeof(*it));
+            g_registeredKeys.erase(it);
+            return 0;
+        }
+    }
+    return WSAEINVAL;
 }
 
 extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** output) {
