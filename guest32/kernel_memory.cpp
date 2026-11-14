@@ -109,7 +109,7 @@ extern "C" LONG __stdcall K_NtAllocateVirtualMemory(
 
 extern "C" LONG __stdcall K_NtFreeVirtualMemory(
     void** baseAddress, SIZE_T* regionSize, ULONG freeType) {
-    if (!baseAddress || !*baseAddress ||
+    if (!baseAddress || !*baseAddress || !regionSize ||
         (freeType != MEM_RELEASE && freeType != MEM_DECOMMIT))
         return kInvalidParameter;
     const std::uintptr_t requested = reinterpret_cast<std::uintptr_t>(*baseAddress);
@@ -118,7 +118,7 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
     SIZE_T size = 0;
     void* base = *baseAddress;
     if (freeType == MEM_RELEASE) {
-        if (regionSize && *regionSize != 0) return kInvalidParameter;
+        if (*regionSize != 0) return kInvalidParameter;
     } else {
         std::uint32_t alignedBase = 0, alignedSize = 0;
         if (!regionSize || !*regionSize || *regionSize > 0xFFFFFFFFu ||
@@ -131,7 +131,7 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
     if (!VirtualFree(base, size, freeType)) return StatusFromWin32(GetLastError());
     if (freeType == MEM_RELEASE) {
         *baseAddress = nullptr;
-        if (regionSize) *regionSize = 0;
+        *regionSize = 0;
     } else {
         *baseAddress = base;
         *regionSize = size;
