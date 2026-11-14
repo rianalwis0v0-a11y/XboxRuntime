@@ -345,9 +345,13 @@ int main() {
         return Fail("real guest kernel import thunks did not complete all API calls",
                     7, &backend, image, stop);
     backend.stopGuest(backend.context);
-    if (readMarker(shutdownMarkerOffset) != 1u)
-        return Fail("HalRegisterShutdownNotification callback was not invoked during shutdown",
-                    8, &backend, image, stop);
+    if (readMarker(shutdownMarkerOffset) != 1u) {
+        std::fprintf(stderr, "kernel_guest_backend_smoke: shutdown notification callback was not invoked\\n");
+        backend.releaseImage(image, backend.context);
+        stop();
+        FreeLibrary(module);
+        return 8;
+    }
     backend.releaseImage(image, backend.context);
     stop();
     FreeLibrary(module);
