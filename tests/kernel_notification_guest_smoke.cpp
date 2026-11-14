@@ -30,8 +30,7 @@ int main() {
         !high.ListEntry.Flink || !middle.ListEntry.Flink)
         return Fail("registration list links were not populated");
 
-    // Duplicate registration is ignored; unregister removes the high-priority
-    // callback before shutdown, so only the remaining three? No: removed is 20.
+    // Duplicate registration is ignored; unregister removes the priority-20 callback.
     K_HalRegisterShutdownNotification(&low, TRUE);
     K_HalRegisterShutdownNotification(&removed, FALSE);
     if (removed.ListEntry.Flink || removed.ListEntry.Blink)
