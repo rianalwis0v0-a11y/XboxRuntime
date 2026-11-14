@@ -1604,3 +1604,15 @@ Branch / latest commit: feature/nv2a-completion-v2 / 4511ce8f011e1e1629809636835
 Change: DMA pushbuffer validation no longer incorrectly rejects GET > PUT. The parser still requires an explicit in-buffer JUMP to wrap to offset zero; walking off the DMA object's mapped limit remains an error. Regression test starts at offset 0xFF4, jumps to zero, dispatches a DMA-context bind into previously unused slot 3 (method 0x018C), and checks final GET=8 plus the new binding.
 Files changed: modules/nv2a/nv2a_bridge.c, tests/nv2a_smoke.cpp, docs/NV2A-INTEGRATION.md.
 Verification: The preceding combiner-routing run 43598595268 passed x64 build and focused CTest (including nv2a_smoke and nv2a_hlsl_smoke), x86 build, and basic XBE smoke; the full workflow still failed at the comprehensive diagnostic XBE with 0xC0000409. The circular-wrap change is not yet CI-verified.
+
+
+[2026-11-14 14:05 UTC] [Kernel Developer 1 — Group B export dispatch mapping]
+Status: PR OPEN / CI RUNNING; dispatch mapping only, not semantic implementation.
+Branch: work/kernel-export-half-b
+Base: work/kernel-execution-backend at 6076f0a144df82340d4d943b62b84e3dba199b71
+Head: 4d66582efa12f360ea477090078a76050352fdf7
+PR #21: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/21
+Changed files: guest32/kernel_compat.cpp (57 explicit ordinal routes to existing K_Unsupported fail-fast handler); docs/KERNEL_EXPORT_GROUP_B_MAPPING.md (57-entry status ledger, clearly marks behavior unsupported); tools/audit_kernel_exports.py (recognizes fail-fast label in conditional-jump audit).
+Static audit on PR head: 371 catalogue entries; 270 unique function routes; 34 data exports; 304 mapped ordinals; no unknown ordinals; no function/data overlap; no missing conditional-jump labels. The remaining 57 Group A exports are assigned to the other kernel chat. Ten further ordinals are already covered on Dev 3/Dev 4 branches but are not yet present in the integration base; their PRs must still be rebased/integrated.
+CI: workflow run 43602902969 triggered by PR #21. At board update, guest32 job 132471281840 was in progress and host64 job 132471281653 queued. No test result claimed yet.
+Important: this PR does not implement Xbox behavior for these 57 exports. They now resolve to explicit fail-fast unsupported behavior instead of being accidentally routed through generic unknown-import fallback. Upgrade individual APIs only with pinned NXDK ABI provenance and guest-call/host tests. Do not merge until CI passes and review confirms the dispatcher mapping.
