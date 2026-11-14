@@ -323,8 +323,7 @@ extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
     DWORD status = XNET_ETHERNET_LINK_ACTIVE;
     if (adapter->TransmitLinkSpeed >= 100000000ull) status |= XNET_ETHERNET_LINK_100MBPS;
     else if (adapter->TransmitLinkSpeed > 0) status |= XNET_ETHERNET_LINK_10MBPS;
-    if (adapter->IfType == IF_TYPE_IEEE80211) status |= XNET_ETHERNET_LINK_WIRELESS;
-    // IP Helper does not expose duplex mode on this adapter record; leave the
+    // The original Xbox ABI has no wireless-link flag. IP Helper does not expose duplex mode on this adapter record; leave the
     // duplex bits clear rather than inventing full/half duplex state.
     return status;
 }
@@ -339,15 +338,21 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
     std::vector<BYTE> storage;
     auto* adapter = FindUsableIPv4Adapter(storage);
     if (!adapter) return XNET_GET_XNADDR_NONE;
+    bool autoIp = false;
     for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
         if (unicast->Address.lpSockaddr && unicast->Address.lpSockaddr->sa_family == AF_INET) {
             const auto* ip = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
-            if (ip->sin_addr.s_addr != htonl(INADDR_ANY) && ip->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) { output->ina = ip->sin_addr; break; }
+            if (ip->sin_addr.s_addr != htonl(INADDR_ANY) && ip->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+                output->ina = ip->sin_addr;
+                autoIp = (ntohl(ip->sin_addr.s_addr) & 0xFFFF0000u) == 0xA9FE0000u;
+                break;
+            }
         }
     }
     if (adapter->PhysicalAddressLength >= sizeof(output->abEnet)) std::memcpy(output->abEnet, adapter->PhysicalAddress, sizeof(output->abEnet));
-    DWORD flags = XNET_GET_XNADDR_ETHERNET |
-        (adapter->Dhcpv4Enabled ? XNET_GET_XNADDR_DHCP : XNET_GET_XNADDR_STATIC);
+    DWORD flags = XNET_GET_XNADDR_ETHERNET;
+    if (autoIp) flags |= XNET_GET_XNADDR_AUTO;
+    else flags |= adapter->Dhcpv4Enabled ? XNET_GET_XNADDR_DHCP : XNET_GET_XNADDR_STATIC;
     if (adapter->FirstGatewayAddress) flags |= XNET_GET_XNADDR_GATEWAY;
     if (adapter->FirstDnsServerAddress) flags |= XNET_GET_XNADDR_DNS;
     return flags;
