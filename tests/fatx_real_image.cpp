@@ -32,7 +32,7 @@ int wmain(int argc, wchar_t** argv) {
     std::memcpy(image.data(), "FATX", 4);
     put32(image, 8, 2);  // two 512-byte sectors per cluster
     put32(image, 12, 1); // root directory is cluster 1
-    put16(image, 0x1000 + 2, 0xFFF8); // root EOC
+    put16(image, 0x1000 + 2, 0xFFFF); // root EOC
     put16(image, 0x1000 + 4, 3);     // file cluster 2 -> 3
     put16(image, 0x1000 + 6, 0xFFF8);// file EOC
     BYTE* root = image.data() + dataOffset;
