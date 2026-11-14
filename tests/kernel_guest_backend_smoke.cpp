@@ -229,73 +229,73 @@ int main() {
     std::memcpy(image + 0x2300, shutdownCallback.data(), shutdownCallback.size());
 
     std::vector<std::uint8_t> guestEntry;
-    auto emit8 = [&](std::uint8_t value) { guestEntry.push_back(value); };
-    auto emit32 = [&](std::uint32_t value) {
+    auto emitGuest8 = [&](std::uint8_t value) { guestEntry.push_back(value); };
+    auto emitGuest32 = [&](std::uint32_t value) {
         const auto* bytes = reinterpret_cast<const std::uint8_t*>(&value);
         guestEntry.insert(guestEntry.end(), bytes, bytes + sizeof(value));
     };
-    auto push32 = [&](std::uint32_t value) { emit8(0x68); emit32(value); };
-    auto callThunk = [&](std::uint32_t slotAddress) {
-        emit8(0xFF); emit8(0x15); emit32(slotAddress); // call dword ptr [absolute]
+    auto pushGuest32 = [&](std::uint32_t value) { emitGuest8(0x68); emitGuest32(value); };
+    auto callGuestThunk = [&](std::uint32_t slotAddress) {
+        emitGuest8(0xFF); emitGuest8(0x15); emitGuest32(slotAddress); // call dword ptr [absolute]
     };
-    auto testEax = [&]() { emit8(0x85); emit8(0xC0); };
-    auto compareMemory = [&](std::uint32_t address, std::uint32_t value) {
-        emit8(0x81); emit8(0x3D); emit32(address); emit32(value);
+    auto testGuestEax = [&]() { emitGuest8(0x85); emitGuest8(0xC0); };
+    auto compareGuestMemory = [&](std::uint32_t address, std::uint32_t value) {
+        emitGuest8(0x81); emitGuest8(0x3D); emitGuest32(address); emitGuest32(value);
     };
-    auto compareEax = [&](std::uint32_t value) { emit8(0x3D); emit32(value); };
-    auto storeMemory = [&](std::uint32_t address, std::uint32_t value) {
-        emit8(0xC7); emit8(0x05); emit32(address); emit32(value);
+    auto compareGuestEax = [&](std::uint32_t value) { emitGuest8(0x3D); emitGuest32(value); };
+    auto storeGuestMemory = [&](std::uint32_t address, std::uint32_t value) {
+        emitGuest8(0xC7); emitGuest8(0x05); emitGuest32(address); emitGuest32(value);
     };
     std::vector<std::size_t> failBranches;
-    auto branchNotEqualToFailure = [&]() {
-        emit8(0x0F); emit8(0x85); failBranches.push_back(guestEntry.size()); emit32(0);
+    auto branchGuestNotEqualToFailure = [&]() {
+        emitGuest8(0x0F); emitGuest8(0x85); failBranches.push_back(guestEntry.size()); emitGuest32(0);
     };
-    auto branchLessEqualToFailure = [&]() {
-        emit8(0x0F); emit8(0x8E); failBranches.push_back(guestEntry.size()); emit32(0);
+    auto branchGuestLessEqualToFailure = [&]() {
+        emitGuest8(0x0F); emitGuest8(0x8E); failBranches.push_back(guestEntry.size()); emitGuest32(0);
     };
 
     const std::uint32_t thunkTableVa = guestBase + kernelThunkOffset;
-    push32(guestBase + statsOffset);
-    callThunk(thunkTableVa);
-    testEax(); branchNotEqualToFailure();
-    compareMemory(guestBase + statsOffset, 12u);
-    branchNotEqualToFailure();
-    compareMemory(guestBase + statsOffset + 4u, 0u);
-    branchLessEqualToFailure();
-    compareMemory(guestBase + statsOffset + 8u, 0u);
-    branchLessEqualToFailure();
+    pushGuest32(guestBase + statsOffset);
+    callGuestThunk(thunkTableVa);
+    testGuestEax(); branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + statsOffset, 12u);
+    branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + statsOffset + 4u, 0u);
+    branchGuestLessEqualToFailure();
+    compareGuestMemory(guestBase + statsOffset + 8u, 0u);
+    branchGuestLessEqualToFailure();
 
-    push32(guestBase + deviceNameStringOffset);
-    push32(guestBase + linkNameStringOffset);
-    callThunk(thunkTableVa + 4u);
-    testEax(); branchNotEqualToFailure();
+    pushGuest32(guestBase + deviceNameStringOffset);
+    pushGuest32(guestBase + linkNameStringOffset);
+    callGuestThunk(thunkTableVa + 4u);
+    testGuestEax(); branchGuestNotEqualToFailure();
 
     // A duplicate name must report STATUS_OBJECT_NAME_COLLISION.
-    push32(guestBase + deviceNameStringOffset);
-    push32(guestBase + linkNameStringOffset);
-    callThunk(thunkTableVa + 4u);
-    compareEax(0xC0000035u);
-    branchNotEqualToFailure();
+    pushGuest32(guestBase + deviceNameStringOffset);
+    pushGuest32(guestBase + linkNameStringOffset);
+    callGuestThunk(thunkTableVa + 4u);
+    compareGuestEax(0xC0000035u);
+    branchGuestNotEqualToFailure();
 
-    push32(guestBase + linkNameStringOffset);
-    callThunk(thunkTableVa + 8u);
-    testEax(); branchNotEqualToFailure();
+    pushGuest32(guestBase + linkNameStringOffset);
+    callGuestThunk(thunkTableVa + 8u);
+    testGuestEax(); branchGuestNotEqualToFailure();
 
     // A second delete must report STATUS_OBJECT_NAME_NOT_FOUND.
-    push32(guestBase + linkNameStringOffset);
-    callThunk(thunkTableVa + 8u);
-    compareEax(0xC0000034u);
-    branchNotEqualToFailure();
+    pushGuest32(guestBase + linkNameStringOffset);
+    callGuestThunk(thunkTableVa + 8u);
+    compareGuestEax(0xC0000034u);
+    branchGuestNotEqualToFailure();
 
-    push32(1u);
-    push32(guestBase + shutdownRegistrationOffset);
-    callThunk(thunkTableVa + 12u);
+    pushGuest32(1u);
+    pushGuest32(guestBase + shutdownRegistrationOffset);
+    callGuestThunk(thunkTableVa + 12u);
 
-    storeMemory(guestBase + apiMarkerOffset, 1u);
-    emit8(0xC3);
+    storeGuestMemory(guestBase + apiMarkerOffset, 1u);
+    emitGuest8(0xC3);
     const std::size_t failureOffset = guestEntry.size();
-    storeMemory(guestBase + apiMarkerOffset, 0xBADu);
-    emit8(0xC3);
+    storeGuestMemory(guestBase + apiMarkerOffset, 0xBADu);
+    emitGuest8(0xC3);
     for (const std::size_t displacement : failBranches) {
         const std::int32_t delta = static_cast<std::int32_t>(failureOffset) -
                                    static_cast<std::int32_t>(displacement + sizeof(delta));
