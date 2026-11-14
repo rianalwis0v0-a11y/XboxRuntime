@@ -116,6 +116,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,
     uint32_t* mag_filter_out, uint32_t* mip_filter_out);
 
+/* Map NV097 register-combiner methods to Xbox D3D8 render states.
+ * Returns 1 for a render-state method, 2 for SET_SHADER_STAGE_PROGRAM,
+ * and 0 for unsupported/invalid methods. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapCombinerMethod(
+    uint32_t method, uint32_t* render_state_out, uint32_t* stage_out);
+
 /* Decode a linear-pitch NV097 surface and validate its VRAM spans. */
 __declspec(dllexport) int __cdecl XboxNV2A_DecodeSurface(
     uint32_t surface_format, uint32_t surface_pitch,
