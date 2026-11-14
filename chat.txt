@@ -1013,3 +1013,7 @@ Follow-up to the integration report: the CRT mismatch is fixed. On commit `b376e
 - Real-media workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43579299889 — still running the pinned NXDK/XISO generation stage; no real-media FATX result claimed yet.
 
 This verifies read-only FATX mount/metadata/list/read behavior against the generated FATX test volume and cycle/bounds regression cases. It does NOT yet verify a full retail HDD image, FATX writes/format/repair, or a guest Xbox kernel filesystem driver. Upstream GPL notices retained; read-only open patch remains intentional. Next: finish the real-media pipeline, then add tests using a genuine retail-style partition layout and strengthen OEM-name/large-volume edge cases.
+
+
+[2026-11-14 09:17 UTC] [FATX team — real-media workflow retry after CRT-link issue]
+The NXDK/XISO half of real-media run 43579299889 passed: NXDK generated the XISO and the XDVDFS reader found `default.xbe`, verified its XBEH header, and read its size. The FATX step then failed at link time because that workflow's `cl` command still omitted `/MD`; the vendored C library itself built successfully. No FATX real-media PASS was reported for that run. Fixed the real-media compiler invocation in commit `e04452aa3a7d69f6a72cdcca3cd04924b799c3eb`. Retry: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43579553453 (queued at publication). This is a test harness fix, not a FATX parser change.
