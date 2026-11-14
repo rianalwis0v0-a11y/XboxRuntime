@@ -847,8 +847,6 @@ static int ConvertPathToFatx(LPCWSTR path, std::string& converted)
 
 static int ValidateFileChain(FatxVolume* v, const FatxDirEntry& entry)
 {
-    if (entry.size == 0)
-        return FATX_OK;
     if (!ValidCluster(v, entry.firstCluster))
         return FATX_CORRUPT;
 
@@ -1002,6 +1000,79 @@ extern "C" int __cdecl FATX_ReadFileW(
     return FATX_OK;
 }
 
+
+extern "C" int __cdecl FATX_CreateFileW(
+    FATX_VOLUME handle,
+    LPCWSTR path)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path)
+        return FATX_INVALID_ARGUMENT;
+
+    VolumeOperationGuard operationGuard(v);
+    if (!v->writable)
+        return FATX_INVALID_ARGUMENT;
+
+    std::string fatxPath;
+    int status = ConvertPathToFatx(path, fatxPath);
+    if (status != FATX_OK)
+        return status;
+
+    const size_t slash = fatxPath.find_last_of('/');
+    const std::string name = slash == std::string::npos
+        ? fatxPath : fatxPath.substr(slash + 1);
+    if (name.empty() || name == "." || name == ".." || name.size() > 42)
+        return FATX_INVALID_ARGUMENT;
+    for (unsigned char ch : name) {
+        if (ch < 0x20 || ch == 0x7F || ch == ':' || ch == '*' ||
+            ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|')
+            return FATX_INVALID_ARGUMENT;
+    }
+
+    // Resolve the parent independently so malformed/cyclic directory chains
+    // are rejected before upstream allocation or directory-entry mutation.
+    std::wstring widePath(path);
+    for (wchar_t& ch : widePath) {
+        if (ch == L'/') ch = L'\\';
+    }
+    while (widePath.size() > 1 &&
+           (widePath.back() == L'\\' || widePath.back() == L'/'))
+        widePath.pop_back();
+    const size_t wideSlash = widePath.find_last_of(L"\\/");
+    std::wstring parentPath = wideSlash == std::wstring::npos
+        ? L"\\" : wideSlash == 0
+        ? L"\\" : widePath.substr(0, wideSlash);
+
+    FatxDirEntry parent;
+    bool parentRoot = false;
+    status = ResolvePath(v, parentPath.c_str(), &parent, &parentRoot);
+    if (status != FATX_OK)
+        return status;
+    if (!(parent.attributes & FATX_ATTRIBUTE_DIRECTORY))
+        return FATX_NOT_DIRECTORY;
+
+    std::vector<FatxDirEntry> parentEntries;
+    status = ReadDirectory(v, parent.firstCluster, parentEntries);
+    if (status != FATX_OK)
+        return status;
+
+    FatxDirEntry existing;
+    bool isRoot = false;
+    status = ResolvePath(v, path, &existing, &isRoot);
+    if (status == FATX_OK)
+        return FATX_INVALID_ARGUMENT; // no replacement on create
+    if (status != FATX_NOT_FOUND)
+        return status;
+
+    if (fatx_mknod(&v->upstream, fatxPath.c_str()) != FATX_STATUS_SUCCESS)
+        return FATX_IO_ERROR;
+    if (fatx_flush_fat_cache(&v->upstream) != FATX_STATUS_SUCCESS ||
+        fflush(v->upstream.device) != 0)
+        return FATX_IO_ERROR;
+
+    return FATX_OK;
+}
+
 extern "C" int __cdecl FATX_WriteFileW(
     FATX_VOLUME handle,
     LPCWSTR path,
@@ -1037,7 +1108,7 @@ extern "C" int __cdecl FATX_WriteFileW(
 
     // The first write milestone supports overwrite and append to existing,
     // non-empty files. Sparse gaps and empty-file allocation come later.
-    if (entry.size == 0 || offset > entry.size ||
+    if (offset > entry.size ||
         offset > static_cast<ULONGLONG>(INT_MAX) - bytesToWrite)
         return FATX_INVALID_ARGUMENT;
 
