@@ -157,7 +157,7 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
     const bool closeSource = (options & 1u) != 0; // NXDK DUPLICATE_CLOSE_SOURCE
     HANDLE duplicate = nullptr;
     if (!DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(),
-                         &duplicate, 0, FALSE, 0)) {
+                         &duplicate, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
         const DWORD error = GetLastError();
         if (closeSource) CloseHandle(source);
         return StatusFromWin32(error);
