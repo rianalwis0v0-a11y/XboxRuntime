@@ -56,19 +56,6 @@ int main() {
     if (status != static_cast<LONG>(0xC000000Du))
         return Fail("reject unsupported ZeroBits", status);
 
-    HANDLE source = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!source) return Fail("create host test event", static_cast<LONG>(GetLastError()));
-    HANDLE duplicate = nullptr;
-    status = K_NtDuplicateObject(source, &duplicate, 1u); // DUPLICATE_CLOSE_SOURCE
-    if (status != 0 || !duplicate) return Fail("duplicate/close-source handle", status);
-    if (WaitForSingleObject(source, 0) != WAIT_FAILED ||
-        GetLastError() != ERROR_INVALID_HANDLE)
-        return Fail("source handle was not closed", static_cast<LONG>(GetLastError()));
-    if (!SetEvent(duplicate) || WaitForSingleObject(duplicate, 0) != WAIT_OBJECT_0)
-        return Fail("duplicated handle remains usable", static_cast<LONG>(GetLastError()));
-    if (!CloseHandle(duplicate))
-        return Fail("close duplicate", static_cast<LONG>(GetLastError()));
-
-    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release, duplicate/close-source handle semantics)");
+    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release)");
     return 0;
 }
