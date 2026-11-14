@@ -135,3 +135,40 @@ be claimed.
 Current build/test automation compiles the x64 kernel provider, main runtime
 module, x86 guest process, and both network/registry smoke tests. A successful
 compile does not prove a real XBE starts or connects to Insignia.
+
+
+## PCI configuration-space access
+
+Kernel ordinal 46, `HalReadWritePCISpace`, is implemented in
+`guest32/pci_compat.cpp` with the NXDK six-argument stdcall ABI. The first
+compatibility target is the NXDK CRT's Pentium III frequency probe:
+bus 0, slot 0x60 (PCI device 0, function 3), register 0x6C. The Xbox host
+bridge value `0x00000801` represents an 8:1 crystal-to-FSB ratio (16.666...
+MHz to 133.333... MHz), which combines with the 5.5x CPU multiplier to produce
+the 733.333 MHz Xbox TSC frequency. Other PCI functions currently read as
+absent (`0xFF` bytes); this is a deliberately narrow initial model, not a
+claim of complete MCPX/NV2A PCI emulation. Unknown bus/device writes are ignored.
+
+
+## System-thread startup
+
+Kernel ordinal 255, `PsCreateSystemThreadEx`, is implemented as a Win32
+thread-backed compatibility path. It preserves the ten-argument Xbox stdcall
+ABI, optional thread-ID output, suspended creation, the system-routine
+(StartRoutine, StartContext) call shape, and per-thread TLS storage. Ordinal
+254, `PsCreateSystemThread`, now uses the five-argument Xbox ABI and routes
+through the same implementation.
+
+Ordinal 104, `KeGetCurrentThread`, returns a guest KTHREAD-compatible object,
+not a Windows thread HANDLE. Its Xbox layout is 0x110 bytes; the verified
+NXDK offsets include StackBase 0x1C, StackLimit 0x20, KernelStack 0x24 and
+TlsData 0x28. The current implementation provides these fields and uses
+Windows scheduling underneath. It is **not** a complete Xbox dispatcher,
+scheduler, APC, IRQL, or object-manager implementation; those semantics still
+need dedicated work and tests.
+
+
+The real NXDK integration test also inspects every committed page in section 2
+after mapping and asserts that the XBE executable flag is clear and no page
+has a PAGE_EXECUTE protection. This protects the loader's writable/preload
+section semantics from accidental executable promotion.

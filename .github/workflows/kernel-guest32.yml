@@ -65,13 +65,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check out completed XBE loader implementation
-        uses: actions/checkout@v4
-        with:
-          repository: rianalwis0v0-a11y/XboxRuntime
-          ref: work/xbe-loader
-          path: loader-src
-
       - name: Download NXDK XBE fixture
         uses: actions/download-artifact@v4
         with:
@@ -102,10 +95,10 @@ jobs:
         run: cmake -S guest32 -B build-guest32 -A Win32
 
       - name: Build x86 guest and networking tests
-        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke
+        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke xbox_sha1_smoke privileged_instruction_smoke pci_compat_smoke thread_compat_smoke
 
       - name: Run x86 networking and guest API tests
-        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke"
+        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke|xbox_sha1_smoke|privileged_instruction_smoke|pci_compat_smoke|thread_compat_smoke"
 
       - name: Verify backend exports
         shell: pwsh
@@ -130,6 +123,17 @@ jobs:
       - name: Run shared-memory guest execution smoke test
         run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R kernel_guest_backend_smoke
 
+      - name: Build and run XBE format regression tests
+        shell: cmd
+        run: |
+          call "%ProgramFiles(x86)%/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath > vs-path.txt
+          set /p VS_PATH=<vs-path.txt
+          call "%VS_PATH%/VC/Auxiliary/Build/vcvars64.bat"
+          cl /nologo /std:c++17 /EHsc /W4 /WX /Fe:xbe_format_tests.exe tests/xbe_format_tests.cpp modules/xbe_loader/xbe_format.cpp
+          if errorlevel 1 exit /b 1
+          xbe_format_tests.exe
+          if errorlevel 1 exit /b 1
+
       - name: Build x64 XBE loader DLL for joint integration
         shell: cmd
         run: |
@@ -137,11 +141,11 @@ jobs:
           set /p VS_PATH=<vs-path.txt
           call "%VS_PATH%/VC/Auxiliary/Build/vcvars64.bat"
           cd /d "%GITHUB_WORKSPACE%"
-          cl /nologo /std:c++17 /EHsc /W4 /WX /c loader-src/modules/xbe_loader/xbe_format.cpp loader-src/modules/xbe_loader/xbe_loader.cpp
+          cl /nologo /std:c++17 /EHsc /W4 /WX /c modules/xbe_loader/xbe_format.cpp modules/xbe_loader/xbe_loader.cpp
           if errorlevel 1 exit /b 1
-          link /nologo /DLL /DEF:loader-src/modules/xbe_loader/xbe_loader.def /OUT:xbe_loader.dll xbe_format.obj xbe_loader.obj
+          link /nologo /DLL /DEF:modules/xbe_loader/xbe_loader.def /OUT:xbe_loader.dll xbe_format.obj xbe_loader.obj
           if errorlevel 1 exit /b 1
-          cl /nologo /std:c++17 /EHsc /W4 /permissive- /Fe:kernel_xbe_integration.exe tests/kernel_xbe_integration.cpp loader-src/modules/xbe_loader/xbe_format.cpp
+          cl /nologo /std:c++17 /EHsc /W4 /permissive- /Fe:kernel_xbe_integration.exe tests/kernel_xbe_integration.cpp modules/xbe_loader/xbe_format.cpp
           if errorlevel 1 exit /b 1
 
       - name: Stage real backend integration runtime

@@ -6,7 +6,7 @@ endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "xbe_guest32 must be configured with the Win32/x86 toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_memory.cpp kernel_object_manager.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
+add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp pci_compat.cpp thread_compat.cpp xbox_sha1.cpp privileged_instruction.cpp kernel_memory.cpp kernel_object_manager.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
@@ -48,6 +48,28 @@ target_compile_options(guest_api_registry_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(guest_api_registry_smoke PRIVATE ws2_32 iphlpapi)
 add_test(NAME guest_api_registry_smoke COMMAND guest_api_registry_smoke)
 
+# Validate the guest Xbox SHA-1 imports against standard SHA-1 vectors.
+add_executable(xbox_sha1_smoke
+  ../tests/xbox_sha1_smoke.cpp
+  xbox_sha1.cpp
+)
+target_include_directories(xbox_sha1_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(xbox_sha1_smoke PRIVATE cxx_std_17)
+target_compile_definitions(xbox_sha1_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(xbox_sha1_smoke PRIVATE /W4 /permissive-)
+add_test(NAME xbox_sha1_smoke COMMAND xbox_sha1_smoke)
+
+# Verify the narrowly scoped RDMSR emulation used by the Xbox Pentium III XBE.
+add_executable(privileged_instruction_smoke
+  ../tests/privileged_instruction_smoke.cpp
+  privileged_instruction.cpp
+)
+target_include_directories(privileged_instruction_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(privileged_instruction_smoke PRIVATE cxx_std_17)
+target_compile_definitions(privileged_instruction_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(privileged_instruction_smoke PRIVATE /W4 /permissive-)
+add_test(NAME privileged_instruction_smoke COMMAND privileged_instruction_smoke)
+
 # Execute the x86 guest-facing memory/object entry points with their real stdcall ABI.
 add_executable(kernel_memory_guest_smoke
   ../tests/kernel_memory_guest_smoke.cpp
@@ -70,3 +92,25 @@ target_compile_features(kernel_handle_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_handle_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(kernel_handle_guest_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_handle_guest_smoke COMMAND kernel_handle_guest_smoke)
+
+# Validate the Xbox host-bridge PCI configuration read used by the NXDK CRT.
+add_executable(pci_compat_smoke
+  ../tests/pci_compat_smoke.cpp
+  pci_compat.cpp
+)
+target_include_directories(pci_compat_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(pci_compat_smoke PRIVATE cxx_std_17)
+target_compile_definitions(pci_compat_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(pci_compat_smoke PRIVATE /W4 /permissive-)
+add_test(NAME pci_compat_smoke COMMAND pci_compat_smoke)
+
+# Verify Xbox PsCreateSystemThreadEx ABI, suspended-start semantics and KTHREAD TLS offsets.
+add_executable(thread_compat_smoke
+  ../tests/thread_compat_smoke.cpp
+  thread_compat.cpp
+)
+target_include_directories(thread_compat_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(thread_compat_smoke PRIVATE cxx_std_17)
+target_compile_definitions(thread_compat_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(thread_compat_smoke PRIVATE /W4 /permissive-)
+add_test(NAME thread_compat_smoke COMMAND thread_compat_smoke)

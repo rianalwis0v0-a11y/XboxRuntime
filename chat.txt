@@ -96,3 +96,186 @@ KERNEL DEVELOPER REQUEST — PLEASE IMPLEMENT THE PROVIDER:
 4. Keep kernel implementation on the kernel team's own branch. Do not edit work/xbe-loader or other teams' branches. Please reply on this board with branch/commit, exported symbol evidence, build/test results, and any ABI changes.
 5. Once implemented, coordinate a joint integration test: launch a real 32-bit homebrew XBE, verify entrypoint execution, imports, TLS, unload/cleanup, and report the first failing guest instruction with register/fault diagnostics if it crashes.
 Known limitations: No real homebrew or retail XBE has been launched yet; current backend test uses a fake backend. RSA certificate signature and section-digest verification are not implemented. The loader's parser/mapping success is not evidence of full Xbox execution.
+
+
+[2026-11-14 13:xx UTC] [Kernel Developer 5 — XBE execution specialist]
+Status: IN_PROGRESS (real-XBE failure reproduced from CI; root-cause trace still open)
+Branch / commit: work/kernel-xbe-execution-fix / 6076f0a144df82340d4d943b62b84e3dba199b71 (branched from work/kernel-execution-backend after Developer 2 memory/handle APIs)
+Summary:
+- Read the shared coordination board before starting and created an isolated branch; no other developer branch was modified.
+- Retrieved and inspected real NXDK-built default.xbe CI run 43580285749. Fixture SHA-256: 090F8F24C68AECB968119CADF8CD96BE38DDAA04BE18D1993702D04BB10069D6.
+- Reproduced the exact failure: guest entry exits with STATUS_ACCESS_VIOLATION 0xC0000005; exceptionIP=faultAddress=0x10018DC0; accessType=8; page protection PAGE_READONLY; TLS index cleanup and image release succeed.
+- Parsed sections: section 2 VA=0x10017000, virtualSize=0x3000, rawSize=0xD38, flags=0x3. Fault offset is 0x1DC0 from section start, beyond raw bytes (zero-filled virtual tail), so it is an invalid control-flow destination into non-executable zero-fill—not justification to relax section protections.
+- TLS directory has callbacks=0. Existing startup uses TLS alloc/set, then calls XBE entry as a cdecl function; no callback failure is observed.
+- Inspected current guest startup, import resolution and section protection code. Current diagnostics lack EAX/EBX/ECX/EDX/ESI/EDI/EBP/ESP and stack return addresses, so the actual branch source cannot yet be distinguished between a bad indirect call, bad return address/stack, or startup ABI mismatch.
+Files changed: chat.txt only (this progress entry).
+Build and tests (commands + results): Existing run 43580285749: NXDK fixture build PASS; kernel host build PASS; x86 guest build PASS; network_smoke + guest_api_registry_smoke PASS; ABI v2 export audit PASS; synthetic guest backend smoke PASS; real NXDK XBE execution FAIL as detailed above. No new code build/test claimed.
+Known issues / next steps:
+1. Add x86 exception CONTEXT register and stack snapshot to guest exit diagnostics, then rerun the real NXDK fixture to identify the exact control-flow transfer/call chain.
+2. Trace the originating indirect call/return through NXDK startup and import thunk paths; inspect calling convention and TLS semantics against pinned NXDK source before changing behavior.
+3. Implement the evidenced root fix and regression test. Keep section 2 non-executable.
+4. Full integration workflow and PR to work/kernel-execution-backend remain pending; no execution success is claimed.
+
+
+[2026-11-14 13:05 UTC] [Kernel Developer 5 — exception-context instrumentation]
+Status: IN_PROGRESS (diagnostic patch committed; CI running; root cause not yet proven)
+Branch / commit: work/kernel-xbe-execution-fix / 64ba45e9508b7f292cea4578a443a1a0f83e74c5; draft PR #20: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/20
+Summary:
+- Extended the guest exit protocol with a fixed 64-byte x86 fault context: EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, and eight stack DWORDs.
+- Captured CONTEXT fields inside the guest SEH exception filter, bounded the stack read to its committed readable VirtualQuery region, passed the context over the existing named-pipe reply, and added integration-harness output.
+- No section flags/protections, guest ABI definitions, or startup behavior were changed. This is instrumentation only; it is not the root fix.
+Files changed: guest32/guest_protocol.h, guest32/kernel_compat.h, guest32/kernel_compat.cpp, guest32/guest32.cpp, modules/xbox_kernel/xbox_kernel.cpp, tests/kernel_xbe_integration.cpp, chat.txt.
+Build and tests:
+- New draft PR #20 targets work/kernel-execution-backend.
+- GitHub Actions run 43597802105 triggered from PR #20. At publication, NXDK fixture job was still in progress; no compile/test PASS is claimed for this patch yet.
+- Prior baseline run 43580285749 still shows all host/guest builds, export audit, network/API tests and synthetic backend smoke passing; real NXDK XBE fails at 0x10018DC0.
+Known issues / next steps:
+1. Inspect run 43597802105 for compile failures and then read the emitted register/stack snapshot from the real NXDK XBE.
+2. Use the return chain/register state to isolate a bad indirect call, stack/return corruption, import stub, or startup ABI mismatch.
+3. Implement a root-cause correction and add a regression test that proves the actual NXDK fixture executes with section 2 still non-executable.
+4. PR #20 remains draft; no real-XBE success or completed integration workflow is claimed.
+
+
+[2026-11-14 13:15 UTC] [Kernel Developer 5 — Cxbx XBE processing port]
+Status: IN_PROGRESS (Cxbx-compatible XBE type fix and self-contained loader integration committed; real execution CI not yet verified)
+Branch / commit: work/kernel-xbe-execution-fix / a1cf06a238a8be1c638df18b05ccc4b74922c63e; draft PR #20 retitled and updated: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/20
+Reference source inspected:
+- Cxbx-Reloaded src/common/xbe/Xbe.cpp: Xbe::GetXbeType() determines Chihiro using `(dwEntryAddr & XBOX_WRITE_COMBINED_BASE) == SEGABOOT_EP_XOR`, and debug using the KSEG0 bit in the encoded kernel thunk.
+- Cxbx-Reloaded src/core/kernel/init/CxbxKrnl.cpp: XOR_EP_KEY/XOR_KT_KEY, MapThunkTable, ImportLibraries, preload sections via XeLoadSection, TLS setup and XBE launch.
+- Existing XboxRuntime loader already implemented retail/debug/Chihiro XOR keys, entry/thunk decoding, file-backed parsing, virtual image mapping, and kernel/non-kernel import processing. This work reuses that implementation and makes it part of this PR's integration build rather than relying on a separate mutable branch checkout.
+Changes:
+- Added the existing XboxRuntime XBE loader implementation to this branch under modules/xbe_loader (format parser, loader, exports definition and loader header); backend API header was already present.
+- Changed CI to compile the loader from this branch, removing checkout of work/xbe-loader. Integration test now includes the branch-local loader headers.
+- Fixed a concrete Cxbx semantic mismatch: Chihiro detection now tests bit 0x40000000 rather than requiring upper nibble exactly 0x4. Cxbx's mask is XBOX_WRITE_COMBINED_BASE, so values with additional upper-nibble bits must still be identified as Chihiro.
+- Added tests/xbe_format_tests.cpp covering retail, debug and Chihiro type/key decoding, and added CI build/run step for the tests.
+- Updated PR #20 title/body with source references and explicit unresolved execution status.
+Files changed since last update: modules/xbe_loader/xbe_format.h, modules/xbe_loader/xbe_format.cpp, modules/xbe_loader/xbe_loader.h, modules/xbe_loader/xbe_loader.cpp, modules/xbe_loader/xbe_loader.def, .github/workflows/kernel-guest32.yml, tests/kernel_xbe_integration.cpp, tests/xbe_format_tests.cpp, chat.txt.
+Build and tests:
+- No new CI run has yet been observed for commit a1cf06a238a8be1c638df18b05ccc4b74922c63e; do not report these changes as compiled or tested until Actions completes.
+- The earlier diagnostic workflow run 43597802105 was still in progress during the previous check; it predates the loader-port commits and does not verify them.
+- No claim that the original real NXDK fault is fixed. Section 2 remains non-executable and no protection workaround was added.
+Next steps:
+1. Confirm workflow triggered for PR #20 after the latest commit. If not, use the repository's Actions UI/workflow_dispatch to run kernel-guest32.yml.
+2. Fix compile/test failures, run the retail/debug/Chihiro parser regression tests, then inspect new register/stack diagnostics from real NXDK fixture.
+3. Continue comparing the actual guest startup against Cxbx's startup sequence (preload semantics, kernel thunk patching, non-kernel imports, TLS data/index/callbacks and entry invocation) and implement only evidence-backed gaps.
+4. Do not mark PR ready or report execution success until default.xbe returns with section 2 still non-executable.
+
+
+[2026-11-14 13:21 UTC] [Kernel Developer 5 — root cause identified and corrected; verification pending]
+Status: FIX COMMITTED; awaiting real NXDK CI rerun
+Branch / commit: work/kernel-xbe-execution-fix / 4f6634bee63a624aa8c5b2e8a88b6a45f1b936f9; PR #20 remains draft.
+Evidence and root cause:
+- Downloaded the exact NXDK CI fixture artifact and disassembled section 0 with objdump.
+- Fault context EBP=0x10006F91 points at the instruction after a call in XBE code at 0x10006F8C. The call sequence uses kernel thunk slot 0x10016F1C, whose on-disk value is 0x800000C0 (ordinal 192, NtCreateMutant).
+- OpenXDK's authoritative xboxkrnl export definition decorates this export as `NtCreateMutant@12`, proving a 3-argument stdcall ABI. Reference: https://github.com/XboxDev/OpenXDK/blob/master/src/xboxkrnl/xboxkrnl.exe.def (ordinal 192).
+- XboxRuntime incorrectly declared K_NtCreateMutant with four arguments. Its stdcall return popped 16 bytes instead of the required 12, shifting the caller stack by four bytes. The disassembly and captured EBP/EIP are consistent with the saved frame pointer/return address being consumed and a data-buffer address 0x10018DC0 being used as the next instruction pointer.
+- The patched kernel thunk slot 69 (address 0x10016FAC, ordinal 335) is a valid guest stub at 0x0056029E, so the initial hypothesis that the thunk pointer itself was the bad target was disproven. The call through ordinal 192's wrong stack cleanup is the identified root cause.
+Fix:
+- Changed K_NtCreateMutant to the correct three-argument signature and set the initial-owner behavior to FALSE because the Xbox export has no fourth initial-owner parameter.
+- No guest ABI was changed; the implementation now matches the existing Xbox kernel ABI.
+- Added diagnostic output for patched kernel thunk targets to the integration harness. It confirmed thunk[69] is 0x0056029E, outside the XBE image.
+Files changed for this fix: guest32/kernel_compat.cpp. Diagnostic file changed earlier: tests/kernel_xbe_integration.cpp.
+Verification:
+- Prior run 43599057587: all host/guest builds, shared-memory smoke, parser regression tests and loader DLL build passed; real NXDK XBE still failed at 0x10018DC0 before this fix.
+- Parser regression output: PASS: retail, debug, and Chihiro XBE type/key decoding matches Cxbx semantics.
+- New CI runs triggered for fix commit 4f6634bee63a624aa8c5b2e8a88b6a45f1b936f9: run 43599305231 (kernel host/guest and real XBE) and run 43599305260 (kernel memory/object APIs). Both were queued when this entry was written.
+- Do not claim real XBE success until the new run completes and shows clean exit/TLS cleanup with section 2 non-executable.
+Next:
+1. Inspect run 43599305231 and verify the NXDK fixture no longer faults at 0x10018DC0.
+2. If a new failure appears, use the register/stack and thunk-table diagnostics to continue tracing.
+3. Update PR #20 with the root-cause evidence and add a focused regression assertion for the NtCreateMutant@12 stack ABI if practical.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — unsupported-import diagnosis instrumentation]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-xbe-execution-fix / PR #20.
+Summary:
+- Re-read the failed real NXDK execution log (workflow run 43600570426, kernel job 132464469623). The failure is not a native CPU instruction that needs blanket emulation: it is STATUS_ILLEGAL_INSTRUCTION (0xC000001D) raised intentionally by XboxRuntime's K_Unsupported(ordinal) when a kernel import is not implemented.
+- Confirmed K_Unsupported calls RaiseException(0xC000001D, EXCEPTION_NONCONTINUABLE, 1, &ordinal). The previous diagnostics omitted EXCEPTION_RECORD.ExceptionInformation[0], so the missing ordinal was hidden.
+- Cross-checked the ordinal ABI catalogue against OXOS's clean-room exports.tsv. OXOS is GPL-2.0; its implementation source is not being copied into this MIT-licensed runtime. Xermu's README documents a useful Zydis-based x86 JIT/privileged-instruction architecture, but its license is marked TBD, so its source is not being copied either. Cxbx/Xemu code is GPL-family; use semantic references unless licensing is explicitly resolved.
+Files changed:
+- guest32/guest_protocol.h: bumped guest protocol version to 3 and extended fault context with exception flags/count/parameter0.
+- guest32/kernel_compat.cpp: captures the original exception metadata, including the unsupported kernel ordinal.
+- tests/kernel_xbe_integration.cpp: prints exception metadata on guest failure.
+Build and tests:
+- No CI run yet for these diagnostics. Existing run 43600570426: host/guest builds and unit tests passed; real NXDK XBE execution failed at the deliberate K_Unsupported exception.
+Known issues / next steps:
+1. Run CI and read the actual exception parameter to identify the missing kernel ordinal.
+2. Implement that ordinal only after confirming its name, calling convention, argument widths, and semantics from NXDK/OpenXDK plus an independent clean-room reference.
+3. Continue until the NXDK homebrew XBE returns successfully with TLS cleanup and original section protections intact.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — NXDK PCI probe dependency]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-xbe-execution-fix / PR #20.
+Finding:
+- The NXDK CRT source `lib/winapi/profiling.c` calls `HalReadWritePCISpace(0, 0x60, 0x6C, &fsbreg, 4, FALSE)` during startup. The pinned NXDK export definition confirms ordinal 46 is `HalReadWritePCISpace@24` (six 32-bit stdcall arguments).
+- OXOS's clean-room PCI code confirms SlotNumber uses PCI_SLOT_NUMBER bitfields (device bits 0–4, function bits 5–7) and that PCI config cycles are 32-bit aligned with byte/word lane extraction/merge. This was used as a semantic reference only; no GPL-2.0 implementation source was copied.
+- Slot 0x60 therefore means PCI device 0, function 3. The NXDK profiling calculation expects divider=1 and multiplier=8 at register 0x6C, i.e. dword 0x00000801, to derive 133.333 MHz FSB and 733.333 MHz CPU/TSC frequency when combined with the Pentium III 5.5x MSR multiplier.
+Changes:
+- Added a focused PCI configuration compatibility module and mapped kernel ordinal 46 to it.
+- The initial implementation models only the Xbox host-bridge function 0:3 register needed by NXDK CRT startup; absent devices return 0xFF and unsupported writes are ignored. It does not claim complete PCI/MCPX/NV2A emulation.
+- Added an x86 smoke test for the exact NXDK read, byte-lane behaviour, and absent-device reads.
+Files changed: guest32/pci_compat.h, guest32/pci_compat.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, tests/pci_compat_smoke.cpp, .github/workflows/kernel-guest32.yml, docs/KERNEL_API.md, chat.txt.
+Build and tests: Awaiting CI after this commit. No clean XBE execution claim yet.
+Next:
+1. Read the new exception metadata from the diagnostic run; confirm the unsupported ordinal is 46 before treating this as the confirmed runtime blocker.
+2. Verify pci_compat_smoke and the real NXDK XBE path on Windows CI.
+3. Continue resolving subsequent missing imports based on exact exception parameters until the XBE returns and TLS cleanup passes.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — ordinal 255 and KTHREAD compatibility]
+Status: IN PROGRESS; Windows CI pending.
+Evidence:
+- Latest real-XBE run 43602563925 reached the intentional K_Unsupported path and the new exception metadata reported parameter0=0x000000FF: missing kernel import ordinal 255.
+- NXDK's pinned xboxkrnl.exe.def identifies ordinal 255 as PsCreateSystemThreadEx@40. The NXDK header confirms ten 32-bit stdcall arguments; NXDK's WinAPI thread.c passes WinapiThreadStartup as SystemRoutine, with the title start routine/context as the first two system-routine arguments.
+- NXDK WinapiThreadStartup dereferences KeGetCurrentThread()->TlsData and expects a 16-byte-aligned TLS payload after a 4-byte self-pointer. XboxRuntime's previous KeGetCurrentThread returned a Windows pseudo-HANDLE, which was not a valid Xbox KTHREAD pointer. A simple thread-creation stub alone would therefore have crashed immediately.
+- OXOS's clean-room spec confirms KTHREAD size 0x110 and offsets StackBase=0x1C, StackLimit=0x20, KernelStack=0x24, TlsData=0x28; PsCreateSystemThreadEx uses a minimum 0x3000 stack and invokes SystemRoutine(StartRoutine, StartContext). This is used as semantic reference only; no GPL-2.0 implementation source was copied.
+Changes:
+- Added guest32/thread_compat.{h,cpp} with the Xbox KTHREAD layout/prefix, per-native-thread current-thread context, TLS allocation/alignment, PsCreateSystemThreadEx, and the correct five-argument PsCreateSystemThread wrapper.
+- Mapped ordinal 255 and corrected ordinal 254 to the Xbox ABI.
+- KeGetCurrentThread now returns a KTHREAD-compatible pointer with valid host stack bounds rather than a Windows pseudo-handle.
+- Thread-control helpers resolve KTHREAD pointers to their native Win32 handles; NtClose releases the compatibility mapping.
+- Added a dedicated x86 smoke test covering PsCreateSystemThreadEx ABI, CREATE_SUSPENDED, thread start, KTHREAD stack bounds and TLS alignment.
+Files changed: guest32/thread_compat.h, guest32/thread_compat.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, tests/thread_compat_smoke.cpp, .github/workflows/kernel-guest32.yml, docs/KERNEL_API.md, chat.txt.
+Verification: Not yet compiled or tested. Previous run 43602563925 verified PCI smoke, guest build, API tests, XBE parser tests and loader build; real-XBE run failed on ordinal 255.
+Next:
+1. Run Windows CI and confirm the thread module compiles and the thread smoke test passes.
+2. Re-run the real NXDK XBE; inspect any next unsupported ordinal or KTHREAD/TLS failure.
+3. Do not claim full execution until the XBE entrypoint returns, TLS cleanup passes, and section 2 stays non-executable.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — thread shim compile fix]
+- The first Windows compile of commit dc2afffe747e6f51ac58220b94f94e6332280318 found that InitializeListHead is an Xbox/NT helper, not a Win32 SDK declaration. Replaced it with explicit LIST_ENTRY self-link initialization in the compatibility KTHREAD.
+- Guarded WIN32_LEAN_AND_MEAN in the new thread/PCI headers to avoid introducing macro-redefinition warnings.
+- The compile failure was limited to thread_compat.cpp; the host64 tests passed. New CI will verify the fix and run the thread smoke test.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — first successful real XBE execution]
+Status: MILESTONE PASSED; adding final memory-protection assertion.
+Verified on commit 0d3789a77d45468d1d13edb8f7f1005539e4e464, Windows workflow run 43603410466:
+- NXDK fixture build succeeded.
+- Kernel export audit, host backend, main runtime module, x86 guest build, networking/API tests, shared-memory backend smoke test, XBE format tests, and x64 loader build all passed.
+- thread_compat_smoke passed (6/6 selected guest tests).
+- Real loader -> kernel backend -> NXDK XBE integration passed. The real guest entrypoint returned with exitCode=0, TLS index slot cleared (tlsIndexCleared=1), no exception, and guest image VA released after shutdown.
+- This is the first verified clean real NXDK XBE entrypoint return in this branch.
+Remaining acceptance check:
+- The existing integration test did not explicitly assert section 2's actual VirtualQuery protection. Added a check that section 2's executable flag is clear and every mapped page remains committed and non-executable. New CI will verify this before marking the execution milestone complete.
+
+
+[2026-11-14 14:15 UTC] [Kernel Developer 5 — XBE execution milestone verified]
+Status: PASS — real NXDK XBE now runs through the real loader and kernel backend.
+Verified commit: d2c63bb1e7b5665e0c52d4f786b0eb8f496fc61a.
+Windows CI run: 43603739074 (https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43603739074).
+Results:
+- NXDK homebrew XBE fixture built and uploaded successfully.
+- Kernel export audit, host backend build, main runtime build, x86 guest build, networking/API tests, shared-memory backend smoke, XBE format tests, x64 loader build, and real backend pair verification all passed.
+- thread_compat_smoke passed; confirms PsCreateSystemThreadEx ABI, suspended start, KTHREAD stack bounds and TLS alignment.
+- Explicit section-2 test passed: section flags=0x00000003; every mapped page committed and non-executable.
+- Real guest entrypoint returned with exitCode=0; TLS index slot cleared (tlsIndexCleared=1); exceptionIP=0; guest image VA released after shutdown.
+Acceptance:
+- Real XBE entrypoint executes and returns cleanly.
+- TLS cleanup succeeds.
+- Section 2 remains non-executable.
+- No loader/backend crash; image release verified.
+Remaining work is broader kernel compatibility for more XBE titles, not the minimal NXDK homebrew execution path. PR #20 remains draft for review; do not merge without user/team approval.

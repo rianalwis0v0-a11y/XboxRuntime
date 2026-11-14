@@ -23,9 +23,13 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "pci_compat.h"
+#include "thread_compat.h"
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
+#include "xbox_sha1.h"
+#include "privileged_instruction.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -544,7 +548,6 @@ extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return Interl
 extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
-extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
 extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t, BOOL alertable, const LARGE_INTEGER* interval) {
     if (!interval) { SwitchToThread(); return 0; }
     const DWORD timeout = KernelTimeout(interval);
@@ -889,6 +892,7 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
 }
 
 extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    XboxKernelForgetThreadHandle(h);
     CloseGuestDirectorySearch(h);
     if (XboxKernelCloseObjectHandle(h)) return 0;
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
@@ -1396,34 +1400,20 @@ extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE
     if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
     return LONG(0xC0000008u);
 }
-struct GuestClientId { HANDLE UniqueProcess; HANDLE UniqueThread; };
-extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, void*, HANDLE process,
-                                                   GuestClientId* clientId, LPTHREAD_START_ROUTINE start,
-                                                   void* context) {
-    if (!threadHandle || !start) return LONG(0xC000000Du);
-    if (process && process != GetCurrentProcess() && process != reinterpret_cast<HANDLE>(intptr_t(-1)))
-        return LONG(0xC000000Du);
-    DWORD threadId = 0;
-    HANDLE thread = CreateThread(nullptr, 0, start, context, 0, &threadId);
-    if (!thread) return LONG(0xC0000017u);
-    *threadHandle = thread;
-    if (clientId) {
-        clientId->UniqueProcess = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(GetCurrentProcessId()));
-        clientId->UniqueThread = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(threadId));
-    }
-    return 0;
-}
 extern "C" void __stdcall K_PsTerminateSystemThread(LONG status) { ExitThread(DWORD(status)); }
 extern "C" LONG __stdcall K_KeSuspendThread(HANDLE thread) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD previous = SuspendThread(thread);
     return previous == DWORD(-1) ? LONG(0xC0000008u) : LONG(previous);
 }
 extern "C" LONG __stdcall K_KeResumeThread(HANDLE thread) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD previous = ResumeThread(thread);
     return previous == DWORD(-1) ? LONG(0xC0000008u) : LONG(previous);
 }
 extern "C" LONG __stdcall K_KeAlertResumeThread(HANDLE thread) { return K_KeResumeThread(thread); }
 extern "C" LONG __stdcall K_KeSetPriorityThread(HANDLE thread, LONG priority) {
+    thread = XboxKernelResolveThreadHandle(thread);
     const int previous = GetThreadPriority(thread);
     if (previous == THREAD_PRIORITY_ERROR_RETURN) return LONG(0xC0000008u);
     const int mapped = priority >= 15 ? THREAD_PRIORITY_TIME_CRITICAL :
@@ -1435,15 +1425,19 @@ extern "C" LONG __stdcall K_KeSetPriorityThread(HANDLE thread, LONG priority) {
 extern "C" LONG __stdcall K_KeSetBasePriorityThread(HANDLE thread, LONG increment) {
     return K_KeSetPriorityThread(thread, increment);
 }
-extern "C" LONG __stdcall K_KeQueryBasePriorityThread(HANDLE) { return 0; }
+extern "C" LONG __stdcall K_KeQueryBasePriorityThread(HANDLE thread) {
+    return GetThreadPriority(XboxKernelResolveThreadHandle(thread));
+}
 extern "C" void __stdcall K_KeSetPriorityProcess(HANDLE process, LONG priority) {
     const DWORD cls = priority > 0 ? HIGH_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
     if (process) SetPriorityClass(process, cls);
 }
 extern "C" void __stdcall K_KeSetDisableBoostThread(HANDLE thread, BOOL disable) {
-    if (thread) SetThreadPriorityBoost(thread, disable);
+    if (thread) SetThreadPriorityBoost(XboxKernelResolveThreadHandle(thread), disable);
 }
-extern "C" void __stdcall K_KeBoostPriorityThread(HANDLE) { /* Windows schedules runnable threads. */ }
+extern "C" void __stdcall K_KeBoostPriorityThread(HANDLE thread) {
+    if (thread) SetThreadPriority(XboxKernelResolveThreadHandle(thread), THREAD_PRIORITY_ABOVE_NORMAL);
+}
 extern "C" void __stdcall K_KeInitializeEvent(void* event, ULONG type, BOOL initialState) {
     if (!event) return;
     HANDLE h = CreateEventW(nullptr, type == 0, initialState, nullptr);
@@ -1765,9 +1759,33 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
     return status;
 }
 
-extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
+extern "C" LONG __stdcall K_ExQueryNonVolatileSetting(
+    std::uint32_t valueIndex, std::uint32_t* type, void* value,
+    std::uint32_t valueLength, std::uint32_t* resultLength) {
+    // XC_MAX_ALL asks for the complete 256-byte XBOX_EEPROM image.
+    constexpr std::uint32_t kXcMaxAll = 0xFFFFu;
+    constexpr std::uint32_t kRegBinary = 3u;
+    if (valueIndex != kXcMaxAll)
+        return LONG(0xC0000034u); // STATUS_OBJECT_NAME_NOT_FOUND
+    if (resultLength) *resultLength = g_eeprom.size();
+    if (!type || !value)
+        return LONG(0xC000000Du); // STATUS_INVALID_PARAMETER
+    if (valueLength < g_eeprom.size())
+        return LONG(0xC0000023u); // STATUS_BUFFER_TOO_SMALL
+    {
+        std::lock_guard<std::mutex> lock(g_eepromMutex);
+        *type = kRegBinary;
+        std::memcpy(value, g_eeprom.data(), g_eeprom.size());
+    }
+    return 0;
+}
+
+// Xbox kernel ordinal 192 is NtCreateMutant@12: exactly three 32-bit
+// arguments (HANDLE*, ACCESS_MASK, OBJECT_ATTRIBUTES*). A fourth stdcall
+// argument over-pops ESP and turns the caller's stack data into a return IP.
+extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*) {
     if (!out) return LONG(0xC000000Du);
-    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
+    HANDLE h = CreateMutexW(nullptr, FALSE, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
 }
@@ -1826,8 +1844,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
+        cmp eax, 24
+        je ex_query_nonvolatile_setting
         cmp eax, 45
         je smbus_read
+        cmp eax, 46
+        je hal_pci
         cmp eax, 50
         je smbus_write
         cmp eax, 51
@@ -1868,6 +1890,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_suspend_thread
         cmp eax, 254
         je ps_create_thread
+        cmp eax, 255
+        je ps_create_thread_ex
         cmp eax, 258
         je ps_terminate_thread
         cmp eax, 56
@@ -2232,6 +2256,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_semaphore
         cmp eax, 216
         je nt_query_timer
+        cmp eax, 335
+        je xcsha_init
+        cmp eax, 336
+        je xcsha_update
+        cmp eax, 337
+        je xcsha_final
         push eax
         call K_Unsupported
         add esp, 4
@@ -2248,6 +2278,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_interlocked_add_large_statistic: jmp K_ExInterlockedAddLargeStatistic
     ex_interlocked_compare_exchange64: jmp K_ExInterlockedCompareExchange64
     pool_size: jmp K_ExQueryPoolBlockSize
+    ex_query_nonvolatile_setting: jmp K_ExQueryNonVolatileSetting
+    hal_pci: jmp K_HalReadWritePCISpace
     smbus_read: jmp K_HalReadSMBusValue
     smbus_write: jmp K_HalWriteSMBusValue
     icx: jmp K_InterlockedCompareExchange
@@ -2268,6 +2300,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_set_thread_priority: jmp K_KeSetPriorityThread
     ke_suspend_thread: jmp K_KeSuspendThread
     ps_create_thread: jmp K_PsCreateSystemThread
+    ps_create_thread_ex: jmp K_PsCreateSystemThreadEx
     ps_terminate_thread: jmp K_PsTerminateSystemThread
     ke_query_base_priority: jmp K_KeQueryBasePriorityThread
     interlocked_flush_slist: jmp K_InterlockedFlushSList
@@ -2449,6 +2482,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    xcsha_init: jmp K_XcSHAInit
+    xcsha_update: jmp K_XcSHAUpdate
+    xcsha_final: jmp K_XcSHAFinal
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
@@ -2671,10 +2707,60 @@ std::uint32_t g_lastGuestAccessType = 0;
 std::uint32_t g_lastGuestFaultAddress = 0;
 std::uint32_t g_lastGuestFaultProtection = 0;
 std::uint32_t g_lastGuestFaultState = 0;
+XboxGuestFaultContext g_lastGuestFaultContext{};
 
 int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
+    if (exception && exception->ExceptionRecord &&
+        exception->ExceptionRecord->ExceptionCode == EXCEPTION_PRIV_INSTRUCTION &&
+        exception->ContextRecord) {
+        CONTEXT* cpu = exception->ContextRecord;
+        const auto ip = static_cast<std::uintptr_t>(cpu->Eip);
+        MEMORY_BASIC_INFORMATION instructionMemory{};
+        if (VirtualQuery(reinterpret_cast<const void*>(ip), &instructionMemory,
+                         sizeof(instructionMemory)) == sizeof(instructionMemory) &&
+            instructionMemory.State == MEM_COMMIT &&
+            !(instructionMemory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+            ip + 2u <= reinterpret_cast<std::uintptr_t>(instructionMemory.BaseAddress) +
+                       instructionMemory.RegionSize) {
+            std::uint8_t opcode[2]{};
+            std::memcpy(opcode, reinterpret_cast<const void*>(ip), sizeof(opcode));
+            if (XboxGuestEmulateRdmsr(cpu, opcode, sizeof(opcode)))
+                return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    }
     if (exception && exception->ExceptionRecord) {
         const auto* record = exception->ExceptionRecord;
+        if (exception->ContextRecord) {
+            const CONTEXT* cpu = exception->ContextRecord;
+            g_lastGuestFaultContext.exceptionFlags = record->ExceptionFlags;
+            g_lastGuestFaultContext.exceptionParameterCount = record->NumberParameters;
+            g_lastGuestFaultContext.exceptionParameter0 =
+                record->NumberParameters ? static_cast<std::uint32_t>(
+                    record->ExceptionInformation[0]) : 0u;
+            g_lastGuestFaultContext.eax = cpu->Eax;
+            g_lastGuestFaultContext.ebx = cpu->Ebx;
+            g_lastGuestFaultContext.ecx = cpu->Ecx;
+            g_lastGuestFaultContext.edx = cpu->Edx;
+            g_lastGuestFaultContext.esi = cpu->Esi;
+            g_lastGuestFaultContext.edi = cpu->Edi;
+            g_lastGuestFaultContext.ebp = cpu->Ebp;
+            g_lastGuestFaultContext.esp = cpu->Esp;
+            std::memset(g_lastGuestFaultContext.stack, 0,
+                        sizeof(g_lastGuestFaultContext.stack));
+            MEMORY_BASIC_INFORMATION stackMemory{};
+            const auto stack = static_cast<std::uintptr_t>(cpu->Esp);
+            if (cpu->Esp && VirtualQuery(reinterpret_cast<const void*>(stack),
+                    &stackMemory, sizeof(stackMemory)) == sizeof(stackMemory) &&
+                stackMemory.State == MEM_COMMIT &&
+                !(stackMemory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+                stack + sizeof(g_lastGuestFaultContext.stack) <=
+                    reinterpret_cast<std::uintptr_t>(stackMemory.BaseAddress) +
+                    stackMemory.RegionSize) {
+                std::memcpy(g_lastGuestFaultContext.stack,
+                    reinterpret_cast<const void*>(stack),
+                    sizeof(g_lastGuestFaultContext.stack));
+            }
+        }
         g_lastGuestExceptionCode = record->ExceptionCode;
         g_lastGuestExceptionInstruction =
             static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(
@@ -2711,8 +2797,12 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
     if (faultProtection) *faultProtection = g_lastGuestFaultProtection;
     if (faultState) *faultState = g_lastGuestFaultState;
 }
+void XboxKernelGetLastExceptionContext(XboxGuestFaultContext* context) {
+    if (context) *context = g_lastGuestFaultContext;
+}
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
+    XboxKernelInitializeCurrentThread();
     XboxKernelBeginObjectHandleSession();
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
@@ -2808,6 +2898,7 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
     g_lastGuestFaultAddress = 0;
     g_lastGuestFaultProtection = 0;
     g_lastGuestFaultState = 0;
+    g_lastGuestFaultContext = {};
     DWORD result = 0;
     using Entry = void (__cdecl*)();
     __try {

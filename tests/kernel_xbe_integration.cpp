@@ -1,8 +1,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "../loader-src/modules/xbe_loader/xbe_backend_api.h"
-#include "../loader-src/modules/xbe_loader/xbe_format.h"
+#include "../modules/xbe_loader/xbe_backend_api.h"
+#include "../modules/xbe_loader/xbe_format.h"
+#include "../guest32/guest_protocol.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -14,8 +15,48 @@ using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
 using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
-using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
+using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, XboxGuestFaultContext*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
+
+
+static bool IsExecutableProtection(DWORD protection) {
+    switch (protection & 0xFFu) {
+    case PAGE_EXECUTE:
+    case PAGE_EXECUTE_READ:
+    case PAGE_EXECUTE_READWRITE:
+    case PAGE_EXECUTE_WRITECOPY:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool VerifySectionIsNonExecutable(const XboxXbe::Image& image,
+                                         std::uint32_t sectionIndex) {
+    if (sectionIndex >= image.sectionCount)
+        return false;
+    const auto& section = image.sections[sectionIndex];
+    if (!section.virtualSize || (section.flags & 0x04u) != 0)
+        return false; // XBE SECTION_EXECUTABLE bit must be clear.
+
+    SYSTEM_INFO systemInfo{};
+    GetSystemInfo(&systemInfo);
+    const std::uint64_t pageSize = systemInfo.dwPageSize;
+    const std::uint64_t start = section.virtualAddress;
+    const std::uint64_t end = start + section.virtualSize;
+    if (!pageSize || end <= start)
+        return false;
+
+    for (std::uint64_t page = start & ~(pageSize - 1u); page < end; page += pageSize) {
+        MEMORY_BASIC_INFORMATION memory{};
+        if (VirtualQuery(reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(page)), &memory, sizeof(memory)) != sizeof(memory) ||
+            memory.State != MEM_COMMIT || IsExecutableProtection(memory.Protect)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
@@ -149,6 +190,16 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     if (!result) {
+        if (!VerifySectionIsNonExecutable(image, 2)) {
+            std::fprintf(stderr,
+                "FAIL: XBE section 2 must remain committed and non-executable after mapping.\n");
+            result = 15;
+        } else {
+            std::puts("PASS: XBE section 2 remains committed and non-executable.");
+        }
+    }
+
+    if (!result) {
         struct GuestTlsDirectory {
             std::uint32_t start, end, index, callbacks, zeroFill, characteristics;
         } tls{};
@@ -207,9 +258,45 @@ int wmain(int argc, wchar_t** argv) {
         std::uint32_t faultAddress = 0;
         std::uint32_t faultProtection = 0;
         std::uint32_t faultState = 0;
+        XboxGuestFaultContext faultContext{};
         const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
             &exceptionInstruction, &accessType, &faultAddress,
-            &faultProtection, &faultState);
+            &faultProtection, &faultState, &faultContext);
+        if (exceptionInstruction) {
+            std::printf("Fault registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X\\n",
+                faultContext.eax, faultContext.ebx, faultContext.ecx, faultContext.edx,
+                faultContext.esi, faultContext.edi, faultContext.ebp, faultContext.esp);
+            std::printf("Exception metadata: flags=0x%08X parameterCount=%u parameter0=0x%08X\\n",
+                faultContext.exceptionFlags, faultContext.exceptionParameterCount,
+                faultContext.exceptionParameter0);
+            std::printf("Fault stack:");
+            for (std::uint32_t value : faultContext.stack) std::printf(" %08X", value);
+            std::printf("\\n");
+
+            // The guest and host share the mapped XBE pages. Snapshot the
+            // patched kernel thunk table after a fault so bad import targets
+            // can be distinguished from a corrupted return address.
+            for (std::uint32_t i = 0; i < 128 && image.kernelThunkAddress; ++i) {
+                const std::uint64_t slot64 = std::uint64_t(image.kernelThunkAddress) + i * 4ull;
+                if (slot64 > 0xFFFFFFFFull) break;
+                std::uint32_t target = 0;
+                SIZE_T thunkCopied = 0;
+                if (!ReadProcessMemory(GetCurrentProcess(),
+                        reinterpret_cast<const void*>(static_cast<std::uintptr_t>(slot64)),
+                        &target, sizeof(target), &thunkCopied) || thunkCopied != sizeof(target))
+                    break;
+                if (!target) break;
+                if (i == 69 || target == faultAddress ||
+                    (target >= image.baseAddress &&
+                     std::uint64_t(target) < std::uint64_t(image.baseAddress) + image.imageSize)) {
+                    std::printf("Kernel thunk[%u] @0x%08llX -> 0x%08X%s\\n",
+                        i, static_cast<unsigned long long>(slot64), target,
+                        target >= image.baseAddress &&
+                        std::uint64_t(target) < std::uint64_t(image.baseAddress) + image.imageSize
+                            ? " <inside XBE image>" : "");
+                }
+            }
+        }
         if (exceptionInstruction) {
             std::uint8_t faultBytes[32]{};
             SIZE_T faultCopied = 0;
