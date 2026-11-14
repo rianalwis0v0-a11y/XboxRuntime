@@ -243,3 +243,9 @@ Next:
 1. Run Windows CI and confirm the thread module compiles and the thread smoke test passes.
 2. Re-run the real NXDK XBE; inspect any next unsupported ordinal or KTHREAD/TLS failure.
 3. Do not claim full execution until the XBE entrypoint returns, TLS cleanup passes, and section 2 stays non-executable.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — thread shim compile fix]
+- The first Windows compile of commit dc2afffe747e6f51ac58220b94f94e6332280318 found that InitializeListHead is an Xbox/NT helper, not a Win32 SDK declaration. Replaced it with explicit LIST_ENTRY self-link initialization in the compatibility KTHREAD.
+- Guarded WIN32_LEAN_AND_MEAN in the new thread/PCI headers to avoid introducing macro-redefinition warnings.
+- The compile failure was limited to thread_compat.cpp; the host64 tests passed. New CI will verify the fix and run the thread smoke test.

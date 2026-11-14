@@ -41,8 +41,11 @@ void InitializeGuestKThread(XboxGuestKThread* thread, void* tlsData) {
     std::memset(thread, 0, sizeof(*thread));
     thread->dispatcherHeader[0] = 6;
     thread->dispatcherHeader[2] = 0x44;
-    InitializeListHead(reinterpret_cast<PLIST_ENTRY>(thread->dispatcherHeader + 8));
-    InitializeListHead(&thread->mutantListHead);
+    auto* waitList = reinterpret_cast<PLIST_ENTRY>(thread->dispatcherHeader + 8);
+    waitList->Flink = waitList;
+    waitList->Blink = waitList;
+    thread->mutantListHead.Flink = &thread->mutantListHead;
+    thread->mutantListHead.Blink = &thread->mutantListHead;
 
     ULONG_PTR lowLimit = 0;
     ULONG_PTR highLimit = 0;
