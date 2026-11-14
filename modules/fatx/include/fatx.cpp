@@ -753,12 +753,12 @@ extern "C" int __cdecl FATX_ListDirectoryW(
     DWORD capacity,
     DWORD* required)
 {
-    VolumeOperationGuard operationGuard(v);
     FatxVolume* v = static_cast<FatxVolume*>(handle);
 
     if (!g_initialized || !v || !path || !required)
         return FATX_INVALID_ARGUMENT;
 
+    VolumeOperationGuard operationGuard(v);
     *required = 0;
 
     FatxDirEntry directory;
@@ -815,6 +815,62 @@ extern "C" int __cdecl FATX_ListDirectoryW(
     return FATX_OK;
 }
 
+static int ConvertPathToFatx(LPCWSTR path, std::string& converted)
+{
+    if (!path || wcslen(path) > 240)
+        return FATX_INVALID_ARGUMENT;
+
+    BOOL usedDefault = FALSE;
+    const int needed = WideCharToMultiByte(
+        437, WC_NO_BEST_FIT_CHARS, path, -1,
+        nullptr, 0, nullptr, &usedDefault);
+    if (needed <= 0 || usedDefault)
+        return FATX_INVALID_ARGUMENT;
+
+    std::vector<char> buffer(static_cast<size_t>(needed));
+    usedDefault = FALSE;
+    if (!WideCharToMultiByte(
+        437, WC_NO_BEST_FIT_CHARS, path, -1,
+        buffer.data(), needed, nullptr, &usedDefault) || usedDefault)
+        return FATX_INVALID_ARGUMENT;
+
+    converted.assign(buffer.data());
+    for (char& ch : converted) {
+        if (ch == '\\') ch = '/';
+    }
+    if (converted.empty() || converted.front() != '/')
+        converted.insert(converted.begin(), '/');
+    return FATX_OK;
+}
+
+static int ValidateFileChain(FatxVolume* v, const FatxDirEntry& entry)
+{
+    if (entry.size == 0)
+        return FATX_OK;
+    if (!ValidCluster(v, entry.firstCluster))
+        return FATX_CORRUPT;
+
+    std::unordered_set<DWORD> visited;
+    DWORD current = entry.firstCluster;
+    ULONGLONG capacity = 0;
+
+    for (ULONGLONG count = 0; count < v->clusterCount; ++count) {
+        if (!visited.insert(current).second)
+            return FATX_CORRUPT;
+        capacity += v->clusterSize;
+
+        DWORD next = 0;
+        bool end = false;
+        const int status = NextCluster(v, current, &next, &end);
+        if (status != FATX_OK)
+            return status;
+        if (end)
+            return capacity >= entry.size ? FATX_OK : FATX_CORRUPT;
+        current = next;
+    }
+    return FATX_CORRUPT;
+}
+
 extern "C" int __cdecl FATX_ReadFileW(
     FATX_VOLUME handle,
     LPCWSTR path,
@@ -830,6 +886,7 @@ extern "C" int __cdecl FATX_ReadFileW(
         !bytesRead || (!buffer && bytesToRead))
         return FATX_INVALID_ARGUMENT;
 
+    VolumeOperationGuard operationGuard(v);
     *bytesRead = 0;
 
     FatxDirEntry entry;
