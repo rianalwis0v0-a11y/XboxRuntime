@@ -14,13 +14,17 @@ System-information candidates include `PsQueryStatistics` (256) and `MmQueryStat
 
 | API | Ordinal | Status | Evidence |
 |---|---:|---|---|
-| `PsQueryStatistics` | 256 | PARTIAL | x86 guest stdcall smoke; returns process-backing thread/handle counts, not a console-wide Xbox object-manager snapshot |
-| `IoCreateSymbolicLink` | 67 | PARTIAL | x86 guest stdcall smoke; case-insensitive prefix namespace, duplicate detection, bounded cycle rejection, and path translation |
-| `IoDeleteSymbolicLink` | 69 | PARTIAL | x86 guest stdcall smoke; deletion and missing-name status |
-| `HalRegisterShutdownNotification` | 47 | PARTIAL | x86 guest and x64 host tests; ordered callbacks, unregister, one-shot shutdown dispatch |
+| `PsQueryStatistics` | 256 | PARTIAL | x86 guest stdcall smoke plus synthetic XBE import-thunk call; returns process-backing thread/handle counts, not a console-wide Xbox object-manager snapshot |
+| `IoCreateSymbolicLink` | 67 | PARTIAL | synthetic XBE import-thunk call plus x86/x64 tests; case-insensitive prefix namespace, duplicate detection, bounded cycle rejection, and path translation |
+| `IoDeleteSymbolicLink` | 69 | PARTIAL | synthetic XBE import-thunk call plus x86/x64 tests; deletion and missing-name status |
+| `HalRegisterShutdownNotification` | 47 | PARTIAL | synthetic XBE import-thunk call verifies shutdown callback marker; x86/x64 tests cover ordered callbacks, unregister, and one-shot dispatch |
 
 ## Coordination boundaries
 
 - Developer 2 owns memory APIs and shared object/handle ownership. This branch does not replace `NtDuplicateObject` or `NtClose`.
 - Developer 3 owns threads, synchronization, and asynchronous completion. This branch does not claim APC or overlapped file-I/O behavior.
 - File/device I/O extensions must use the pinned NXDK layouts and return explicit unsupported/error statuses until their host backing semantics are implemented.
+
+## Real guest-call evidence
+
+`tests/kernel_guest_backend_smoke.cpp` constructs a synthetic x86 XBE with a kernel thunk table for ordinals 256, 67, 69, and 47. The guest entrypoint calls the resolved import thunks using the x86 stack ABI. It verifies PsQueryStatistics output, symbolic-link success/collision/deletion/missing-name statuses, then registers a shutdown callback whose shared-memory marker must be set when `XboxKernelShutdownTitle` runs. This is an import-thunk integration test, not a claim that a retail game XBE has been tested.
