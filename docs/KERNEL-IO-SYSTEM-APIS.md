@@ -4,9 +4,9 @@ Pinned ABI source: XboxDev/nxdk revision `fafbe41b48fa00a31b79dd49ad1f86a30adcdd
 
 ## Initial audit
 
-The export catalogue is an ordinal inventory, not an implementation ledger. Existing guest dispatch already routes a limited file-I/O subset: `NtCreateFile` (190), `NtOpenFile` (202), `NtReadFile` (219), `NtWriteFile` (236), `NtFlushBuffersFile` (198), `NtDeleteFile` (195), `NtQueryDirectoryFile` (207), `NtQueryInformationFile` (211), `NtSetInformationFile` (226), `NtQueryVolumeInformationFile` (218), and `NtQueryFullAttributesFile` (210). The directory query currently supports only `FileDirectoryInformation` (class 1); file information queries support only a small subset of classes. The current read/write handlers complete synchronously and do not implement APC/overlapped completion.
+The export catalogue is an ordinal inventory, not an implementation ledger. Existing guest dispatch already routes a limited file-I/O subset: `NtCreateFile` (190), `NtOpenFile` (202), `NtReadFile` (219), `NtWriteFile` (236), `NtFlushBuffersFile` (198), `NtDeleteFile` (195), `NtQueryDirectoryFile` (207), `NtQueryInformationFile` (211), `NtSetInformationFile` (226), `NtQueryVolumeInformationFile` (218), and `NtQueryFullAttributesFile` (210). The directory query currently supports only `FileDirectoryInformation` (class 1); file information queries support only a small subset of classes. The current read/write handlers complete synchronously and do not implement APC/overlapped completion. `IoCreateSymbolicLink`/`IoDeleteSymbolicLink` now have a bounded guest namespace map used by the existing file-path translator; this is not a complete NT object manager or device-object implementation.
 
-The following catalogue groups are not dispatched by the inspected baseline: most IRP/device-object APIs (ordinals 59-87), `NtDeviceIoControlFile` (196), `NtFsControlFile` (200), `NtReadFileScatter` (220), `NtWriteFileGather` (237), `NtCreateIoCompletion` (191), `NtSetIoCompletion` (227), `NtRemoveIoCompletion` (223), `IoCreateSymbolicLink` (67), and `IoDeleteSymbolicLink` (69). These are audit findings, not assertions that every API should be implemented by this tranche.
+The following catalogue groups are not dispatched by the inspected baseline: most IRP/device-object APIs (ordinals 59-87), `NtDeviceIoControlFile` (196), `NtFsControlFile` (200), `NtReadFileScatter` (220), `NtWriteFileGather` (237), `NtCreateIoCompletion` (191), `NtSetIoCompletion` (227), `NtRemoveIoCompletion` (223), the IRP/device object APIs, `NtDeviceIoControlFile` (196), `NtFsControlFile` (200), `NtReadFileScatter` (220), `NtWriteFileGather` (237), and I/O completion exports (191, 223, 227). These remain audit findings, not assertions that every API should be implemented by this tranche.
 
 System-information candidates include `PsQueryStatistics` (256) and `MmQueryStatistics` (181). The latter overlaps the memory developer's ownership and is intentionally excluded here. `PsQueryStatistics` is the first isolated implementation in this branch.
 
@@ -15,6 +15,8 @@ System-information candidates include `PsQueryStatistics` (256) and `MmQueryStat
 | API | Ordinal | Status | Evidence |
 |---|---:|---|---|
 | `PsQueryStatistics` | 256 | PARTIAL | x86 guest stdcall smoke; returns process-backing thread/handle counts, not a console-wide Xbox object-manager snapshot |
+| `IoCreateSymbolicLink` | 67 | PARTIAL | x86 guest stdcall smoke; case-insensitive prefix namespace, duplicate detection, bounded cycle rejection, and path translation |
+| `IoDeleteSymbolicLink` | 69 | PARTIAL | x86 guest stdcall smoke; deletion and missing-name status |
 
 ## Coordination boundaries
 
