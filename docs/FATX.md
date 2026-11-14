@@ -50,7 +50,7 @@ bounds, and invalid FAT markers before calling the vendored writer, serializes
 operations per volume, flushes FAT metadata and file data, and reports the
 number of bytes written.
 
-Not yet supported by this first write milestone: sparse writes beyond EOF, file/directory creation, delete, rename, truncate,
+Not yet supported by this first write milestone: sparse writes beyond EOF, directory creation, delete, rename, truncate,
 format, repair, or direct physical-device writes. FATX has no journal, so a
 power loss or I/O failure during a multi-step update can still leave an image
 inconsistent. Always work on a backup copy.
