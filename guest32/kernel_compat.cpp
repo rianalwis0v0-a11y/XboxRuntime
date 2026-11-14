@@ -916,6 +916,14 @@ struct GuestFileDirectoryInformation {
 };
 static_assert(offsetof(GuestFileDirectoryInformation, FileName) == 64,
               "Xbox FILE_DIRECTORY_INFORMATION filename offset must be 0x40");
+struct GuestFileNamesInformation {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    ULONG FileNameLength;
+    CHAR FileName[1];
+};
+static_assert(offsetof(GuestFileNamesInformation, FileName) == 12,
+              "Xbox FILE_NAMES_INFORMATION filename offset must be 0x0C");
 static bool SkipDotDirectoryEntries(HANDLE search, WIN32_FIND_DATAW& data) {
     while (wcscmp(data.cFileName, L".") == 0 || wcscmp(data.cFileName, L"..") == 0) {
         if (!FindNextFileW(search, &data)) return false;
@@ -936,8 +944,14 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
     if (!file || file == INVALID_HANDLE_VALUE) return SetDirectoryIoStatus(io, statusInvalidHandle);
-    if (!information || informationClass != 1 || length < 64)
-        return SetDirectoryIoStatus(io, informationClass != 1 ? LONG(0xC0000003u) : statusInvalidParameter);
+    if (!information) return SetDirectoryIoStatus(io, statusInvalidParameter);
+    if (informationClass != 1 && informationClass != 12)
+        return SetDirectoryIoStatus(io, LONG(0xC0000003u)); // STATUS_INVALID_INFO_CLASS
+    const ULONG minimumLength = informationClass == 1
+        ? static_cast<ULONG>(offsetof(GuestFileDirectoryInformation, FileName))
+        : static_cast<ULONG>(offsetof(GuestFileNamesInformation, FileName));
+    if (length < minimumLength)
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
     if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
     if (fileMask && ((fileMask->Length && !fileMask->Buffer) ||
                      fileMask->Length > fileMask->MaximumLength))
@@ -1004,26 +1018,40 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     const size_t nameChars = wcslen(state.current.cFileName);
     const int nameBytes = nameChars ? WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
         static_cast<int>(nameChars), nullptr, 0, nullptr, nullptr) : 0;
-    if (nameBytes < 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
-    const size_t required = offsetof(GuestFileDirectoryInformation, FileName) + static_cast<size_t>(nameBytes);
+    if (nameChars && nameBytes <= 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    const size_t filenameOffset = informationClass == 1
+        ? offsetof(GuestFileDirectoryInformation, FileName)
+        : offsetof(GuestFileNamesInformation, FileName);
+    const size_t required = filenameOffset + static_cast<size_t>(nameBytes);
     if (required > length) return SetDirectoryIoStatus(io, statusBufferOverflow, static_cast<ULONG>(required));
 
-    auto* out = static_cast<GuestFileDirectoryInformation*>(information);
-    std::memset(out, 0, required);
-    out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
-    out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
-    out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
-    out->ChangeTime = out->LastWriteTime;
-    ULARGE_INTEGER size{};
-    size.HighPart = state.current.nFileSizeHigh;
-    size.LowPart = state.current.nFileSizeLow;
-    out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
-    out->AllocationSize = out->EndOfFile;
-    out->FileAttributes = state.current.dwFileAttributes;
-    out->FileNameLength = static_cast<ULONG>(nameBytes);
-    if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
-        static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
-        return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    if (informationClass == 1) {
+        auto* out = static_cast<GuestFileDirectoryInformation*>(information);
+        std::memset(out, 0, required);
+        out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
+        out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
+        out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
+        out->ChangeTime = out->LastWriteTime;
+        ULARGE_INTEGER size{};
+        size.HighPart = state.current.nFileSizeHigh;
+        size.LowPart = state.current.nFileSizeLow;
+        out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+        out->AllocationSize = out->EndOfFile;
+        out->FileAttributes = state.current.dwFileAttributes;
+        out->FileNameLength = static_cast<ULONG>(nameBytes);
+        if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+            static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    } else {
+        auto* out = static_cast<GuestFileNamesInformation*>(information);
+        std::memset(out, 0, required);
+        out->NextEntryOffset = 0;
+        out->FileIndex = 0; // The host FindFirstFile API does not expose Xbox file indices.
+        out->FileNameLength = static_cast<ULONG>(nameBytes);
+        if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+            static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    }
     state.currentValid = false;
     if (event) SetEvent(event);
     return SetDirectoryIoStatus(io, 0, static_cast<ULONG>(required));
