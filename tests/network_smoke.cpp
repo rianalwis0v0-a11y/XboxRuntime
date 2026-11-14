@@ -35,6 +35,12 @@ int main() {
         return 35;
     }
 
+    if (XboxWSACleanup() != SOCKET_ERROR || WSAGetLastError() != WSANOTINITIALISED ||
+        XboxWSAStartup(MAKEWORD(2, 3), &guestWsaData) != WSAVERNOTSUPPORTED) {
+        XNetCleanup();
+        return 41;
+    }
+
     BYTE randomBytes[32]{};
     if (XNetRandom(randomBytes, sizeof(randomBytes)) != 0) { XNetCleanup(); return 18; }
     XNADDR testAddress{};
