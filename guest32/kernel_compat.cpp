@@ -2713,6 +2713,7 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
 }
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
+    XboxKernelBeginObjectHandleSession();
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
     DWORD tlsIndex = TLS_OUT_OF_INDEXES;
