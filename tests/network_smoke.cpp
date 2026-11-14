@@ -16,6 +16,24 @@ int main() {
         return 22;
     }
 
+    // The XDK-compatible public winsockx.h defines 12 one-byte startup fields.
+    static_assert(sizeof(XNetStartupParams) == 12, "retail XNet startup ABI");
+    XNetStartupParams badParams{};
+    badParams.cfgSizeOfStruct = 13;
+    if (XNetStartup(&badParams) != WSAEINVAL) return 34;
+
+    XNKID generatedId{};
+    XNKEY generatedKey{};
+    if (XNetCreateKey(&generatedId, &generatedKey) != 0 ||
+        (generatedId.ab[0] & 0xF0u) != 0 ||
+        XNetRegisterKey(&generatedId, &generatedKey) != 0 ||
+        XNetRegisterKey(&generatedId, &generatedKey) != WSAEALREADY ||
+        XNetUnregisterKey(&generatedId) != 0 ||
+        XNetUnregisterKey(&generatedId) != WSAEINVAL) {
+        XNetCleanup();
+        return 35;
+    }
+
     BYTE randomBytes[32]{};
     if (XNetRandom(randomBytes, sizeof(randomBytes)) != 0) { XNetCleanup(); return 18; }
     XNADDR testAddress{};
