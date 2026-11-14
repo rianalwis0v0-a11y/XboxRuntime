@@ -188,8 +188,8 @@ static int NextCluster(
 
     uint32_t endMarker =
         v->entrySize == 2
-        ? 0xFFF8
-        : 0xFFFFFFF8;
+        ? 0xFFFF
+        : 0xFFFFFFFF;
 
     uint32_t badMarker =
         v->entrySize == 2
@@ -201,7 +201,12 @@ static int NextCluster(
         ? 0xFFF0
         : 0xFFFFFFF0;
 
-    if (value >= endMarker)
+    uint32_t mediaMarker =
+        v->entrySize == 2
+        ? 0xFFF8
+        : 0xFFFFFFF8;
+
+    if (value == endMarker)
     {
         *end = true;
         *next = 0;
@@ -209,6 +214,7 @@ static int NextCluster(
     }
 
     if (value == badMarker ||
+        value == mediaMarker ||
         value >= reservedMarker ||
         !ValidCluster(v, value))
         return FATX_CORRUPT;
@@ -561,8 +567,9 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     v->clusterSize = spc * 512;
 
+    // Upstream FATX geometry: floor(partition / cluster) plus reserved entry 0.
     ULONGLONG maxClusters =
-        partitionLength / v->clusterSize + 2; // includes FATX reserved entries
+        partitionLength / v->clusterSize + 1;
 
     v->entrySize =
         maxClusters < 0xFFF0 ? 2 : 4;
