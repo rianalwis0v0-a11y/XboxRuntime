@@ -23,6 +23,8 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "kernel_memory.h"
+#include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -886,7 +888,11 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    CloseGuestDirectorySearch(h);
+    if (XboxKernelCloseObjectHandle(h)) return 0;
+    return CloseHandle(h) ? 0 : LONG(0xC0000008u);
+}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
@@ -1335,26 +1341,6 @@ extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
-extern "C" LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR, SIZE_T* size, ULONG type, ULONG protect) {
-    if (!base || !size || !*size) return LONG(0xC000000Du);
-    void* p = VirtualAlloc(*base, *size, type, protect);
-    if (!p) return LONG(0xC0000017u);
-    *base = p;
-    MEMORY_BASIC_INFORMATION info{};
-    if (VirtualQuery(p, &info, sizeof(info))) *size = info.RegionSize;
-    return 0;
-}
-extern "C" LONG __stdcall K_NtProtectVirtualMemory(void** base,SIZE_T* size,ULONG protect,ULONG* oldProtect){
-    if(!base||!*base||!size||!*size)return LONG(0xC000000Du);DWORD old=0;
-    if(!VirtualProtect(*base,*size,protect,&old))return LONG(0xC000000Du);
-    if(oldProtect)*oldProtect=old;return 0;
-}
-extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* base,ULONG infoClass,void* out,ULONG length,ULONG* returned){
-    if(infoClass!=0||!base||!out)return LONG(0xC0000003u);
-    MEMORY_BASIC_INFORMATION info{};SIZE_T n=VirtualQuery(base,&info,sizeof(info));if(!n)return LONG(0xC000000Du);
-    if(returned)*returned=ULONG(n);if(length<sizeof(info))return LONG(0xC0000023u);
-    std::memcpy(out,&info,sizeof(info));return 0;
-}
 extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK, void*, LONG initial, LONG maximum){
     if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
     HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
@@ -1410,15 +1396,6 @@ extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE
     if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
     return LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* size, ULONG type) {
-    if (!base || !*base) return LONG(0xC000000Du);
-    SIZE_T n = size ? *size : 0;
-    if (!VirtualFree(*base, n, type)) return LONG(0xC000000Du);
-    if (type & MEM_RELEASE) { *base = nullptr; if (size) *size = 0; }
-    return 0;
-}
-
-
 struct GuestClientId { HANDLE UniqueProcess; HANDLE UniqueThread; };
 extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, void*, HANDLE process,
                                                    GuestClientId* clientId, LPTHREAD_START_ROUTINE start,
@@ -1817,15 +1794,6 @@ extern "C" LONG __stdcall K_NtResumeThread(HANDLE thread, ULONG* previous) {
     DWORD n = ResumeThread(thread);
     if (n == DWORD(-1)) return LONG(0xC0000008u);
     if (previous) *previous = n;
-    return 0;
-}
-extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE sourceProcess, HANDLE source, HANDLE targetProcess,
-                                                HANDLE* target, ACCESS_MASK access, ULONG attributes, ULONG options) {
-    if (!target) return LONG(0xC000000Du);
-    HANDLE process = targetProcess ? targetProcess : GetCurrentProcess();
-    if (!DuplicateHandle(sourceProcess ? sourceProcess : GetCurrentProcess(), source, process, target,
-                         access, (attributes & 2u) != 0, options))
-        return LONG(0xC0000008u);
     return 0;
 }
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
@@ -2633,6 +2601,7 @@ void XboxKernelSetStartupEvent(HANDLE eventHandle) {
 
 void XboxKernelShutdownTitle() {
     g_startupEvent = nullptr;
+    XboxKernelCloseAllObjectHandles();
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);
         g_stubPage = nullptr;
@@ -2744,6 +2713,7 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
 }
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
+    XboxKernelBeginObjectHandleSession();
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
     DWORD tlsIndex = TLS_OUT_OF_INDEXES;
