@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <new>
 #include <atomic>
 #include "kernel_compat.h"
 #include "guest_api_registry.h"
