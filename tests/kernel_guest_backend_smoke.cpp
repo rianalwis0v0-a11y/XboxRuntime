@@ -79,6 +79,9 @@ struct GuestCodeBuilder {
     void StoreEax(std::uint32_t address) {
         Emit8(0xA3); Emit32(address); // mov [absolute], eax
     }
+    void LoadEax(std::uint32_t address) {
+        Emit8(0xA1); Emit32(address); // mov eax, [absolute]
+    }
 };
 
 int Fail(const char* message, int code, XBE_EXECUTION_BACKEND_V2* backend,
@@ -325,9 +328,11 @@ int main() {
     push(0x1234u); push(0xC0000001u); push(0x33334444u); push(0x11112222u);
     guest.PushMemory(duplicateHandleVa); call(17u); save(72u);
     push(completionInfoVa); guest.PushMemory(duplicateHandleVa); call(15u); save(76u);
+    guest.LoadEax(completionInfoVa); save(100u);
     push(timeoutVa); push(completionIoStatusVa); push(completionApcVa);
     push(completionKeyVa); guest.PushMemory(duplicateHandleVa); call(16u); save(80u);
     push(completionInfoVa); guest.PushMemory(duplicateHandleVa); call(15u); save(84u);
+    guest.LoadEax(completionInfoVa); save(104u);
     push(timeoutVa); push(completionIoStatusVa); push(completionApcVa);
     push(completionKeyVa); guest.PushMemory(duplicateHandleVa); call(16u); save(88u);
     guest.PushMemory(duplicateHandleVa); call(19u); save(92u);
@@ -390,6 +395,8 @@ int main() {
         readMarker(markerOffset + 88u) != 0x102u ||
         readMarker(markerOffset + 92u) != 0u ||
         readMarker(markerOffset + 96u) != 0xC0000008u ||
+        readMarker(markerOffset + 100u) != 1u ||
+        readMarker(markerOffset + 104u) != 0u ||
         *reinterpret_cast<const std::uint32_t*>(image + threadOutOffset) != 0u)
         return Fail("guest-call synchronization/I/O completion ABI assertions failed",
                     6, &backend, image, stop);
