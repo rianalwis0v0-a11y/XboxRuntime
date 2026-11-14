@@ -4,7 +4,7 @@ The FATX module opens a FATX volume from a Windows file or device path and a cal
 
 ## Supported operations
 
-- Validate the FATX volume header and supported sectors-per-cluster values with both the XboxRuntime bounds-checked parser and vendored XboxDev/libfatx.
+- Validate the FATX volume header and supported sectors-per-cluster values (1 through 1024 sectors, powers of two supported by libfatx) with both the XboxRuntime bounds-checked parser and vendored XboxDev/libfatx.
 - Derive the cluster size, FAT entry width, FAT size, data offset, and usable cluster count from the supplied partition length.
 - Read FAT16- or FAT32-width cluster chains.
 - Resolve case-insensitive paths and list directory entries; FATX single-byte filenames are decoded as OEM CP437.
@@ -31,4 +31,4 @@ The API is read-only. The vendored libfatx device open is patched to use `rb`; t
 
 ## Test coverage
 
-The Windows regression test builds a synthetic FATX volume and checks metadata, root listing, multi-cluster reads, offset reads crossing a cluster boundary, partition bounds, and cyclic-chain rejection. CI builds and links the vendored XboxDev/libfatx C library before running the module test. This does not yet constitute validation against a complete retail Xbox HDD image.
+The Windows regression test builds synthetic FATX volumes and checks metadata, root listing, multi-cluster reads, offset reads crossing a cluster boundary, partition bounds, cyclic-chain rejection, strict end-of-chain marker handling (only `0xFFFF`/`0xFFFFFFFF`), and the 32-bit FAT geometry threshold. The module cross-checks computed cluster/FAT geometry against XboxDev/libfatx during mount. CI builds and links the vendored XboxDev/libfatx C library before running the module test. This does not yet constitute validation against a complete retail Xbox HDD image.
