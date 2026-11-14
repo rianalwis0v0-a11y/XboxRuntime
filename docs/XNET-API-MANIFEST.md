@@ -57,7 +57,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 ## Verified status flags
 
 The header defines the Xbox status values used by the implementation:
-- `XNET_GET_XNADDR_NONE=0x1`, `ETHERNET=0x2`, `STATIC=0x4`, `DHCP=0x8`, `GATEWAY=0x20`, `DNS=0x40`, `ONLINE=0x80`, `TROUBLESHOOT=0x8000`.
+- `XNET_GET_XNADDR_PENDING=0`, `NONE=0x1`, `ETHERNET=0x2`, `STATIC=0x4`, `DHCP=0x8`, `AUTO=0x10`, `GATEWAY=0x20`, `DNS=0x40`, `ONLINE=0x80`, `TROUBLESHOOT=0x8000`.
 - `XNET_ETHERNET_LINK_ACTIVE=0x1`, `100MBPS=0x2`, `10MBPS=0x4`, `FULL_DUPLEX=0x8`, `HALF_DUPLEX=0x10`, `WIRELESS=0x20`.
 
 The host adapter query reports only properties it can observe. Duplex flags are intentionally not set because the Windows IP Helper adapter record does not expose duplex mode.
@@ -195,3 +195,10 @@ the former use-after-free risk.
 successful startup, matching the original XNet lifecycle contract. The smoke
 test verifies both the final successful cleanup and the unmatched-cleanup
 error.
+
+
+Address reporting now identifies IPv4 link-local/APIPA addresses (169.254/16)
+with the original `XNET_GET_XNADDR_AUTO` flag instead of incorrectly labelling
+them DHCP. The unsupported `XNET_ETHERNET_LINK_WIRELESS` bit was removed:
+the XDK header defines only ACTIVE, 100MBPS, 10MBPS, FULL_DUPLEX and
+HALF_DUPLEX for this API.
