@@ -34,3 +34,5 @@ bool XboxKernelIsObjectHandle(HANDLE handle);
 // Blocks new creates/acquires and closes all published entries. Outstanding
 // acquired references keep payloads alive until their matching Release.
 void XboxKernelCloseAllObjectHandles();
+// Reopens the table for a new title session after prior shutdown cleanup.
+void XboxKernelBeginObjectHandleSession();
