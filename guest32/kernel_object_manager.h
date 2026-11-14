@@ -13,7 +13,7 @@ enum class XboxKernelObjectLookupStatus : LONG {
     InvalidHandle = static_cast<LONG>(0xC0000008u),
     TypeMismatch = static_cast<LONG>(0xC0000024u),
     InvalidParameter = static_cast<LONG>(0xC000000Du),
-    ShuttingDown = static_cast<LONG>(0xC000010Eu)
+    ShuttingDown = static_cast<LONG>(0xC0000184u)
 };
 
 // On failure, Create leaves payload ownership with the caller.
