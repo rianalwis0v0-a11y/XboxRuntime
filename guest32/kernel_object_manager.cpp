@@ -105,7 +105,7 @@ XboxKernelObjectLookupStatus XboxKernelGetLastObjectLookupStatus() {
 }
 
 LONG XboxKernelDuplicateObjectHandle(HANDLE source, HANDLE* target, ULONG options) {
-    if (!source || !target || options != 0x2u)
+    if (!source || !target || (options & ~0x3u) != 0)
         return static_cast<LONG>(0xC000000Du);
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_shuttingDown) return static_cast<LONG>(0xC000010Eu);
@@ -116,6 +116,16 @@ LONG XboxKernelDuplicateObjectHandle(HANDLE source, HANDLE* target, ULONG option
     ++it->second->references;
     g_handles.emplace(token, it->second);
     *target = token;
+    if ((options & 0x1u) != 0) {
+        auto sourceIt = g_handles.find(source);
+        if (sourceIt != g_handles.end()) {
+            auto record = sourceIt->second;
+            g_handles.erase(sourceIt);
+            // The duplicate's newly-added reference remains live.
+            void* ignoredPayload = nullptr;
+            (void)DropReferenceLocked(record, &ignoredPayload);
+        }
+    }
     return 0;
 }
 
