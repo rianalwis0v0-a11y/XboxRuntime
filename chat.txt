@@ -115,3 +115,22 @@ Known issues / next steps:
 2. Trace the originating indirect call/return through NXDK startup and import thunk paths; inspect calling convention and TLS semantics against pinned NXDK source before changing behavior.
 3. Implement the evidenced root fix and regression test. Keep section 2 non-executable.
 4. Full integration workflow and PR to work/kernel-execution-backend remain pending; no execution success is claimed.
+
+
+[2026-11-14 13:05 UTC] [Kernel Developer 5 — exception-context instrumentation]
+Status: IN_PROGRESS (diagnostic patch committed; CI running; root cause not yet proven)
+Branch / commit: work/kernel-xbe-execution-fix / 64ba45e9508b7f292cea4578a443a1a0f83e74c5; draft PR #20: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/20
+Summary:
+- Extended the guest exit protocol with a fixed 64-byte x86 fault context: EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, and eight stack DWORDs.
+- Captured CONTEXT fields inside the guest SEH exception filter, bounded the stack read to its committed readable VirtualQuery region, passed the context over the existing named-pipe reply, and added integration-harness output.
+- No section flags/protections, guest ABI definitions, or startup behavior were changed. This is instrumentation only; it is not the root fix.
+Files changed: guest32/guest_protocol.h, guest32/kernel_compat.h, guest32/kernel_compat.cpp, guest32/guest32.cpp, modules/xbox_kernel/xbox_kernel.cpp, tests/kernel_xbe_integration.cpp, chat.txt.
+Build and tests:
+- New draft PR #20 targets work/kernel-execution-backend.
+- GitHub Actions run 43597802105 triggered from PR #20. At publication, NXDK fixture job was still in progress; no compile/test PASS is claimed for this patch yet.
+- Prior baseline run 43580285749 still shows all host/guest builds, export audit, network/API tests and synthetic backend smoke passing; real NXDK XBE fails at 0x10018DC0.
+Known issues / next steps:
+1. Inspect run 43597802105 for compile failures and then read the emitted register/stack snapshot from the real NXDK XBE.
+2. Use the return chain/register state to isolate a bad indirect call, stack/return corruption, import stub, or startup ABI mismatch.
+3. Implement a root-cause correction and add a regression test that proves the actual NXDK fixture executes with section 2 still non-executable.
+4. PR #20 remains draft; no real-XBE success or completed integration workflow is claimed.
