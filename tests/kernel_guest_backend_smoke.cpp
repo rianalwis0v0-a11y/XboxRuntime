@@ -230,7 +230,6 @@ int main() {
     constexpr std::uint32_t mutantVa = guestBase + mutantOffset;
     constexpr std::uint32_t timerVa = guestBase + timerOffset;
     constexpr std::uint32_t timeoutVa = guestBase + timeoutOffset;
-    constexpr std::uint32_t dueTimeVa = guestBase + dueTimeOffset;
     const std::uint32_t ordinals[] = {
         108u, 145u, 138u, 159u, 112u, 132u,
         110u, 131u, 113u, 149u, 150u, 97u, 0u
