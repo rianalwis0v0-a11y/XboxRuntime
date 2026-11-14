@@ -91,6 +91,19 @@ int main() {
     XNetDnsRelease(asyncDns);
     WSACloseEvent(asyncDnsEvent);
 
+    // Releasing an in-flight DNS result must not free memory under its worker.
+    WSAEVENT earlyReleaseEvent = WSACreateEvent();
+    XNDNS* earlyReleaseDns = nullptr;
+    if (!earlyReleaseEvent || XNetDnsLookup("localhost", earlyReleaseEvent, &earlyReleaseDns) != 0 ||
+        !earlyReleaseDns || XNetDnsRelease(earlyReleaseDns) != 0 ||
+        WSAWaitForMultipleEvents(1, &earlyReleaseEvent, TRUE, 5000, FALSE) != WSA_WAIT_EVENT_0) {
+        if (earlyReleaseDns) XNetDnsRelease(earlyReleaseDns);
+        if (earlyReleaseEvent) WSACloseEvent(earlyReleaseEvent);
+        XNetCleanup();
+        return 39;
+    }
+    WSACloseEvent(earlyReleaseEvent);
+
     XNADDR titleAddress{};
     const DWORD titleAddressFlags = XNetGetTitleXnAddr(&titleAddress);
     if (titleAddressFlags != XNET_GET_XNADDR_NONE &&
