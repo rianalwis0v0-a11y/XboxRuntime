@@ -34,6 +34,7 @@ target_include_directories(fatx_smoke PRIVATE
 )
 target_compile_features(fatx_smoke PRIVATE cxx_std_17)
 target_compile_definitions(fatx_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(fatx_smoke PRIVATE libfatx_vendor)
 add_test(NAME fatx_smoke COMMAND fatx_smoke)
 
 # Exercise the borrowed NV2A core through the exported XboxRuntime module ABI.

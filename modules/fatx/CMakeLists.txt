@@ -1,3 +1,5 @@
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libfatx" "${CMAKE_CURRENT_BINARY_DIR}/libfatx-vendor")
+
 add_library(fatx MODULE
     include/fatx.cpp
 )
@@ -7,6 +9,7 @@ target_include_directories(fatx PRIVATE
 )
 
 target_compile_features(fatx PRIVATE cxx_std_17)
+target_link_libraries(fatx PRIVATE libfatx_vendor)
 target_compile_definitions(fatx PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX

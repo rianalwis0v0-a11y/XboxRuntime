@@ -1,0 +1,53 @@
+name: Filesystem regression tests
+
+on:
+  push:
+    branches:
+      - work/xdvdfs-fatx
+    paths:
+      - "modules/fatx/**"
+      - "third_party/libfatx/**"
+      - "modules/xdvdfs/**"
+      - "tests/fatx_smoke.cpp"
+      - "tests/xdvdfs_smoke.cpp"
+      - ".github/workflows/filesystem-tests.yml"
+  pull_request:
+    paths:
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "tests/fatx_smoke.cpp"
+      - "tests/xdvdfs_smoke.cpp"
+      - ".github/workflows/filesystem-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  windows-filesystems:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build vendored XboxDev libfatx
+        run: |
+          cmake -S third_party/libfatx -B build-libfatx -A x64
+          cmake --build build-libfatx --config Release
+      - name: Build FATX regression test
+        shell: cmd
+        run: >-
+          cl /nologo /MD /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
+          /Imodules/fatx/include tests/fatx_smoke.cpp
+          modules/fatx/include/fatx.cpp
+          build-libfatx/Release/libfatx_vendor.lib /Fe:fatx_smoke.exe
+      - name: Run FATX regression test
+        shell: cmd
+        run: fatx_smoke.exe
+      - name: Build XDVDFS regression test
+        shell: cmd
+        run: >-
+          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
+          /Imodules/xdvdfs tests/xdvdfs_smoke.cpp
+          modules/xdvdfs/xdvdfs.cpp /Fe:xdvdfs_smoke.exe
+      - name: Run XDVDFS regression test
+        shell: cmd
+        run: xdvdfs_smoke.exe

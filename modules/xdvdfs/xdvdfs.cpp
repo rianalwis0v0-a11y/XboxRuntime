@@ -34,6 +34,7 @@ struct Volume {
     uint32_t rootSize = 0;
     uint64_t directoryBytesParsed = 0;
     std::unordered_map<std::string, Entry> entries;
+    std::unordered_set<uint64_t> directoryRanges;
     bool open = false;
 };
 Volume g_volume;
@@ -65,7 +66,7 @@ bool ReadAt(Volume& v, uint64_t offset, void* buffer, size_t bytes) {
 }
 bool ParseDescriptor(Volume& v, uint64_t partition) {
     uint8_t descriptor[kSector]{};
-    if (!RangeOK(partition + kDescriptorOffset, kSector, v.imageSize) ||
+    if (!RangeOK(partition, kDescriptorOffset + kSector, v.imageSize) ||
         !ReadAt(v, partition + kDescriptorOffset, descriptor, sizeof(descriptor))) return false;
     if (std::memcmp(descriptor, kMagic, 20) != 0 ||
         std::memcmp(descriptor + 0x7EC, kMagic, 20) != 0) return false;
@@ -82,6 +83,8 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
     if (!size) return true;
     if (depth >= 128) return false;
     if (size > 16u * 1024u * 1024u || v.directoryBytesParsed > 128u * 1024u * 1024u - size) return false;
+    const uint64_t directoryKey = (uint64_t(sector) << 32) | size;
+    if (!v.directoryRanges.insert(directoryKey).second) return false;
     v.directoryBytesParsed += size;
     const uint64_t tableOffset = v.partition + uint64_t(sector) * kSector;
     if (!RangeOK(tableOffset, size, v.imageSize)) return false;
@@ -93,9 +96,11 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
     while (!stack.empty()) {
         const uint32_t offset = stack.back();
         stack.pop_back();
-        if (!visited.insert(offset).second) continue;
+        // A directory is a tree, not a graph. Repeated child pointers indicate
+        // a cycle or aliased node and must not be silently accepted.
+        if (!visited.insert(offset).second) return false;
         if (visited.size() > 100000) return false;
-        if (offset > size || size - offset < 14) return false;
+        if ((offset & 3u) != 0 || offset > size || size - offset < 14) return false;
         const uint8_t* p = table.data() + offset;
         const uint16_t left = U16(p);
         const uint16_t right = U16(p + 2);
@@ -103,7 +108,7 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
         const uint32_t fileSize = U32(p + 8);
         const uint8_t attributes = p[12];
         const uint8_t nameLength = p[13];
-        if (!nameLength || nameLength > 255 || uint32_t(14 + nameLength) > size - offset) return false;
+        if (!nameLength || uint32_t(14 + nameLength) > size - offset) return false;
         const uint32_t entryBytes = (14u + nameLength + 3u) & ~3u;
         if (entryBytes > size - offset) return false;
         std::string name(reinterpret_cast<const char*>(p + 14), nameLength);
@@ -118,8 +123,8 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
             const uint64_t dataOffset = v.partition + uint64_t(fileSector) * kSector;
             if (!RangeOK(dataOffset, fileSize, v.imageSize)) return false;
         }
-        // Both encodings have appeared in published descriptions: zero and
-        // 0xffff mean no child. Treat either as absent, with cycle/bounds checks.
+        // Child offsets are stored in DWORD units. Zero and 0xffff are the
+        // documented absent-child encodings seen in existing XISO images.
         if (right != 0 && right != 0xFFFF) stack.push_back(uint32_t(right) * 4u);
         if (left != 0 && left != 0xFFFF) stack.push_back(uint32_t(left) * 4u);
     }
@@ -128,6 +133,8 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
 void CloseUnlocked() {
     g_volume.file.close();
     g_volume.entries.clear();
+    g_volume.directoryRanges.clear();
+    g_volume.directoryBytesParsed = 0;
     g_volume.open = false;
     g_volume.imageSize = g_volume.partition = 0;
     g_volume.rootSector = g_volume.rootSize = 0;
