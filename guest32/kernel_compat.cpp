@@ -298,7 +298,7 @@ static void UpdateGuestDispatcherAfterWait(void* object, DWORD waitResult) {
         break;
     case 9: // TimerSynchronizationObject
         InterlockedExchange(&header->SignalState, 0);
-        InterlockedExchange8(reinterpret_cast<volatile CHAR*>(&header->Inserted), 0);
+        header->Inserted = 0;
         break;
     default:
         break; // Notification events remain signaled.
@@ -1558,6 +1558,9 @@ extern "C" LONG __stdcall K_KeSetEvent(void* event, LONG, UCHAR) {
     HANDLE h = FindKernelObject(event);
     if (!h || !event) return LONG(0xC0000008u);
     auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
+    if (header->Type > 1u) return LONG(0xC0000024u);
+    if (header->Type > 1u) return LONG(0xC0000024u);
+    if (header->Type > 1u) return LONG(0xC0000024u);
     const LONG previous = InterlockedExchange(&header->SignalState, 1);
     if (!SetEvent(h)) {
         InterlockedExchange(&header->SignalState, previous);
@@ -1655,6 +1658,8 @@ extern "C" void __stdcall K_KeInitializeSemaphore(void* semaphore, LONG count, L
 extern "C" LONG __stdcall K_KeReleaseSemaphore(void* semaphore, LONG, LONG adjustment, UCHAR) {
     HANDLE h = FindKernelObject(semaphore);
     if (!h || !semaphore || adjustment <= 0) return LONG(0xC000000Du);
+    if (static_cast<GuestKernelSemaphore*>(semaphore)->Header.Type != 5u)
+        return LONG(0xC0000024u);
     LONG previous = 0;
     if (!ReleaseSemaphore(h, adjustment, &previous))
         return LONG(0xC000000Du);
@@ -1683,6 +1688,8 @@ extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, UCHAR abandoned,
     HANDLE h = FindKernelObject(mutant);
     if (!h || !mutant) return LONG(0xC0000008u);
     auto* guest = static_cast<GuestKernelMutant*>(mutant);
+    if (guest->Header.Type != 2u) return LONG(0xC0000024u);
+    if (abandoned) return LONG(0xC00000BBu); // Abandonment must come from thread rundown.
     const LONG previous = InterlockedIncrement(&guest->Header.SignalState) - 1;
     if (!ReleaseMutex(h)) {
         InterlockedDecrement(&guest->Header.SignalState);
@@ -1713,10 +1720,20 @@ extern "C" void __stdcall K_KeInitializeTimerEx(void* timer, ULONG type) {
 extern "C" UCHAR __stdcall K_KeSetTimer(
     void* timer, LARGE_INTEGER dueTime, void* dpc) {
     HANDLE h = FindKernelObject(timer);
-    if (!h || !timer || dpc) return FALSE;
+    if (!h || !timer) {
+        RaiseGuestInitializationFailure(0xC0000008u);
+        return FALSE;
+    }
     auto* guest = static_cast<GuestKernelTimer*>(timer);
+    if (guest->Header.Type != 8u && guest->Header.Type != 9u)
+        RaiseGuestInitializationFailure(0xC0000024u);
+    if (dpc) RaiseGuestInitializationFailure(0xC00000BBu); // Guest DPC dispatch is not wired yet.
     const UCHAR wasInserted = guest->Header.Inserted;
-    if (!SetWaitableTimer(h, &dueTime, 0, nullptr, nullptr, FALSE)) return FALSE;
+    if (!SetWaitableTimer(h, &dueTime, 0, nullptr, nullptr, FALSE)) {
+        RaiseGuestInitializationFailure(0xC0000001u);
+        return FALSE;
+    }
+    guest->Header.Absolute = dueTime.QuadPart >= 0 ? 1u : 0u;
     guest->DueTime.QuadPart = dueTime.QuadPart;
     guest->Dpc = nullptr;
     guest->Period = 0;
@@ -1726,10 +1743,21 @@ extern "C" UCHAR __stdcall K_KeSetTimer(
 extern "C" UCHAR __stdcall K_KeSetTimerEx(
     void* timer, LARGE_INTEGER dueTime, LONG period, void* dpc) {
     HANDLE h = FindKernelObject(timer);
-    if (!h || !timer || period < 0 || dpc) return FALSE;
+    if (!h || !timer) {
+        RaiseGuestInitializationFailure(0xC0000008u);
+        return FALSE;
+    }
+    if (period < 0) RaiseGuestInitializationFailure(0xC000000Du);
     auto* guest = static_cast<GuestKernelTimer*>(timer);
+    if (guest->Header.Type != 8u && guest->Header.Type != 9u)
+        RaiseGuestInitializationFailure(0xC0000024u);
+    if (dpc) RaiseGuestInitializationFailure(0xC00000BBu); // Guest DPC dispatch is not wired yet.
     const UCHAR wasInserted = guest->Header.Inserted;
-    if (!SetWaitableTimer(h, &dueTime, period, nullptr, nullptr, FALSE)) return FALSE;
+    if (!SetWaitableTimer(h, &dueTime, period, nullptr, nullptr, FALSE)) {
+        RaiseGuestInitializationFailure(0xC0000001u);
+        return FALSE;
+    }
+    guest->Header.Absolute = dueTime.QuadPart >= 0 ? 1u : 0u;
     guest->DueTime.QuadPart = dueTime.QuadPart;
     guest->Dpc = nullptr;
     guest->Period = period;
@@ -1738,9 +1766,17 @@ extern "C" UCHAR __stdcall K_KeSetTimerEx(
 }
 extern "C" UCHAR __stdcall K_KeCancelTimer(void* timer) {
     HANDLE h = FindKernelObject(timer);
-    if (!h || !timer) return FALSE;
-    if (!CancelWaitableTimer(h)) return FALSE;
+    if (!h || !timer) {
+        RaiseGuestInitializationFailure(0xC0000008u);
+        return FALSE;
+    }
     auto* guest = static_cast<GuestKernelTimer*>(timer);
+    if (guest->Header.Type != 8u && guest->Header.Type != 9u)
+        RaiseGuestInitializationFailure(0xC0000024u);
+    if (!CancelWaitableTimer(h)) {
+        RaiseGuestInitializationFailure(0xC0000001u);
+        return FALSE;
+    }
     const UCHAR wasInserted = guest->Header.Inserted;
     guest->Header.Inserted = 0;
     return wasInserted;
