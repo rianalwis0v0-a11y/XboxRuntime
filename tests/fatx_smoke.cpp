@@ -31,7 +31,7 @@ static bool WriteSparseFat32(const wchar_t* path) {
                               FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
     LARGE_INTEGER end{};
-    end.QuadPart = imageSize - 1;
+    end.QuadPart = imageSize;
     bool ok = SetFilePointerEx(file, end, nullptr, FILE_BEGIN) && SetEndOfFile(file);
     BYTE header[0x1000]{};
     std::memcpy(header, "FATX", 4);
