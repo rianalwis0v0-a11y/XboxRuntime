@@ -166,3 +166,9 @@ TlsData 0x28. The current implementation provides these fields and uses
 Windows scheduling underneath. It is **not** a complete Xbox dispatcher,
 scheduler, APC, IRQL, or object-manager implementation; those semantics still
 need dedicated work and tests.
+
+
+The real NXDK integration test also inspects every committed page in section 2
+after mapping and asserts that the XBE executable flag is clear and no page
+has a PAGE_EXECUTE protection. This protects the loader's writable/preload
+section semantics from accidental executable promotion.

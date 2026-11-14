@@ -249,3 +249,15 @@ Next:
 - The first Windows compile of commit dc2afffe747e6f51ac58220b94f94e6332280318 found that InitializeListHead is an Xbox/NT helper, not a Win32 SDK declaration. Replaced it with explicit LIST_ENTRY self-link initialization in the compatibility KTHREAD.
 - Guarded WIN32_LEAN_AND_MEAN in the new thread/PCI headers to avoid introducing macro-redefinition warnings.
 - The compile failure was limited to thread_compat.cpp; the host64 tests passed. New CI will verify the fix and run the thread smoke test.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — first successful real XBE execution]
+Status: MILESTONE PASSED; adding final memory-protection assertion.
+Verified on commit 0d3789a77d45468d1d13edb8f7f1005539e4e464, Windows workflow run 43603410466:
+- NXDK fixture build succeeded.
+- Kernel export audit, host backend, main runtime module, x86 guest build, networking/API tests, shared-memory backend smoke test, XBE format tests, and x64 loader build all passed.
+- thread_compat_smoke passed (6/6 selected guest tests).
+- Real loader -> kernel backend -> NXDK XBE integration passed. The real guest entrypoint returned with exitCode=0, TLS index slot cleared (tlsIndexCleared=1), no exception, and guest image VA released after shutdown.
+- This is the first verified clean real NXDK XBE entrypoint return in this branch.
+Remaining acceptance check:
+- The existing integration test did not explicitly assert section 2's actual VirtualQuery protection. Added a check that section 2's executable flag is clear and every mapped page remains committed and non-executable. New CI will verify this before marking the execution milestone complete.

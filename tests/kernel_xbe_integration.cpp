@@ -18,6 +18,46 @@ using UnloadXbe = void (__cdecl*)();
 using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, XboxGuestFaultContext*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
+
+static bool IsExecutableProtection(DWORD protection) {
+    switch (protection & 0xFFu) {
+    case PAGE_EXECUTE:
+    case PAGE_EXECUTE_READ:
+    case PAGE_EXECUTE_READWRITE:
+    case PAGE_EXECUTE_WRITECOPY:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool VerifySectionIsNonExecutable(const XboxXbe::Image& image,
+                                         std::uint32_t sectionIndex) {
+    if (sectionIndex >= image.sectionCount)
+        return false;
+    const auto& section = image.sections[sectionIndex];
+    if (!section.virtualSize || (section.flags & 0x04u) != 0)
+        return false; // XBE SECTION_EXECUTABLE bit must be clear.
+
+    SYSTEM_INFO systemInfo{};
+    GetSystemInfo(&systemInfo);
+    const std::uint64_t pageSize = systemInfo.dwPageSize;
+    const std::uint64_t start = section.virtualAddress;
+    const std::uint64_t end = start + section.virtualSize;
+    if (!pageSize || end <= start)
+        return false;
+
+    for (std::uint64_t page = start & ~(pageSize - 1u); page < end; page += pageSize) {
+        MEMORY_BASIC_INFORMATION memory{};
+        if (VirtualQuery(reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(page)), &memory, sizeof(memory)) != sizeof(memory) ||
+            memory.State != MEM_COMMIT || IsExecutableProtection(memory.Protect)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -146,6 +186,16 @@ int wmain(int argc, wchar_t** argv) {
         } else {
             xbeActive = true;
             std::puts("PASS: LoadXbe mapped the on-disk NXDK image and the real kernel backend accepted startup.");
+        }
+    }
+
+    if (!result) {
+        if (!VerifySectionIsNonExecutable(image, 2)) {
+            std::fprintf(stderr,
+                "FAIL: XBE section 2 must remain committed and non-executable after mapping.\n");
+            result = 15;
+        } else {
+            std::puts("PASS: XBE section 2 remains committed and non-executable.");
         }
     }
 
