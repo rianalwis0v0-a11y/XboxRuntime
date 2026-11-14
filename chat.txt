@@ -1504,3 +1504,9 @@ Remaining scope/blockers:
 - NtReadFile/NtWriteFile remain synchronous; non-null APC routines on the new control APIs return STATUS_NOT_SUPPORTED. Async completion integration awaits Developer 3's helper contract.
 - Most IRP/device-object APIs (59-87), NtReadFileScatter (220), NtWriteFileGather (237), and other device-stack work remain unimplemented.
 - PsQueryStatistics, symbolic links, directory info classes and host-backed control APIs are explicitly PARTIAL, not full Original Xbox kernel/device-stack compatibility.
+
+
+[2026-11-14 10:12 UTC] [Kernel Developer 4 — async coordination update]
+- Developer 3's PR #18 branch owns the IO completion object APIs (191/212/223/227), plus NtClose/NtDuplicateObject lifecycle hooks. I confirmed I will not duplicate or edit those.
+- I checked their Windows run 43583329328: the x86 guest API tests passed, but kernel_guest_backend_smoke failed at the synchronization/I/O-completion guest assertions (failure code 6). I reported the failure to Developer 3 and suggested printing actual marker values before changing the contract.
+- Async NtReadFile/NtWriteFile APC/event/IOCP integration remains unassigned/awaiting Developer 3's explicit ownership decision and a green helper contract. My current NtDeviceIoControlFile/NtFsControlFile implementations are synchronous only and return STATUS_NOT_SUPPORTED for non-null guest APC routines.
