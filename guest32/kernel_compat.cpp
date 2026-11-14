@@ -1769,6 +1769,27 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
 // Xbox kernel ordinal 192 is NtCreateMutant@12: exactly three 32-bit
 // arguments (HANDLE*, ACCESS_MASK, OBJECT_ATTRIBUTES*). A fourth stdcall
 // argument over-pops ESP and turns the caller's stack data into a return IP.
+extern "C" LONG __stdcall K_ExQueryNonVolatileSetting(
+    std::uint32_t valueIndex, std::uint32_t* type, void* value,
+    std::uint32_t valueLength, SIZE_T* resultLength) {
+    // XC_MAX_ALL asks for the complete 256-byte XBOX_EEPROM image.
+    constexpr std::uint32_t kXcMaxAll = 0xFFFFu;
+    constexpr std::uint32_t kRegBinary = 3u;
+    if (valueIndex != kXcMaxAll)
+        return LONG(0xC0000034u); // STATUS_OBJECT_NAME_NOT_FOUND
+    if (resultLength) *resultLength = g_eeprom.size();
+    if (!type || !value)
+        return LONG(0xC000000Du); // STATUS_INVALID_PARAMETER
+    if (valueLength < g_eeprom.size())
+        return LONG(0xC0000023u); // STATUS_BUFFER_TOO_SMALL
+    {
+        std::lock_guard<std::mutex> lock(g_eepromMutex);
+        *type = kRegBinary;
+        std::memcpy(value, g_eeprom.data(), g_eeprom.size());
+    }
+    return 0;
+}
+
 extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*) {
     if (!out) return LONG(0xC000000Du);
     HANDLE h = CreateMutexW(nullptr, FALSE, nullptr);
@@ -1830,6 +1851,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
+        cmp eax, 24
+        je ex_query_nonvolatile_setting
         cmp eax, 45
         je smbus_read
         cmp eax, 50
@@ -2258,6 +2281,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_interlocked_add_large_statistic: jmp K_ExInterlockedAddLargeStatistic
     ex_interlocked_compare_exchange64: jmp K_ExInterlockedCompareExchange64
     pool_size: jmp K_ExQueryPoolBlockSize
+    ex_query_nonvolatile_setting: jmp K_ExQueryNonVolatileSetting
     smbus_read: jmp K_HalReadSMBusValue
     smbus_write: jmp K_HalWriteSMBusValue
     icx: jmp K_InterlockedCompareExchange
