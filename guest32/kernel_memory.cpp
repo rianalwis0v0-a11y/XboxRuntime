@@ -3,6 +3,7 @@
 #endif
 #include <windows.h>
 #include "kernel_memory.h"
+#include "kernel_object_manager.h"
 
 #include <cstdint>
 #include <cstring>
@@ -154,6 +155,20 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
                                                 ULONG options) {
     if (!ValidHandle(source)) return kInvalidHandle;
     if (!target || (options & ~1u) != 0) return kInvalidParameter;
+    if (XboxKernelIsObjectHandle(source)) {
+        HANDLE duplicate = nullptr;
+        LONG status = XboxKernelDuplicateObjectHandle(source, &duplicate, 0x2u);
+        if (status != kSuccess) return status;
+        if (!CopyToGuest(target, &duplicate, sizeof(duplicate))) {
+            XboxKernelCloseObjectHandle(duplicate);
+            return kInvalidParameter;
+        }
+        if ((options & 1u) != 0 && !XboxKernelCloseObjectHandle(source)) {
+            XboxKernelCloseObjectHandle(duplicate);
+            return kInvalidHandle;
+        }
+        return kSuccess;
+    }
     const bool closeSource = (options & 1u) != 0; // NXDK DUPLICATE_CLOSE_SOURCE
     HANDLE duplicate = nullptr;
     if (!DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(),
