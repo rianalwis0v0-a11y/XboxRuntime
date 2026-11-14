@@ -1464,3 +1464,43 @@ CI:
 Coordination:
 - Developer 3's work/kernel-thread-apis branch contains initial NtCreateIoCompletion (191), NtQueryIoCompletion (212), NtRemoveIoCompletion (223), and NtSetIoCompletion (227) handlers/dispatch. I will not duplicate them. Asked whether they will implement APC/async NtReadFile/NtWriteFile integration; awaiting answer.
 - No new handle/object ownership internals added here; the synthetic guest test calls existing NtClose ordinal 187 only.
+
+
+[2026-11-14 10:11 UTC] [Kernel Developer 4 — validated I/O/system tranche]
+Branch: work/kernel-io-system-apis
+Head commit: d7bb6c8d6e49447a00b89940a686e0d620db843e
+PR #19: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 (OPEN, DRAFT, mergeable; stacked on work/kernel-memory-apis)
+Implemented/extended:
+- PsQueryStatistics (256), partial process-backing thread/handle statistics.
+- IoCreateSymbolicLink (67) / IoDeleteSymbolicLink (69), bounded case-insensitive prefix mapping, duplicate/missing-name statuses, cycle/depth protection.
+- HalRegisterShutdownNotification (47), priority-ordered guest callbacks, unregister and one-shot title-shutdown dispatch.
+- NtQueryDirectoryFile (207), FileDirectoryInformation class 1 and FileNamesInformation class 12.
+- NtDeviceIoControlFile (196), synchronous DeviceIoControl pass-through with NTSTATUS mapping.
+- NtFsControlFile (200), synchronous native host filesystem-control pass-through.
+- Corrected pinned NXDK x86 OBJECT_ATTRIBUTES ABI to 12 bytes: HANDLE RootDirectory, PANSI_STRING ObjectName, ULONG Attributes. TranslateXboxPath now consumes ANSI_STRING and converts to host wide paths; relative RootDirectory paths explicitly return STATUS_NOT_SUPPORTED.
+- Synthetic XBE test exercises ordinals 256,67,69,47,190,207,187,196,200 through actual resolved import thunks. It checks stats, symbolic-link path translation into NtCreateFile, directory classes 1/12, unsupported disk IOCTL error + IOSB, FSCTL_GET_COMPRESSION, NtClose cleanup, and HAL shutdown callback marker.
+Changed files in PR:
+- .github/workflows/kernel-io-system-apis.yml
+- docs/KERNEL-IO-SYSTEM-APIS.md
+- guest32/CMakeLists.txt
+- guest32/kernel_compat.cpp
+- guest32/kernel_system.cpp
+- guest32/kernel_system.h
+- modules/xbox_kernel/CMakeLists.txt
+- tests/kernel_guest_backend_smoke.cpp
+- tests/kernel_io_guest_smoke.cpp
+- tests/kernel_io_system_host_tests.cpp
+- tests/kernel_notification_guest_smoke.cpp
+- tests/kernel_system_guest_smoke.cpp
+Validation:
+- Final branch-head run https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43583906031 — SUCCESS.
+- x86 guest CTest: 3/3 passed (kernel_system_guest_smoke, kernel_io_guest_smoke, kernel_notification_guest_smoke).
+- x64 host CTest: 2/2 passed (kernel_guest_backend_smoke, kernel_io_system_host_tests).
+- The backend test is a synthetic x86 XBE import-thunk test, not a retail game XBE claim.
+Coordination:
+- Developer 2 was informed of the pinned 12-byte ANSI OBJECT_ATTRIBUTES layout; this branch calls existing NtClose ordinal 187 but does not alter handle/object ownership internals.
+- Developer 3's threading branch owns NtCreateIoCompletion/NtQueryIoCompletion/NtRemoveIoCompletion/NtSetIoCompletion (191/212/223/227); I did not duplicate them. Asked whether they will integrate async/APC/IOCP completion into NtReadFile/NtWriteFile; awaiting ownership confirmation.
+Remaining scope/blockers:
+- NtReadFile/NtWriteFile remain synchronous; non-null APC routines on the new control APIs return STATUS_NOT_SUPPORTED. Async completion integration awaits Developer 3's helper contract.
+- Most IRP/device-object APIs (59-87), NtReadFileScatter (220), NtWriteFileGather (237), and other device-stack work remain unimplemented.
+- PsQueryStatistics, symbolic links, directory info classes and host-backed control APIs are explicitly PARTIAL, not full Original Xbox kernel/device-stack compatibility.
