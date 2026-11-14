@@ -237,6 +237,31 @@ int main() {
     }
     FATX_CloseVolume(volume);
     volume = nullptr;
+
+    // Exercise directory create, file rename/delete, directory removal and shrink-only truncate.
+    if (FATX_CreateDirectoryW(volume, L"DIR") != FATX_OK ||
+        FATX_CreateDirectoryW(volume, L"DIR") != FATX_INVALID_ARGUMENT ||
+        FATX_CreateFileW(volume, L"DIR\\\\MOVE.BIN") != FATX_OK) {
+        Fail("FATX directory creation or nested file creation failed");
+        goto stop;
+    }
+    {
+        BYTE small[24]; std::memset(small, 0x3C, sizeof(small));
+        DWORD written = 0;
+        if (FATX_WriteFileW(volume, L"DIR\\\\MOVE.BIN", 0, small, sizeof(small), &written) != FATX_OK ||
+            written != sizeof(small) ||
+            FATX_RenameW(volume, L"DIR\\\\MOVE.BIN", L"DIR\\\\RENAMED.BIN") != FATX_OK ||
+            FATX_DeleteFileW(volume, L"DIR\\\\RENAMED.BIN") != FATX_OK ||
+            FATX_RemoveDirectoryW(volume, L"DIR") != FATX_OK) {
+            Fail("FATX nested write, rename, delete, or directory removal failed");
+            goto stop;
+        }
+        if (FATX_TruncateFileW(volume, L"TEST.BIN", 1200) != FATX_OK ||
+            FATX_TruncateFileW(volume, L"TEST.BIN", 1300) != FATX_INVALID_ARGUMENT) {
+            Fail("FATX shrink-only truncate or growth rejection failed");
+            goto stop;
+        }
+    }
     std::puts("PASS: FATX image-only file creation, overwrite, append, cluster allocation, and persisted data");
 
     // Reopen a cyclic FAT chain and verify that reads stop with corruption,
