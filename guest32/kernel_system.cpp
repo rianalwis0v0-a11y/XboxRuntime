@@ -90,11 +90,11 @@ bool ReadObjectString(const XboxObjectString* source, std::wstring* value) {
 
 extern "C" LONG __stdcall K_IoCreateSymbolicLink(
     XboxObjectString* symbolicLinkName, XboxObjectString* deviceName) {
-    constexpr LONG kStatusInvalidParameter = static_cast<LONG>(0xC000000Du);
+    constexpr LONG kIoStatusInvalidParameter = static_cast<LONG>(0xC000000Du);
     constexpr LONG kStatusObjectNameCollision = static_cast<LONG>(0xC0000035u);
     std::wstring name, target;
     if (!ReadObjectString(symbolicLinkName, &name) ||
-        !ReadObjectString(deviceName, &target)) return kStatusInvalidParameter;
+        !ReadObjectString(deviceName, &target)) return kIoStatusInvalidParameter;
     const std::wstring key = NormalizeObjectName(name);
     std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
     if (g_symbolicLinks.find(key) != g_symbolicLinks.end())
@@ -104,7 +104,7 @@ extern "C" LONG __stdcall K_IoCreateSymbolicLink(
 }
 
 extern "C" LONG __stdcall K_IoDeleteSymbolicLink(XboxObjectString* symbolicLinkName) {
-    constexpr LONG kStatusInvalidParameter = static_cast<LONG>(0xC000000Du);
+    constexpr LONG kIoStatusInvalidParameter = static_cast<LONG>(0xC000000Du);
     constexpr LONG kStatusObjectNameNotFound = static_cast<LONG>(0xC0000034u);
     std::wstring name;
     if (!ReadObjectString(symbolicLinkName, &name)) return kStatusInvalidParameter;
