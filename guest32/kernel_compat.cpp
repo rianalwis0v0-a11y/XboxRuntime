@@ -23,6 +23,7 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "pci_compat.h"
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
@@ -1856,6 +1857,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ex_query_nonvolatile_setting
         cmp eax, 45
         je smbus_read
+        cmp eax, 46
+        je hal_pci
         cmp eax, 50
         je smbus_write
         cmp eax, 51
@@ -2283,6 +2286,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ex_interlocked_compare_exchange64: jmp K_ExInterlockedCompareExchange64
     pool_size: jmp K_ExQueryPoolBlockSize
     ex_query_nonvolatile_setting: jmp K_ExQueryNonVolatileSetting
+    hal_pci: jmp K_HalReadWritePCISpace
     smbus_read: jmp K_HalReadSMBusValue
     smbus_write: jmp K_HalWriteSMBusValue
     icx: jmp K_InterlockedCompareExchange

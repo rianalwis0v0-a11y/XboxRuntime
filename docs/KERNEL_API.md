@@ -135,3 +135,16 @@ be claimed.
 Current build/test automation compiles the x64 kernel provider, main runtime
 module, x86 guest process, and both network/registry smoke tests. A successful
 compile does not prove a real XBE starts or connects to Insignia.
+
+
+## PCI configuration-space access
+
+Kernel ordinal 46, `HalReadWritePCISpace`, is implemented in
+`guest32/pci_compat.cpp` with the NXDK six-argument stdcall ABI. The first
+compatibility target is the NXDK CRT's Pentium III frequency probe:
+bus 0, slot 0x60 (PCI device 0, function 3), register 0x6C. The Xbox host
+bridge value `0x00000801` represents an 8:1 crystal-to-FSB ratio (16.666...
+MHz to 133.333... MHz), which combines with the 5.5x CPU multiplier to produce
+the 733.333 MHz Xbox TSC frequency. Other PCI functions currently read as
+absent (`0xFF` bytes); this is a deliberately narrow initial model, not a
+claim of complete MCPX/NV2A PCI emulation. Unknown bus/device writes are ignored.

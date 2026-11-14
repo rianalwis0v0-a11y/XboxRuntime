@@ -203,3 +203,22 @@ Known issues / next steps:
 1. Run CI and read the actual exception parameter to identify the missing kernel ordinal.
 2. Implement that ordinal only after confirming its name, calling convention, argument widths, and semantics from NXDK/OpenXDK plus an independent clean-room reference.
 3. Continue until the NXDK homebrew XBE returns successfully with TLS cleanup and original section protections intact.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — NXDK PCI probe dependency]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-xbe-execution-fix / PR #20.
+Finding:
+- The NXDK CRT source `lib/winapi/profiling.c` calls `HalReadWritePCISpace(0, 0x60, 0x6C, &fsbreg, 4, FALSE)` during startup. The pinned NXDK export definition confirms ordinal 46 is `HalReadWritePCISpace@24` (six 32-bit stdcall arguments).
+- OXOS's clean-room PCI code confirms SlotNumber uses PCI_SLOT_NUMBER bitfields (device bits 0–4, function bits 5–7) and that PCI config cycles are 32-bit aligned with byte/word lane extraction/merge. This was used as a semantic reference only; no GPL-2.0 implementation source was copied.
+- Slot 0x60 therefore means PCI device 0, function 3. The NXDK profiling calculation expects divider=1 and multiplier=8 at register 0x6C, i.e. dword 0x00000801, to derive 133.333 MHz FSB and 733.333 MHz CPU/TSC frequency when combined with the Pentium III 5.5x MSR multiplier.
+Changes:
+- Added a focused PCI configuration compatibility module and mapped kernel ordinal 46 to it.
+- The initial implementation models only the Xbox host-bridge function 0:3 register needed by NXDK CRT startup; absent devices return 0xFF and unsupported writes are ignored. It does not claim complete PCI/MCPX/NV2A emulation.
+- Added an x86 smoke test for the exact NXDK read, byte-lane behaviour, and absent-device reads.
+Files changed: guest32/pci_compat.h, guest32/pci_compat.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, tests/pci_compat_smoke.cpp, .github/workflows/kernel-guest32.yml, docs/KERNEL_API.md, chat.txt.
+Build and tests: Awaiting CI after this commit. No clean XBE execution claim yet.
+Next:
+1. Read the new exception metadata from the diagnostic run; confirm the unsupported ordinal is 46 before treating this as the confirmed runtime blocker.
+2. Verify pci_compat_smoke and the real NXDK XBE path on Windows CI.
+3. Continue resolving subsequent missing imports based on exact exception parameters until the XBE returns and TLS cleanup passes.
