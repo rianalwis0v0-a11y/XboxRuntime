@@ -376,6 +376,21 @@ int main() {
         return Fail("TLS template/zero-fill or attach-detach callback validation failed",
                     5, &backend, image, stop);
 
+    std::printf("guest sync/io markers: ev=%08X/%08X/%08X/%08X sem=%08X/%08X/%08X mutant=%08X/%08X timer=%08X/%08X/%08X/%08X eventBoost=%08X delay=%08X iocp=%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X depth=%08X/%08X\\n",
+        readMarker(markerOffset + 0u), readMarker(markerOffset + 4u),
+        readMarker(markerOffset + 8u), readMarker(markerOffset + 12u),
+        readMarker(markerOffset + 16u), readMarker(markerOffset + 20u),
+        readMarker(markerOffset + 24u), readMarker(markerOffset + 28u),
+        readMarker(markerOffset + 32u), readMarker(markerOffset + 36u),
+        readMarker(markerOffset + 40u), readMarker(markerOffset + 44u),
+        readMarker(markerOffset + 48u), readMarker(markerOffset + 52u),
+        readMarker(markerOffset + 56u), readMarker(markerOffset + 60u),
+        readMarker(markerOffset + 64u), readMarker(markerOffset + 68u),
+        readMarker(markerOffset + 72u), readMarker(markerOffset + 76u),
+        readMarker(markerOffset + 80u), readMarker(markerOffset + 84u),
+        readMarker(markerOffset + 88u), readMarker(markerOffset + 92u),
+        readMarker(markerOffset + 96u), readMarker(markerOffset + 100u),
+        readMarker(markerOffset + 104u));
     if (readMarker(markerOffset + 0u) != 0u || readMarker(markerOffset + 4u) != 0u ||
         readMarker(markerOffset + 8u) != 1u || readMarker(markerOffset + 12u) != 0x102u ||
         readMarker(markerOffset + 16u) != 0u || readMarker(markerOffset + 20u) != 0u ||
