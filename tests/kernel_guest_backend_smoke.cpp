@@ -102,7 +102,20 @@ int main() {
     }
     CloseHandle(alphaFile);
     TempDirectoryCleanup tempCleanup{tempDirectoryPath, alphaPath};
-    const std::wstring guestDirectoryPath = L"\\??\\" + tempDirectoryPath;
+    const int tempPathBytes = WideCharToMultiByte(CP_ACP, 0, tempDirectoryPath.c_str(),
+        -1, nullptr, 0, nullptr, nullptr);
+    if (tempPathBytes <= 1) {
+        std::fprintf(stderr, "kernel_guest_backend_smoke: temporary path conversion failed\n");
+        stop(); FreeLibrary(module); return 7;
+    }
+    std::string tempDirectoryAnsi(static_cast<size_t>(tempPathBytes), '\0');
+    if (WideCharToMultiByte(CP_ACP, 0, tempDirectoryPath.c_str(), -1,
+        tempDirectoryAnsi.data(), tempPathBytes, nullptr, nullptr) != tempPathBytes) {
+        std::fprintf(stderr, "kernel_guest_backend_smoke: temporary path conversion failed\n");
+        stop(); FreeLibrary(module); return 7;
+    }
+    tempDirectoryAnsi.resize(static_cast<size_t>(tempPathBytes - 1));
+    const std::string guestDirectoryPath = "\\??\\" + tempDirectoryAnsi;
 
     constexpr std::uint32_t guestBase = 0x10000000u;
     constexpr std::uint32_t imageSize = 0x5000u;
@@ -262,36 +275,25 @@ int main() {
     constexpr std::uint32_t fileMaskStringOffset = 0x3860u;
     constexpr std::uint32_t directoryInfoOffset = 0x3900u;
 
-    const size_t guestPathBytes = guestDirectoryPath.size() * sizeof(wchar_t);
-    if (guestPathBytes + sizeof(wchar_t) > 0x200u)
+    const size_t guestPathBytes = guestDirectoryPath.size();
+    if (guestPathBytes + 1u > 0x200u)
         return Fail("temporary directory path exceeds guest test buffer", 9, &backend, image, stop);
-    std::memcpy(image + pathBufferOffset, guestDirectoryPath.c_str(),
-                guestPathBytes + sizeof(wchar_t));
-    struct GuestUnicodeString {
-        std::uint16_t length;
-        std::uint16_t maximumLength;
-        std::uint32_t buffer;
-    };
+    std::memcpy(image + pathBufferOffset, guestDirectoryPath.c_str(), guestPathBytes + 1u);
     struct GuestObjectAttributes {
-        std::uint32_t length;
         std::uint32_t rootDirectory;
         std::uint32_t objectName;
         std::uint32_t attributes;
-        std::uint32_t securityDescriptor;
-        std::uint32_t securityQualityOfService;
     };
-    static_assert(sizeof(GuestUnicodeString) == 8, "x86 UNICODE_STRING layout");
-    static_assert(sizeof(GuestObjectAttributes) == 24, "x86 OBJECT_ATTRIBUTES layout");
-    const GuestUnicodeString guestUnicodeString{
+    static_assert(sizeof(GuestObjectAttributes) == 12, "NXDK x86 OBJECT_ATTRIBUTES layout");
+    const GuestObjectString guestDirectoryName{
         static_cast<std::uint16_t>(guestPathBytes),
-        static_cast<std::uint16_t>(guestPathBytes + sizeof(wchar_t)),
+        static_cast<std::uint16_t>(guestPathBytes + 1u),
         guestBase + pathBufferOffset
     };
     const GuestObjectAttributes guestObjectAttributes{
-        sizeof(GuestObjectAttributes), 0u, guestBase + unicodeStringOffset,
-        0x40u, 0u, 0u
+        0u, guestBase + unicodeStringOffset, 0x40u
     };
-    std::memcpy(image + unicodeStringOffset, &guestUnicodeString, sizeof(guestUnicodeString));
+    std::memcpy(image + unicodeStringOffset, &guestDirectoryName, sizeof(guestDirectoryName));
     std::memcpy(image + objectAttributesOffset, &guestObjectAttributes, sizeof(guestObjectAttributes));
     const std::uint32_t emptyIoStatus[2] = {0u, 0u};
     const std::uint32_t emptyFileHandle = 0u;
