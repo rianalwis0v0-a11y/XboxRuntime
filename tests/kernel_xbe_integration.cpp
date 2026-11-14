@@ -216,6 +216,9 @@ int wmain(int argc, wchar_t** argv) {
             std::printf("Fault registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X\\n",
                 faultContext.eax, faultContext.ebx, faultContext.ecx, faultContext.edx,
                 faultContext.esi, faultContext.edi, faultContext.ebp, faultContext.esp);
+            std::printf("Exception metadata: flags=0x%08X parameterCount=%u parameter0=0x%08X\\n",
+                faultContext.exceptionFlags, faultContext.exceptionParameterCount,
+                faultContext.exceptionParameter0);
             std::printf("Fault stack:");
             for (std::uint32_t value : faultContext.stack) std::printf(" %08X", value);
             std::printf("\\n");
