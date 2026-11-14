@@ -69,7 +69,7 @@ int main() {
     }
 
     constexpr std::uint32_t guestBase = 0x10000000u;
-    constexpr std::uint32_t imageSize = 0x4000u;
+    constexpr std::uint32_t imageSize = 0x5000u;
     constexpr std::uint32_t headerSize = 0x1000u;
     constexpr std::uint32_t sectionTable = guestBase + 0x400u;
     constexpr std::uint32_t entryPoint = guestBase + 0x2000u;
@@ -82,10 +82,9 @@ int main() {
     std::memset(image, 0, imageSize);
     std::memcpy(image + 0x120, &sectionTable, sizeof(sectionTable));
     const TestSection section{
-        0x05u, entryPoint, 0x2000u, 0u, 0u, 0u, 0u, 0u, 0u, {}
+        0x05u, entryPoint, 0x3000u, 0u, 0u, 0u, 0u, 0u, 0u, {}
     };
     std::memcpy(image + 0x400, &section, sizeof(section));
-    image[0x2000] = 0xC3; // Minimal x86 guest entry: ret.
 
     // Build a real x86 TLS callback. On process attach it reads the TLS
     // template and zero-fill bytes through the guest thread's dynamic TlsSlots array.
@@ -166,6 +165,146 @@ int main() {
         return Fail("TLS callback test stub branch overflow", 4, &backend, image, stop);
     std::memcpy(image + 0x2100, callback, used);
 
+    // Build an actual guest entrypoint that calls four Xbox kernel imports
+    // through the resolved x86 thunk table: PsQueryStatistics, IoCreateSymbolicLink,
+    // IoDeleteSymbolicLink, and HalRegisterShutdownNotification.
+    constexpr std::uint32_t apiMarkerOffset = 0x3310u;
+    constexpr std::uint32_t shutdownMarkerOffset = 0x3314u;
+    constexpr std::uint32_t statsOffset = 0x3400u;
+    constexpr std::uint32_t linkNameOffset = 0x3420u;
+    constexpr std::uint32_t deviceNameOffset = 0x3430u;
+    constexpr std::uint32_t linkNameStringOffset = 0x3450u;
+    constexpr std::uint32_t deviceNameStringOffset = 0x3460u;
+    constexpr std::uint32_t shutdownRegistrationOffset = 0x3470u;
+    constexpr std::uint32_t kernelThunkOffset = 0x3500u;
+
+    std::uint32_t stats[3] = {12u, 0u, 0u};
+    std::memcpy(image + statsOffset, stats, sizeof(stats));
+    const char linkName[] = "\\??\\Z:";
+    const char deviceName[] = "\\Device\\Harddisk0\\Partition1";
+    std::memcpy(image + linkNameOffset, linkName, sizeof(linkName));
+    std::memcpy(image + deviceNameOffset, deviceName, sizeof(deviceName));
+    struct GuestObjectString {
+        std::uint16_t length;
+        std::uint16_t maximumLength;
+        std::uint32_t buffer;
+    };
+    static_assert(sizeof(GuestObjectString) == 8, "x86 OBJECT_STRING layout");
+    const GuestObjectString linkNameString{
+        static_cast<std::uint16_t>(sizeof(linkName) - 1),
+        static_cast<std::uint16_t>(sizeof(linkName) - 1),
+        guestBase + linkNameOffset
+    };
+    const GuestObjectString deviceNameString{
+        static_cast<std::uint16_t>(sizeof(deviceName) - 1),
+        static_cast<std::uint16_t>(sizeof(deviceName) - 1),
+        guestBase + deviceNameOffset
+    };
+    std::memcpy(image + linkNameStringOffset, &linkNameString, sizeof(linkNameString));
+    std::memcpy(image + deviceNameStringOffset, &deviceNameString, sizeof(deviceNameString));
+
+    const std::uint32_t shutdownRegistration[4] = {
+        guestBase + 0x2300u, 7u, 0u, 0u
+    };
+    std::memcpy(image + shutdownRegistrationOffset, shutdownRegistration,
+                sizeof(shutdownRegistration));
+
+    const std::uint32_t thunkEntries[5] = {
+        0x80000000u | 256u, 0x80000000u | 67u,
+        0x80000000u | 69u, 0x80000000u | 47u, 0u
+    };
+    std::memcpy(image + kernelThunkOffset, thunkEntries, sizeof(thunkEntries));
+
+    std::vector<std::uint8_t> shutdownCallback;
+    auto callbackEmit8 = [&](std::uint8_t value) { shutdownCallback.push_back(value); };
+    auto callbackEmit32 = [&](std::uint32_t value) {
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(&value);
+        shutdownCallback.insert(shutdownCallback.end(), bytes, bytes + sizeof(value));
+    };
+    callbackEmit8(0xC7); callbackEmit8(0x05);
+    callbackEmit32(guestBase + shutdownMarkerOffset);
+    callbackEmit32(1u);
+    callbackEmit8(0xC2); callbackEmit8(0x04); callbackEmit8(0x00); // ret 4
+    std::memcpy(image + 0x2300, shutdownCallback.data(), shutdownCallback.size());
+
+    std::vector<std::uint8_t> guestEntry;
+    auto emit8 = [&](std::uint8_t value) { guestEntry.push_back(value); };
+    auto emit32 = [&](std::uint32_t value) {
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(&value);
+        guestEntry.insert(guestEntry.end(), bytes, bytes + sizeof(value));
+    };
+    auto push32 = [&](std::uint32_t value) { emit8(0x68); emit32(value); };
+    auto callThunk = [&](std::uint32_t slotAddress) {
+        emit8(0xFF); emit8(0x15); emit32(slotAddress); // call dword ptr [absolute]
+    };
+    auto testEax = [&]() { emit8(0x85); emit8(0xC0); };
+    auto compareMemory = [&](std::uint32_t address, std::uint32_t value) {
+        emit8(0x81); emit8(0x3D); emit32(address); emit32(value);
+    };
+    auto compareEax = [&](std::uint32_t value) { emit8(0x3D); emit32(value); };
+    auto storeMemory = [&](std::uint32_t address, std::uint32_t value) {
+        emit8(0xC7); emit8(0x05); emit32(address); emit32(value);
+    };
+    std::vector<std::size_t> failBranches;
+    auto branchNotEqualToFailure = [&]() {
+        emit8(0x75); failBranches.push_back(guestEntry.size()); emit8(0);
+    };
+    auto branchLessEqualToFailure = [&]() {
+        emit8(0x7E); failBranches.push_back(guestEntry.size()); emit8(0);
+    };
+
+    const std::uint32_t thunkTableVa = guestBase + kernelThunkOffset;
+    push32(guestBase + statsOffset);
+    callThunk(thunkTableVa);
+    testEax(); branchNotEqualToFailure();
+    compareMemory(guestBase + statsOffset, 12u);
+    branchNotEqualToFailure();
+    compareMemory(guestBase + statsOffset + 4u, 0u);
+    branchLessEqualToFailure();
+    compareMemory(guestBase + statsOffset + 8u, 0u);
+    branchLessEqualToFailure();
+
+    push32(guestBase + deviceNameStringOffset);
+    push32(guestBase + linkNameStringOffset);
+    callThunk(thunkTableVa + 4u);
+    testEax(); branchNotEqualToFailure();
+
+    // A duplicate name must report STATUS_OBJECT_NAME_COLLISION.
+    push32(guestBase + deviceNameStringOffset);
+    push32(guestBase + linkNameStringOffset);
+    callThunk(thunkTableVa + 4u);
+    compareEax(0xC0000035u);
+    branchNotEqualToFailure();
+
+    push32(guestBase + linkNameStringOffset);
+    callThunk(thunkTableVa + 8u);
+    testEax(); branchNotEqualToFailure();
+
+    // A second delete must report STATUS_OBJECT_NAME_NOT_FOUND.
+    push32(guestBase + linkNameStringOffset);
+    callThunk(thunkTableVa + 8u);
+    compareEax(0xC0000034u);
+    branchNotEqualToFailure();
+
+    push32(1u);
+    push32(guestBase + shutdownRegistrationOffset);
+    callThunk(thunkTableVa + 12u);
+
+    storeMemory(guestBase + apiMarkerOffset, 1u);
+    emit8(0xC3);
+    const std::size_t failureOffset = guestEntry.size();
+    storeMemory(guestBase + apiMarkerOffset, 0xBADu);
+    emit8(0xC3);
+    for (const std::size_t displacement : failBranches) {
+        const int delta = static_cast<int>(failureOffset) -
+                          static_cast<int>(displacement + 1u);
+        if (delta < -128 || delta > 127)
+            return Fail("kernel API guest entry branch overflow", 6, &backend, image, stop);
+        guestEntry[displacement] = static_cast<std::uint8_t>(
+            static_cast<std::int8_t>(delta));
+    }
+    std::memcpy(image + 0x2000, guestEntry.data(), guestEntry.size());
+
     XBE_IMAGE_INFO info{};
     info.baseAddress = guestBase;
     info.imageSize = imageSize;
@@ -173,7 +312,7 @@ int main() {
     info.entryPoint = entryPoint;
     info.sectionCount = 1;
     info.tlsAddress = guestBase + tlsDirectoryOffset;
-    info.kernelThunkAddress = 0; // No kernel imports in this minimal image.
+    info.kernelThunkAddress = guestBase + kernelThunkOffset;
     info.nonKernelImportDirectoryAddress = 0;
 
     const int resolve = backend.resolveImports(image, &info, backend.context);
@@ -202,10 +341,16 @@ int main() {
         return Fail("TLS template/zero-fill or attach-detach callback validation failed",
                     5, &backend, image, stop);
 
+    if (readMarker(apiMarkerOffset) != 1u)
+        return Fail("real guest kernel import thunks did not complete all API calls",
+                    7, &backend, image, stop);
     backend.stopGuest(backend.context);
+    if (readMarker(shutdownMarkerOffset) != 1u)
+        return Fail("HalRegisterShutdownNotification callback was not invoked during shutdown",
+                    8, &backend, image, stop);
     backend.releaseImage(image, backend.context);
     stop();
     FreeLibrary(module);
-    std::puts("kernel_guest_backend_smoke: PASS (shared mapping + x86 entry + TLS template/zero-fill + callbacks + stop/release)");
+    std::puts("kernel_guest_backend_smoke: PASS (shared mapping + real kernel import thunks + PsQueryStatistics + Io* symbolic links + HAL shutdown callback + TLS + stop/release)");
     return 0;
 }
