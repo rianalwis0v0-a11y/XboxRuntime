@@ -38,6 +38,11 @@ struct XboxGuestCommandReply {
     std::uint32_t status;
 };
 
+struct XboxGuestFaultContext {
+    std::uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp;
+    std::uint32_t stack[8];
+};
+
 struct XboxGuestExitReply {
     std::uint32_t magic;
     std::uint32_t command;
@@ -49,9 +54,11 @@ struct XboxGuestExitReply {
     std::uint32_t faultAddress;
     std::uint32_t faultProtection;
     std::uint32_t faultState;
+    XboxGuestFaultContext faultContext;
 };
 
 static_assert(sizeof(XboxGuestHello) == 20, "guest hello wire size");
 static_assert(sizeof(XboxGuestCommandMessage) == 40, "guest command wire size");
 static_assert(sizeof(XboxGuestCommandReply) == 12, "guest reply wire size");
-static_assert(sizeof(XboxGuestExitReply) == 40, "guest exit reply wire size");
+static_assert(sizeof(XboxGuestFaultContext) == 64, "guest fault context wire size");
+static_assert(sizeof(XboxGuestExitReply) == 104, "guest exit reply wire size");
