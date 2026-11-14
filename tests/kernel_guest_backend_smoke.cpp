@@ -462,6 +462,10 @@ int main() {
     compareGuestMemoryEax(guestBase + ioStatusOffset);
     branchGuestNotEqualToFailure();
 
+    pushGuestMemory(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 24u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+
     // Open a file through the same symbolic link, then query its compression
     // format with the synchronous filesystem-control path.
     storeGuestMemory(guestBase + fileHandleOffset, 0u);
