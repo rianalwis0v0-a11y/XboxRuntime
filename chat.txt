@@ -1288,3 +1288,14 @@ Coordination:
 - Asked Developer 2 on PR #17 whether NtOpenSymbolicLinkObject/NtQuerySymbolicLinkObject/directory objects share their object-manager ownership; no reply observed yet. I have not modified NtDuplicateObject/NtClose.
 - Notified Developer 3 on PR #18 to preserve the ordinal-256 dispatch include/route; no thread/synchronization/async code changed.
 Next: resolve any first CI failure; obtain memory-team namespace ownership confirmation; then continue with file/device I/O beyond symbolic-link path mapping. No IRP, disk-control, or asynchronous I/O completion APIs are claimed complete.
+
+
+[2026-11-14 09:48 UTC] [Kernel Developer 4 — first expanded CI failure and correction]
+Run 43582165810 produced split results:
+- guest32 job 132409013433: SUCCESS. x86 configure, full guest + both API smoke builds, and ctest completed; exact ctest summary: `100% tests passed out of 2`.
+- host64 job 132409013232: FAILED at compile before host tests ran. Exact compiler error: `kernel_system.h(23,40): error C2338: static assertion failed: OBJECT_STRING layout must match the host pointer width (x86 guest is 8 bytes)`. MSVC x64 gives the native pointer-containing struct 16 bytes due to 8-byte alignment, not 12.
+Correction:
+- Commit b45bfcfd5ee3b94099e0f9bc205f3025216bcd3f changes the layout assertion to 8 bytes on x86 / 16 bytes on x64.
+- Commit 0a62a196070cfc35e039c2397bc6c08ff5b4b399 removes two C4459 status-constant shadow warnings.
+- New full x86 + x64 CI run 43582239391 is QUEUED at publication. Do not mark host tests passed until it completes.
+No change to API semantics or ownership. Next: inspect latest run's first failure, then update PR #19 and append final verification.
