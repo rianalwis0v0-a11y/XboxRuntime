@@ -1394,3 +1394,22 @@ Summary: Developer 4 confirmed that the Io* symbolic-link registry remains priva
 Files changed: chat.txt (this entry only); PR #19 coordination comment.
 Build and tests: No new code or tests in this update.
 Known issues / next steps: Await Developer 4's response on the query-only hook. In parallel, audit the pinned NXDK signatures/layouts and current handle ownership before selecting an independently implementable directory-object subset. Existing PR #17 remains the verified VM + same-process NtDuplicateObject tranche; it is not a complete object manager.
+
+
+[2026-11-14 09:53 UTC] [Kernel Developer 3 — verified sync smoke + I/O completion ownership]
+Status: PARTIAL MILESTONE VERIFIED; thread/TLS implementation remains outstanding.
+Branch: work/kernel-thread-apis
+Head commit: 3f7877dacd1ff32044b2e782cf7f7001a6b6ec76
+PR: #18 https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/18 (draft, stacked on work/kernel-execution-backend).
+CI workflow 43582364469:
+- NXDK fixture generation PASS.
+- x64 host backend configure/build PASS; main runtime configure/build PASS.
+- x86 guest configure/build PASS.
+- network_smoke and guest_api_registry_smoke PASS.
+- ABI export audit PASS.
+- kernel_guest_backend_smoke PASS (1/1, 0.07 sec): real x86 import-thunk calls verified event initialize/set/reset/wait, semaphore initialize/release/wait, mutant initialize/release/wait, timer initialize/set/setEx/cancel, KeSetEventBoostPriority and KeDelayExecutionThread. Host test also asserted guest dispatcher structure sizes/types/signal state/list links and by-value LARGE_INTEGER timer ABI.
+- Full workflow FAILED only in the later real NXDK XBE integration stage: exit 0xC0000005 at 0x10018DC0, access type 8, page protection 0x4. This is the known execution-backend baseline failure already recorded by the coordinator and reproduced in prior branches; our dedicated guest-call smoke passed before it.
+Remaining partial behavior: timer DPC callback delivery is fail-fast unsupported; mutant abandonment and owner-thread linkage are unsupported; KeSetEventBoostPriority signals but cannot select/boost a waiting thread; KTHREAD/thread/TLS lifecycle and thread exports are not yet implemented.
+Coordination with Developer 4 (PR #19): confirmed I will own NtCreateIoCompletion ordinal 191, NtSetIoCompletion 227, NtRemoveIoCompletion 223, NtQueryIoCompletion 212, plus completion-port packet/depth state. Developer 4 owns IRP/device/file-side completion producers and can post through NtSetIoCompletion. Asked Developer 2 (PR #17) to coordinate handle close/duplicate metadata hooks; no NtClose/NtDuplicateObject changes made.
+Thread/TLS coordination: two requests remain on PR #15 for current PKTHREAD pointer/native-handle mapping and per-thread TLS attach/detach helpers. No response observed at this update; no execution startup/TLS code changed on my branch.
+Next: implement the four IO completion object APIs with actual guest-call + host tests and agreed close/duplicate lifecycle hooks; then continue PsCreateSystemThread/Ex, KTHREAD identity, per-thread TLS, suspend/resume/priority/alert APIs after execution-owner agreement.
