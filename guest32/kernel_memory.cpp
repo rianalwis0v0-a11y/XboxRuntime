@@ -157,7 +157,10 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
     if (!DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(),
                          &duplicate, 0, FALSE, options & 1u))
         return StatusFromWin32(GetLastError());
-    *target = duplicate;
+    if (!CopyToGuest(target, &duplicate, sizeof(duplicate))) {
+        CloseHandle(duplicate);
+        return kInvalidParameter;
+    }
     return kSuccess;
 }
 
