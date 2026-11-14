@@ -10,6 +10,7 @@
 #include <iphlpapi.h>
 #include <new>
 #include <unordered_set>
+#include <unordered_map>
 #include <bcrypt.h>
 #include "xnet_compat.h"
 #include "network_compat.h"
@@ -21,6 +22,10 @@ XNetStartupParams g_startupParams{};
 struct RegisteredKey { XNKID id; XNKEY key; };
 std::vector<RegisteredKey> g_registeredKeys;
 std::unordered_set<uint32_t> g_xnetSocketTokens;
+struct DnsLookupWork { char* hostname; XNDNS* result; WSAEVENT eventHandle; bool releaseRequested; };
+std::mutex g_dnsMutex;
+std::unordered_map<XNDNS*, DnsLookupWork*> g_pendingDns;
+std::unordered_set<XNDNS*> g_dnsResults;
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -73,12 +78,6 @@ extern "C" int WINAPI XNetCleanup() {
 }
 
 namespace {
-struct DnsLookupWork {
-    char* hostname;
-    XNDNS* result;
-    WSAEVENT eventHandle;
-};
-
 DWORD WINAPI CompleteDnsLookup(void* parameter) {
     auto* work = static_cast<DnsLookupWork*>(parameter);
     uint32_t address = 0;
@@ -91,6 +90,18 @@ DWORD WINAPI CompleteDnsLookup(void* parameter) {
         work->result->cina = 0;
     }
     if (work->eventHandle) WSASetEvent(work->eventHandle);
+
+    // XNetDnsRelease may race completion. A pending release transfers the
+    // result's final free to this worker; a completed result remains caller-owned.
+    {
+        std::lock_guard<std::mutex> lock(g_dnsMutex);
+        auto pending = g_pendingDns.find(work->result);
+        if (pending != g_pendingDns.end()) g_pendingDns.erase(pending);
+        if (work->releaseRequested) {
+            g_dnsResults.erase(work->result);
+            HeapFree(GetProcessHeap(), 0, work->result);
+        }
+    }
     HeapFree(GetProcessHeap(), 0, work->hostname);
     HeapFree(GetProcessHeap(), 0, work);
     XboxNetCleanup(); // Keep Winsock alive until the resolver has finished.
@@ -171,6 +182,7 @@ extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, 
         return WSAENOBUFS;
     }
     std::memcpy(nameCopy, hostname, hostnameLength + 1);
+    result->iStatus = WSAEINPROGRESS;
 
     // Acquire the operation's Winsock reference while holding the XNet
     // lifecycle lock, so a concurrent final XNetCleanup cannot slip between
@@ -187,8 +199,30 @@ extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, 
     work->hostname = nameCopy;
     work->result = result;
     work->eventHandle = eventHandle;
+    work->releaseRequested = false;
+    try {
+        std::lock_guard<std::mutex> lock(g_dnsMutex);
+        g_dnsResults.insert(result);
+        g_pendingDns.emplace(result, work);
+    } catch (...) {
+        {
+            std::lock_guard<std::mutex> lock(g_dnsMutex);
+            g_dnsResults.erase(result);
+            g_pendingDns.erase(result);
+        }
+        XboxNetCleanup();
+        HeapFree(GetProcessHeap(), 0, result);
+        HeapFree(GetProcessHeap(), 0, work);
+        HeapFree(GetProcessHeap(), 0, nameCopy);
+        return WSAENOBUFS;
+    }
     HANDLE thread = CreateThread(nullptr, 0, CompleteDnsLookup, work, 0, nullptr);
     if (!thread) {
+        {
+            std::lock_guard<std::mutex> lock(g_dnsMutex);
+            g_pendingDns.erase(result);
+            g_dnsResults.erase(result);
+        }
         XboxNetCleanup();
         HeapFree(GetProcessHeap(), 0, result);
         HeapFree(GetProcessHeap(), 0, work);
@@ -201,7 +235,22 @@ extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, 
 }
 
 extern "C" int WINAPI XNetDnsRelease(XNDNS* result) {
-    if (result) HeapFree(GetProcessHeap(), 0, result);
+    if (!result) return WSAEFAULT;
+    bool freeNow = false;
+    {
+        std::lock_guard<std::mutex> lock(g_dnsMutex);
+        auto owned = g_dnsResults.find(result);
+        if (owned == g_dnsResults.end()) return WSAEINVAL;
+        auto pending = g_pendingDns.find(result);
+        if (pending != g_pendingDns.end()) {
+            pending->second->releaseRequested = true;
+            g_dnsResults.erase(owned);
+            return 0;
+        }
+        g_dnsResults.erase(owned);
+        freeNow = true;
+    }
+    if (freeNow) HeapFree(GetProcessHeap(), 0, result);
     return 0;
 }
 
