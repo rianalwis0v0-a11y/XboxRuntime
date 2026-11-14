@@ -888,6 +888,19 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
 }
 
 extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
+    if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
+}
+extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, const LARGE_INTEGER* timeout) {
+    if (!h || h == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    const DWORD result = WaitForSingleObjectEx(h, KernelTimeout(timeout), alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) return 0;
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
+    return LONG(0xC0000008u);
+}
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
 
 struct GuestFileDirectoryInformation {
@@ -1323,6 +1336,36 @@ extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
+extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK, void*, LONG initial, LONG maximum){
+    if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
+    HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
+}
+
+using NtQueryObjectInfoFn = LONG (NTAPI*)(HANDLE, ULONG, void*, ULONG, ULONG*);
+static FARPROC ResolveNtQueryRoutine(const char* name) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? GetProcAddress(ntdll, name) : nullptr;
+}
+static LONG QueryNativeObject(HANDLE handle, ULONG infoClass, void* info,
+                              ULONG length, ULONG* returnLength, const char* routine) {
+    if (!handle || handle == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    FARPROC address = ResolveNtQueryRoutine(routine);
+    if (!address) return LONG(0xC0000002u); // STATUS_NOT_IMPLEMENTED
+    auto query = reinterpret_cast<NtQueryObjectInfoFn>(address);
+    return query(handle, infoClass, info, length, returnLength);
+}
+extern "C" LONG __stdcall K_NtQueryEvent(HANDLE event, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(event, infoClass, info, length, returnLength, "NtQueryEvent");
+}
+extern "C" LONG __stdcall K_NtQueryMutant(HANDLE mutant, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(mutant, infoClass, info, length, returnLength, "NtQueryMutant");
+}
+extern "C" LONG __stdcall K_NtQuerySemaphore(HANDLE semaphore, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(semaphore, infoClass, info, length, returnLength, "NtQuerySemaphore");
+}
+extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, ULONG infoClass, void* info, ULONG length, ULONG* returnLength) {
+    return QueryNativeObject(timer, infoClass, info, length, returnLength, "NtQueryTimer");
+}
 extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
     if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
 }
@@ -1717,6 +1760,12 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
     return status;
 }
 
+extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
+    if (!out) return LONG(0xC000000Du);
+    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
+    if (!h) return LONG(0xC0000017u);
+    *out = h; return 0;
+}
 extern "C" LONG __stdcall K_NtReleaseMutant(HANDLE mutant, LONG* previous) {
     if (previous) *previous = 0;
     if (!mutant) return LONG(0xC0000008u);
