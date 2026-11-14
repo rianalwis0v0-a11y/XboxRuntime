@@ -66,10 +66,14 @@ jobs:
         run: |
           cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/xdvdfs tests/xdvdfs_real_xiso.cpp modules/xdvdfs/xdvdfs.cpp /Fe:xdvdfs_real_xiso.exe
           xdvdfs_real_xiso.exe media\hello.iso
+      - name: Build vendored XboxDev libfatx
+        run: |
+          cmake -S third_party/libfatx -B build-libfatx -A x64
+          cmake --build build-libfatx --config Release
       - name: Build and generate a FATX disk image, then verify the reader
         shell: cmd
         run: |
-          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/fatx/include tests/fatx_real_image.cpp modules/fatx/include/fatx.cpp /Fe:fatx_real_image.exe
+          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/fatx/include tests/fatx_real_image.cpp modules/fatx/include/fatx.cpp build-libfatx/Release/libfatx_vendor.lib /Fe:fatx_real_image.exe
           fatx_real_image.exe media\test-fatx.img
           certutil -hashfile media\test-fatx.img SHA256
       - uses: actions/upload-artifact@v4
