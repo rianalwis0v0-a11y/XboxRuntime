@@ -180,3 +180,12 @@ virtual address (`uint32_t`), not a native host pointer. This keeps the
 guest ABI's 24-byte `XNQOSINFO` / 32-byte `XNQOS` layout invariant when the
 same header is compiled by the x64 host-side smoke target; a 64-bit host
 pointer must never leak into an Xbox structure.
+
+
+Asynchronous DNS ownership is now race-safe. Results are marked
+`WSAEINPROGRESS` until the worker completes. `XNetDnsRelease` validates
+ownership; if called while lookup is pending, it defers freeing the result
+until the worker has finished writing it and signaled the event. Completed
+results remain caller-owned until released. The smoke test exercises release
+immediately after queuing a lookup and waits for worker completion, covering
+the former use-after-free risk.
