@@ -272,8 +272,8 @@ int main() {
     constexpr std::uint32_t fileMaskOffset = 0x3850u;
     constexpr std::uint32_t fileMaskStringOffset = 0x3860u;
     constexpr std::uint32_t directoryInfoOffset = 0x3900u;
-    constexpr std::uint32_t filePathOffset = 0x3880u;
-    constexpr std::uint32_t filePathStringOffset = 0x3890u;
+    constexpr std::uint32_t filePathOffset = 0x3870u;
+    constexpr std::uint32_t filePathStringOffset = 0x3888u;
     constexpr std::uint32_t fileObjectAttributesOffset = 0x38A0u;
     constexpr std::uint32_t compressionOutputOffset = 0x38B0u;
 
