@@ -2646,6 +2646,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_protect_vm
         cmp eax, 217
         je nt_query_vm
+        cmp eax, 191
+        je nt_create_iocp
+        cmp eax, 212
+        je nt_query_iocp
+        cmp eax, 223
+        je nt_remove_iocp
+        cmp eax, 227
+        je nt_set_iocp
         cmp eax, 193
         je nt_create_semaphore
         cmp eax, 222
@@ -2871,6 +2879,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     rtl_unicode_to_ansi: jmp K_RtlUnicodeStringToAnsiString
     nt_protect_vm: jmp K_NtProtectVirtualMemory
     nt_query_vm: jmp K_NtQueryVirtualMemory
+    nt_create_iocp: jmp K_NtCreateIoCompletion
+    nt_query_iocp: jmp K_NtQueryIoCompletion
+    nt_remove_iocp: jmp K_NtRemoveIoCompletion
+    nt_set_iocp: jmp K_NtSetIoCompletion
     nt_create_semaphore: jmp K_NtCreateSemaphore
     nt_release_semaphore: jmp K_NtReleaseSemaphore
     nt_wait_multiple: jmp K_NtWaitForMultipleObjects
@@ -3040,6 +3052,16 @@ void XboxKernelShutdownTitle() {
         std::lock_guard<std::mutex> lock(g_kernelObjectMutex);
         for (auto& item : g_kernelObjects) if (item.second) CloseHandle(item.second);
         g_kernelObjects.clear();
+    }
+    {
+        std::unordered_map<HANDLE, std::shared_ptr<GuestIoCompletionState>> completionObjects;
+        {
+            std::lock_guard<std::mutex> lock(g_ioCompletionMutex);
+            completionObjects.swap(g_ioCompletionObjects);
+        }
+        for (auto& item : completionObjects)
+            if (item.first) CloseHandle(item.first);
+        completionObjects.clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_directorySearchMutex);
