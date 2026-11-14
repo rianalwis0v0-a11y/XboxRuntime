@@ -1000,3 +1000,75 @@ extern "C" int __cdecl FATX_ReadFileW(
 
     return FATX_OK;
 }
+
+extern "C" int __cdecl FATX_WriteFileW(
+    FATX_VOLUME handle,
+    LPCWSTR path,
+    ULONGLONG offset,
+    const void* buffer,
+    DWORD bytesToWrite,
+    DWORD* bytesWritten)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path || !bytesWritten ||
+        (!buffer && bytesToWrite))
+        return FATX_INVALID_ARGUMENT;
+
+    VolumeOperationGuard operationGuard(v);
+    *bytesWritten = 0;
+
+    if (!v->writable)
+        return FATX_INVALID_ARGUMENT;
+    if (bytesToWrite == 0)
+        return FATX_OK;
+    if (bytesToWrite > static_cast<DWORD>(INT_MAX))
+        return FATX_INVALID_ARGUMENT;
+
+    FatxDirEntry entry;
+    bool root = false;
+    int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK)
+        return status;
+    if (root || (entry.attributes & FATX_ATTRIBUTE_DIRECTORY))
+        return FATX_IS_DIRECTORY;
+    if (entry.attributes & FATX_ATTRIBUTE_READONLY)
+        return FATX_INVALID_ARGUMENT;
+
+    // The first write milestone supports overwrite and append to existing,
+    // non-empty files. Sparse gaps and empty-file allocation come later.
+    if (entry.size == 0 || offset > entry.size ||
+        offset > UINT32_MAX - static_cast<ULONGLONG>(bytesToWrite))
+        return FATX_INVALID_ARGUMENT;
+
+    status = ValidateFileChain(v, entry);
+    if (status != FATX_OK)
+        return status;
+
+    std::string fatxPath;
+    status = ConvertPathToFatx(path, fatxPath);
+    if (status != FATX_OK)
+        return status;
+
+    if (fflush(v->upstream.device) != 0)
+        return FATX_IO_ERROR;
+
+    const int written = fatx_write(
+        &v->upstream,
+        fatxPath.c_str(),
+        static_cast<off_t>(offset),
+        static_cast<size_t>(bytesToWrite),
+        buffer
+    );
+
+    if (written > 0)
+        *bytesWritten = static_cast<DWORD>(written);
+
+    if (written != static_cast<int>(bytesToWrite))
+        return FATX_IO_ERROR;
+
+    if (fatx_flush_fat_cache(&v->upstream) != FATX_STATUS_SUCCESS ||
+        fflush(v->upstream.device) != 0)
+        return FATX_IO_ERROR;
+
+    return FATX_OK;
+}
