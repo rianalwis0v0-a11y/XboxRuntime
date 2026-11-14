@@ -24,6 +24,7 @@
 #include <atomic>
 #include "kernel_compat.h"
 #include "kernel_memory.h"
+#include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -887,7 +888,11 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    CloseGuestDirectorySearch(h);
+    if (XboxKernelCloseObjectHandle(h)) return 0;
+    return CloseHandle(h) ? 0 : LONG(0xC0000008u);
+}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
@@ -2596,6 +2601,7 @@ void XboxKernelSetStartupEvent(HANDLE eventHandle) {
 
 void XboxKernelShutdownTitle() {
     g_startupEvent = nullptr;
+    XboxKernelCloseAllObjectHandles();
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);
         g_stubPage = nullptr;
