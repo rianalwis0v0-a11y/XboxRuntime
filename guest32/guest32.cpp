@@ -195,6 +195,7 @@ int wmain(int argc, wchar_t** argv) {
                             nullptr, &exitReply.exceptionInstruction,
                             &exitReply.accessType, &exitReply.faultAddress,
                             &exitReply.faultProtection, &exitReply.faultState);
+                        XboxKernelGetLastExceptionContext(&exitReply.faultContext);
                         XboxKernelShutdownTitle();
                     } else {
                         exitReply.status = GetLastError();
