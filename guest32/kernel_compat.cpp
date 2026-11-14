@@ -1065,6 +1065,61 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
 }
 
 
+static LONG NtControlFileImpl(HANDLE file, HANDLE event, void* apcRoutine,
+    GuestIoStatusBlock* io, ULONG controlCode, void* inputBuffer,
+    ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG statusNotSupported = LONG(0xC00000BBu);
+    if (!io) return statusInvalidParameter;
+    if (!file || file == INVALID_HANDLE_VALUE)
+        return SetDirectoryIoStatus(io, statusInvalidHandle);
+    if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
+    if ((inputLength && !inputBuffer) || (outputLength && !outputBuffer))
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    DWORD bytesReturned = 0;
+    const BOOL succeeded = DeviceIoControl(file, controlCode, inputBuffer,
+        inputLength, outputBuffer, outputLength, &bytesReturned, nullptr);
+    const DWORD error = succeeded ? ERROR_SUCCESS : GetLastError();
+    LONG status = 0;
+    if (!succeeded) {
+        switch (error) {
+        case ERROR_INVALID_HANDLE: status = statusInvalidHandle; break;
+        case ERROR_INVALID_PARAMETER: status = statusInvalidParameter; break;
+        case ERROR_ACCESS_DENIED: status = LONG(0xC0000022u); break;
+        case ERROR_INVALID_FUNCTION: status = LONG(0xC0000010u); break; // STATUS_INVALID_DEVICE_REQUEST
+        case ERROR_NOT_SUPPORTED: status = statusNotSupported; break;
+        case ERROR_INSUFFICIENT_BUFFER: status = LONG(0xC0000023u); break; // STATUS_BUFFER_TOO_SMALL
+        case ERROR_MORE_DATA: status = LONG(0x80000005u); break; // STATUS_BUFFER_OVERFLOW
+        case ERROR_NOACCESS: status = LONG(0xC0000005u); break; // STATUS_ACCESS_VIOLATION
+        case ERROR_NOT_READY: status = LONG(0xC00000A3u); break; // STATUS_DEVICE_NOT_READY
+        case ERROR_IO_DEVICE: status = LONG(0xC0000185u); break; // STATUS_IO_DEVICE_ERROR
+        default: status = LONG(0xC0000001u); break; // STATUS_UNSUCCESSFUL
+        }
+    }
+    const LONG result = SetDirectoryIoStatus(io, status, bytesReturned);
+    if (event) SetEvent(event);
+    return result;
+}
+
+extern "C" LONG __stdcall K_NtDeviceIoControlFile(HANDLE file, HANDLE event,
+    void* apcRoutine, void* apcContext, GuestIoStatusBlock* io, ULONG controlCode,
+    void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    (void)apcContext;
+    return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
+        inputBuffer, inputLength, outputBuffer, outputLength);
+}
+
+extern "C" LONG __stdcall K_NtFsControlFile(HANDLE file, HANDLE event,
+    void* apcRoutine, void* apcContext, GuestIoStatusBlock* io, ULONG controlCode,
+    void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    (void)apcContext;
+    return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
+        inputBuffer, inputLength, outputBuffer, outputLength);
+}
+
+
 static bool ParseUnsigned(const char* text, ULONG base, ULONG* value) {
     if (!text || !value || (base != 0 && (base < 2 || base > 36))) return false;
     while (*text && std::isspace(static_cast<unsigned char>(*text))) ++text;
@@ -2124,6 +2179,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_set_information_file
         cmp eax, 190
         je nt_create_file
+        cmp eax, 196
+        je nt_device_io_control_file
+        cmp eax, 200
+        je nt_fs_control_file
         cmp eax, 195
         je nt_delete_file
         cmp eax, 202
@@ -2419,6 +2478,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
+    nt_device_io_control_file: jmp K_NtDeviceIoControlFile
+    nt_fs_control_file: jmp K_NtFsControlFile
     nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
     nt_read_file: jmp K_NtReadFile
