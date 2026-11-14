@@ -190,6 +190,30 @@ int main() {
             Fail("FATX append with cluster allocation failed");
             goto stop;
         }
+
+        if (FATX_CreateFileW(volume, L"NEW.BIN") != FATX_OK ||
+            FATX_CreateFileW(volume, L"NEW.BIN") != FATX_INVALID_ARGUMENT) {
+            Fail("FATX empty-file creation or duplicate rejection failed");
+            goto stop;
+        }
+        BYTE newFileData[32];
+        for (DWORD i = 0; i < sizeof(newFileData); ++i)
+            newFileData[i] = BYTE(0xC0 + i);
+        if (FATX_WriteFileW(volume, L"NEW.BIN", 0, newFileData,
+                            sizeof(newFileData), &bytesWritten) != FATX_OK ||
+            bytesWritten != sizeof(newFileData)) {
+            Fail("writing a newly created empty FATX file failed");
+            goto stop;
+        }
+        BYTE newFileReadback[32]{};
+        DWORD newFileBytesRead = 0;
+        if (FATX_ReadFileW(volume, L"NEW.BIN", 0, newFileReadback,
+                           sizeof(newFileReadback), &newFileBytesRead) != FATX_OK ||
+            newFileBytesRead != sizeof(newFileData) ||
+            std::memcmp(newFileData, newFileReadback, sizeof(newFileData)) != 0) {
+            Fail("new FATX file data did not read back");
+            goto stop;
+        }
     }
     FATX_CloseVolume(volume);
     volume = nullptr;
@@ -213,7 +237,7 @@ int main() {
     }
     FATX_CloseVolume(volume);
     volume = nullptr;
-    std::puts("PASS: FATX image-only overwrite, append, third-cluster allocation, and persisted data");
+    std::puts("PASS: FATX image-only file creation, overwrite, append, cluster allocation, and persisted data");
 
     // Reopen a cyclic FAT chain and verify that reads stop with corruption,
     // rather than looping or returning fabricated data.
