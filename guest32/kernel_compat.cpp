@@ -581,7 +581,7 @@ std::wstring TranslateXboxPath(const GuestAnsiString* name){
     const int characters = MultiByteToWideChar(CP_ACP, 0, name->Buffer,
         static_cast<int>(name->Length), nullptr, 0);
     if (characters <= 0) return {};
-    std::wstring p(static_cast<size_t>(characters), L'\\0');
+    std::wstring p(static_cast<size_t>(characters), L'\0');
     if (MultiByteToWideChar(CP_ACP, 0, name->Buffer, static_cast<int>(name->Length),
         p.data(), characters) != characters) return {};
     if (!XboxKernelResolveSymbolicLinks(&p)) return {};
