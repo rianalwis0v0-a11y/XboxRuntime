@@ -213,6 +213,7 @@ int main() {
     }
     FATX_CloseVolume(volume);
     volume = nullptr;
+    std::puts("PASS: FATX image-only overwrite, append, third-cluster allocation, and persisted data");
 
     // Reopen a cyclic FAT chain and verify that reads stop with corruption,
     // rather than looping or returning fabricated data.
