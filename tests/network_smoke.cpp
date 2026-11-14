@@ -20,7 +20,7 @@ int main() {
     static_assert(sizeof(XNetStartupParams) == 12, "retail XNet startup ABI");
     XNetStartupParams badParams{};
     badParams.cfgSizeOfStruct = 13;
-    if (XNetStartup(&badParams) != WSAEINVAL) return 34;
+    if (XNetStartup(&badParams) != WSAEFAULT) return 34;
 
     XNKID generatedId{};
     XNKEY generatedKey{};
