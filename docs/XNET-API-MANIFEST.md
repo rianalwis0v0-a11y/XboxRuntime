@@ -16,7 +16,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 - `SOCKET`, `DWORD`, `ULONG`, pointers and handles are 32-bit in this guest build.
 - IPv4 addresses in `IN_ADDR` and `sockaddr_in.sin_addr` are network byte order; ports in `sockaddr_in.sin_port` are network byte order.
 - Socket handles returned by `XSocketCreate` are 32-bit opaque guest tokens, not host SOCKET values.
-- Structures use `#pragma pack(push, 4)` in the current header. The static assertions currently enforce `XNetStartupParams=13`, `XNADDR=36`, `XNDNS=40` bytes. These sizes still require comparison against an authoritative Xbox SDK-compatible header before claiming retail ABI compatibility.
+- Structures use `#pragma pack(push, 4)` in the current header. The static assertions currently enforce `XNetStartupParams=12`, `XNADDR=36`, `XNDNS=40` bytes. These sizes still require comparison against an authoritative Xbox SDK-compatible header before claiming retail ABI compatibility.
 
 ## Implemented title-facing functions
 
@@ -131,3 +131,30 @@ The following `__cdecl` functions are implementation-private guest32 helpers. Th
 3. Add per-function ABI tests, including invalid pointers/lengths, asynchronous DNS event ordering and cleanup races, socket options, nonblocking I/O, select edge cases, overlapped behavior and close-vs-operation races.
 4. Agree with kernel/loader on a guest API registration format and prove one verified call path from a real XBE.
 5. Design static XNet interception separately; do not patch guessed signatures or claim that these compiled functions automatically redirect retail calls.
+
+
+## ABI correction and key-registration tranche (2026-11-14)
+
+The XDK-compatible RXDK-SDK `include/winsockx.h` reference shows the retail
+`XNetStartupParams` is **12 bytes**, not 13. Its fields are:
+`cfgSizeOfStruct`, `cfgFlags`, `cfgPrivatePoolSizeInPages`,
+`cfgEnetReceiveQueueLength`, `cfgIpFragMaxSimultaneous`,
+`cfgIpFragMaxPacketDiv256`, `cfgSockMaxSockets`,
+`cfgSockDefaultRecvBufsizeInK`, `cfgSockDefaultSendBufsizeInK`,
+`cfgKeyRegMax`, `cfgSecRegMax`, and `cfgQosDataLimitDiv4`.
+The prior local declaration had the wrong field set and size; it has been replaced
+and compile-time offset/size assertions now enforce the reference layout.
+
+The same reference defines `XNKEY` as 16 bytes and uses one-byte packing for
+the XNet structures. The guest header now models `XNKEY`, `XNQOSINFO`, and
+`XNQOS`, with x86 size/offset assertions.
+
+The key API tranche now implements random system-link key creation and a
+bounded registration table with duplicate detection, configured capacity, and
+secure wiping on unregister/cleanup. **This is not the original XNet secure
+packet protocol:** Diffie-Hellman exchange, HMAC/DES packet protection,
+security associations, NAT traversal, QoS, and XBE call dispatch remain
+unimplemented and are not claimed.
+
+Reference: [RXDK-SDK winsockx.h](https://github.com/Team-Resurgent/RXDK-SDK/blob/main/include/winsockx.h);
+implementation reference: [RXDK-Libs ip.cpp](https://github.com/Team-Resurgent/RXDK-Libs/blob/main/libs/libxnet/net/ip.cpp).
