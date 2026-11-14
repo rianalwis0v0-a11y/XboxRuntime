@@ -1,4 +1,6 @@
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include "kernel_memory.h"
 
@@ -24,7 +26,6 @@ LONG StatusFromWin32(DWORD error) noexcept {
     case ERROR_OUTOFMEMORY: return kNoMemory;
     case ERROR_ACCESS_DENIED: return kAccessDenied;
     case ERROR_INVALID_ADDRESS: return static_cast<LONG>(0xC0000018u); // STATUS_CONFLICTING_ADDRESSES
-    case ERROR_INVALID_PAGE_PROTECTION: return static_cast<LONG>(0xC0000045u);
     default: return kUnsuccessful;
     }
 }
