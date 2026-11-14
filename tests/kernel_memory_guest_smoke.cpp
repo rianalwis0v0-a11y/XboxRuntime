@@ -64,9 +64,17 @@ int main() {
     if (status != 0 || !duplicate) return Fail("duplicate event handle", status);
     LONG previous = -1;
     status = K_NtSetEvent(eventHandle, &previous);
-    if (status != 0) return Fail("signal event", status);
+    if (status != 0 || previous != 0) return Fail("signal event", status);
+    struct EventInfo { ULONG type; LONG state; } eventInfo{};
+    status = K_NtQueryEvent(eventHandle, &eventInfo);
+    if (status != 0 || eventInfo.type != 1 || eventInfo.state != 1)
+        return Fail("query signaled event", status);
     status = K_NtWaitForSingleObject(duplicate, FALSE, nullptr);
     if (status != 0) return Fail("wait duplicated event", status);
+    status = K_NtQueryEvent(eventHandle, &eventInfo);
+    if (status != 0 || eventInfo.state != 0) return Fail("query consumed auto-reset event", status);
+    status = K_NtClearEvent(eventHandle);
+    if (status != 0) return Fail("clear event", status);
     if (!CloseHandle(duplicate) || !CloseHandle(eventHandle))
         return Fail("close event handles", static_cast<LONG>(GetLastError()));
 
@@ -82,8 +90,11 @@ int main() {
     HANDLE mutant = nullptr;
     status = K_NtCreateMutant(&mutant, nullptr, TRUE);
     if (status != 0 || !mutant) return Fail("create mutant", status);
+    struct MutantInfo { LONG count; UCHAR owned; UCHAR abandoned; UCHAR padding[2]; } mutantInfo{};
+    status = K_NtQueryMutant(mutant, &mutantInfo);
+    if (status != 0 || mutantInfo.owned != TRUE) return Fail("query owned mutant", status);
     if (!CloseHandle(mutant)) return Fail("close mutant", static_cast<LONG>(GetLastError()));
 
-    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release, event/duplicate/wait/close, semaphore/mutant)");
+    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release, event/query/set/clear/duplicate/wait, semaphore/mutant query)");
     return 0;
 }
