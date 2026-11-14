@@ -513,3 +513,17 @@ vertices. The draw staging buffer is sized for that worst case (3,072 slots),
 and the smoke test checks the final expanded vertex plus rejection when the
 caller supplies only 3,065 slots. This fixes an out-of-bounds write in the
 previous 2,048-vertex staging buffer.
+
+
+## NV097 register-combiner routing
+
+The NV097 general-combiner input/output words, per-stage C0/C1 factors,
+combiner control, and final-combiner input words are now routed into the
+matching Xbox D3D8 pixel-combiner render states. The shader-stage-program
+method is forwarded as the D3D8 pixel-shader token. This lets the pinned
+D3D8/D3D11 combiner translator build and cache the corresponding pixel shader
+instead of leaving these NV097 methods as inert register writes. A host smoke
+test checks all eight stage offsets, both final-combiner words, control, and
+the special shader-token route. This validates method mapping and dispatch
+wiring; a real pixel readback through a running Xbox title is still required
+for visual conformance.
