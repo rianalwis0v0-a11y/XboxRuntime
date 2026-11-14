@@ -245,10 +245,11 @@ int main() {
     std::memcpy(image + shutdownRegistrationOffset, shutdownRegistration,
                 sizeof(shutdownRegistration));
 
-    const std::uint32_t thunkEntries[7] = {
+    const std::uint32_t thunkEntries[8] = {
         0x80000000u | 256u, 0x80000000u | 67u,
         0x80000000u | 69u, 0x80000000u | 47u,
-        0x80000000u | 190u, 0x80000000u | 207u, 0u
+        0x80000000u | 190u, 0x80000000u | 207u,
+        0x80000000u | 187u, 0u
     };
     std::memcpy(image + kernelThunkOffset, thunkEntries, sizeof(thunkEntries));
 
@@ -434,6 +435,11 @@ int main() {
     branchGuestNotEqualToFailure();
     compareGuestByte(guestBase + directoryInfoOffset + 64u, static_cast<std::uint8_t>('a'));
     branchGuestNotEqualToFailure();
+
+    // Close the directory handle through the memory team's existing NtClose export.
+    pushGuestMemory(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 24u);
+    testGuestEax(); branchGuestNotEqualToFailure();
 
     pushGuest32(1u);
     pushGuest32(guestBase + shutdownRegistrationOffset);
