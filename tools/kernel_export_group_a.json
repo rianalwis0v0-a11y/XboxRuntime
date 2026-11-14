@@ -1,0 +1,1433 @@
+{
+  "schema_version": 1,
+  "group": "A",
+  "generated_for_branch": "work/kernel-export-half-a",
+  "source_policy": "Signatures from pinned NXDK lib/xboxkrnl/xboxkrnl.h; ordinals and x86 decorated export names/stack-byte decorations from pinned NXDK lib/xboxkrnl/xboxkrnl.exe.def.",
+  "exports": [
+    {
+      "ordinal": 2,
+      "name": "AvSendTVEncoderOption",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI AvSendTVEncoderOption\n(\n    IN PVOID RegisterBase,\n    IN ULONG Option,\n    IN ULONG Param,\n    OUT PULONG Result\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "AvSendTVEncoderOption@16                 @   2 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "AvSendTVEncoderOption@16",
+      "decoration_stack_bytes": 16
+    },
+    {
+      "ordinal": 3,
+      "name": "AvSetDisplayMode",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI ULONG NTAPI AvSetDisplayMode\n(\n    IN PVOID RegisterBase,\n    IN ULONG Step,\n    IN ULONG DisplayMode,\n    IN ULONG SourceColorFormat,\n    IN ULONG Pitch,\n    IN ULONG FrameBuffer\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "AvSetDisplayMode@24                      @   3 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "AvSetDisplayMode@24",
+      "decoration_stack_bytes": 24
+    },
+    {
+      "ordinal": 24,
+      "name": "ExQueryNonVolatileSetting",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting\n(\n    IN ULONG ValueIndex,\n    OUT PULONG Type,\n    OUT PVOID Value,\n    IN ULONG ValueLength,\n    OUT PULONG ResultLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExQueryNonVolatileSetting@20",
+      "decoration_stack_bytes": 20
+    },
+    {
+      "ordinal": 25,
+      "name": "ExReadWriteRefurbInfo",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo\n(\n    OUT XBOX_REFURB_INFO *RefurbInfo,\n    IN ULONG ValueLength,\n    BOOLEAN DoWrite\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "ExReadWriteRefurbInfo@12                 @  25 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExReadWriteRefurbInfo@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 29,
+      "name": "ExSaveNonVolatileSetting",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting\n(\n    IN ULONG ValueIndex,\n    IN ULONG Type,\n    IN CONST PVOID Value,\n    IN ULONG ValueLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExSaveNonVolatileSetting@16",
+      "decoration_stack_bytes": 16
+    },
+    {
+      "ordinal": 38,
+      "name": "HalClearSoftwareInterrupt",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL HalClearSoftwareInterrupt\n(\n    IN KIRQL RequestIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@HalClearSoftwareInterrupt@4             @  38 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@HalClearSoftwareInterrupt@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 39,
+      "name": "HalDisableSystemInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalDisableSystemInterrupt\n(\n    IN ULONG BusInterruptLevel\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalDisableSystemInterrupt@4              @  39 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalDisableSystemInterrupt@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 43,
+      "name": "HalEnableSystemInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalEnableSystemInterrupt\n(\n    IN ULONG BusInterruptLevel,\n    IN KINTERRUPT_MODE InterruptMode\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalEnableSystemInterrupt@8               @  43 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalEnableSystemInterrupt@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 44,
+      "name": "HalGetInterruptVector",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI ULONG NTAPI HalGetInterruptVector\n(\n    IN ULONG BusInterruptLevel,\n    OUT PKIRQL Irql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalGetInterruptVector@8                  @  44 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalGetInterruptVector@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 46,
+      "name": "HalReadWritePCISpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalReadWritePCISpace\n(\n    IN ULONG BusNumber,\n    IN ULONG SlotNumber,\n    IN ULONG RegisterNumber,\n    IN PVOID Buffer,\n    IN ULONG Length,\n    IN BOOLEAN WritePCISpace\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalReadWritePCISpace@24                  @  46 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalReadWritePCISpace@24",
+      "decoration_stack_bytes": 24
+    },
+    {
+      "ordinal": 48,
+      "name": "HalRequestSoftwareInterrupt",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL HalRequestSoftwareInterrupt\n(\n    KIRQL RequestIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@HalRequestSoftwareInterrupt@4           @  48 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@HalRequestSoftwareInterrupt@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 59,
+      "name": "IoAllocateIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoAllocateIrp\n(\n    IN CCHAR StackSize\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoAllocateIrp@4                          @  59 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoAllocateIrp@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 60,
+      "name": "IoBuildAsynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL,\n    IN PIO_STATUS_BLOCK IoStatusBlock OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoBuildAsynchronousFsdRequest@24         @  60 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildAsynchronousFsdRequest@24",
+      "decoration_stack_bytes": 24
+    },
+    {
+      "ordinal": 61,
+      "name": "IoBuildDeviceIoControlRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest\n(\n    IN ULONG IoControlCode,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PVOID InputBuffer OPTIONAL,\n    IN ULONG InputBufferLength,\n    OUT PVOID OutputBuffer OPTIONAL,\n    IN ULONG OutputBufferLength,\n    IN BOOLEAN InternalDeviceIoControl,\n    IN PKEVENT Event,\n    OUT PIO_STATUS_BLOCK IoStatusBlock\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoBuildDeviceIoControlRequest@36         @  61 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildDeviceIoControlRequest@36",
+      "decoration_stack_bytes": 36
+    },
+    {
+      "ordinal": 62,
+      "name": "IoBuildSynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL,\n    IN PKEVENT Event,\n    OUT PIO_STATUS_BLOCK IoStatusBlock\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoBuildSynchronousFsdRequest@28          @  62 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildSynchronousFsdRequest@28",
+      "decoration_stack_bytes": 28
+    },
+    {
+      "ordinal": 63,
+      "name": "IoCheckShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCheckShareAccess\n(\n    IN ACCESS_MASK DesiredAccess,\n    IN ULONG DesiredShareAccess,\n    IN OUT PFILE_OBJECT FileObject,\n    IN OUT PSHARE_ACCESS ShareAccess,\n    IN BOOLEAN Update\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoCheckShareAccess@20                    @  63 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCheckShareAccess@20",
+      "decoration_stack_bytes": 20
+    },
+    {
+      "ordinal": 65,
+      "name": "IoCreateDevice",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCreateDevice\n(\n    IN PDRIVER_OBJECT DriverObject,\n    IN ULONG DeviceExtensionSize,\n    IN POBJECT_STRING DeviceName OPTIONAL,\n    IN DEVICE_TYPE DeviceType,\n    IN BOOLEAN Exclusive,\n    OUT PDEVICE_OBJECT *DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoCreateDevice@24                        @  65 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCreateDevice@24",
+      "decoration_stack_bytes": 24
+    },
+    {
+      "ordinal": 66,
+      "name": "IoCreateFile",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCreateFile\n(\n    OUT PHANDLE FileHandle,\n    IN ACCESS_MASK DesiredAccess,\n    IN POBJECT_ATTRIBUTES ObjectAttributes,\n    OUT PIO_STATUS_BLOCK IoStatusBlock,\n    IN PLARGE_INTEGER AllocationSize OPTIONAL,\n    IN ULONG FileAttributes,\n    IN ULONG ShareAccess,\n    IN ULONG Disposition,\n    IN ULONG CreateOptions,\n    IN ULONG Options\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoCreateFile@40                          @  66 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCreateFile@40",
+      "decoration_stack_bytes": 40
+    },
+    {
+      "ordinal": 68,
+      "name": "IoDeleteDevice",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoDeleteDevice\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoDeleteDevice@4                         @  68 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDeleteDevice@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 72,
+      "name": "IoFreeIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoFreeIrp\n(\n    IN PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoFreeIrp@4                              @  72 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoFreeIrp@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 73,
+      "name": "IoInitializeIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoInitializeIrp\n(\n    IN OUT PIRP Irp,\n    IN USHORT PacketSize,\n    IN CCHAR StackSize\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoInitializeIrp@12                       @  73 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoInitializeIrp@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 75,
+      "name": "IoQueryFileInformation",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoQueryFileInformation\n(\n    IN PFILE_OBJECT FileObject,\n    IN FILE_INFORMATION_CLASS FileInformationClass,\n    IN ULONG Length,\n    OUT PVOID FileInformation,\n    OUT PULONG ReturnedLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoQueryFileInformation@20                @  75 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueryFileInformation@20",
+      "decoration_stack_bytes": 20
+    },
+    {
+      "ordinal": 76,
+      "name": "IoQueryVolumeInformation",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoQueryVolumeInformation\n(\n    IN PFILE_OBJECT FileObject,\n    IN FS_INFORMATION_CLASS FsInformationClass,\n    IN ULONG Length,\n    OUT PVOID FsInformation,\n    OUT PULONG ReturnedLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoQueryVolumeInformation@20              @  76 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueryVolumeInformation@20",
+      "decoration_stack_bytes": 20
+    },
+    {
+      "ordinal": 77,
+      "name": "IoQueueThreadIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoQueueThreadIrp\n(\n    IN PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoQueueThreadIrp@4                       @  77 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueueThreadIrp@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 78,
+      "name": "IoRemoveShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoRemoveShareAccess\n(\n    IN PFILE_OBJECT FileObject,\n    IN OUT PSHARE_ACCESS ShareAccess\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoRemoveShareAccess@8                    @  78 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoRemoveShareAccess@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 79,
+      "name": "IoSetIoCompletion",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSetIoCompletion\n(\n    IN PVOID IoCompletion,\n    IN PVOID KeyContext,\n    IN PVOID ApcContext,\n    IN NTSTATUS IoStatus,\n    IN ULONG_PTR IoStatusInformation\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSetIoCompletion@20                     @  79 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSetIoCompletion@20",
+      "decoration_stack_bytes": 20
+    },
+    {
+      "ordinal": 80,
+      "name": "IoSetShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoSetShareAccess\n(\n    IN ACCESS_MASK DesiredAccess,\n    IN ULONG DesiredShareAccess,\n    IN OUT PFILE_OBJECT FileObject,\n    OUT PSHARE_ACCESS ShareAccess\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSetShareAccess@16                      @  80 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSetShareAccess@16",
+      "decoration_stack_bytes": 16
+    },
+    {
+      "ordinal": 81,
+      "name": "IoStartNextPacket",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartNextPacket\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoStartNextPacket@4                      @  81 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartNextPacket@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 82,
+      "name": "IoStartNextPacketByKey",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartNextPacketByKey\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN ULONG Key\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoStartNextPacketByKey@8                 @  82 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartNextPacketByKey@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 83,
+      "name": "IoStartPacket",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartPacket\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PIRP Irp,\n    IN PULONG Key OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoStartPacket@12                         @  83 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartPacket@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 84,
+      "name": "IoSynchronousDeviceIoControlRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest\n(\n    IN ULONG IoControlCode,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PVOID InputBuffer OPTIONAL,\n    IN ULONG InputBufferLength,\n    OUT PVOID OutputBuffer OPTIONAL,\n    IN ULONG OutputBufferLength,\n    OUT PULONG ReturnedOutputBufferLength OPTIONAL,\n    IN BOOLEAN InternalDeviceIoControl\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSynchronousDeviceIoControlRequest@32   @  84 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSynchronousDeviceIoControlRequest@32",
+      "decoration_stack_bytes": 32
+    },
+    {
+      "ordinal": 85,
+      "name": "IoSynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSynchronousFsdRequest@20               @  85 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSynchronousFsdRequest@20",
+      "decoration_stack_bytes": 20
+    },
+    {
+      "ordinal": 86,
+      "name": "IofCallDriver",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI NTSTATUS FASTCALL IofCallDriver\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@IofCallDriver@8                         @  86 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@IofCallDriver@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 87,
+      "name": "IofCompleteRequest",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL IofCompleteRequest\n(\n    IN PIRP Irp,\n    IN CCHAR PriorityBoost\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@IofCompleteRequest@8                    @  87 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@IofCompleteRequest@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 90,
+      "name": "IoDismountVolume",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoDismountVolume\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoDismountVolume@4                       @  90 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDismountVolume@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 91,
+      "name": "IoDismountVolumeByName",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoDismountVolumeByName\n(\n    IN POBJECT_STRING DeviceName\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoDismountVolumeByName@4                 @  91 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDismountVolumeByName@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 93,
+      "name": "KeAlertThread",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeAlertThread\n(\n    IN PKTHREAD Thread,\n    IN KPROCESSOR_MODE ProcessorMode\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeAlertThread@8                          @  93 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeAlertThread@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 98,
+      "name": "KeConnectInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeConnectInterrupt\n(\n    IN PKINTERRUPT Interrupt\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeConnectInterrupt@4                     @  98 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeConnectInterrupt@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 100,
+      "name": "KeDisconnectInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeDisconnectInterrupt\n(\n    IN PKINTERRUPT Interrupt\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeDisconnectInterrupt@4                  @ 100 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeDisconnectInterrupt@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 105,
+      "name": "KeInitializeApc",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI KeInitializeApc\n(\n    IN PRKAPC Apc,\n    IN PRKTHREAD Thread,\n    IN PKKERNEL_ROUTINE KernelRoutine,\n    IN PKRUNDOWN_ROUTINE RundownRoutine OPTIONAL,\n    IN PKNORMAL_ROUTINE NormalRoutine OPTIONAL,\n    IN KPROCESSOR_MODE ProcessorMode OPTIONAL,\n    IN PVOID NormalContext OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeInitializeApc@28                       @ 105 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInitializeApc@28",
+      "decoration_stack_bytes": 28
+    },
+    {
+      "ordinal": 109,
+      "name": "KeInitializeInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI KeInitializeInterrupt\n(\n    IN PKINTERRUPT Interrupt,\n    IN PKSERVICE_ROUTINE ServiceRoutine,\n    IN PVOID ServiceContext,\n    IN ULONG Vector,\n    IN KIRQL Irql,\n    IN KINTERRUPT_MODE InterruptMode,\n    IN BOOLEAN ShareVector\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeInitializeInterrupt@28                 @ 109 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInitializeInterrupt@28",
+      "decoration_stack_bytes": 28
+    },
+    {
+      "ordinal": 118,
+      "name": "KeInsertQueueApc",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeInsertQueueApc\n(\n    IN PRKAPC Apc,\n    IN PVOID SystemArgument1,\n    IN PVOID SystemArgument2,\n    IN KPRIORITY Increment\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeInsertQueueApc@16                      @ 118 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInsertQueueApc@16",
+      "decoration_stack_bytes": 16
+    },
+    {
+      "ordinal": 139,
+      "name": "KeRestoreFloatingPointState",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState\n(\n    IN PKFLOATING_SAVE FloatSave\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeRestoreFloatingPointState@4            @ 139 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeRestoreFloatingPointState@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 141,
+      "name": "KeRundownQueue",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PLIST_ENTRY NTAPI KeRundownQueue\n(\n    IN PRKQUEUE Queue\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeRundownQueue@4                         @ 141 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeRundownQueue@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 142,
+      "name": "KeSaveFloatingPointState",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI KeSaveFloatingPointState\n(\n    OUT PKFLOATING_SAVE FloatSave\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeSaveFloatingPointState@4               @ 142 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeSaveFloatingPointState@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 153,
+      "name": "KeSynchronizeExecution",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeSynchronizeExecution\n(\n    IN PKINTERRUPT Interrupt,\n    IN PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,\n    IN PVOID SynchronizeContext\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeSynchronizeExecution@12                @ 153 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeSynchronizeExecution@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 163,
+      "name": "KiUnlockDispatcherDatabase",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL KiUnlockDispatcherDatabase\n(\n    IN KIRQL OldIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@KiUnlockDispatcherDatabase@4            @ 163 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@KiUnlockDispatcherDatabase@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 168,
+      "name": "MmClaimGpuInstanceMemory",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmClaimGpuInstanceMemory\n(\n    IN SIZE_T NumberOfBytes,\n    OUT SIZE_T *NumberOfPaddingBytes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmClaimGpuInstanceMemory@8               @ 168 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmClaimGpuInstanceMemory@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 169,
+      "name": "MmCreateKernelStack",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmCreateKernelStack\n(\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN DebuggerThread\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmCreateKernelStack@8                    @ 169 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmCreateKernelStack@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 170,
+      "name": "MmDeleteKernelStack",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmDeleteKernelStack\n(\n    IN PVOID KernelStackBase,\n    IN PVOID KernelStackLimit\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmDeleteKernelStack@8                    @ 170 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmDeleteKernelStack@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 175,
+      "name": "MmLockUnlockBufferPages",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmLockUnlockBufferPages\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN UnlockPages\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmLockUnlockBufferPages@12               @ 175 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmLockUnlockBufferPages@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 176,
+      "name": "MmLockUnlockPhysicalPage",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmLockUnlockPhysicalPage\n(\n    IN ULONG_PTR PhysicalAddress,\n    IN BOOLEAN UnlockPage\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmLockUnlockPhysicalPage@8               @ 176 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmLockUnlockPhysicalPage@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 177,
+      "name": "MmMapIoSpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmMapIoSpace\n(\n    IN ULONG_PTR PhysicalAddress,\n    IN SIZE_T NumberOfBytes,\n    IN ULONG Protect\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmMapIoSpace@12                          @ 177 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmMapIoSpace@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 178,
+      "name": "MmPersistContiguousMemory",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmPersistContiguousMemory\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN Persist\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmPersistContiguousMemory@12             @ 178 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmPersistContiguousMemory@12",
+      "decoration_stack_bytes": 12
+    },
+    {
+      "ordinal": 181,
+      "name": "MmQueryStatistics",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI MmQueryStatistics\n(\n    IN OUT PMM_STATISTICS MemoryStatistics\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmQueryStatistics@4                      @ 181 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmQueryStatistics@4",
+      "decoration_stack_bytes": 4
+    },
+    {
+      "ordinal": 183,
+      "name": "MmUnmapIoSpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmUnmapIoSpace\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmUnmapIoSpace@8                         @ 183 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmUnmapIoSpace@8",
+      "decoration_stack_bytes": 8
+    },
+    {
+      "ordinal": 188,
+      "name": "NtCreateDirectoryObject",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI NtCreateDirectoryObject\n(\n    OUT PHANDLE DirectoryHandle,\n    IN POBJECT_ATTRIBUTES ObjectAttributes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (object manager/handle APIs; confirmation requested)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "NtCreateDirectoryObject@8                @ 188 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "NtCreateDirectoryObject@8",
+      "decoration_stack_bytes": 8
+    }
+  ]
+}
