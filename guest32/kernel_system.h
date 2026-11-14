@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <cstdint>
+#include <cstddef>
 #include <string>
 
 // Pinned XboxDev/nxdk xboxkrnl.h: PS_STATISTICS is three ULONGs.
