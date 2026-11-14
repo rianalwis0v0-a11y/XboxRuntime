@@ -100,6 +100,9 @@ int main() {
     auto getStats = reinterpret_cast<StatsFn>(Need(module, "XboxNV2A_GetStats"));
     auto expandPrimitive = reinterpret_cast<ExpandPrimitiveFn>(
         Need(module, "XboxNV2A_ExpandPrimitive"));
+    using MapCombinerMethodFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*);
+    auto mapCombiner = reinterpret_cast<MapCombinerMethodFn>(
+        Need(module, "XboxNV2A_MapCombinerMethod"));
 
     auto readVram = reinterpret_cast<ReadMemoryFn>(Need(module, "XboxNV2A_ReadVRAM"));
     auto writeVram = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteVRAM"));
@@ -396,6 +399,39 @@ int main() {
     if (start() != 0) {
         std::cerr << "FAIL: NV2A module initialization\\n";
         return 1;
+    }
+
+    /* NV097 combiner method families map to the Xbox D3D8 combiner states. */
+    {
+        struct Case { uint32_t method, state, stage; };
+        const Case cases[] = {
+            {0x0260u, 200u, 0u}, {0x027Cu, 207u, 7u},
+            {0x0288u, 208u, 0u}, {0x028Cu, 209u, 0u},
+            {0x0A60u, 235u, 0u}, {0x0A7Cu, 242u, 7u},
+            {0x0A80u, 243u, 0u}, {0x0A9Cu, 250u, 7u},
+            {0x0AA0u, 226u, 0u}, {0x0ABCu, 233u, 7u},
+            {0x0AC0u, 210u, 0u}, {0x0ADCu, 217u, 7u},
+            {0x1E40u, 218u, 0u}, {0x1E5Cu, 225u, 7u},
+            {0x1E60u, 234u, 0u}
+        };
+        for (const auto& c : cases) {
+            uint32_t state = 0, stage = 0;
+            if (mapCombiner(c.method, &state, &stage) != 1 ||
+                state != c.state || stage != c.stage) {
+                std::cerr << "FAIL: NV097 combiner method mapping\\n";
+                stop();
+                return 1;
+            }
+        }
+        uint32_t state = 99u, stage = 99u;
+        if (mapCombiner(0x1E70u, &state, &stage) != 2 ||
+            state != 0u || stage != 0u ||
+            mapCombiner(0x1E71u, &state, &stage) != 0 ||
+            mapCombiner(0x1E80u, &state, &stage) != 0) {
+            std::cerr << "FAIL: NV097 pixel-shader token/invalid mapping\\n";
+            stop();
+            return 1;
+        }
     }
 
     /* The largest accepted QUAD_STRIP expands to 3,066 vertices. */
