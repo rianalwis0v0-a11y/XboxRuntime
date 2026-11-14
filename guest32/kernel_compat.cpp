@@ -1081,10 +1081,8 @@ extern "C" LONG __stdcall K_NtRemoveIoCompletion(
     GuestIoStatusBlock* ioStatusBlock, const LARGE_INTEGER* timeout) {
     if (!keyContext || !apcContext || !ioStatusBlock)
         return LONG(0xC000000Du);
-    *keyContext = nullptr;
-    *apcContext = nullptr;
-    ioStatusBlock->Status = 0;
-    ioStatusBlock->Information = 0;
+    // Output storage is committed only when a packet is removed; a timeout
+    // must not overwrite the caller's previous output values.
     auto state = FindIoCompletionState(handle);
     if (!state) return LONG(0xC0000008u);
     DWORD bytes = 0;
