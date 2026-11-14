@@ -57,6 +57,24 @@ int __cdecl FATX_OpenVolumeW(
 );
 
 __declspec(dllexport)
+int __cdecl FATX_OpenImageReadWriteW(
+    LPCWSTR imagePath,
+    ULONGLONG partitionOffset,
+    ULONGLONG partitionLength,
+    FATX_VOLUME* volume
+);
+
+__declspec(dllexport)
+int __cdecl FATX_WriteFileW(
+    FATX_VOLUME volume,
+    LPCWSTR path,
+    ULONGLONG offset,
+    const void* buffer,
+    DWORD bytesToWrite,
+    DWORD* bytesWritten
+);
+
+__declspec(dllexport)
 void __cdecl FATX_CloseVolume(FATX_VOLUME volume);
 
 __declspec(dllexport)
