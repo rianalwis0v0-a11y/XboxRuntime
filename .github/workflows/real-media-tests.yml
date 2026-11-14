@@ -1,0 +1,79 @@
+name: Real Xbox media regression tests
+
+on:
+  push:
+    branches:
+      - work/xdvdfs-fatx
+    paths:
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "tests/fatx_real_image.cpp"
+      - "tests/xdvdfs_real_xiso.cpp"
+      - ".github/workflows/real-media-tests.yml"
+  pull_request:
+    paths:
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "tests/fatx_real_image.cpp"
+      - "tests/xdvdfs_real_xiso.cpp"
+      - ".github/workflows/real-media-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  build-nxdk-xiso:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out pinned NXDK
+        uses: actions/checkout@v4
+        with:
+          repository: XboxDev/nxdk
+          ref: fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e
+          path: nxdk
+          submodules: recursive
+      - name: Install NXDK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm lld pkgconf bison flex cmake
+      - name: Build homebrew XBE and XISO with NXDK
+        run: |
+          eval "$(./nxdk/bin/activate -s)"
+          make -C nxdk/samples/hello -j2 GEN_XISO=hello.iso
+          test -s nxdk/samples/hello/bin/default.xbe
+          test -s nxdk/samples/hello/hello.iso
+          sha256sum nxdk/samples/hello/bin/default.xbe nxdk/samples/hello/hello.iso
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nxdk-hello-xiso
+          path: |
+            nxdk/samples/hello/hello.iso
+            nxdk/samples/hello/bin/default.xbe
+          if-no-files-found: error
+
+  verify-real-media:
+    needs: build-nxdk-xiso
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: nxdk-hello-xiso
+          path: media
+      - name: Build and verify XDVDFS reader against NXDK XISO
+        shell: cmd
+        run: |
+          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/xdvdfs tests/xdvdfs_real_xiso.cpp modules/xdvdfs/xdvdfs.cpp /Fe:xdvdfs_real_xiso.exe
+          xdvdfs_real_xiso.exe media\hello.iso
+      - name: Build and generate a FATX disk image, then verify the reader
+        shell: cmd
+        run: |
+          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/fatx/include tests/fatx_real_image.cpp modules/fatx/include/fatx.cpp /Fe:fatx_real_image.exe
+          fatx_real_image.exe media\test-fatx.img
+          certutil -hashfile media\test-fatx.img SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xbox-filesystem-test-media
+          path: |
+            media/hello.iso
+            media/test-fatx.img
+          if-no-files-found: error
