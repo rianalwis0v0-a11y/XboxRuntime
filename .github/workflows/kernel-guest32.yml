@@ -123,6 +123,17 @@ jobs:
       - name: Run shared-memory guest execution smoke test
         run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R kernel_guest_backend_smoke
 
+      - name: Build and run XBE format regression tests
+        shell: cmd
+        run: |
+          call "%ProgramFiles(x86)%/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath > vs-path.txt
+          set /p VS_PATH=<vs-path.txt
+          call "%VS_PATH%/VC/Auxiliary/Build/vcvars64.bat"
+          cl /nologo /std:c++17 /EHsc /W4 /WX /Fe:xbe_format_tests.exe tests/xbe_format_tests.cpp modules/xbe_loader/xbe_format.cpp
+          if errorlevel 1 exit /b 1
+          xbe_format_tests.exe
+          if errorlevel 1 exit /b 1
+
       - name: Build x64 XBE loader DLL for joint integration
         shell: cmd
         run: |
