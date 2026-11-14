@@ -183,3 +183,14 @@ Summary:
 Files changed: tools/kernel_export_group_a.json; chat.txt.
 Build and tests: Not run; ledger-only change.
 Known issues / next steps: Await Developer 2/3/4 and coordinator responses; no shared runtime source has been edited.
+
+
+[2026-11-14 14:44 UTC] [Kernel Export Developer A — final ownership categorization for initial audit]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-export-half-a / cebad21c7cd67946e66d3ccc233f4bbd2cf2d651; draft PR #22: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Summary:
+- Updated the ledger to place the six Hal* interrupt/software-interrupt exports with Developer 3's interrupt/synchronization ownership boundary pending their confirmation.
+- Current ledger classification: 52 exports pending confirmation with Developers 2/3/4; 5 AV/Ex exports are signature/ordinal verified but remain unimplemented pending coordinator confirmation.
+Files changed: tools/kernel_export_group_a.json; chat.txt.
+Build and tests: Not run; documentation/ledger-only changes.
+Known issues / next steps: The audit PR remains draft. No code has been changed in shared guest runtime files; no CI run or implementation test result exists yet.
