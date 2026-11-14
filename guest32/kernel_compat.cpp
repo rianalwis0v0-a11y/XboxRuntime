@@ -572,11 +572,18 @@ extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
-struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+struct GuestObjectAttributes { HANDLE RootDirectory; GuestAnsiString* ObjectName; ULONG Attributes; };
+static_assert(sizeof(GuestObjectAttributes) == 12, "NXDK OBJECT_ATTRIBUTES must be 12 bytes on x86");
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
-std::wstring TranslateXboxPath(const GuestUnicodeString* name){
-    if(!name||!name->Buffer||!name->Length)return {};
-    std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
+std::wstring TranslateXboxPath(const GuestAnsiString* name){
+    if(!name||!name->Buffer||!name->Length||name->Length>name->MaximumLength)return {};
+    const int characters = MultiByteToWideChar(CP_ACP, 0, name->Buffer,
+        static_cast<int>(name->Length), nullptr, 0);
+    if (characters <= 0) return {};
+    std::wstring p(static_cast<size_t>(characters), L'\\0');
+    if (MultiByteToWideChar(CP_ACP, 0, name->Buffer, static_cast<int>(name->Length),
+        p.data(), characters) != characters) return {};
     if (!XboxKernelResolveSymbolicLinks(&p)) return {};
     const std::wstring cd=L"\\Device\\Cdrom0";
     const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
@@ -592,6 +599,7 @@ DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x4
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
 LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
     if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
     std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
     DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
     if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
@@ -616,7 +624,7 @@ static LARGE_INTEGER FileTimeToLarge(const FILETIME& value) {
 }
 extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* out) {
-    if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
+    if (!oa || !oa->ObjectName || !out)
         return LONG(0xC000000Du);
     if (oa->RootDirectory) return LONG(0xC00000BBu);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
@@ -654,6 +662,7 @@ extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
 
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
@@ -903,8 +912,6 @@ extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, cons
     if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
     return LONG(0xC0000008u);
 }
-struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
-
 struct GuestFileDirectoryInformation {
     ULONG NextEntryOffset;
     ULONG FileIndex;
