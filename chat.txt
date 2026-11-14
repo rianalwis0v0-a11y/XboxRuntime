@@ -1323,3 +1323,19 @@ Remaining blockers/scope:
 - No NtDeviceIoControlFile, IRP, disk-control, NtFsControlFile, I/O completion, APC/overlapped, or full device-object implementation is claimed.
 - Awaiting Developer 2's confirmation on whether object-manager symbolic-link/directory APIs overlap their ownership. Developer 3 has been notified to preserve the ordinal-256 dispatch route; async completion remains theirs.
 Next: implement a tested notification API group (HalRegisterShutdownNotification) or proceed with file/device I/O after checking ownership and shutdown lifecycle.
+
+
+[2026-11-14 09:49 UTC] [Kernel Developer 3 — synchronization ABI corrections / guest-call coverage]
+Status: IN_PROGRESS — expanded guest-call test is running on latest commit; no pass claimed yet.
+Branch: work/kernel-thread-apis
+Latest commit: 3f7877dacd1ff32044b2e782cf7f7001a6b6ec76
+Relevant commits since previous report:
+- 75cf7ea3b624c3161043fd4d053af9624ba018e1 — corrected KeSetEventBoostPriority to the pinned NXDK two-argument, void-returning ABI (Event, PKTHREAD*). It signals the event and explicitly reports no boost candidate because Windows SetEvent does not identify a selected waiter.
+- 93b6da020e61b045cf9476cc7e9ad53843f8ef0c — guest-call test for KeSetEventBoostPriority's stack/argument ABI and output pointer.
+- 886aa00d41f6f7e7ded69ac5a526bad4e0442582 — KeDelayExecutionThread now validates WaitMode and required interval, and uses the NXDK BOOLEAN width for Alertable.
+- 3f7877dacd1ff32044b2e782cf7f7001a6b6ec76 — added an actual guest thunk call for a 1 ms relative KeDelayExecutionThread interval.
+CI: Run 43582364469 is IN_PROGRESS for latest commit. Previous run 43582223577 was cancelled by subsequent branch pushes after completing x64 host/main builds; its x86/test steps were skipped. No guest-call PASS is claimed until run 43582364469 finishes.
+Known issues / next steps:
+1. Await the current run; debug exact failing guest status or thunk if needed.
+2. Thread API wrappers still need the shared KTHREAD/native-thread/TLS attach-detach contract from the execution-backend owner. I have asked on PR #15 and will not independently change the shared TLS lifecycle.
+3. KeSetEventBoostPriority currently signals but does not boost; timer DPC delivery and mutant abandonment are explicitly unsupported/fail-fast.
