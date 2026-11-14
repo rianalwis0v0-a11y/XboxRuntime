@@ -635,15 +635,31 @@ extern "C" int __cdecl FATX_OpenVolumeW(
         &v->upstream, narrowPath.data(), partitionOffset,
         partitionLength, 512, FATX_READ_FROM_SUPERBLOCK
     ) != FATX_STATUS_SUCCESS) {
-        if (v->upstream.device) {
-            fclose(v->upstream.device);
-            v->upstream.device = nullptr;
-        }
+        // fatx_open_device closes its FILE* on initialization failure.
+        // Clear the stale pointer; do not fclose it a second time.
+        v->upstream.device = nullptr;
         delete v;
         CloseHandle(file);
         return FATX_INVALID_VOLUME;
     }
     v->upstreamOpen = true;
+
+    const ULONGLONG upstreamDataOffset =
+        v->upstream.cluster_offset - v->upstream.partition_offset;
+    const DWORD upstreamEntrySize =
+        v->upstream.fat_type == 1 ? 2u :
+        v->upstream.fat_type == 2 ? 4u : 0u;
+    if (v->upstream.bytes_per_cluster != v->clusterSize ||
+        v->upstream.root_cluster != v->rootCluster ||
+        upstreamDataOffset != v->dataOffset ||
+        upstreamEntrySize != v->entrySize) {
+        fatx_close_device(&v->upstream);
+        v->upstream.device = nullptr;
+        v->upstreamOpen = false;
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_VOLUME;
+    }
 
     *output = v;
 
