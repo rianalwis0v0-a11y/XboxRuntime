@@ -77,6 +77,18 @@ int __cdecl FATX_CreateFileW(
 );
 
 __declspec(dllexport)
+int __cdecl FATX_DeleteFileW(FATX_VOLUME volume, LPCWSTR path);
+
+__declspec(dllexport)
+int __cdecl FATX_RemoveDirectoryW(FATX_VOLUME volume, LPCWSTR path);
+
+__declspec(dllexport)
+int __cdecl FATX_RenameW(FATX_VOLUME volume, LPCWSTR source, LPCWSTR destination);
+
+__declspec(dllexport)
+int __cdecl FATX_TruncateFileW(FATX_VOLUME volume, LPCWSTR path, ULONGLONG newSize);
+
+__declspec(dllexport)
 int __cdecl FATX_WriteFileW(
     FATX_VOLUME volume,
     LPCWSTR path,
