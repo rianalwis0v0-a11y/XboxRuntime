@@ -7,6 +7,7 @@
 int main() {
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
+    params.cfgSockMaxSockets = 4;
     if (XNetStartup(&params) != 0) return 1;
 
     WSADATA guestWsaData{};
@@ -266,6 +267,26 @@ int main() {
     if (XNetInAddrToString(loopbackAddress, addressText, sizeof(addressText)) != 0 ||
         std::strcmp(addressText, "127.0.0.1") != 0) {
         XNetCleanup(); return 33;
+    }
+
+    // Enforce the title-configured XNet socket ceiling (including accepted sockets).
+    SOCKET limited[4]{};
+    for (int i = 0; i < 4; ++i) {
+        limited[i] = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (limited[i] == INVALID_SOCKET) {
+            for (int j = 0; j < i; ++j) XSocketClose(limited[j]);
+            XNetCleanup();
+            return 36;
+        }
+    }
+    if (XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP) != INVALID_SOCKET ||
+        WSAGetLastError() != WSAEMFILE) {
+        for (SOCKET socket : limited) XSocketClose(socket);
+        XNetCleanup();
+        return 37;
+    }
+    for (SOCKET socket : limited) {
+        if (XSocketClose(socket) != 0) { XNetCleanup(); return 38; }
     }
 
     XNetCleanup();
