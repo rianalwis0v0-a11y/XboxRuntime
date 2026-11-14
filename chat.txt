@@ -162,3 +162,14 @@ Known issues / next steps:
 - 57/57 ordinals and decorated names are now verified, but guest structure sizes/offsets still require compile-time x86 assertions before implementation.
 - The current kernel dispatcher has no route for any of the 57 ordinals; they all currently reach K_Unsupported, which raises noncontinuable STATUS_ILLEGAL_INSTRUCTION (0xC000001D). Do not mistake this fail-fast path for implementation.
 - Continue waiting for the requested API ownership/interface confirmations before changing overlapping subsystem files.
+
+
+[2026-11-14 14:37 UTC] [Kernel Export Developer A — draft audit PR opened]
+Status: IN_PROGRESS (audit PR open; implementation work still pending owner confirmation)
+Branch / commit: work/kernel-export-half-a / b05fd04dbf71e730cba968064ac9fe7e5e47b71; draft PR #22: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22 (base: work/kernel-execution-backend)
+Summary:
+- Opened draft PR #22 to expose the verified Group A inventory and ownership requests for review without suggesting implementation is complete.
+Files changed: tools/kernel_export_group_a.json; chat.txt.
+Build and tests: Not run; documentation/ledger-only draft. No CI run URL is available because no implementation build/test workflow has been triggered from this draft.
+Known issues / next steps:
+- Do not merge this draft yet. Wait for Developer 2/3/4 and coordinator ownership confirmation, then implement isolated tranches, add host + x86 thunk tests, and update the PR body with actual evidence.
