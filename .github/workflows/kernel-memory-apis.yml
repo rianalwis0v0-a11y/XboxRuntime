@@ -1,0 +1,37 @@
+name: Xbox kernel memory and object API tests
+
+on:
+  push:
+    branches:
+      - work/kernel-memory-apis
+  pull_request:
+    branches:
+      - work/kernel-execution-backend
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-memory-apis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guest32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x86 guest API tests
+        run: cmake -S guest32 -B build-memory-guest32 -A Win32
+      - name: Build x86 guest and memory API smoke test
+        run: cmake --build build-memory-guest32 --config Release --target xbe_guest32 kernel_memory_guest_smoke
+      - name: Run x86 guest ABI tests
+        run: ctest --test-dir build-memory-guest32 -C Release --output-on-failure -R kernel_memory_guest_smoke
+
+  host64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x64 host-side tests
+        run: cmake -S modules/xbox_kernel -B build-memory-host64 -A x64
+      - name: Build host range-validation tests
+        run: cmake --build build-memory-host64 --config Release --target kernel_memory_host_tests
+      - name: Run host tests
+        run: ctest --test-dir build-memory-host64 -C Release --output-on-failure -R kernel_memory_host_tests
