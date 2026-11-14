@@ -50,12 +50,16 @@ struct GuestTimer32 {
     std::uint32_t Dpc;
     std::int32_t Period;
 };
+struct GuestIoStatusBlock32 { std::int32_t Status; std::uint32_t Information; };
+struct GuestIoCompletionBasicInformation32 { std::int32_t Depth; };
 #pragma pack(pop)
 static_assert(sizeof(GuestDispatcherHeader32) == 16, "NXDK DISPATCHER_HEADER");
 static_assert(sizeof(GuestEvent32) == 16, "NXDK KEVENT");
 static_assert(sizeof(GuestSemaphore32) == 20, "NXDK KSEMAPHORE");
 static_assert(sizeof(GuestMutant32) == 32, "NXDK KMUTANT");
 static_assert(sizeof(GuestTimer32) == 40, "NXDK KTIMER");
+static_assert(sizeof(GuestIoStatusBlock32) == 8, "NXDK IO_STATUS_BLOCK");
+static_assert(sizeof(GuestIoCompletionBasicInformation32) == 4, "NXDK IO_COMPLETION_BASIC_INFORMATION");
 
 struct GuestCodeBuilder {
     std::uint8_t* bytes;
@@ -66,6 +70,9 @@ struct GuestCodeBuilder {
         used += sizeof(value);
     }
     void Push(std::uint32_t value) { Emit8(0x68); Emit32(value); }
+    void PushMemory(std::uint32_t address) {
+        Emit8(0xFF); Emit8(0x35); Emit32(address); // push dword ptr [absolute]
+    }
     void CallIat(std::uint32_t address) {
         Emit8(0xFF); Emit8(0x15); Emit32(address); // call dword ptr [absolute]
     }
@@ -221,13 +228,25 @@ int main() {
     constexpr std::uint32_t semaphoreOffset = 0x3540u;
     constexpr std::uint32_t mutantOffset = 0x3580u;
     constexpr std::uint32_t timerOffset = 0x3600u;
-    constexpr std::uint32_t markerOffset = 0x3700u;
+    constexpr std::uint32_t markerOffset = 0x3800u;
     constexpr std::uint32_t timeoutOffset = 0x3740u;
     constexpr std::uint32_t dueTimeOffset = 0x3748u;
     constexpr std::uint32_t threadOutOffset = 0x3750u;
     constexpr std::uint32_t delayIntervalOffset = 0x3758u;
+    constexpr std::uint32_t completionHandleOffset = 0x3760u;
+    constexpr std::uint32_t duplicateHandleOffset = 0x3764u;
+    constexpr std::uint32_t completionInfoOffset = 0x3770u;
+    constexpr std::uint32_t completionKeyOffset = 0x3774u;
+    constexpr std::uint32_t completionApcOffset = 0x3778u;
+    constexpr std::uint32_t completionIoStatusOffset = 0x377Cu;
     constexpr std::uint32_t threadOutVa = guestBase + threadOutOffset;
     constexpr std::uint32_t delayIntervalVa = guestBase + delayIntervalOffset;
+    constexpr std::uint32_t completionHandleVa = guestBase + completionHandleOffset;
+    constexpr std::uint32_t duplicateHandleVa = guestBase + duplicateHandleOffset;
+    constexpr std::uint32_t completionInfoVa = guestBase + completionInfoOffset;
+    constexpr std::uint32_t completionKeyVa = guestBase + completionKeyOffset;
+    constexpr std::uint32_t completionApcVa = guestBase + completionApcOffset;
+    constexpr std::uint32_t completionIoStatusVa = guestBase + completionIoStatusOffset;
     constexpr std::uint32_t iat = guestBase + thunkTableOffset;
     constexpr std::uint32_t eventVa = guestBase + eventOffset;
     constexpr std::uint32_t semaphoreVa = guestBase + semaphoreOffset;
@@ -236,7 +255,8 @@ int main() {
     constexpr std::uint32_t timeoutVa = guestBase + timeoutOffset;
     const std::uint32_t ordinals[] = {
         108u, 145u, 138u, 159u, 112u, 132u,
-        110u, 131u, 113u, 149u, 150u, 97u, 146u, 99u, 0u
+        110u, 131u, 113u, 149u, 150u, 97u, 146u, 99u,
+        191u, 212u, 223u, 227u, 198u, 187u, 0u
     };
     for (std::size_t i = 0; i < sizeof(ordinals) / sizeof(ordinals[0]); ++i) {
         const std::uint32_t thunk = ordinals[i]
@@ -292,6 +312,27 @@ int main() {
     push(static_cast<std::uint32_t>(relativeDueTime)); push(timerVa); call(10u); save(44u);
     push(timerVa); call(11u); save(48u);
     push(delayIntervalVa); push(0u); push(0u); call(13u); save(56u);
+
+    // I/O completion ports: create, duplicate in-process, close the original,
+    // post/query/remove a packet through the duplicate, then verify timeout and
+    // closed-handle behavior. The packet preserves both guest contexts,
+    // NTSTATUS and Information.
+    push(0u); push(0u); push(0x001F0003u); push(completionHandleVa); call(14u); save(60u);
+    push(0u); push(0u); push(0u); push(0xFFFFFFFFu);
+    push(duplicateHandleVa); guest.PushMemory(completionHandleVa);
+    push(0xFFFFFFFFu); call(18u); save(64u);
+    guest.PushMemory(completionHandleVa); call(19u); save(68u);
+    push(0x1234u); push(0xC0000001u); push(0x33334444u); push(0x11112222u);
+    guest.PushMemory(duplicateHandleVa); call(17u); save(72u);
+    push(completionInfoVa); guest.PushMemory(duplicateHandleVa); call(15u); save(76u);
+    push(timeoutVa); push(completionIoStatusVa); push(completionApcVa);
+    push(completionKeyVa); guest.PushMemory(duplicateHandleVa); call(16u); save(80u);
+    push(completionInfoVa); guest.PushMemory(duplicateHandleVa); call(15u); save(84u);
+    push(timeoutVa); push(completionIoStatusVa); push(completionApcVa);
+    push(completionKeyVa); guest.PushMemory(duplicateHandleVa); call(16u); save(88u);
+    guest.PushMemory(duplicateHandleVa); call(19u); save(92u);
+    push(0x1234u); push(0xC0000001u); push(0x33334444u); push(0x11112222u);
+    guest.PushMemory(duplicateHandleVa); call(17u); save(96u);
     guest.Emit8(0xC3); // ret
 
     XBE_IMAGE_INFO info{};
@@ -339,9 +380,32 @@ int main() {
         readMarker(markerOffset + 48u) != 1u ||
         readMarker(markerOffset + 52u) != 1u ||
         readMarker(markerOffset + 56u) != 0u ||
+        readMarker(markerOffset + 60u) != 0u ||
+        readMarker(markerOffset + 64u) != 0u ||
+        readMarker(markerOffset + 68u) != 0u ||
+        readMarker(markerOffset + 72u) != 0u ||
+        readMarker(markerOffset + 76u) != 0u ||
+        readMarker(markerOffset + 80u) != 0u ||
+        readMarker(markerOffset + 84u) != 0u ||
+        readMarker(markerOffset + 88u) != 0x102u ||
+        readMarker(markerOffset + 92u) != 0u ||
+        readMarker(markerOffset + 96u) != 0xC0000008u ||
         *reinterpret_cast<const std::uint32_t*>(image + threadOutOffset) != 0u)
-        return Fail("guest-call event/semaphore/mutant/timer ABI assertions failed",
+        return Fail("guest-call synchronization/I/O completion ABI assertions failed",
                     6, &backend, image, stop);
+
+    const auto* completionInfo = reinterpret_cast<const GuestIoCompletionBasicInformation32*>(image + completionInfoOffset);
+    const auto* completionIoStatus = reinterpret_cast<const GuestIoStatusBlock32*>(image + completionIoStatusOffset);
+    const std::uint32_t completionHandle = *reinterpret_cast<const std::uint32_t*>(image + completionHandleOffset);
+    const std::uint32_t duplicateHandle = *reinterpret_cast<const std::uint32_t*>(image + duplicateHandleOffset);
+    if (!completionHandle || !duplicateHandle || completionHandle == duplicateHandle ||
+        completionInfo->Depth != 0 ||
+        *reinterpret_cast<const std::uint32_t*>(image + completionKeyOffset) != 0x11112222u ||
+        *reinterpret_cast<const std::uint32_t*>(image + completionApcOffset) != 0x33334444u ||
+        completionIoStatus->Status != LONG(0xC0000001u) ||
+        completionIoStatus->Information != 0x1234u)
+        return Fail("guest I/O completion packet/depth assertions failed",
+                    8, &backend, image, stop);
 
     const auto* event = reinterpret_cast<const GuestEvent32*>(image + eventOffset);
     const auto* semaphore = reinterpret_cast<const GuestSemaphore32*>(image + semaphoreOffset);
