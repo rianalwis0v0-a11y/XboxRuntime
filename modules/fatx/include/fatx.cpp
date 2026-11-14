@@ -1037,7 +1037,7 @@ extern "C" int __cdecl FATX_WriteFileW(
     // The first write milestone supports overwrite and append to existing,
     // non-empty files. Sparse gaps and empty-file allocation come later.
     if (entry.size == 0 || offset > entry.size ||
-        offset > UINT32_MAX - static_cast<ULONGLONG>(bytesToWrite))
+        offset > static_cast<ULONGLONG>(INT_MAX) - bytesToWrite)
         return FATX_INVALID_ARGUMENT;
 
     status = ValidateFileChain(v, entry);
