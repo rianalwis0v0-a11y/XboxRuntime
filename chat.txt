@@ -1017,3 +1017,27 @@ This verifies read-only FATX mount/metadata/list/read behavior against the gener
 
 [2026-11-14 09:17 UTC] [FATX team — real-media workflow retry after CRT-link issue]
 The NXDK/XISO half of real-media run 43579299889 passed: NXDK generated the XISO and the XDVDFS reader found `default.xbe`, verified its XBEH header, and read its size. The FATX step then failed at link time because that workflow's `cl` command still omitted `/MD`; the vendored C library itself built successfully. No FATX real-media PASS was reported for that run. Fixed the real-media compiler invocation in commit `e04452aa3a7d69f6a72cdcca3cd04924b799c3eb`. Retry: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43579553453 (queued at publication). This is a test harness fix, not a FATX parser change.
+
+
+
+[2026-11-14 09:xx UTC] [Kernel team — C Coordinator takeover / real NXDK XBE fault investigation]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-execution-backend / 28841b142f864ef12e66173bd40487d197bab724; PR #15: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/15
+Summary:
+- Took over kernel execution work. Target remains a real NXDK XBE loaded by the merged x64 loader and executed inside the isolated x86 guest process.
+- Retrieved actual failing CI run 43437143349: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43437143349. NXDK fixture generation, host kernel build, x86 guest build, network/API tests, ABI v2 export audit, synthetic guest/TLS smoke, and x64 loader integration build all passed. The real on-disk XBE execution step failed.
+- Exact guest failure: STATUS_ACCESS_VIOLATION (0xC0000005), exceptionIP/faultAddress 0x10018DC0, accessType=8 (instruction fetch), fault protection PAGE_READONLY (0x4), committed memory. Guest TLS index cleanup and host image VA release passed.
+- Parsed sections: section0 flags 0x6 (preload+executable), section1 flags 0x2 (preload), section2 flags 0x3 (writable+preload), section3 flags 0x3. The fault VA is in section2. Current ProtectImage uses XBE executable bit 0x4, consistent with the NXDK/Cxbe XBE section flag definition; do NOT simply mark the entire image executable.
+- Inspected pinned NXDK revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e headers: lib/xboxkrnl/xboxkrnl.h and xboxdef.h define the Xbox KTHREAD, XBE_SECTION_HEADER, NTSTATUS, kernel API signatures and guest structure layouts. XBE_SECTION_HEADER is a packed 56-byte structure; executable flag is bit 2 (0x4). The public NXDK header does not expose a KPCR definition, so KPCR layout must be sourced separately and verified, not invented.
+- Added TLS directory/callback diagnostic output to tests/kernel_xbe_integration.cpp so the next real-XBE run prints TLS template/index/callback addresses, the owning XBE section flags, and callback bytes.
+Files changed: tests/kernel_xbe_integration.cpp
+Build and tests:
+- Previous synthetic kernel guest backend smoke: PASS (run 43437143349).
+- Previous real NXDK XBE integration: FAIL as above.
+- Diagnostic commit 28841b142f864ef12e66173bd40487d197bab724; new CI run 43579639178: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43579639178 (queued/in progress at time of report; no new PASS claimed).
+Known issues / next steps:
+1. Inspect TLS callback diagnostic output from run 43579639178; identify whether 0x10018DC0 is a callback, CRT initializer, or invalid indirect branch target.
+2. Fix the actual guest startup/control-flow or section-protection issue, then rerun the real XBE test and existing TLS/backend smoke tests.
+3. Add a compile-time ABI conformance check against the pinned NXDK xboxkrnl.h/XBE_SECTION_HEADER definitions; keep MSVC host headers isolated from NXDK's clang/GNU attributes.
+4. Continue Xbox guest thread/KPCR/TIB/FS semantics only after the real entrypoint path is understood. ABI v2 remains internal host↔guest backend transport; Xbox-native structures/calling conventions/ordinals remain guest-facing.
+No real guest-entry PASS or complete Xbox kernel compatibility claim is made.
