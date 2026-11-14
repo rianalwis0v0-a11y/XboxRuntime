@@ -150,6 +150,65 @@ int main() {
             goto stop;
         }
     }
+    {
+        BYTE forbiddenWrite[1] = {0xAA};
+        DWORD bytesWritten = 0;
+        if (FATX_WriteFileW(volume, L"TEST.BIN", 0, forbiddenWrite,
+                            sizeof(forbiddenWrite), &bytesWritten) != FATX_INVALID_ARGUMENT ||
+            bytesWritten != 0) {
+            Fail("read-only volume accepted a write");
+            goto stop;
+        }
+    }
+    FATX_CloseVolume(volume);
+    volume = nullptr;
+
+    // Write only to a regular image file, then reopen read-only and verify
+    // both an overwrite and an append that allocates a third cluster.
+    if (FATX_OpenImageReadWriteW(filePath, 0, imageSize, &volume) != FATX_OK) {
+        Fail("could not open FATX image in explicit read-write mode");
+        goto stop;
+    }
+    {
+        BYTE patch[16];
+        std::memset(patch, 0xA5, sizeof(patch));
+        DWORD bytesWritten = 0;
+        if (FATX_WriteFileW(volume, L"\\\\TEST.BIN", 1000, patch,
+                            sizeof(patch), &bytesWritten) != FATX_OK ||
+            bytesWritten != sizeof(patch)) {
+            Fail("FATX in-place overwrite failed");
+            goto stop;
+        }
+
+        BYTE appended[700];
+        std::memset(appended, 0x5A, sizeof(appended));
+        if (FATX_WriteFileW(volume, L"TEST.BIN", payloadSize, appended,
+                            sizeof(appended), &bytesWritten) != FATX_OK ||
+            bytesWritten != sizeof(appended)) {
+            Fail("FATX append with cluster allocation failed");
+            goto stop;
+        }
+    }
+    FATX_CloseVolume(volume);
+    volume = nullptr;
+
+    if (FATX_OpenVolumeW(filePath, 0, imageSize, &volume) != FATX_OK) {
+        Fail("could not reopen written FATX image read-only");
+        goto stop;
+    }
+    {
+        std::vector<BYTE> expected = payload;
+        std::fill(expected.begin() + 1000, expected.begin() + 1016, 0xA5);
+        expected.insert(expected.end(), 700, 0x5A);
+        std::vector<BYTE> actual(expected.size());
+        DWORD bytesRead = 0;
+        if (FATX_ReadFileW(volume, L"TEST.BIN", 0, actual.data(),
+                           static_cast<DWORD>(actual.size()), &bytesRead) != FATX_OK ||
+            bytesRead != expected.size() || actual != expected) {
+            Fail("written FATX data or updated file size did not persist");
+            goto stop;
+        }
+    }
     FATX_CloseVolume(volume);
     volume = nullptr;
 
