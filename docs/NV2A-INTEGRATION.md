@@ -527,3 +527,13 @@ test checks all eight stage offsets, both final-combiner words, control, and
 the special shader-token route. This validates method mapping and dispatch
 wiring; a real pixel readback through a running Xbox title is still required
 for visual conformance.
+
+
+## Circular DMA pushbuffer wrap
+
+The DMA pusher now accepts a circular-buffer state where GET is greater than
+PUT after the producer wraps. It still requires the stream to contain an
+explicit NV4 JUMP back into the DMA object; reaching the object limit without
+a valid control-flow command remains a protection fault. The regression test
+places a JUMP near the end of the DMA object, resumes at offset zero, dispatches
+a context-DMA bind, and verifies the final GET/PUT relationship and binding.
