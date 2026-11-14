@@ -29,9 +29,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Configure x86 guest runtime for import-thunk test
+        run: cmake -S guest32 -B build-io-host-guest32 -A Win32
+      - name: Build x86 guest runtime
+        run: cmake --build build-io-host-guest32 --config Release --target xbe_guest32
       - name: Configure x64 host API tests
         run: cmake -S modules/xbox_kernel -B build-io-host64 -A x64
-      - name: Build x64 host API tests
-        run: cmake --build build-io-host64 --config Release --target kernel_io_system_host_tests
-      - name: Run x64 host API tests
-        run: ctest --test-dir build-io-host64 -C Release --output-on-failure -R kernel_io_system_host_tests
+      - name: Build x64 host API and backend integration tests
+        run: cmake --build build-io-host64 --config Release --target xbox_kernel kernel_io_system_host_tests kernel_guest_backend_smoke
+      - name: Stage x86 guest runtime beside host kernel DLL
+        run: Copy-Item -Force build-io-host-guest32/out/xbe_guest32.exe build-io-host64/out/xbe_guest32.exe
+      - name: Run x64 host and real guest import-thunk tests
+        run: ctest --test-dir build-io-host64 -C Release --output-on-failure -R "kernel_io_system_host_tests|kernel_guest_backend_smoke"
