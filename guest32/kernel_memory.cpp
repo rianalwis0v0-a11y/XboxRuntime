@@ -11,7 +11,6 @@ constexpr LONG kInvalidHandle = static_cast<LONG>(0xC0000008u);
 constexpr LONG kInvalidParameter = static_cast<LONG>(0xC000000Du);
 constexpr LONG kNoMemory = static_cast<LONG>(0xC0000017u);
 constexpr LONG kAccessDenied = static_cast<LONG>(0xC0000022u);
-constexpr LONG kNotSupported = static_cast<LONG>(0xC00000BBu);
 constexpr LONG kUnsuccessful = static_cast<LONG>(0xC0000001u);
 constexpr std::uint64_t kGuestAddressLimit = 0x100000000ull;
 constexpr std::uint32_t kPageSize = 0x1000u;
@@ -160,26 +159,5 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
         return StatusFromWin32(GetLastError());
     *target = duplicate;
     return kSuccess;
-}
-
-extern "C" LONG __stdcall K_NtQueryEvent(HANDLE event, void* information) {
-    struct EventBasicInformation { ULONG eventType; LONG eventState; };
-    static_assert(sizeof(EventBasicInformation) == 8, "NXDK EVENT_BASIC_INFORMATION ABI");
-    return QueryNative(event, information, sizeof(EventBasicInformation), "NtQueryEvent");
-}
-extern "C" LONG __stdcall K_NtQueryMutant(HANDLE mutant, void* information) {
-    struct MutantBasicInformation { LONG currentCount; UCHAR ownedByCaller; UCHAR abandonedState; UCHAR padding[2]; };
-    static_assert(sizeof(MutantBasicInformation) == 8, "NXDK MUTANT_BASIC_INFORMATION ABI");
-    return QueryNative(mutant, information, sizeof(MutantBasicInformation), "NtQueryMutant");
-}
-extern "C" LONG __stdcall K_NtQuerySemaphore(HANDLE semaphore, void* information) {
-    struct SemaphoreBasicInformation { LONG currentCount; LONG maximumCount; };
-    static_assert(sizeof(SemaphoreBasicInformation) == 8, "NXDK SEMAPHORE_BASIC_INFORMATION ABI");
-    return QueryNative(semaphore, information, sizeof(SemaphoreBasicInformation), "NtQuerySemaphore");
-}
-extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, void* information) {
-    struct TimerBasicInformation { LARGE_INTEGER remainingTime; BOOLEAN timerState; UCHAR padding[7]; };
-    static_assert(sizeof(TimerBasicInformation) == 16, "NXDK TIMER_BASIC_INFORMATION ABI");
-    return QueryNative(timer, information, sizeof(TimerBasicInformation), "NtQueryTimer");
 }
 
