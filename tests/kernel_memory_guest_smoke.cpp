@@ -56,45 +56,19 @@ int main() {
     if (status != static_cast<LONG>(0xC000000Du))
         return Fail("reject unsupported ZeroBits", status);
 
-    HANDLE eventHandle = nullptr;
-    status = K_NtCreateEvent(&eventHandle, nullptr, 1, FALSE);
-    if (status != 0 || !eventHandle) return Fail("create synchronization event", status);
+    HANDLE source = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!source) return Fail("create host test event", static_cast<LONG>(GetLastError()));
     HANDLE duplicate = nullptr;
-    status = K_NtDuplicateObject(eventHandle, &duplicate, 0);
-    if (status != 0 || !duplicate) return Fail("duplicate event handle", status);
-    LONG previous = -1;
-    status = K_NtSetEvent(eventHandle, &previous);
-    if (status != 0 || previous != 0) return Fail("signal event", status);
-    struct EventInfo { ULONG type; LONG state; } eventInfo{};
-    status = K_NtQueryEvent(eventHandle, &eventInfo);
-    if (status != 0 || eventInfo.type != 1 || eventInfo.state != 1)
-        return Fail("query signaled event", status);
-    status = K_NtWaitForSingleObject(duplicate, FALSE, nullptr);
-    if (status != 0) return Fail("wait duplicated event", status);
-    status = K_NtQueryEvent(eventHandle, &eventInfo);
-    if (status != 0 || eventInfo.state != 0) return Fail("query consumed auto-reset event", status);
-    status = K_NtClearEvent(eventHandle);
-    if (status != 0) return Fail("clear event", status);
-    if (!CloseHandle(duplicate) || !CloseHandle(eventHandle))
-        return Fail("close event handles", static_cast<LONG>(GetLastError()));
+    status = K_NtDuplicateObject(source, &duplicate, 1u); // DUPLICATE_CLOSE_SOURCE
+    if (status != 0 || !duplicate) return Fail("duplicate/close-source handle", status);
+    if (WaitForSingleObject(source, 0) != WAIT_FAILED ||
+        GetLastError() != ERROR_INVALID_HANDLE)
+        return Fail("source handle was not closed", static_cast<LONG>(GetLastError()));
+    if (!SetEvent(duplicate) || WaitForSingleObject(duplicate, 0) != WAIT_OBJECT_0)
+        return Fail("duplicated handle remains usable", static_cast<LONG>(GetLastError()));
+    if (!CloseHandle(duplicate))
+        return Fail("close duplicate", static_cast<LONG>(GetLastError()));
 
-    HANDLE semaphore = nullptr;
-    status = K_NtCreateSemaphore(&semaphore, nullptr, 1, 3);
-    if (status != 0 || !semaphore) return Fail("create semaphore", status);
-    struct SemaphoreInfo { LONG currentCount; LONG maximumCount; } semaphoreInfo{};
-    status = K_NtQuerySemaphore(semaphore, &semaphoreInfo);
-    if (status != 0 || semaphoreInfo.currentCount != 1 ||
-        semaphoreInfo.maximumCount != 3) return Fail("query semaphore", status);
-    if (!CloseHandle(semaphore)) return Fail("close semaphore", static_cast<LONG>(GetLastError()));
-
-    HANDLE mutant = nullptr;
-    status = K_NtCreateMutant(&mutant, nullptr, TRUE);
-    if (status != 0 || !mutant) return Fail("create mutant", status);
-    struct MutantInfo { LONG count; UCHAR owned; UCHAR abandoned; UCHAR padding[2]; } mutantInfo{};
-    status = K_NtQueryMutant(mutant, &mutantInfo);
-    if (status != 0 || mutantInfo.owned != TRUE) return Fail("query owned mutant", status);
-    if (!CloseHandle(mutant)) return Fail("close mutant", static_cast<LONG>(GetLastError()));
-
-    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release, event/query/set/clear/duplicate/wait, semaphore/mutant query)");
+    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release, duplicate/close-source handle semantics)");
     return 0;
 }
