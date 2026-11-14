@@ -74,7 +74,7 @@ jobs:
       - name: Build and generate a FATX disk image, then verify the reader
         shell: cmd
         run: |
-          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/fatx/include tests/fatx_real_image.cpp modules/fatx/include/fatx.cpp build-libfatx/Release/libfatx_vendor.lib /Fe:fatx_real_image.exe
+          cl /nologo /MD /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/fatx/include tests/fatx_real_image.cpp modules/fatx/include/fatx.cpp build-libfatx/Release/libfatx_vendor.lib /Fe:fatx_real_image.exe
           fatx_real_image.exe media\test-fatx.img
           certutil -hashfile media\test-fatx.img SHA256
       - uses: actions/upload-artifact@v4
