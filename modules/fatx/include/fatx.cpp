@@ -4,7 +4,8 @@
 #include <winioctl.h>
 
 #include "../include/fatx.h"
-#include "../../../third_party/libfatx/fatx_internal.h"
+#include "../../../third_party/libfatx/fatx.h"
+extern "C" int fatx_flush_fat_cache(struct fatx_fs* fs);
 
 #include <new>
 #include <cwchar>
@@ -879,7 +880,6 @@ extern "C" int __cdecl FATX_ReadFileW(
     DWORD bytesToRead,
     DWORD* bytesRead)
 {
-    VolumeOperationGuard operationGuard(v);
     FatxVolume* v = static_cast<FatxVolume*>(handle);
 
     if (!g_initialized || !v || !path ||
