@@ -78,10 +78,10 @@ bool ReadObjectString(const XboxObjectString* source, std::wstring* value) {
     const int characters = MultiByteToWideChar(
         CP_ACP, 0, source->Buffer, source->Length, nullptr, 0);
     if (characters <= 0) return false;
-    std::wstring converted(static_cast<size_t>(characters), L'\\0');
+    std::wstring converted(static_cast<size_t>(characters), L'\0');
     if (MultiByteToWideChar(CP_ACP, 0, source->Buffer, source->Length,
                             converted.data(), characters) != characters) return false;
-    if (converted.find(L'\\0') != std::wstring::npos ||
+    if (converted.find(L'\0') != std::wstring::npos ||
         (converted.front() != L'\\' && converted.front() != L'/')) return false;
     *value = std::move(converted);
     return true;
