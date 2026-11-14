@@ -78,7 +78,7 @@ int main() {
 
     BYTE* root = image.data() + dataOffset;
     root[0] = 8;
-    root[1] = FATX_ATTRIBUTE_ARCHIVE;
+    root[1] = FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE;
     std::memcpy(root + 2, "TEST.BIN", 8);
     Put32(image, dataOffset + 0x2C, 2);
     Put32(image, dataOffset + 0x30, payloadSize);
@@ -129,7 +129,7 @@ int main() {
         }
         FATX_ENTRY entry{};
         if (FATX_ListDirectoryW(volume, L"\\", &entry, 1, &required) != FATX_OK ||
-            std::wcscmp(entry.name, L"TEST.BIN") != 0 || entry.size != payloadSize) {
+            std::wcscmp(entry.name, L"TEST.BIN") != 0 || entry.size != payloadSize ||\n            entry.attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE)) {
             Fail("root directory listing failed");
             goto stop;
         }
