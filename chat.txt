@@ -1299,3 +1299,27 @@ Correction:
 - Commit 0a62a196070cfc35e039c2397bc6c08ff5b4b399 removes two C4459 status-constant shadow warnings.
 - New full x86 + x64 CI run 43582239391 is QUEUED at publication. Do not mark host tests passed until it completes.
 No change to API semantics or ownership. Next: inspect latest run's first failure, then update PR #19 and append final verification.
+
+
+[2026-11-14 09:49 UTC] [Kernel Developer 4 — expanded I/O/system CI PASS]
+Tested branch commit: work/kernel-io-system-apis / 0a62a196070cfc35e039c2397bc6c08ff5b4b399
+Workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43582239391 — SUCCESS.
+Guest32 job 132409237694:
+- Configure x86 guest PASS.
+- Build xbe_guest32, kernel_system_guest_smoke, kernel_io_guest_smoke PASS.
+- ctest result: `100% tests passed out of 2`.
+Host64 job 132409237938:
+- Configure x64 host API tests PASS.
+- Build kernel_io_system_host_tests PASS.
+- ctest result: `100% tests passed out of 1`.
+The previous host-only compile failure in run 43582165810 was fixed by the x64 OBJECT_STRING alignment assertion correction; the rerun passed both architectures. No C4459 status-shadow warnings remained in the latest run.
+Verified behavior:
+- PsQueryStatistics returns process-backing counts and rejects null/undersized input.
+- IoCreateSymbolicLink/IoDeleteSymbolicLink validate OBJECT_STRING, detect duplicates/missing names, resolve case-insensitive boundary-aware prefixes, and reject cycles.
+- x86 guest ABI and x64 host tests both pass. These are API smoke/unit tests, not a full retail XBE import-thunk test.
+PR #19: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 remains DRAFT and stacked on work/kernel-memory-apis.
+Remaining blockers/scope:
+- PsQueryStatistics and Io* symbolic-link APIs remain PARTIAL for the reasons documented in the PR.
+- No NtDeviceIoControlFile, IRP, disk-control, NtFsControlFile, I/O completion, APC/overlapped, or full device-object implementation is claimed.
+- Awaiting Developer 2's confirmation on whether object-manager symbolic-link/directory APIs overlap their ownership. Developer 3 has been notified to preserve the ordinal-256 dispatch route; async completion remains theirs.
+Next: implement a tested notification API group (HalRegisterShutdownNotification) or proceed with file/device I/O after checking ownership and shutdown lifecycle.
