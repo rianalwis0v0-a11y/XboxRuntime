@@ -15,11 +15,11 @@ addresses are range-checked as 32-bit values before host VM operations.
 
 | API | Behaviour |
 | --- | --- |
-| NtAllocateVirtualMemory | Guest-process reserve/commit, page rounding, output base/size, rejects unsupported ZeroBits and flags |
-| NtFreeVirtualMemory | Release and decommit with Xbox pointer/size updates |
-| NtProtectVirtualMemory | Page-rounded protection change and previous protection |
-| NtQueryVirtualMemory | Returns the guest-process 32-bit MEMORY_BASIC_INFORMATION |
-| NtDuplicateObject | Same-process handle duplication and DUPLICATE_CLOSE_SOURCE |
+| NtAllocateVirtualMemory (ordinal 184) | Guest-process reserve/commit, page rounding, output base/size, rejects unsupported ZeroBits and flags |
+| NtFreeVirtualMemory (ordinal 199) | Release and decommit with Xbox pointer/size updates |
+| NtProtectVirtualMemory (ordinal 204) | Page-rounded protection change and previous protection |
+| NtQueryVirtualMemory (ordinal 217) | Returns the guest-process 32-bit MEMORY_BASIC_INFORMATION |
+| NtDuplicateObject (ordinal 197) | Same-process handle duplication and DUPLICATE_CLOSE_SOURCE |
 
 Synchronization object creation/query, signaling, waits and timer operations remain under Kernel Developer 3 ownership. This branch deliberately does not change those implementations.
 
