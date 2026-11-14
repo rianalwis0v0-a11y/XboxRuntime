@@ -156,7 +156,7 @@ int main() {
     std::memcpy(image + tlsDirectoryOffset, tlsDirectory, sizeof(tlsDirectory));
     const std::uint32_t templateValue = 0x11223344u;
     std::memcpy(image + tlsTemplateOffset, &templateValue, sizeof(templateValue));
-    const std::uint32_t callbackVa = guestBase + 0x2100u;
+    const std::uint32_t callbackVa = guestBase + 0x3A00u;
     std::memcpy(image + tlsCallbacksOffset, &callbackVa, sizeof(callbackVa));
 
     std::uint8_t callback[128]{};
@@ -211,7 +211,7 @@ int main() {
         !patchBranch(skipFailure, attach) ||
         !patchBranch(skipDetach, returnOffset))
         return Fail("TLS callback test stub branch overflow", 4, &backend, image, stop);
-    std::memcpy(image + 0x2100, callback, used);
+    std::memcpy(image + 0x3A00, callback, used);
 
     // Resolve real kernel ordinals to x86 guest-callable dispatch thunks, then
     // execute those thunks from the synthetic guest entrypoint. These calls
