@@ -17,18 +17,5 @@ LONG __stdcall K_NtFreeVirtualMemory(void** base, SIZE_T* regionSize,
 LONG __stdcall K_NtProtectVirtualMemory(void** base, SIZE_T* regionSize,
                                         ULONG newProtect, ULONG* oldProtect);
 LONG __stdcall K_NtQueryVirtualMemory(void* base, void* memoryInformation);
-LONG __stdcall K_NtCreateEvent(HANDLE* out, void* objectAttributes,
-                               ULONG eventType, BOOLEAN initialState);
-LONG __stdcall K_NtCreateSemaphore(HANDLE* out, void* objectAttributes,
-                                   LONG initialCount, LONG maximumCount);
-LONG __stdcall K_NtCreateMutant(HANDLE* out, void* objectAttributes,
-                                BOOLEAN initialOwner);
 LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target, ULONG options);
-LONG __stdcall K_NtQueryEvent(HANDLE event, void* information);
-LONG __stdcall K_NtQueryMutant(HANDLE mutant, void* information);
-LONG __stdcall K_NtQuerySemaphore(HANDLE semaphore, void* information);
-LONG __stdcall K_NtQueryTimer(HANDLE timer, void* information);
-LONG __stdcall K_NtSetEvent(HANDLE event, LONG* previousState);
-LONG __stdcall K_NtClearEvent(HANDLE event);
-LONG __stdcall K_NtWaitForSingleObject(HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER* timeout);
 }
