@@ -210,6 +210,8 @@ Result Parse(const std::uint8_t* file, std::size_t fileSize,
     // Do not choose an XOR key merely because its decoded address happens
     // to land inside an executable section: that can misclassify malformed
     // or deliberately ambiguous headers.
+    // Match Cxbx-Reloaded Xbe::GetXbeType(): Chihiro is selected by
+    // the XBOX_WRITE_COMBINED_BASE bit, not an exact upper-nibble match.
     parsed.chihiroImage =
         (encodedEntry & kChihiroEntryTypeMask) == kChihiroEntryTypeValue;
     parsed.debugImage = !parsed.chihiroImage &&
