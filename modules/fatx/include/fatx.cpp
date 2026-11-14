@@ -530,37 +530,6 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     v->base = partitionOffset;
     v->length = partitionLength;
 
-    // Validate the same volume with the mature XboxDev/libfatx parser.
-    // The vendored library is patched to open images read-only.
-    const int pathBytes = WideCharToMultiByte(
-        CP_ACP, 0, devicePath, -1, nullptr, 0, nullptr, nullptr
-    );
-    if (pathBytes <= 0) {
-        delete v;
-        CloseHandle(file);
-        return FATX_INVALID_ARGUMENT;
-    }
-    std::vector<char> narrowPath(static_cast<size_t>(pathBytes));
-    if (!WideCharToMultiByte(
-        CP_ACP, 0, devicePath, -1, narrowPath.data(), pathBytes, nullptr, nullptr
-    )) {
-        delete v;
-        CloseHandle(file);
-        return FATX_INVALID_ARGUMENT;
-    }
-    if (fatx_open_device(
-        &v->upstream, narrowPath.data(), partitionOffset,
-        partitionLength, 512, FATX_READ_FROM_SUPERBLOCK
-    ) != FATX_STATUS_SUCCESS) {
-        if (v->upstream.device) {
-            fclose(v->upstream.device);
-            v->upstream.device = nullptr;
-        }
-        delete v;
-        CloseHandle(file);
-        return FATX_INVALID_VOLUME;
-    }
-    v->upstreamOpen = true;
 
     BYTE header[0x1000]{};
 
@@ -627,6 +596,38 @@ extern "C" int __cdecl FATX_OpenVolumeW(
         CloseHandle(file);
         return FATX_INVALID_VOLUME;
     }
+
+    // Validate the same volume with the mature XboxDev/libfatx parser.
+    // The vendored library is patched to open images read-only.
+    const int pathBytes = WideCharToMultiByte(
+        CP_ACP, 0, devicePath, -1, nullptr, 0, nullptr, nullptr
+    );
+    if (pathBytes <= 0) {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_ARGUMENT;
+    }
+    std::vector<char> narrowPath(static_cast<size_t>(pathBytes));
+    if (!WideCharToMultiByte(
+        CP_ACP, 0, devicePath, -1, narrowPath.data(), pathBytes, nullptr, nullptr
+    )) {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_ARGUMENT;
+    }
+    if (fatx_open_device(
+        &v->upstream, narrowPath.data(), partitionOffset,
+        partitionLength, 512, FATX_READ_FROM_SUPERBLOCK
+    ) != FATX_STATUS_SUCCESS) {
+        if (v->upstream.device) {
+            fclose(v->upstream.device);
+            v->upstream.device = nullptr;
+        }
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_VOLUME;
+    }
+    v->upstreamOpen = true;
 
     *output = v;
 
