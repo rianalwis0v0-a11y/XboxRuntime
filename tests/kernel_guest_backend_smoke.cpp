@@ -321,7 +321,7 @@ int main() {
     // closed-handle behavior. The packet preserves both guest contexts,
     // NTSTATUS and Information.
     push(0u); push(0u); push(0x001F0003u); push(completionHandleVa); call(14u); save(60u);
-    push(0u); push(0u); push(0u); push(0xFFFFFFFFu);
+    push(2u); push(0u); push(0u); push(0xFFFFFFFFu); // DUPLICATE_SAME_ACCESS
     push(duplicateHandleVa); guest.PushMemory(completionHandleVa);
     push(0xFFFFFFFFu); call(18u); save(64u);
     guest.PushMemory(completionHandleVa); call(19u); save(68u);
