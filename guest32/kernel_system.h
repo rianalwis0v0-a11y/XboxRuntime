@@ -20,7 +20,7 @@ struct XboxObjectString {
     USHORT MaximumLength;
     char* Buffer;
 };
-static_assert(sizeof(XboxObjectString) == 8, "Original Xbox OBJECT_STRING must be 8 bytes");
+static_assert(sizeof(XboxObjectString) == (sizeof(void*) == 4 ? 8 : 12), "OBJECT_STRING layout must match the host pointer width (x86 guest is 8 bytes)");
 
 extern "C" LONG __stdcall K_IoCreateSymbolicLink(
     XboxObjectString* symbolicLinkName, XboxObjectString* deviceName);
