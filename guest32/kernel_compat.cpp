@@ -2734,6 +2734,11 @@ int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
         const auto* record = exception->ExceptionRecord;
         if (exception->ContextRecord) {
             const CONTEXT* cpu = exception->ContextRecord;
+            g_lastGuestFaultContext.exceptionFlags = record->ExceptionFlags;
+            g_lastGuestFaultContext.exceptionParameterCount = record->NumberParameters;
+            g_lastGuestFaultContext.exceptionParameter0 =
+                record->NumberParameters ? static_cast<std::uint32_t>(
+                    record->ExceptionInformation[0]) : 0u;
             g_lastGuestFaultContext.eax = cpu->Eax;
             g_lastGuestFaultContext.ebx = cpu->Ebx;
             g_lastGuestFaultContext.ecx = cpu->Ecx;
