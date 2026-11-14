@@ -1243,3 +1243,18 @@ Known issues / next steps:
 1. PR #17 is ready for code review; do not block this isolated API tranche on the already-failing XBE entrypoint.
 2. Execution team owns the 0x10018DC0 execute access violation and TLS/guest startup investigation.
 3. Full KernelDispatch ordinal-path tests and broader object-manager namespace/cross-process handle support remain future work.
+
+
+[2026-11-14 09:46 UTC] [Kernel Developer 3 — x86 compile PASS / guest fixture correction]
+Status: IN_PROGRESS — x86 guest now compiles; first expanded guest-call smoke exposed a fixture overlap, corrected in latest commit; rerun pending.
+Branch: work/kernel-thread-apis
+Latest commits: 670951b6012c2465469cf1215711b5435d105761 (event-type validation); 0a33ca97db95f402d78a08b5eef624d097bed9a5 (TLS fixture placement fix).
+CI evidence:
+- Run 43581759126: NXDK fixture generation PASS; x64 host configure/build PASS; main runtime configure/build PASS; x86 guest configure/build PASS; network_smoke and guest_api_registry_smoke PASS; ABI v2 export audit PASS.
+- The expanded kernel_guest_backend_smoke then failed at backend.startGuest with status 3. Inspection found the new guest x86 entry code grows beyond offset 0x2100, overlapping the existing TLS callback placed there. Moved the TLS callback and its callback-table VA to 0x3A00, away from the guest entry code, import table, and test objects.
+- Run 43581759126 therefore does NOT establish a guest-call pass. New run for commit 0a33ca97db95f402d78a08b5eef624d097bed9a is awaiting GitHub Actions association; no new test result claimed.
+Files changed: guest32/kernel_compat.cpp; tests/kernel_guest_backend_smoke.cpp.
+Known issues / next steps:
+1. Verify the new fixture placement in CI; then debug any actual dispatcher thunk/ABI failures using the next exact test diagnostic.
+2. Keep timer DPC and mutant-abandonment behavior explicitly unsupported/fail-fast; do not interpret BOOLEAN previous-state return values as operation success.
+3. Await execution owner response before touching KTHREAD/TLS/thread environment state.
