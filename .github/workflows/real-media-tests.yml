@@ -59,6 +59,8 @@ jobs:
         with:
           name: nxdk-hello-xiso
           path: media
+      - name: Initialize MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
       - name: Build and verify XDVDFS reader against NXDK XISO
         shell: cmd
         run: |
