@@ -32,3 +32,24 @@ The API is read-only. The vendored libfatx device open is patched to use `rb`; t
 ## Test coverage
 
 The Windows regression test builds synthetic FATX volumes and checks metadata, root listing, multi-cluster reads, offset reads crossing a cluster boundary, partition bounds, cyclic-chain rejection, strict end-of-chain marker handling (only `0xFFFF`/`0xFFFFFFFF`), and the 32-bit FAT geometry threshold. The module cross-checks computed cluster/FAT geometry against XboxDev/libfatx during mount. CI builds and links the vendored XboxDev/libfatx C library before running the module test. This does not yet constitute validation against a complete retail Xbox HDD image.
+
+
+## FATX write support (initial image-only milestone)
+
+The legacy `FATX_OpenVolumeW` API remains read-only. The opt-in
+`FATX_OpenImageReadWriteW` API is restricted to ordinary drive-letter image
+file paths; it rejects device-namespace paths so this initial write path cannot
+write directly to a physical Xbox HDD.
+
+`FATX_WriteFileW` currently supports overwriting bytes in an existing
+non-empty file and appending at the current EOF, including allocation of
+additional clusters. It validates the existing cluster chain for cycles,
+bounds, and invalid FAT markers before calling the vendored writer, serializes
+operations per volume, flushes FAT metadata and file data, and reports the
+number of bytes written.
+
+Not yet supported by this first write milestone: creating empty files,
+sparse writes beyond EOF, file/directory creation, delete, rename, truncate,
+format, repair, or direct physical-device writes. FATX has no journal, so a
+power loss or I/O failure during a multi-step update can still leave an image
+inconsistent. Always work on a backup copy.
