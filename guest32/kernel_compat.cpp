@@ -24,6 +24,7 @@
 #include <atomic>
 #include "kernel_compat.h"
 #include "kernel_memory.h"
+#include "kernel_system.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -1863,6 +1864,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_suspend_thread
         cmp eax, 254
         je ps_create_thread
+        cmp eax, 256
+        je ps_query_statistics
         cmp eax, 258
         je ps_terminate_thread
         cmp eax, 56
@@ -2263,6 +2266,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_set_thread_priority: jmp K_KeSetPriorityThread
     ke_suspend_thread: jmp K_KeSuspendThread
     ps_create_thread: jmp K_PsCreateSystemThread
+    ps_query_statistics: jmp K_PsQueryStatistics
     ps_terminate_thread: jmp K_PsTerminateSystemThread
     ke_query_base_priority: jmp K_KeQueryBasePriorityThread
     interlocked_flush_slist: jmp K_InterlockedFlushSList
