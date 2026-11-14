@@ -1,4 +1,3 @@
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
@@ -41,6 +40,8 @@ using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
 struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1, u2, v2, u3, v3; };
+using ExpandPrimitiveFn = int (__cdecl*)(uint32_t, const HostVertex*, uint32_t,
+    HostVertex*, uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
@@ -97,6 +98,11 @@ int main() {
     auto submit = reinterpret_cast<SubmitFn>(Need(module, "XboxNV2A_SubmitMethod"));
     auto flush = reinterpret_cast<FlushFn>(Need(module, "XboxNV2A_Flush"));
     auto getStats = reinterpret_cast<StatsFn>(Need(module, "XboxNV2A_GetStats"));
+    auto expandPrimitive = reinterpret_cast<ExpandPrimitiveFn>(
+        Need(module, "XboxNV2A_ExpandPrimitive"));
+    using MapCombinerMethodFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*);
+    auto mapCombiner = reinterpret_cast<MapCombinerMethodFn>(
+        Need(module, "XboxNV2A_MapCombinerMethod"));
 
     auto readVram = reinterpret_cast<ReadMemoryFn>(Need(module, "XboxNV2A_ReadVRAM"));
     auto writeVram = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteVRAM"));
@@ -391,10 +397,68 @@ int main() {
     }
 
     if (start() != 0) {
-        std::cerr << "FAIL: NV2A module initialization\n";
+        std::cerr << "FAIL: NV2A module initialization\\n";
         return 1;
     }
 
+    /* NV097 combiner method families map to the Xbox D3D8 combiner states. */
+    {
+        struct Case { uint32_t method, state, stage; };
+        const Case cases[] = {
+            {0x0260u, 200u, 0u}, {0x027Cu, 207u, 7u},
+            {0x0288u, 208u, 0u}, {0x028Cu, 209u, 0u},
+            {0x0A60u, 235u, 0u}, {0x0A7Cu, 242u, 7u},
+            {0x0A80u, 243u, 0u}, {0x0A9Cu, 250u, 7u},
+            {0x0AA0u, 226u, 0u}, {0x0ABCu, 233u, 7u},
+            {0x0AC0u, 210u, 0u}, {0x0ADCu, 217u, 7u},
+            {0x1E40u, 218u, 0u}, {0x1E5Cu, 225u, 7u},
+            {0x1E60u, 234u, 0u}
+        };
+        for (const auto& c : cases) {
+            uint32_t state = 0, stage = 0;
+            if (mapCombiner(c.method, &state, &stage) != 1 ||
+                state != c.state || stage != c.stage) {
+                std::cerr << "FAIL: NV097 combiner method mapping\\n";
+                stop();
+                return 1;
+            }
+        }
+        uint32_t state = 99u, stage = 99u;
+        if (mapCombiner(0x1E70u, &state, &stage) != 2 ||
+            state != 0u || stage != 0u ||
+            mapCombiner(0x1E71u, &state, &stage) != 0 ||
+            mapCombiner(0x1E80u, &state, &stage) != 0) {
+            std::cerr << "FAIL: NV097 pixel-shader token/invalid mapping\\n";
+            stop();
+            return 1;
+        }
+    }
+
+    /* The largest accepted QUAD_STRIP expands to 3,066 vertices. */
+    {
+        std::vector<HostVertex> input(1024), output(3072);
+        for (uint32_t i = 0; i < input.size(); ++i)
+            input[i].x = static_cast<float>(i);
+        uint32_t type = 0, primitives = 0, outputCount = 0;
+        if (expandPrimitive(9u, input.data(), 1024u, output.data(),
+                static_cast<uint32_t>(output.size()), &type, &primitives,
+                &outputCount) != 0 ||
+            type != 4u || primitives != 1022u || outputCount != 3066u ||
+            output[0].x != 0.0f || output[1].x != 1.0f ||
+            output[2].x != 3.0f || output[3065].x != 1022.0f) {
+            std::cerr << "FAIL: maximum QUAD_STRIP expansion\\n";
+            stop();
+            return 1;
+        }
+        type = primitives = outputCount = 99u;
+        if (expandPrimitive(9u, input.data(), 1024u, output.data(),
+                3065u, &type, &primitives, &outputCount) == 0 ||
+            type != 0u || primitives != 0u || outputCount != 0u) {
+            std::cerr << "FAIL: QUAD_STRIP output-capacity rejection\\n";
+            stop();
+            return 1;
+        }
+    }
 
     const uint32_t pattern[4] = {0x11223344u, 0x55667788u, 0xAABBCCDDu, 0x01020304u};
     uint32_t copy[4]{};
@@ -685,19 +749,101 @@ int main() {
         return 1;
     }
 
-    /* PFIFO reports the NV1A single-level CALL/RETURN faults in DMA_STATE. */
-    const uint32_t nestedCallStream[] = {
-        0x00000012u, 0u, 0u, 0u, 0x0000001Eu
+    /* Nested CALL/RETURN must unwind correctly through three PGRAPH DMA binds. */
+    const uint32_t nestedDmaCallStream[] = {
+        0x0000001Au,                         /* Main CALL -> outer routine at +24 */
+        (1u << 18) | 0x0180u, dmaHandle,    /* Main continuation: bind DMA_A */
+        0u, 0u, 0u,                          /* Padding before outer routine */
+        0x0000002Au,                         /* Outer CALL -> inner routine at +40 */
+        (1u << 18) | 0x0184u, dmaHandle,    /* Outer continuation: bind DMA_B */
+        0x00020000u,                         /* Return from outer routine */
+        (1u << 18) | 0x0188u, dmaHandle,    /* Inner routine: bind DMA_C */
+        0x00020000u                          /* Return from inner routine */
     };
-    const uint32_t invalidCallTargetStream[] = { 0xFFFFFFFEu };
-    const uint32_t inactiveReturnStream[] = { 0x00020000u };
-    if (writeVram(0x1000u, nestedCallStream, sizeof(nestedCallStream)) != 0 ||
-        submitDmaPush(channel, dmaHandle, 0u, sizeof(nestedCallStream),
-                      &dmaGet, &dmaMethods) == 0 ||
+    DmaInfo nestedA{}, nestedB{}, nestedC{};
+    if (writeVram(0x1000u, nestedDmaCallStream, sizeof(nestedDmaCallStream)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 12u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 12u || dmaMethods != 3u ||
+        getDmaContext(channel, 0u, 0x0180u, &nestedA) != 0 ||
+        getDmaContext(channel, 0u, 0x0184u, &nestedB) != 0 ||
+        getDmaContext(channel, 0u, 0x0188u, &nestedC) != 0 ||
+        nestedA.handle != dmaHandle || nestedB.handle != dmaHandle ||
+        nestedC.handle != dmaHandle) {
+        std::cerr << "FAIL: nested NV2A DMA CALL/RETURN execution\\n";
+        stop();
+        return 1;
+    }
+
+    /* Circular PFIFO queues may have GET > PUT after PUT wraps.
+     * The command stream must explicitly JUMP back to offset zero. */
+    {
+        const uint32_t jumpToZero = 0x20000000u;
+        const uint32_t wrappedCommands[] = {
+            (1u << 18) | 0x018Cu, dmaHandle
+        };
+        DmaInfo wrappedContext{};
+        if (writeVram(0x1000u + 0xFF4u, &jumpToZero, sizeof(jumpToZero)) != 0 ||
+            writeVram(0x1000u, wrappedCommands, sizeof(wrappedCommands)) != 0 ||
+            submitDmaPush(channel, dmaHandle, 0xFF4u, 8u,
+                &dmaGet, &dmaMethods) != 0 ||
+            dmaGet != 8u || dmaMethods != 1u ||
+            getDmaContext(channel, 0u, 0x018Cu, &wrappedContext) != 0 ||
+            wrappedContext.handle != dmaHandle) {
+            std::cerr << "FAIL: NV2A DMA ring wrap with JUMP and GET > PUT\\n";
+            stop();
+            return 1;
+        }
+    }
+
+    /* Exactly 16 nested calls are accepted; a 17th level reports CALL_ACTIVE. */
+    std::vector<uint32_t> maxCallDepthStream(33u, 0u);
+    maxCallDepthStream[0] = 0x0000000Au; /* CALL +8 -> first subroutine */
+    maxCallDepthStream[1] = 0x00000009u; /* After unwind, jump to PUT (+8) */
+    for (uint32_t depth = 1u; depth < 16u; ++depth) {
+        const uint32_t callIndex = depth * 2u;
+        maxCallDepthStream[callIndex] = ((callIndex + 2u) * 4u) | 2u;
+        maxCallDepthStream[callIndex + 1u] = 0x00020000u;
+    }
+    maxCallDepthStream[32] = 0x00020000u;
+    if (writeVram(0x1000u, maxCallDepthStream.data(),
+                  (uint32_t)(maxCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 4u, &dmaGet, &dmaMethods) != 0 ||
+        dmaGet != 4u || dmaMethods != 0u) {
+        std::cerr << "FAIL: NV2A DMA CALL stack rejected the supported 16-level depth\\n";
+        stop();
+        return 1;
+    }
+
+    std::vector<uint32_t> overflowCallDepthStream(37u, 0u);
+    overflowCallDepthStream[0] = 0x0000000Au;
+    overflowCallDepthStream[1] = 0x00000009u;
+    overflowCallDepthStream[2] = (1u << 18) | 0x1D90u; /* Must not dispatch before overflow is found. */
+    overflowCallDepthStream[3] = 0xFFAA55CCu;
+    for (uint32_t depth = 1u; depth < 17u; ++depth) {
+        const uint32_t callIndex = 2u + depth * 2u;
+        overflowCallDepthStream[callIndex] = ((callIndex + 2u) * 4u) | 2u;
+        overflowCallDepthStream[callIndex + 1u] = 0x00020000u;
+    }
+    overflowCallDepthStream[36] = 0x00020000u;
+    Stats beforeDepthOverflow{}, afterDepthOverflow{};
+    if (getStats(&beforeDepthOverflow) != 0 ||
+        writeVram(0x1000u, overflowCallDepthStream.data(),
+                  (uint32_t)(overflowCallDepthStream.size() * sizeof(uint32_t))) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0u, 4u, &dmaGet, &dmaMethods) == 0 ||
+        getStats(&afterDepthOverflow) != 0 || dmaMethods != 0u ||
+        beforeDepthOverflow.methods_handled != afterDepthOverflow.methods_handled ||
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
         (read(0x3228u, 4u) >> 29) != 1u ||
-        write(0x2100u, 0x1000u, 4u) != 0 ||
-        writeVram(0x1000u, invalidCallTargetStream, sizeof(invalidCallTargetStream)) != 0 ||
+        write(0x2100u, 0x1000u, 4u) != 0) {
+        std::cerr << "FAIL: NV2A DMA CALL stack overflow was not rejected before dispatch\\n";
+        stop();
+        return 1;
+    }
+
+    /* Invalid CALL targets and RETURN without an active call remain faults. */
+    const uint32_t invalidCallTargetStream[] = { 0xFFFFFFFEu };
+    const uint32_t inactiveReturnStream[] = { 0x00020000u };
+    if (writeVram(0x1000u, invalidCallTargetStream, sizeof(invalidCallTargetStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, sizeof(invalidCallTargetStream),
                       &dmaGet, &dmaMethods) == 0 ||
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
@@ -709,7 +855,7 @@ int main() {
         (read(0x2100u, 4u) & 0x1000u) == 0u ||
         (read(0x3228u, 4u) >> 29) != 3u ||
         write(0x2100u, 0x1000u, 4u) != 0) {
-        std::cerr << "FAIL: PFIFO CALL/RETURN error state and interrupt reporting\\n";
+        std::cerr << "FAIL: PFIFO invalid CALL target / inactive RETURN error reporting\\n";
         stop();
         return 1;
     }
@@ -833,6 +979,27 @@ int main() {
         stageOffsets[1] != 16u || stageSizes[1] != 4u ||
         stagePixels[0] != 1u || stagePixels[16] != 13u) {
         std::cerr << "FAIL: live NV097 texture stage decode\\n";
+        stop();
+        return 1;
+    }
+
+    /* The two-bit live texture selector must reach DMA_C and DMA_D too. */
+    for (uint32_t slot = 2u; slot < 4u; ++slot) {
+        const uint32_t selectedFormat = (textureFormat & ~3u) | slot;
+        if (submit(0u, 0x1B04u, selectedFormat) != 0 ||
+            getTextureInfo(channel, 0u, 0u, &textureInfo) != 0 ||
+            textureInfo.context_method != 0x0180u + slot * 4u ||
+            decodeTextureStage(channel, 0u, 0u, stagePixels,
+                sizeof(stagePixels), stageOffsets, stageSizes) != 0 ||
+            stageOffsets[1] != 16u || stageSizes[1] != 4u ||
+            stagePixels[0] != 1u || stagePixels[16] != 13u) {
+            std::cerr << "FAIL: live NV097 texture DMA_C/D context selection\\n";
+            stop();
+            return 1;
+        }
+    }
+    if (submit(0u, 0x1B04u, textureFormat) != 0) {
+        std::cerr << "FAIL: restore NV097 texture DMA_B context\\n";
         stop();
         return 1;
     }

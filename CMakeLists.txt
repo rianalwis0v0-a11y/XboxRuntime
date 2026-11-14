@@ -11,6 +11,10 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp/CMakeLists.txt
         "xboxrecomp submodule is missing. Clone with: git clone --recurse-submodules <repo-url>")
 endif()
 
+if(WIN32)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyXboxRecompNv2aVshPatch.cmake")
+endif()
+
 add_subdirectory(third_party/xboxrecomp)
 add_subdirectory(modules/nv2a)
 add_subdirectory(modules/insignia_dns)

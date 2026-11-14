@@ -4,8 +4,8 @@
 #include <d3dcompiler.h>
 #include "d3d8_vsh.h"
 
-static int compile_program(const DWORD* instructions, unsigned count,
-                           const char* label)
+static int compile_program(const char* name, const DWORD* words, int instruction_count,
+                           const char* required_source, uint16_t expected_inputs)
 {
     NV2AVshProgram program;
     char hlsl[16384];
@@ -13,79 +13,183 @@ static int compile_program(const DWORD* instructions, unsigned count,
     ID3DBlob* errors = NULL;
 
     memset(&program, 0, sizeof(program));
-    d3d8_vsh_parse(instructions, count, &program);
+    d3d8_vsh_parse(words, instruction_count, &program);
 
-    const int length = d3d8_vsh_generate_hlsl(
-        &program, hlsl, (int)sizeof(hlsl));
-    if (length <= 0 || length >= (int)sizeof(hlsl)) {
-        fprintf(stderr, "FAIL: %s HLSL generation failed\\n", label);
+    if (program.inputs_read != expected_inputs) {
+        fprintf(stderr, "FAIL: %s input-register metadata mismatch (got 0x%04X, expected mask 0x%04X)\n",
+                name, program.inputs_read, expected_inputs);
         return 1;
     }
-    if (!strstr(hlsl, "SV_POSITION")) {
-        fprintf(stderr, "FAIL: %s generated HLSL has no position output\\n",
-                label);
+
+    const int length = d3d8_vsh_generate_hlsl(&program, hlsl, (int)sizeof(hlsl));
+    if (length <= 0 || length >= (int)sizeof(hlsl)) {
+        fprintf(stderr, "FAIL: %s HLSL generation failed\n", name);
         return 2;
     }
+    if (!strstr(hlsl, "SV_POSITION") || !strstr(hlsl, required_source)) {
+        fprintf(stderr, "FAIL: %s generated HLSL is missing expected shader code: %s\n",
+                name, required_source);
+        fputs("--- generated HLSL ---\n", stderr);
+        fputs(hlsl, stderr);
+        fputs("\n", stderr);
+        return 3;
+    }
 
-    const HRESULT hr = D3DCompile(
-        hlsl, (SIZE_T)length, label, NULL, NULL, "main", "vs_5_0",
-        D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &bytecode, &errors);
+    const HRESULT hr = D3DCompile(hlsl, (SIZE_T)length, name,
+        NULL, NULL, "main", "vs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0,
+        &bytecode, &errors);
     if (FAILED(hr)) {
         if (errors && ID3D10Blob_GetBufferPointer(errors))
             fputs((const char*)ID3D10Blob_GetBufferPointer(errors), stderr);
-        fputs("\\n--- generated HLSL ---\\n", stderr);
+        fprintf(stderr, "\nFAIL: %s HLSL did not compile\n", name);
+        fputs("--- generated HLSL ---\n", stderr);
         fputs(hlsl, stderr);
-        fputs("\\n", stderr);
+        fputs("\n", stderr);
         if (errors) ID3D10Blob_Release(errors);
         if (bytecode) ID3D10Blob_Release(bytecode);
-        fprintf(stderr, "FAIL: %s did not compile as VS 5.0\\n", label);
-        return 3;
+        return 4;
     }
 
     if (errors) ID3D10Blob_Release(errors);
     if (!bytecode || ID3D10Blob_GetBufferSize(bytecode) == 0) {
-        fprintf(stderr, "FAIL: %s compiler returned empty bytecode\\n", label);
+        fprintf(stderr, "FAIL: %s compiler returned empty shader bytecode\n", name);
         if (bytecode) ID3D10Blob_Release(bytecode);
-        return 4;
+        return 5;
     }
+
     ID3D10Blob_Release(bytecode);
-    printf("PASS: %s HLSL generation and VS 5.0 compilation\\n", label);
+    printf("PASS: %s NV2A microcode -> HLSL -> VS 5.0 bytecode\n", name);
     return 0;
+}
+
+
+static void make_input_shader(DWORD instruction[4], NV2AVshMacOp mac,
+                              NV2AVshIluOp ilu, int output_from_ilu)
+{
+    instruction[0] = 0u;
+    instruction[1] = ((DWORD)mac << 21) | ((DWORD)ilu << 25) | 0x1Bu;
+    instruction[2] = (2u << 26) | (0x1Bu << 17) | (2u << 11) | (0x1Bu << 2);
+    instruction[3] = (2u << 28) | (0xFu << 12) | (1u << 11) |
+                     (output_from_ilu ? (1u << 2) : 0u) | 1u;
 }
 
 int main(void)
 {
-    DWORD instruction[4] = {0, 0, 0, 0};
+    /* Real MAC MOV: v0 -> oPos, all four components, then FINAL. */
+    {
+        const DWORD instruction[4] = {
+            0u,
+            (1u << 21) | 0x1Bu,
+            (2u << 26),
+            (0xFu << 12) | (1u << 11) | 1u
+        };
+        const int result = compile_program(
+            "nv2a_vsh_input_mov", instruction, 1,
+            "oPos = (v0)", (uint16_t)(1u << 0));
+        if (result) return 10 + result;
+    }
 
-    /* Keep the one-slot NOP case as the smallest parser/compiler sanity check. */
-    instruction[3] = 1u;
-    if (compile_program(instruction, 1u, "NV2A NOP") != 0)
-        return 1;
+    /* Real MAC ADD: v5 + v5 -> oPos, exercising both source operands. */
+    {
+        const DWORD instruction[4] = {
+            0u,
+            (3u << 21) | (5u << 9) | 0x1Bu,
+            (2u << 26) | (0x1Bu << 2),
+            (2u << 28) | (0xFu << 12) | (1u << 11) | 1u
+        };
+        const int result = compile_program(
+            "nv2a_vsh_input_add", instruction, 1,
+            "oPos = ((v5 + v5))", (uint16_t)(1u << 5));
+        if (result) return 20 + result;
+    }
 
-    /* MAC MOV v0 -> oPos exercises a real input read and position write. */
-    memset(instruction, 0, sizeof(instruction));
-    instruction[1] = (1u << 21) | 0x1Bu;
-    instruction[2] = 2u << 26;
-    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
-    if (compile_program(instruction, 1u, "NV2A MOV input-to-oPos") != 0)
-        return 2;
+    /* Real MAC MOV: c[17] -> oPos, exercising constant-source lowering. */
+    {
+        const DWORD instruction[4] = {
+            0u,
+            (1u << 21) | (17u << 13) | 0x1Bu,
+            (3u << 26),
+            (0xFu << 12) | (1u << 11) | 1u
+        };
+        const int result = compile_program(
+            "nv2a_vsh_constant_mov", instruction, 1,
+            "oPos = (c[17])", 0);
+        if (result) return 30 + result;
+    }
 
-    /* MAC ADD v5 + v5 -> oPos exercises a two-source arithmetic operation. */
-    memset(instruction, 0, sizeof(instruction));
-    instruction[1] = (3u << 21) | (5u << 9);
-    instruction[2] = (2u << 26) | (2u << 11);
-    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
-    if (compile_program(instruction, 1u, "NV2A ADD input-to-oPos") != 0)
-        return 3;
 
-    /* MAC MOV c[5] -> oPos exercises constant-register source emission. */
-    memset(instruction, 0, sizeof(instruction));
-    instruction[1] = (1u << 21) | (5u << 13) | 0x1Bu;
-    instruction[2] = 3u << 26;
-    instruction[3] = (0xFu << 12) | (1u << 11) | 1u;
-    if (compile_program(instruction, 1u, "NV2A MOV constant-to-oPos") != 0)
-        return 4;
+    /* Paired MAC+ILU reads source C before either destination is written.
+     * MAC overwrites R1 while ILU RCP reads old R1.x; HLSL must snapshot it. */
+    {
+        const DWORD instruction[4] = {
+            0u,
+            (1u << 21) | (2u << 25) | (17u << 13) | 0x1Bu,
+            (3u << 26) | (0x1Bu << 2),
+            (1u << 30) | (1u << 28) | (0xFu << 24) | (1u << 20) |
+                (0x8u << 16) | (0xFu << 12) | (1u << 11) | 1u
+        };
+        const int result = compile_program(
+            "nv2a_vsh_paired_mac_ilu", instruction, 1,
+            "_vsh_src2 = R1", 0);
+        if (result) return 40 + result;
 
-    puts("PASS: NV2A NOP, input MOV, input ADD, and constant MOV shader translation");
+        NV2AVshProgram program;
+        char hlsl[16384];
+        memset(&program, 0, sizeof(program));
+        d3d8_vsh_parse(instruction, 1, &program);
+        const int length = d3d8_vsh_generate_hlsl(&program, hlsl, (int)sizeof(hlsl));
+        if (length <= 0 || length >= (int)sizeof(hlsl)) return 50;
+        const char* snapshot = strstr(hlsl, "float4 _vsh_src2 = R1;");
+        const char* mac_write = strstr(hlsl, "R1 = (_vsh_src0)");
+        const char* ilu_read = strstr(hlsl, "1.0 / _vsh_src2.x");
+        if (!snapshot || !mac_write || !ilu_read ||
+            !(snapshot < mac_write && mac_write < ilu_read)) {
+            fputs("FAIL: paired MAC/ILU source C was not snapshotted before destination writes\\n", stderr);
+            fputs(hlsl, stderr);
+            return 51;
+        }
+    }
+
+
+    /* Exercise additional MAC and ILU opcodes through the same real parser. */
+    {
+        struct OpcodeCase {
+            const char* name;
+            NV2AVshMacOp mac;
+            NV2AVshIluOp ilu;
+            int output_from_ilu;
+            const char* expected;
+        };
+        static const struct OpcodeCase cases[] = {
+            { "nv2a_mac_mul", NV2A_VSH_MAC_MUL, NV2A_VSH_ILU_NOP, 0, "v0 * v0" },
+            { "nv2a_mac_mad", NV2A_VSH_MAC_MAD, NV2A_VSH_ILU_NOP, 0, "v0 * v0 + v0" },
+            { "nv2a_mac_dp3", NV2A_VSH_MAC_DP3, NV2A_VSH_ILU_NOP, 0, "dot(v0.xyz, v0.xyz)" },
+            { "nv2a_mac_dph", NV2A_VSH_MAC_DPH, NV2A_VSH_ILU_NOP, 0, "dot(float4(v0.xyz, 1.0), v0)" },
+            { "nv2a_mac_dp4", NV2A_VSH_MAC_DP4, NV2A_VSH_ILU_NOP, 0, "dot(v0, v0)" },
+            { "nv2a_mac_dst", NV2A_VSH_MAC_DST, NV2A_VSH_ILU_NOP, 0, "v0.y * v0.y" },
+            { "nv2a_mac_min", NV2A_VSH_MAC_MIN, NV2A_VSH_ILU_NOP, 0, "min(v0, v0)" },
+            { "nv2a_mac_max", NV2A_VSH_MAC_MAX, NV2A_VSH_ILU_NOP, 0, "max(v0, v0)" },
+            { "nv2a_mac_slt", NV2A_VSH_MAC_SLT, NV2A_VSH_ILU_NOP, 0, "step(v0, v0)" },
+            { "nv2a_mac_sge", NV2A_VSH_MAC_SGE, NV2A_VSH_ILU_NOP, 0, "step(v0, v0)" },
+            { "nv2a_ilu_mov", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_MOV, 1, "oPos = (v0)" },
+            { "nv2a_ilu_rcp", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_RCP, 1, "1.0 / v0.x" },
+            { "nv2a_ilu_rcc", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_RCC, 1, "clamp(1.0 / v0.x" },
+            { "nv2a_ilu_rsq", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_RSQ, 1, "rsqrt(abs(v0.x))" },
+            { "nv2a_ilu_exp", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_EXP, 1, "exp2(v0.x)" },
+            { "nv2a_ilu_log", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_LOG, 1, "log2(max(abs(v0.x)" },
+            { "nv2a_ilu_lit", NV2A_VSH_MAC_NOP, NV2A_VSH_ILU_LIT, 1, "float4(1.0, max(v0.x, 0.0)" }
+        };
+        unsigned i;
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+            DWORD instruction[4];
+            make_input_shader(instruction, cases[i].mac, cases[i].ilu,
+                              cases[i].output_from_ilu);
+            const int result = compile_program(cases[i].name, instruction, 1,
+                                               cases[i].expected, 1u);
+            if (result) return 60 + (int)i * 10 + result;
+        }
+    }
+
+    puts("PASS: NV2A vertex shader parser and MAC/ILU opcode compilation matrix");
     return 0;
 }

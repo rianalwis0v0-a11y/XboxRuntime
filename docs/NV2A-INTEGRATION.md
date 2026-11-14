@@ -123,14 +123,14 @@ channel switching and puller scheduling.
 resolves a readable DMA object through RAMHT and processes its NV4-style command
 stream. GET/PUT are byte offsets within that object. The implementation handles
 incrementing and non-incrementing method packets, legacy and NV1A jump commands,
-single-level CALL/RETURN, and the reference-counter method. It validates
+nested CALL/RETURN (up to 16 stack levels), and the reference-counter method. It validates
 all reads and control-flow targets against the mapped DMA span, bounds execution
 to one million command/data words, and performs a validation pass before GPU
 dispatch so malformed streams do not partially execute.
 
 The puller currently binds only the graphics engine. It does not enable the later-generation NOP method on NV2A. Object-bind method 0 and
 the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
-unimplemented puller special methods, nested calls, PCI/AGP DMA, DMA page
+unimplemented puller special methods, calls deeper than 16 levels, PCI/AGP DMA, DMA page
 translation, interrupts, scheduling/channel switching, and IB mode remain
 unsupported. This is a functional NV4-style software pusher path, not a full
 hardware PFIFO implementation.
@@ -477,3 +477,63 @@ CMP fetches use a four-byte packed record per vertex even though the NV097
 format's component field describes the three expanded output components. The
 DMA reader therefore treats CMP as a 4-byte element (and rejects it for
 non-normal arrays) before the normal unpacker expands it to three floats.
+
+
+## GPU vertex-shader translation smoke coverage
+
+The NV2A HLSL smoke test exercises real microcode rather than only a terminated empty/NOP slot. It verifies an input-register MOV (v0 to oPos), a two-source input ADD (v5 + v5 to oPos), and a constant-register MOV (c[17] to oPos). It checks parsed input-register metadata and the expected emitted HLSL, then compiles each generated shader with the Direct3D HLSL compiler targeting shader model 5.0. This proves those three translation cases produce valid GPU shader bytecode; it does not claim complete instruction-set coverage or a physical-GPU draw test. Runtime vertex instructions remain translated to D3D11 HLSL and execute in the D3D11 shader pipeline; CPU-side work in the NV2A bridge is register/constant and vertex-attribute staging, not a CPU vertex-shader interpreter.
+
+
+## Bounded nested DMA CALL/RETURN
+
+The NV4-style DMA pusher now maintains a 16-entry return-address stack instead of a single saved return address. Nested helper routines unwind in LIFO order. The validation pass and dispatch pass use the same bounded stack logic, so excessive nesting is rejected before any PGRAPH methods are dispatched. The smoke test covers a two-level nested routine that binds three DMA contexts, the maximum supported depth of 16, rejection of depth 17 with the PFIFO CALL_ACTIVE error, invalid call targets, and RETURN without an active call. This remains a bounded software pusher; it does not add DMA ring wraparound, nested-depth beyond 16, PCI/AGP DMA or full PFIFO scheduling.
+
+
+## Correct NV2A vertex microcode decoding
+
+The pinned xboxrecomp D3D8 HLSL translator previously read opcode/source/destination fields from the wrong DWORD positions, so real NV2A instructions could be parsed as NOPs. On Windows, CMake now applies a small idempotent patch to the pinned submodule source before building: opcodes and shared indices are decoded from DWORD1; source muxes/swizzles/registers from DWORD2/3; and the independent MAC-temp, ILU-temp and output masks plus output routing from DWORD3. The destination structure now retains separate temp and output write masks. The HLSL smoke test uses the actual NV2A DWORD layout and checks exact input masks for MOV v0, ADD v5+v5 and MOV c[17] before compiling the generated VS 5.0 bytecode. The patch is local to the checked-out submodule worktree and does not alter the pinned submodule commit.
+
+
+## Parallel MAC/ILU source semantics
+
+When both execution units are active in one NV2A instruction slot, the hardware reads A, B and C before either unit commits a destination. The HLSL lowering now snapshots all three source vectors into unique per-instruction temporaries before emitting MAC and ILU writes. The regression test pairs a MAC MOV that overwrites R1 with an ILU RCP that reads the old R1.x, and asserts the generated HLSL snapshots R1 before the MAC write and uses the snapshot for the ILU operation.
+
+
+## Vertex opcode compilation matrix
+
+The Windows HLSL smoke suite now compiles representative MAC operations (MOV, MUL, ADD, MAD, DP3, DPH, DP4, DST, MIN, MAX, SLT and SGE) and ILU operations (MOV, RCP, RCC, RSQ, EXP, LOG and LIT) from actual four-DWORD NV2A instruction words. These are targeted translation/bytecode checks, not exhaustive numerical conformance tests against physical NV2A hardware.
+
+
+## Primitive expansion bounds
+
+Primitive topology conversion is now isolated in the exported, deterministic
+`XboxNV2A_ExpandPrimitive` helper and covered independently of a live D3D
+device. A maximum 1,024-vertex QUAD_STRIP expands to 3,066 triangle-list
+vertices. The draw staging buffer is sized for that worst case (3,072 slots),
+and the smoke test checks the final expanded vertex plus rejection when the
+caller supplies only 3,065 slots. This fixes an out-of-bounds write in the
+previous 2,048-vertex staging buffer.
+
+
+## NV097 register-combiner routing
+
+The NV097 general-combiner input/output words, per-stage C0/C1 factors,
+combiner control, and final-combiner input words are now routed into the
+matching Xbox D3D8 pixel-combiner render states. The shader-stage-program
+method is forwarded as the D3D8 pixel-shader token. This lets the pinned
+D3D8/D3D11 combiner translator build and cache the corresponding pixel shader
+instead of leaving these NV097 methods as inert register writes. A host smoke
+test checks all eight stage offsets, both final-combiner words, control, and
+the special shader-token route. This validates method mapping and dispatch
+wiring; a real pixel readback through a running Xbox title is still required
+for visual conformance.
+
+
+## Circular DMA pushbuffer wrap
+
+The DMA pusher now accepts a circular-buffer state where GET is greater than
+PUT after the producer wraps. It still requires the stream to contain an
+explicit NV4 JUMP back into the DMA object; reaching the object limit without
+a valid control-flow command remains a protection fault. The regression test
+places a JUMP near the end of the DMA object, resumes at offset zero, dispatches
+a context-DMA bind, and verifies the final GET/PUT relationship and binding.
