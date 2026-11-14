@@ -2,7 +2,7 @@
 #include <cstdint>
 
 constexpr std::uint32_t XBOX_GUEST_PROTOCOL_MAGIC = 0x47584258u;
-constexpr std::uint32_t XBOX_GUEST_PROTOCOL_VERSION = 2u;
+constexpr std::uint32_t XBOX_GUEST_PROTOCOL_VERSION = 3u;
 
 enum XboxGuestCommand : std::uint32_t {
     XboxGuestResolveImports = 1u,
@@ -41,6 +41,9 @@ struct XboxGuestCommandReply {
 struct XboxGuestFaultContext {
     std::uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp;
     std::uint32_t stack[8];
+    std::uint32_t exceptionFlags;
+    std::uint32_t exceptionParameterCount;
+    std::uint32_t exceptionParameter0;
 };
 
 struct XboxGuestExitReply {
@@ -60,5 +63,5 @@ struct XboxGuestExitReply {
 static_assert(sizeof(XboxGuestHello) == 20, "guest hello wire size");
 static_assert(sizeof(XboxGuestCommandMessage) == 40, "guest command wire size");
 static_assert(sizeof(XboxGuestCommandReply) == 12, "guest reply wire size");
-static_assert(sizeof(XboxGuestFaultContext) == 64, "guest fault context wire size");
-static_assert(sizeof(XboxGuestExitReply) == 104, "guest exit reply wire size");
+static_assert(sizeof(XboxGuestFaultContext) == 76, "guest fault context wire size");
+static_assert(sizeof(XboxGuestExitReply) == 116, "guest exit reply wire size");
