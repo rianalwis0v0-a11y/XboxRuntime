@@ -397,6 +397,71 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
     return 0;
 }
 
+int __cdecl XboxNV2A_MapCombinerMethod(uint32_t method,
+    uint32_t* render_state_out, uint32_t* stage_out)
+{
+    if (render_state_out) *render_state_out = 0;
+    if (stage_out) *stage_out = 0;
+    if (!render_state_out || !stage_out || (method & 3u))
+        return 0;
+
+    uint32_t state = 0, stage = 0;
+    if (method >= 0x0260u && method <= 0x027Cu) {
+        stage = (method - 0x0260u) / 4u;
+        state = D3DRS_PSALPHAINPUTS0 + stage;
+    } else if (method == 0x0288u) {
+        state = D3DRS_PSFINALCOMBINERINPUTSABCD;
+    } else if (method == 0x028Cu) {
+        state = D3DRS_PSFINALCOMBINERINPUTSEFG;
+    } else if (method >= 0x0A60u && method <= 0x0A7Cu) {
+        stage = (method - 0x0A60u) / 4u;
+        state = D3DRS_PSCONSTANT0_0 + stage;
+    } else if (method >= 0x0A80u && method <= 0x0A9Cu) {
+        stage = (method - 0x0A80u) / 4u;
+        state = D3DRS_PSCONSTANT1_0 + stage;
+    } else if (method >= 0x0AA0u && method <= 0x0ABCu) {
+        stage = (method - 0x0AA0u) / 4u;
+        state = D3DRS_PSALPHAOUTPUTS0 + stage;
+    } else if (method >= 0x0AC0u && method <= 0x0ADCu) {
+        stage = (method - 0x0AC0u) / 4u;
+        state = D3DRS_PSRGBINPUTS0 + stage;
+    } else if (method >= 0x1E40u && method <= 0x1E5Cu) {
+        stage = (method - 0x1E40u) / 4u;
+        state = D3DRS_PSRGBOUTPUTS0 + stage;
+    } else if (method == 0x1E60u) {
+        state = D3DRS_PSCOMBINERCOUNT;
+    } else if (method == 0x1E70u) {
+        /* This method carries the Xbox pixel-shader token, not a render state. */
+        return 2;
+    } else {
+        return 0;
+    }
+
+    *render_state_out = state;
+    *stage_out = stage;
+    return 1;
+}
+
+static int apply_nv2a_combiner_method(uint32_t method, uint32_t parameter)
+{
+    uint32_t render_state = 0, stage = 0;
+    const int mapping = XboxNV2A_MapCombinerMethod(
+        method, &render_state, &stage);
+    (void)stage;
+    IDirect3DDevice8* device = xbox_GetD3DDevice();
+    if (!device || !device->lpVtbl)
+        return 0;
+
+    if (mapping == 1 && device->lpVtbl->SetRenderState) {
+        return SUCCEEDED(device->lpVtbl->SetRenderState(
+            device, (D3DRENDERSTATETYPE)render_state, parameter)) ? 1 : 0;
+    }
+    if (mapping == 2 && device->lpVtbl->SetPixelShader) {
+        return SUCCEEDED(device->lpVtbl->SetPixelShader(device, parameter)) ? 1 : 0;
+    }
+    return 0;
+}
+
 static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t method,
                                  uint32_t parameter)
 {
@@ -456,6 +521,20 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         g_gpu->pgraph.regs[method / 4u] = parameter;
         return;
     }
+    /* Route NV097 register-combiner state into the Xbox D3D8 layer.
+     * Its D3D11 backend compiles/caches the corresponding pixel shader. */
+    {
+        uint32_t combiner_state = 0, combiner_stage = 0;
+        const int combiner_kind = XboxNV2A_MapCombinerMethod(
+            method, &combiner_state, &combiner_stage);
+        if (combiner_kind != 0) {
+            if (apply_nv2a_combiner_method(method, parameter))
+                ++g_pgraph_custom_methods;
+            g_gpu->pgraph.regs[method / 4u] = parameter;
+            return;
+        }
+    }
+
     if (method >= 0x1B00u && method <= 0x1BDCu) {
         const uint32_t stage = (method - 0x1B00u) / 0x40u;
         const uint32_t reg = (method - 0x1B00u) % 0x40u;
