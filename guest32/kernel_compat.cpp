@@ -24,6 +24,7 @@
 #include <atomic>
 #include "kernel_compat.h"
 #include "kernel_memory.h"
+#include "kernel_system.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -571,11 +572,20 @@ extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
-struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+static_assert(sizeof(GuestAnsiString) == 8, "NXDK ANSI_STRING must be 8 bytes on x86");
+struct GuestObjectAttributes { HANDLE RootDirectory; GuestAnsiString* ObjectName; ULONG Attributes; };
+static_assert(sizeof(GuestObjectAttributes) == 12, "NXDK OBJECT_ATTRIBUTES must be 12 bytes on x86");
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
-std::wstring TranslateXboxPath(const GuestUnicodeString* name){
-    if(!name||!name->Buffer||!name->Length)return {};
-    std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
+std::wstring TranslateXboxPath(const GuestAnsiString* name){
+    if(!name||!name->Buffer||!name->Length||name->Length>name->MaximumLength)return {};
+    const int characters = MultiByteToWideChar(CP_ACP, 0, name->Buffer,
+        static_cast<int>(name->Length), nullptr, 0);
+    if (characters <= 0) return {};
+    std::wstring p(static_cast<size_t>(characters), L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, name->Buffer, static_cast<int>(name->Length),
+        p.data(), characters) != characters) return {};
+    if (!XboxKernelResolveSymbolicLinks(&p)) return {};
     const std::wstring cd=L"\\Device\\Cdrom0";
     const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
     if(p.rfind(cd,0)==0)p=g_titleDirectory+p.substr(cd.size());
@@ -590,6 +600,7 @@ DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x4
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
 LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
     if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
     std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
     DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
     if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
@@ -614,7 +625,7 @@ static LARGE_INTEGER FileTimeToLarge(const FILETIME& value) {
 }
 extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* out) {
-    if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
+    if (!oa || !oa->ObjectName || !out)
         return LONG(0xC000000Du);
     if (oa->RootDirectory) return LONG(0xC00000BBu);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
@@ -652,6 +663,7 @@ extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
 
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
@@ -901,8 +913,6 @@ extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, cons
     if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
     return LONG(0xC0000008u);
 }
-struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
-
 struct GuestFileDirectoryInformation {
     ULONG NextEntryOffset;
     ULONG FileIndex;
@@ -914,6 +924,14 @@ struct GuestFileDirectoryInformation {
 };
 static_assert(offsetof(GuestFileDirectoryInformation, FileName) == 64,
               "Xbox FILE_DIRECTORY_INFORMATION filename offset must be 0x40");
+struct GuestFileNamesInformation {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    ULONG FileNameLength;
+    CHAR FileName[1];
+};
+static_assert(offsetof(GuestFileNamesInformation, FileName) == 12,
+              "Xbox FILE_NAMES_INFORMATION filename offset must be 0x0C");
 static bool SkipDotDirectoryEntries(HANDLE search, WIN32_FIND_DATAW& data) {
     while (wcscmp(data.cFileName, L".") == 0 || wcscmp(data.cFileName, L"..") == 0) {
         if (!FindNextFileW(search, &data)) return false;
@@ -934,8 +952,14 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
     if (!file || file == INVALID_HANDLE_VALUE) return SetDirectoryIoStatus(io, statusInvalidHandle);
-    if (!information || informationClass != 1 || length < 64)
-        return SetDirectoryIoStatus(io, informationClass != 1 ? LONG(0xC0000003u) : statusInvalidParameter);
+    if (!information) return SetDirectoryIoStatus(io, statusInvalidParameter);
+    if (informationClass != 1 && informationClass != 12)
+        return SetDirectoryIoStatus(io, LONG(0xC0000003u)); // STATUS_INVALID_INFO_CLASS
+    const ULONG minimumLength = informationClass == 1
+        ? static_cast<ULONG>(offsetof(GuestFileDirectoryInformation, FileName))
+        : static_cast<ULONG>(offsetof(GuestFileNamesInformation, FileName));
+    if (length < minimumLength)
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
     if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
     if (fileMask && ((fileMask->Length && !fileMask->Buffer) ||
                      fileMask->Length > fileMask->MaximumLength))
@@ -1002,29 +1026,112 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     const size_t nameChars = wcslen(state.current.cFileName);
     const int nameBytes = nameChars ? WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
         static_cast<int>(nameChars), nullptr, 0, nullptr, nullptr) : 0;
-    if (nameBytes < 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
-    const size_t required = offsetof(GuestFileDirectoryInformation, FileName) + static_cast<size_t>(nameBytes);
+    if (nameChars && nameBytes <= 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    const size_t filenameOffset = informationClass == 1
+        ? offsetof(GuestFileDirectoryInformation, FileName)
+        : offsetof(GuestFileNamesInformation, FileName);
+    const size_t required = filenameOffset + static_cast<size_t>(nameBytes);
     if (required > length) return SetDirectoryIoStatus(io, statusBufferOverflow, static_cast<ULONG>(required));
 
-    auto* out = static_cast<GuestFileDirectoryInformation*>(information);
-    std::memset(out, 0, required);
-    out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
-    out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
-    out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
-    out->ChangeTime = out->LastWriteTime;
-    ULARGE_INTEGER size{};
-    size.HighPart = state.current.nFileSizeHigh;
-    size.LowPart = state.current.nFileSizeLow;
-    out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
-    out->AllocationSize = out->EndOfFile;
-    out->FileAttributes = state.current.dwFileAttributes;
-    out->FileNameLength = static_cast<ULONG>(nameBytes);
-    if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
-        static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
-        return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    if (informationClass == 1) {
+        auto* out = static_cast<GuestFileDirectoryInformation*>(information);
+        std::memset(out, 0, required);
+        out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
+        out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
+        out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
+        out->ChangeTime = out->LastWriteTime;
+        ULARGE_INTEGER size{};
+        size.HighPart = state.current.nFileSizeHigh;
+        size.LowPart = state.current.nFileSizeLow;
+        out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+        out->AllocationSize = out->EndOfFile;
+        out->FileAttributes = state.current.dwFileAttributes;
+        out->FileNameLength = static_cast<ULONG>(nameBytes);
+        if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+            static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    } else {
+        auto* out = static_cast<GuestFileNamesInformation*>(information);
+        std::memset(out, 0, required);
+        out->NextEntryOffset = 0;
+        out->FileIndex = 0; // The host FindFirstFile API does not expose Xbox file indices.
+        out->FileNameLength = static_cast<ULONG>(nameBytes);
+        if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+            static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    }
     state.currentValid = false;
     if (event) SetEvent(event);
     return SetDirectoryIoStatus(io, 0, static_cast<ULONG>(required));
+}
+
+
+static LONG NtControlFileImpl(HANDLE file, HANDLE event, void* apcRoutine,
+    GuestIoStatusBlock* io, ULONG controlCode, void* inputBuffer,
+    ULONG inputLength, void* outputBuffer, ULONG outputLength, bool filesystemControl) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG statusNotSupported = LONG(0xC00000BBu);
+    if (!io) return statusInvalidParameter;
+    if (!file || file == INVALID_HANDLE_VALUE)
+        return SetDirectoryIoStatus(io, statusInvalidHandle);
+    if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
+    if ((inputLength && !inputBuffer) || (outputLength && !outputBuffer))
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    if (filesystemControl) {
+        using NativeNtFsControlFile = LONG (NTAPI*)(HANDLE, HANDLE, void*, void*,
+            GuestIoStatusBlock*, ULONG, void*, ULONG, void*, ULONG);
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto native = ntdll ? reinterpret_cast<NativeNtFsControlFile>(
+            GetProcAddress(ntdll, "NtFsControlFile")) : nullptr;
+        if (!native) return SetDirectoryIoStatus(io, statusNotSupported);
+        // The guest APC routine is not a host APC thunk; asynchronous APC delivery
+        // is owned by the threading provider. Synchronous FSCTLs use the native
+        // host filesystem path and its IO_STATUS_BLOCK/event completion semantics.
+        return native(file, event, nullptr, nullptr, io, controlCode,
+            inputBuffer, inputLength, outputBuffer, outputLength);
+    }
+
+    DWORD bytesReturned = 0;
+    const BOOL succeeded = DeviceIoControl(file, controlCode, inputBuffer,
+        inputLength, outputBuffer, outputLength, &bytesReturned, nullptr);
+    const DWORD error = succeeded ? ERROR_SUCCESS : GetLastError();
+    LONG status = 0;
+    if (!succeeded) {
+        switch (error) {
+        case ERROR_INVALID_HANDLE: status = statusInvalidHandle; break;
+        case ERROR_INVALID_PARAMETER: status = statusInvalidParameter; break;
+        case ERROR_ACCESS_DENIED: status = LONG(0xC0000022u); break;
+        case ERROR_INVALID_FUNCTION: status = LONG(0xC0000010u); break; // STATUS_INVALID_DEVICE_REQUEST
+        case ERROR_NOT_SUPPORTED: status = statusNotSupported; break;
+        case ERROR_INSUFFICIENT_BUFFER: status = LONG(0xC0000023u); break; // STATUS_BUFFER_TOO_SMALL
+        case ERROR_MORE_DATA: status = LONG(0x80000005u); break; // STATUS_BUFFER_OVERFLOW
+        case ERROR_NOACCESS: status = LONG(0xC0000005u); break; // STATUS_ACCESS_VIOLATION
+        case ERROR_NOT_READY: status = LONG(0xC00000A3u); break; // STATUS_DEVICE_NOT_READY
+        case ERROR_IO_DEVICE: status = LONG(0xC0000185u); break; // STATUS_IO_DEVICE_ERROR
+        default: status = LONG(0xC0000001u); break; // STATUS_UNSUCCESSFUL
+        }
+    }
+    const LONG result = SetDirectoryIoStatus(io, status, bytesReturned);
+    if (event) SetEvent(event);
+    return result;
+}
+
+extern "C" LONG __stdcall K_NtDeviceIoControlFile(HANDLE file, HANDLE event,
+    void* apcRoutine, void* apcContext, GuestIoStatusBlock* io, ULONG controlCode,
+    void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    (void)apcContext;
+    return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
+        inputBuffer, inputLength, outputBuffer, outputLength, false);
+}
+
+extern "C" LONG __stdcall K_NtFsControlFile(HANDLE file, HANDLE event,
+    void* apcRoutine, void* apcContext, GuestIoStatusBlock* io, ULONG controlCode,
+    void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    (void)apcContext;
+    return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
+        inputBuffer, inputLength, outputBuffer, outputLength, true);
 }
 
 
@@ -1702,9 +1809,9 @@ extern "C" void __stdcall K_RtlRip(const char* message, const char* file, ULONG 
 }
 extern "C" void __stdcall K_KeBugCheck(ULONG code) { ExitProcess(code); }
 extern "C" void __stdcall K_KeBugCheckEx(ULONG code, ULONG, ULONG, ULONG, ULONG) { ExitProcess(code); }
-extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { ExitProcess(0); }
+extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
 extern "C" BOOL __stdcall K_HalIsResetOrShutdownPending() { return FALSE; }
-extern "C" void __stdcall K_HalInitiateShutdown() { ExitProcess(0); }
+extern "C" void __stdcall K_HalInitiateShutdown() { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
 extern "C" ULONG __stdcall K_DbgPrompt(const char* prompt, char* response, ULONG length) {
     if (prompt) OutputDebugStringA(prompt);
     if (response && length) response[0] = 0;
@@ -1821,6 +1928,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
+        cmp eax, 47
+        je hal_register_shutdown_notification
         cmp eax, 45
         je smbus_read
         cmp eax, 50
@@ -1835,6 +1944,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
+        cmp eax, 67
+        je io_create_symbolic_link
+        cmp eax, 69
+        je io_delete_symbolic_link
         cmp eax, 74
         je io_invalid_device_request
         cmp eax, 361
@@ -1863,6 +1976,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_suspend_thread
         cmp eax, 254
         je ps_create_thread
+        cmp eax, 256
+        je ps_query_statistics
         cmp eax, 258
         je ps_terminate_thread
         cmp eax, 56
@@ -2079,6 +2194,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_set_information_file
         cmp eax, 190
         je nt_create_file
+        cmp eax, 196
+        je nt_device_io_control_file
+        cmp eax, 200
+        je nt_fs_control_file
         cmp eax, 195
         je nt_delete_file
         cmp eax, 202
@@ -2263,6 +2382,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_set_thread_priority: jmp K_KeSetPriorityThread
     ke_suspend_thread: jmp K_KeSuspendThread
     ps_create_thread: jmp K_PsCreateSystemThread
+    ps_query_statistics: jmp K_PsQueryStatistics
     ps_terminate_thread: jmp K_PsTerminateSystemThread
     ke_query_base_priority: jmp K_KeQueryBasePriorityThread
     interlocked_flush_slist: jmp K_InterlockedFlushSList
@@ -2271,6 +2391,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     exf_insert_head: jmp K_ExfInterlockedInsertHeadList
     exf_insert_tail: jmp K_ExfInterlockedInsertTailList
     exf_remove_head: jmp K_ExfInterlockedRemoveHeadList
+    hal_register_shutdown_notification: jmp K_HalRegisterShutdownNotification
     hal_return_firmware: jmp K_HalReturnToFirmware
     rtl_assert: jmp K_RtlAssert
     hal_read_tray: jmp K_HalReadSMCTrayState
@@ -2297,6 +2418,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    io_create_symbolic_link: jmp K_IoCreateSymbolicLink
+    io_delete_symbolic_link: jmp K_IoDeleteSymbolicLink
     io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
@@ -2370,6 +2493,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
+    nt_device_io_control_file: jmp K_NtDeviceIoControlFile
+    nt_fs_control_file: jmp K_NtFsControlFile
     nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
     nt_read_file: jmp K_NtReadFile
@@ -2591,10 +2716,12 @@ bool XboxKernelProtectImage() {
 }
 
 void XboxKernelSetStartupEvent(HANDLE eventHandle) {
+    if (eventHandle) XboxKernelResetShutdownNotifications();
     g_startupEvent = eventHandle;
 }
 
 void XboxKernelShutdownTitle() {
+    XboxKernelInvokeShutdownNotifications();
     g_startupEvent = nullptr;
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);

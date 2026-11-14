@@ -1,0 +1,43 @@
+name: Xbox kernel I/O and system API tests
+
+on:
+  push:
+    branches:
+      - work/kernel-io-system-apis
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-io-system-apis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guest32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x86 guest API tests
+        run: cmake -S guest32 -B build-io-guest32 -A Win32
+      - name: Build x86 guest and system/I/O API smoke tests
+        run: cmake --build build-io-guest32 --config Release --target xbe_guest32 kernel_system_guest_smoke kernel_io_guest_smoke kernel_notification_guest_smoke
+      - name: Run x86 guest ABI tests
+        run: ctest --test-dir build-io-guest32 -C Release --output-on-failure -R "kernel_(system|io|notification)_guest_smoke"
+
+  host64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x86 guest runtime for import-thunk test
+        run: cmake -S guest32 -B build-io-host-guest32 -A Win32
+      - name: Build x86 guest runtime
+        run: cmake --build build-io-host-guest32 --config Release --target xbe_guest32
+      - name: Configure x64 host API tests
+        run: cmake -S modules/xbox_kernel -B build-io-host64 -A x64
+      - name: Build x64 host API and backend integration tests
+        run: cmake --build build-io-host64 --config Release --target xbox_kernel kernel_io_system_host_tests kernel_guest_backend_smoke
+      - name: Stage x86 guest runtime beside host kernel DLL
+        run: Copy-Item -Force build-io-host-guest32/out/xbe_guest32.exe build-io-host64/out/xbe_guest32.exe
+      - name: Run x64 host and real guest import-thunk tests
+        run: ctest --test-dir build-io-host64 -C Release --output-on-failure -R "kernel_io_system_host_tests|kernel_guest_backend_smoke"
