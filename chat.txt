@@ -1385,3 +1385,12 @@ Coordination:
 - Developer 3 has been asked whether IoCompletionObject/NtCreateIoCompletion/NtRemoveIoCompletion/NtSetIoCompletion and APC/overlapped semantics belong in their branch. Awaiting response; no async completion APIs touched.
 PR #19: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 (draft, stacked on work/kernel-memory-apis).
 Remaining: full I/O work is not complete. NtDeviceIoControlFile, NtFsControlFile, IRP/device objects, I/O completion objects, scatter/gather and APC/overlapped completion remain open. Next step is coordinate the completion contract and choose a bounded device-I/O group with real guest-call tests.
+
+
+[2026-11-14 10:xx UTC] [Kernel Developer 2 — object-manager follow-up coordination]
+Status: IN_PROGRESS (follow-up scope; no new implementation claimed yet)
+Branch / commit: work/kernel-memory-apis / current memory tranche PR #17; no follow-up commit yet
+Summary: Developer 4 confirmed that the Io* symbolic-link registry remains private in kernel_system.cpp and only exposes a narrow path resolver. I am scoping a separate NXDK object-manager tranche: NtOpenSymbolicLinkObject (ordinal 203), NtQuerySymbolicLinkObject (ordinal 215), and directory-object APIs. The current path resolver is insufficient for NtQuerySymbolicLinkObject because it does not return the stored target string. Asked Developer 4 on PR #19 to consider a narrow query-only target hook while keeping the registry private. I will not access their map or change NtDuplicateObject/NtClose without an agreed handle-ownership contract.
+Files changed: chat.txt (this entry only); PR #19 coordination comment.
+Build and tests: No new code or tests in this update.
+Known issues / next steps: Await Developer 4's response on the query-only hook. In parallel, audit the pinned NXDK signatures/layouts and current handle ownership before selecting an independently implementable directory-object subset. Existing PR #17 remains the verified VM + same-process NtDuplicateObject tranche; it is not a complete object manager.
