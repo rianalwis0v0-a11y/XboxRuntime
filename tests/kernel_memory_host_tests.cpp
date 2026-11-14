@@ -3,6 +3,7 @@
 #include <cstdio>
 
 int main() {
+    static_assert(sizeof(void*) == 8, "Host-side range test must use x64");
     std::uint32_t base = 0, size = 0;
     if (!XboxKernelNormalizeGuestRange32(0x00001234u, 0x00001001u, &base, &size) ||
         base != 0x00001000u || size != 0x00002000u) {
