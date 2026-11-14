@@ -1544,3 +1544,11 @@ Windows workflow 43584107336:
 Scope limitations (not claimed complete): KeSetEventBoostPriority signals and returns no boost candidate (no selected waiter priority boost); timer DPC callbacks are fail-fast unsupported; mutant owner-thread linkage/abandonment are incomplete; named IOCP objects and cross-process IOCP duplication are unsupported. Thread APIs (KTHREAD identity, PsCreateSystemThread/Ex, suspend/resume/priority/alert/APC) and per-thread XBE TLS attach/detach are still outstanding.
 Coordination: Developer 4 was notified of IOCP ownership and overlapping guest smoke fixture changes. Developer 2 was asked to preserve IOCP duplicate/close metadata hooks in NtDuplicateObject/NtClose. Execution owner was asked three times on PR #15 for KTHREAD/native-handle and TLS attach/detach contract; no response observed yet. I have not changed execution startup TLS code without that agreement.
 Next: execution owner must confirm/hand off thread/TLS helper contract; then implement thread exports and per-thread TLS, add guest tests, and re-run CI. Keep PR #18 draft until this is complete and integration blockers are resolved.
+
+
+[2026-11-14 10:17 UTC] [Kernel Developer 3 — async I/O ownership clarified]
+Developer 4 ownership decision posted on PR #19:
+- Developer 4 owns async file/device producer behavior for NtReadFile/NtWriteFile/NtDeviceIoControlFile/NtFsControlFile, including deciding whether completed operations signal a guest event or post an IOCP packet.
+- Developer 3 owns the IO completion object/queue exports (NtCreateIoCompletion/NtSetIoCompletion/NtRemoveIoCompletion/NtQueryIoCompletion) and packet semantics; file/device paths should post through NtSetIoCompletion.
+- Developer 3 also owns kernel APC/thread primitives (KeInitializeApc, KeInsertQueueApc, NtQueueApcThread and alert/APC dispatch) once the execution owner supplies/approves the KTHREAD + per-thread TLS lifecycle interface. Until then, non-null guest APC routines must remain explicit STATUS_NOT_SUPPORTED.
+- No duplicate file I/O or IOCP implementation is planned. PR #19 has been told to preserve the same guest smoke fixture additions and merge/rebase in coordination with PR #18.
