@@ -143,7 +143,32 @@ int main() {
             goto stop;
         }
     }
-    std::puts("PASS: FATX mount, metadata, directory listing, multi-cluster reads, bounds, and cycle detection");
+    FATX_CloseVolume(volume);
+    volume = nullptr;
+
+    // 0xFFF8 is the FATX media/reserved marker, not end-of-chain.
+    Put16(image, 0x1000 + 4, 0xFFF8);
+    if (!WriteImage(filePath, image)) {
+        Fail("could not write invalid media-marker image");
+        goto stop;
+    }
+    if (FATX_OpenVolumeW(filePath, 0, imageSize, &volume) != FATX_OK) {
+        Fail("could not reopen media-marker image");
+        goto stop;
+    }
+    {
+        BYTE buffer[payloadSize]{};
+        DWORD bytesRead = 0;
+        if (FATX_ReadFileW(volume, L"TEST.BIN", 0, buffer, payloadSize, &bytesRead) != FATX_CORRUPT ||
+            bytesRead != clusterSize) {
+            Fail("media marker was incorrectly accepted as end-of-chain");
+            goto stop;
+        }
+    }
+    FATX_CloseVolume(volume);
+    volume = nullptr;
+
+    std::puts("PASS: FATX mount, metadata, directory listing, multi-cluster reads, bounds, and cycle detection and strict end-marker validation");
     result = 0;
 stop:
     if (volume) FATX_CloseVolume(volume);
