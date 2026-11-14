@@ -224,6 +224,8 @@ int main() {
     constexpr std::uint32_t markerOffset = 0x3700u;
     constexpr std::uint32_t timeoutOffset = 0x3740u;
     constexpr std::uint32_t dueTimeOffset = 0x3748u;
+    constexpr std::uint32_t threadOutOffset = 0x3750u;
+    constexpr std::uint32_t threadOutVa = guestBase + threadOutOffset;
     constexpr std::uint32_t iat = guestBase + thunkTableOffset;
     constexpr std::uint32_t eventVa = guestBase + eventOffset;
     constexpr std::uint32_t semaphoreVa = guestBase + semaphoreOffset;
@@ -232,7 +234,7 @@ int main() {
     constexpr std::uint32_t timeoutVa = guestBase + timeoutOffset;
     const std::uint32_t ordinals[] = {
         108u, 145u, 138u, 159u, 112u, 132u,
-        110u, 131u, 113u, 149u, 150u, 97u, 0u
+        110u, 131u, 113u, 149u, 150u, 97u, 146u, 0u
     };
     for (std::size_t i = 0; i < sizeof(ordinals) / sizeof(ordinals[0]); ++i) {
         const std::uint32_t thunk = ordinals[i]
@@ -244,6 +246,8 @@ int main() {
     const std::int64_t relativeDueTime = -100000; // 10 ms
     std::memcpy(image + timeoutOffset, &zeroTimeout, sizeof(zeroTimeout));
     std::memcpy(image + dueTimeOffset, &relativeDueTime, sizeof(relativeDueTime));
+    const std::uint32_t invalidThreadPointer = 0xFFFFFFFFu;
+    std::memcpy(image + threadOutOffset, &invalidThreadPointer, sizeof(invalidThreadPointer));
 
     GuestCodeBuilder guest{image + 0x2000};
     const auto push = [&](std::uint32_t value) { guest.Push(value); };
@@ -259,6 +263,8 @@ int main() {
     push(timeoutVa); push(0u); push(0u); push(0u); push(eventVa); call(3u); save(4u);
     push(eventVa); call(2u); save(8u);
     push(timeoutVa); push(0u); push(0u); push(0u); push(eventVa); call(3u); save(12u);
+    push(threadOutVa); push(eventVa); call(12u); // KeSetEventBoostPriority(Event, PKTHREAD*)
+    push(eventVa); call(2u); save(52u);
 
     // Semaphore: release returns prior count 0; one wait consumes the count;
     // a second zero-time wait times out.
@@ -325,7 +331,9 @@ int main() {
         readMarker(markerOffset + 24u) != 0x102u || readMarker(markerOffset + 28u) != 0u ||
         readMarker(markerOffset + 32u) != 0u || readMarker(markerOffset + 36u) != 0u ||
         readMarker(markerOffset + 40u) != 1u || readMarker(markerOffset + 44u) != 0u ||
-        readMarker(markerOffset + 48u) != 1u)
+        readMarker(markerOffset + 48u) != 1u ||
+        readMarker(markerOffset + 52u) != 1u ||
+        *reinterpret_cast<const std::uint32_t*>(image + threadOutOffset) != 0u)
         return Fail("guest-call event/semaphore/mutant/timer ABI assertions failed",
                     6, &backend, image, stop);
 
