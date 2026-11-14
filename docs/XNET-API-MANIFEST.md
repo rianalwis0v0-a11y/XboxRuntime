@@ -202,3 +202,9 @@ with the original `XNET_GET_XNADDR_AUTO` flag instead of incorrectly labelling
 them DHCP. The unsupported `XNET_ETHERNET_LINK_WIRELESS` bit was removed:
 the XDK header defines only ACTIVE, 100MBPS, 10MBPS, FULL_DUPLEX and
 HALF_DUPLEX for this API.
+
+
+The guest WSA aliases now maintain their own startup reference count on top of
+the shared Winsock transport. An unmatched `WSACleanup` returns
+`SOCKET_ERROR` with `WSANOTINITIALISED`, and versions newer than 2.2 are
+rejected with `WSAVERNOTSUPPORTED`. The smoke test covers both cases.
