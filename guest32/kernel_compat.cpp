@@ -26,6 +26,7 @@
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
+#include "xbox_sha1.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -2235,6 +2236,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_semaphore
         cmp eax, 216
         je nt_query_timer
+        cmp eax, 335
+        je xcsha_init
+        cmp eax, 336
+        je xcsha_update
+        cmp eax, 337
+        je xcsha_final
         push eax
         call K_Unsupported
         add esp, 4
@@ -2452,6 +2459,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    xcsha_init: jmp K_XcSHAInit
+    xcsha_update: jmp K_XcSHAUpdate
+    xcsha_final: jmp K_XcSHAFinal
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
