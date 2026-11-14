@@ -279,14 +279,8 @@ int main() {
         std::uint32_t securityDescriptor;
         std::uint32_t securityQualityOfService;
     };
-    struct GuestObjectString {
-        std::uint16_t length;
-        std::uint16_t maximumLength;
-        std::uint32_t buffer;
-    };
     static_assert(sizeof(GuestUnicodeString) == 8, "x86 UNICODE_STRING layout");
     static_assert(sizeof(GuestObjectAttributes) == 24, "x86 OBJECT_ATTRIBUTES layout");
-    static_assert(sizeof(GuestObjectString) == 8, "x86 OBJECT_STRING layout");
     const GuestUnicodeString guestUnicodeString{
         static_cast<std::uint16_t>(guestPathBytes),
         static_cast<std::uint16_t>(guestPathBytes + sizeof(wchar_t)),
