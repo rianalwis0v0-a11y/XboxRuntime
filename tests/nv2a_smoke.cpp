@@ -774,6 +774,27 @@ int main() {
         return 1;
     }
 
+    /* Circular PFIFO queues may have GET > PUT after PUT wraps.
+     * The command stream must explicitly JUMP back to offset zero. */
+    {
+        const uint32_t jumpToZero = 0x20000000u;
+        const uint32_t wrappedCommands[] = {
+            (1u << 18) | 0x0180u, dmaHandle
+        };
+        DmaInfo wrappedContext{};
+        if (writeVram(0x1000u + 0xFF4u, &jumpToZero, sizeof(jumpToZero)) != 0 ||
+            writeVram(0x1000u, wrappedCommands, sizeof(wrappedCommands)) != 0 ||
+            submitDmaPush(channel, dmaHandle, 0xFF4u, 8u,
+                &dmaGet, &dmaMethods) != 0 ||
+            dmaGet != 8u || dmaMethods != 1u ||
+            getDmaContext(channel, 0u, 0x0180u, &wrappedContext) != 0 ||
+            wrappedContext.handle != dmaHandle) {
+            std::cerr << "FAIL: NV2A DMA ring wrap with JUMP and GET > PUT\\n";
+            stop();
+            return 1;
+        }
+    }
+
     /* Exactly 16 nested calls are accepted; a 17th level reports CALL_ACTIVE. */
     std::vector<uint32_t> maxCallDepthStream(33u, 0u);
     maxCallDepthStream[0] = 0x0000000Au; /* CALL +8 -> first subroutine */
