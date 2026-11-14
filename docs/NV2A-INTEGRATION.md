@@ -502,3 +502,14 @@ When both execution units are active in one NV2A instruction slot, the hardware 
 ## Vertex opcode compilation matrix
 
 The Windows HLSL smoke suite now compiles representative MAC operations (MOV, MUL, ADD, MAD, DP3, DPH, DP4, DST, MIN, MAX, SLT and SGE) and ILU operations (MOV, RCP, RCC, RSQ, EXP, LOG and LIT) from actual four-DWORD NV2A instruction words. These are targeted translation/bytecode checks, not exhaustive numerical conformance tests against physical NV2A hardware.
+
+
+## Primitive expansion bounds
+
+Primitive topology conversion is now isolated in the exported, deterministic
+`XboxNV2A_ExpandPrimitive` helper and covered independently of a live D3D
+device. A maximum 1,024-vertex QUAD_STRIP expands to 3,066 triangle-list
+vertices. The draw staging buffer is sized for that worst case (3,072 slots),
+and the smoke test checks the final expanded vertex plus rejection when the
+caller supplies only 3,065 slots. This fixes an out-of-bounds write in the
+previous 2,048-vertex staging buffer.
