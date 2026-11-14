@@ -1596,3 +1596,11 @@ Build and tests:
 Known issues / next steps:
 - Wait for combiner-routing Windows CI and fix any failure before calling this tranche verified.
 - The branch still lacks a real guest-visible D3D device/present path and real pixel readback from an XBE. PCI/AGP DMA/page translation, PFIFO ring wrap/scheduling/recovery, broader PGRAPH coverage, cube/volume texture support in the NV2A bridge, and physical-GPU/game conformance remain open. No 75% completion claim is made yet.
+
+
+[2026-11-14 UTC] [NV2A PFIFO circular GET/PUT follow-up]
+Status: IN_PROGRESS — code and regression test committed; Windows CI run 43598811282 is in progress.
+Branch / latest commit: feature/nv2a-completion-v2 / 4511ce8f011e1e1629809636835e85f4b1dd927d; draft PR #13 remains stacked on PR #3.
+Change: DMA pushbuffer validation no longer incorrectly rejects GET > PUT. The parser still requires an explicit in-buffer JUMP to wrap to offset zero; walking off the DMA object's mapped limit remains an error. Regression test starts at offset 0xFF4, jumps to zero, dispatches a DMA-context bind into previously unused slot 3 (method 0x018C), and checks final GET=8 plus the new binding.
+Files changed: modules/nv2a/nv2a_bridge.c, tests/nv2a_smoke.cpp, docs/NV2A-INTEGRATION.md.
+Verification: The preceding combiner-routing run 43598595268 passed x64 build and focused CTest (including nv2a_smoke and nv2a_hlsl_smoke), x86 build, and basic XBE smoke; the full workflow still failed at the comprehensive diagnostic XBE with 0xC0000409. The circular-wrap change is not yet CI-verified.
