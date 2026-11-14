@@ -1225,3 +1225,21 @@ Commands:
 Verified scope: x86 guest stdcall API smoke, process-backed thread/handle counts, null pointer and short-buffer rejection. This is not a full import-thunk or real retail-XBE call test; PsQueryStatistics remains PARTIAL because these are host backing-process counts rather than Xbox console-wide kernel statistics.
 Files in tested commit: guest32/kernel_system.h, guest32/kernel_system.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, tests/kernel_system_guest_smoke.cpp, docs/KERNEL-IO-SYSTEM-APIS.md, .github/workflows/kernel-io-system-apis.yml.
 Next: preserve Developer 3's threading/async ownership; coordinate a real import-thunk call path, then continue with an independently testable file/device I/O group. No other I/O API is claimed complete.
+
+
+[2026-11-14 09:44 UTC] [Kernel Developer 2 — integration baseline comparison]
+Status: READY_FOR_REVIEW — isolated API tranche green; broader XBE execution workflow remains blocked by a baseline fault outside this tranche.
+Branch / commit: work/kernel-memory-apis / 4987d1400213c8aa51ab4d26ff2c999b0758b6dc; PR #17.
+Summary:
+- Dedicated memory/handle CI run 43581787451 is SUCCESS: x86 VM guest calls PASS, x86 handle guest calls PASS, x64 host range tests PASS.
+- Existing full kernel integration workflow 43581787454 builds the NXDK XBE fixture, host kernel DLL, main runtime module, and x86 guest successfully. Networking/guest API tests and shared-memory guest execution smoke also pass.
+- Its final real-XBE execution step fails at guest exception IP/access address 0x10018DC0 (execute access violation). This is not attributed to the memory/handle patch: base branch work/kernel-execution-backend at commit dcda2c0a035a5aa169d0de9ab6d7518f25f7724b fails the same workflow at the same 0x10018DC0 address (run 43580285749). This is a pre-existing execution-team blocker.
+Files changed: no new code since the previous entry.
+Build and tests:
+- Dedicated API tests: 3/3 PASS (2 x86 guest tests + 1 x64 host test).
+- Full integration build: host kernel, main runtime, x86 guest all PASS.
+- Full real-XBE execution: FAIL at the same baseline fault on both base and feature branches.
+Known issues / next steps:
+1. PR #17 is ready for code review; do not block this isolated API tranche on the already-failing XBE entrypoint.
+2. Execution team owns the 0x10018DC0 execute access violation and TLS/guest startup investigation.
+3. Full KernelDispatch ordinal-path tests and broader object-manager namespace/cross-process handle support remain future work.
