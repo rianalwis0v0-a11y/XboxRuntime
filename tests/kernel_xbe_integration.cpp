@@ -149,6 +149,57 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     if (!result) {
+        struct GuestTlsDirectory {
+            std::uint32_t start, end, index, callbacks, zeroFill, characteristics;
+        } tls{};
+        SIZE_T copied = 0;
+        if (ReadProcessMemory(GetCurrentProcess(),
+                reinterpret_cast<const void*>(static_cast<std::uintptr_t>(image.tlsAddress)),
+                &tls, sizeof(tls), &copied) && copied == sizeof(tls)) {
+            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\\n",
+                tls.start, tls.end, tls.index, tls.callbacks, tls.zeroFill, tls.characteristics);
+            if (tls.callbacks) {
+                for (std::uint32_t n = 0; n < 16; ++n) {
+                    std::uint32_t callback = 0;
+                    copied = 0;
+                    const auto slot = static_cast<std::uintptr_t>(tls.callbacks) + n * sizeof(callback);
+                    if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(slot),
+                            &callback, sizeof(callback), &copied) || copied != sizeof(callback)) {
+                        std::printf("TLS callback[%u]: unreadable\\n", n);
+                        break;
+                    }
+                    if (!callback) {
+                        std::printf("TLS callback[%u]: <terminator>\\n", n);
+                        break;
+                    }
+                    const XboxXbe::Section* owner = nullptr;
+                    for (const auto& section : image.sections) {
+                        const std::uint64_t end = std::uint64_t(section.virtualAddress) + section.virtualSize;
+                        if (callback >= section.virtualAddress && callback < end) {
+                            owner = &section;
+                            break;
+                        }
+                    }
+                    std::printf("TLS callback[%u]=0x%08X sectionFlags=%s",
+                        n, callback, owner ? "" : "<outside image>\\n");
+                    if (owner) std::printf("0x%08X\\n", owner->flags);
+                    std::uint8_t bytes[16]{};
+                    copied = 0;
+                    if (ReadProcessMemory(GetCurrentProcess(),
+                            reinterpret_cast<const void*>(static_cast<std::uintptr_t>(callback)),
+                            bytes, sizeof(bytes), &copied) && copied) {
+                        std::printf("  callback bytes:");
+                        for (SIZE_T b = 0; b < copied; ++b) std::printf(" %02X", bytes[b]);
+                        std::printf("\\n");
+                    }
+                }
+            }
+        } else {
+            std::printf("TLS directory diagnostic read failed: %lu\\n", GetLastError());
+        }
+    }
+
+    if (!result) {
         std::uint32_t exitCode = 0xFFFFFFFFu;
         std::uint32_t tlsCleared = 0;
         std::uint32_t exceptionInstruction = 0;
