@@ -184,3 +184,22 @@ Next:
 1. Inspect run 43599305231 and verify the NXDK fixture no longer faults at 0x10018DC0.
 2. If a new failure appears, use the register/stack and thunk-table diagnostics to continue tracing.
 3. Update PR #20 with the root-cause evidence and add a focused regression assertion for the NtCreateMutant@12 stack ABI if practical.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — unsupported-import diagnosis instrumentation]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-xbe-execution-fix / PR #20.
+Summary:
+- Re-read the failed real NXDK execution log (workflow run 43600570426, kernel job 132464469623). The failure is not a native CPU instruction that needs blanket emulation: it is STATUS_ILLEGAL_INSTRUCTION (0xC000001D) raised intentionally by XboxRuntime's K_Unsupported(ordinal) when a kernel import is not implemented.
+- Confirmed K_Unsupported calls RaiseException(0xC000001D, EXCEPTION_NONCONTINUABLE, 1, &ordinal). The previous diagnostics omitted EXCEPTION_RECORD.ExceptionInformation[0], so the missing ordinal was hidden.
+- Cross-checked the ordinal ABI catalogue against OXOS's clean-room exports.tsv. OXOS is GPL-2.0; its implementation source is not being copied into this MIT-licensed runtime. Xermu's README documents a useful Zydis-based x86 JIT/privileged-instruction architecture, but its license is marked TBD, so its source is not being copied either. Cxbx/Xemu code is GPL-family; use semantic references unless licensing is explicitly resolved.
+Files changed:
+- guest32/guest_protocol.h: bumped guest protocol version to 3 and extended fault context with exception flags/count/parameter0.
+- guest32/kernel_compat.cpp: captures the original exception metadata, including the unsupported kernel ordinal.
+- tests/kernel_xbe_integration.cpp: prints exception metadata on guest failure.
+Build and tests:
+- No CI run yet for these diagnostics. Existing run 43600570426: host/guest builds and unit tests passed; real NXDK XBE execution failed at the deliberate K_Unsupported exception.
+Known issues / next steps:
+1. Run CI and read the actual exception parameter to identify the missing kernel ordinal.
+2. Implement that ordinal only after confirming its name, calling convention, argument widths, and semantics from NXDK/OpenXDK plus an independent clean-room reference.
+3. Continue until the NXDK homebrew XBE returns successfully with TLS cleanup and original section protections intact.
