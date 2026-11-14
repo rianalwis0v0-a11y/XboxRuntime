@@ -257,11 +257,12 @@ int main() {
     std::memcpy(image + shutdownRegistrationOffset, shutdownRegistration,
                 sizeof(shutdownRegistration));
 
-    const std::uint32_t thunkEntries[8] = {
+    const std::uint32_t thunkEntries[10] = {
         0x80000000u | 256u, 0x80000000u | 67u,
         0x80000000u | 69u, 0x80000000u | 47u,
         0x80000000u | 190u, 0x80000000u | 207u,
-        0x80000000u | 187u, 0u
+        0x80000000u | 187u, 0x80000000u | 196u,
+        0x80000000u | 200u, 0u
     };
     std::memcpy(image + kernelThunkOffset, thunkEntries, sizeof(thunkEntries));
 
@@ -271,6 +272,10 @@ int main() {
     constexpr std::uint32_t fileMaskOffset = 0x3850u;
     constexpr std::uint32_t fileMaskStringOffset = 0x3860u;
     constexpr std::uint32_t directoryInfoOffset = 0x3900u;
+    constexpr std::uint32_t filePathOffset = 0x3880u;
+    constexpr std::uint32_t filePathStringOffset = 0x3890u;
+    constexpr std::uint32_t fileObjectAttributesOffset = 0x38A0u;
+    constexpr std::uint32_t compressionOutputOffset = 0x38B0u;
 
     if (guestPathBytes + 1u > 0x200u)
         return Fail("temporary directory path exceeds guest test buffer", 9, &backend, image, stop);
@@ -285,6 +290,22 @@ int main() {
         0u, guestBase + linkNameStringOffset, 0x40u
     };
     std::memcpy(image + objectAttributesOffset, &guestObjectAttributes, sizeof(guestObjectAttributes));
+
+    const char guestFilePath[] = "\\??\\Z:\\alpha.bin";
+    std::memcpy(image + filePathOffset, guestFilePath, sizeof(guestFilePath));
+    const GuestObjectString guestFilePathString{
+        static_cast<std::uint16_t>(sizeof(guestFilePath) - 1),
+        static_cast<std::uint16_t>(sizeof(guestFilePath) - 1),
+        guestBase + filePathOffset
+    };
+    const GuestObjectAttributes guestFileObjectAttributes{
+        0u, guestBase + filePathStringOffset, 0x40u
+    };
+    std::memcpy(image + filePathStringOffset, &guestFilePathString, sizeof(guestFilePathString));
+    std::memcpy(image + fileObjectAttributesOffset, &guestFileObjectAttributes, sizeof(guestFileObjectAttributes));
+    const std::uint16_t noCompression = 0;
+    std::memcpy(image + compressionOutputOffset, &noCompression, sizeof(noCompression));
+
     const std::uint32_t emptyIoStatus[2] = {0u, 0u};
     const std::uint32_t emptyFileHandle = 0u;
     std::memcpy(image + ioStatusOffset, emptyIoStatus, sizeof(emptyIoStatus));
@@ -332,6 +353,9 @@ int main() {
     auto compareGuestByte = [&](std::uint32_t address, std::uint8_t value) {
         emitGuest8(0x80); emitGuest8(0x3D); emitGuest32(address); emitGuest8(value);
     };
+    auto compareGuestMemoryEax = [&](std::uint32_t address) {
+        emitGuest8(0x39); emitGuest8(0x05); emitGuest32(address); // cmp [absolute], eax
+    };
     auto storeGuestMemory = [&](std::uint32_t address, std::uint32_t value) {
         emitGuest8(0xC7); emitGuest8(0x05); emitGuest32(address); emitGuest32(value);
     };
@@ -341,6 +365,9 @@ int main() {
     };
     auto branchGuestLessEqualToFailure = [&]() {
         emitGuest8(0x0F); emitGuest8(0x8E); failBranches.push_back(guestEntry.size()); emitGuest32(0);
+    };
+    auto branchGuestEqualToFailure = [&]() {
+        emitGuest8(0x0F); emitGuest8(0x84); failBranches.push_back(guestEntry.size()); emitGuest32(0);
     };
 
     const std::uint32_t thunkTableVa = guestBase + kernelThunkOffset;
@@ -418,7 +445,55 @@ int main() {
     compareGuestByte(guestBase + directoryInfoOffset + 64u, static_cast<std::uint8_t>('a'));
     branchGuestNotEqualToFailure();
 
-    // Close the directory handle through the memory team's existing NtClose export.
+    // Unsupported disk IOCTLs on a directory handle must fail, and the IOSB
+    // must carry the same failure status (never fake-success).
+    pushGuest32(0u); // OutputBufferLength
+    pushGuest32(0u); // OutputBuffer
+    pushGuest32(0u); // InputBufferLength
+    pushGuest32(0u); // InputBuffer
+    pushGuest32(0x00070000u); // IOCTL_DISK_GET_DRIVE_GEOMETRY
+    pushGuest32(guestBase + ioStatusOffset);
+    pushGuest32(0u); // ApcContext
+    pushGuest32(0u); // ApcRoutine
+    pushGuest32(0u); // Event
+    pushGuestMemory(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 28u);
+    testGuestEax(); branchGuestEqualToFailure();
+    compareGuestMemoryEax(guestBase + ioStatusOffset);
+    branchGuestNotEqualToFailure();
+
+    // Open a file through the same symbolic link, then query its compression
+    // format with the synchronous filesystem-control path.
+    storeGuestMemory(guestBase + fileHandleOffset, 0u);
+    pushGuest32(0u); // FILE_OPEN, non-directory
+    pushGuest32(1u);
+    pushGuest32(7u);
+    pushGuest32(0u);
+    pushGuest32(0u);
+    pushGuest32(guestBase + ioStatusOffset);
+    pushGuest32(guestBase + fileObjectAttributesOffset);
+    pushGuest32(1u); // GENERIC_READ / FILE_READ_DATA
+    pushGuest32(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 16u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+
+    pushGuest32(2u); // OutputBufferLength
+    pushGuest32(guestBase + compressionOutputOffset);
+    pushGuest32(0u); // InputBufferLength
+    pushGuest32(0u); // InputBuffer
+    pushGuest32(0x0009003Cu); // FSCTL_GET_COMPRESSION
+    pushGuest32(guestBase + ioStatusOffset);
+    pushGuest32(0u); // ApcContext
+    pushGuest32(0u); // ApcRoutine
+    pushGuest32(0u); // Event
+    pushGuestMemory(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 32u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + ioStatusOffset + 4u, 2u);
+    branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + compressionOutputOffset, 0u);
+    branchGuestNotEqualToFailure();
+
     pushGuestMemory(guestBase + fileHandleOffset);
     callGuestThunk(thunkTableVa + 24u);
     testGuestEax(); branchGuestNotEqualToFailure();
