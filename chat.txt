@@ -1413,3 +1413,18 @@ Remaining partial behavior: timer DPC callback delivery is fail-fast unsupported
 Coordination with Developer 4 (PR #19): confirmed I will own NtCreateIoCompletion ordinal 191, NtSetIoCompletion 227, NtRemoveIoCompletion 223, NtQueryIoCompletion 212, plus completion-port packet/depth state. Developer 4 owns IRP/device/file-side completion producers and can post through NtSetIoCompletion. Asked Developer 2 (PR #17) to coordinate handle close/duplicate metadata hooks; no NtClose/NtDuplicateObject changes made.
 Thread/TLS coordination: two requests remain on PR #15 for current PKTHREAD pointer/native-handle mapping and per-thread TLS attach/detach helpers. No response observed at this update; no execution startup/TLS code changed on my branch.
 Next: implement the four IO completion object APIs with actual guest-call + host tests and agreed close/duplicate lifecycle hooks; then continue PsCreateSystemThread/Ex, KTHREAD identity, per-thread TLS, suspend/resume/priority/alert APIs after execution-owner agreement.
+
+
+[2026-11-14 09:55 UTC] [Kernel Developer 4 — real XBE import-thunk integration added]
+Branch head: work/kernel-io-system-apis / 4b28ffd1437070f994b4ba1501ba7c79774c851f
+PR #19: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 (draft, stacked on work/kernel-memory-apis)
+New test work:
+- Extended tests/kernel_guest_backend_smoke.cpp with a synthetic x86 guest XBE containing a real kernel thunk table for ordinals 256 (PsQueryStatistics), 67 (IoCreateSymbolicLink), 69 (IoDeleteSymbolicLink), and 47 (HalRegisterShutdownNotification).
+- Guest entrypoint now calls all four resolved import thunks with x86 stack ABI. It checks PsQueryStatistics output, IoCreateSymbolicLink success + duplicate collision, IoDeleteSymbolicLink success + missing-name status, and registers a guest callback that must set a shared marker during title shutdown.
+- The test verifies the shutdown callback after the x86 child process executes XboxKernelShutdownTitle.
+- CI host64 job now builds xbe_guest32 (Win32), builds xbox_kernel + kernel_guest_backend_smoke (x64), stages xbe_guest32.exe beside xbox_kernel.dll, and runs the backend integration test alongside x64 host unit tests.
+Correctness fix:
+- XboxKernelSetStartupEvent now resets shutdown registrations only when a non-null startup event is set. Clearing the startup event after guest startup must not erase registrations made by the guest entrypoint.
+- The generated x86 entry test uses near conditional branches to keep all failure branches in range and has separate emitter names from the TLS callback generator.
+Commits in this test tranche: cdb8f477f2ac97c00808ce0374a7cf182d73f3d0, f076a810242eebfa4fc3a516f8b5480cbb1efa12, 25b60a8e127805cfcf1a3367b07bb9efac3dfd64, 525fbcb799bb10b27995e0759121e1c930748ef0, 4b28ffd1437070f994b4ba1501ba7c79774c851f.
+CI run 43582778275: IN_PROGRESS at publication; earlier compile failure (missing <vector> and local emitter-name collisions) was fixed in the latest commit. Do not claim import-thunk success until the test step completes and shared shutdown marker is observed.
