@@ -3,6 +3,11 @@
 #include <cstring>
 #include <string>
 
+static LONG g_shutdownOrder[3]{};
+static ULONG g_shutdownCount = 0;
+static void __stdcall RecordShutdown(XboxHalShutdownRegistration* registration) {
+    if (g_shutdownCount < 3) g_shutdownOrder[g_shutdownCount++] = registration->Priority;
+}
 static int Fail(const char* message) {
     std::fprintf(stderr, "FAIL: %s\n", message);
     return 1;
@@ -44,6 +49,18 @@ int main() {
     K_IoDeleteSymbolicLink(&a);
     K_IoDeleteSymbolicLink(&b);
 
-    std::puts("PASS: x64 host PsQueryStatistics and symbolic-link namespace tests");
+    XboxKernelResetShutdownNotifications();
+    XboxHalShutdownRegistration low{RecordShutdown, 0, {}};
+    XboxHalShutdownRegistration high{RecordShutdown, 10, {}};
+    XboxHalShutdownRegistration middle{RecordShutdown, 5, {}};
+    K_HalRegisterShutdownNotification(&low, TRUE);
+    K_HalRegisterShutdownNotification(&high, TRUE);
+    K_HalRegisterShutdownNotification(&middle, TRUE);
+    XboxKernelInvokeShutdownNotifications();
+    if (g_shutdownCount != 3 || g_shutdownOrder[0] != 10 ||
+        g_shutdownOrder[1] != 5 || g_shutdownOrder[2] != 0)
+        return Fail("HAL shutdown callbacks were not invoked in priority order");
+
+    std::puts("PASS: x64 host PsQueryStatistics symbolic-link namespace, and HAL notification tests");
     return 0;
 }
