@@ -9,6 +9,7 @@
 #include <vector>
 #include <iphlpapi.h>
 #include <new>
+#include <unordered_set>
 #include <bcrypt.h>
 #include "xnet_compat.h"
 #include "network_compat.h"
@@ -19,6 +20,7 @@ unsigned g_xnetUsers = 0;
 XNetStartupParams g_startupParams{};
 struct RegisteredKey { XNKID id; XNKEY key; };
 std::vector<RegisteredKey> g_registeredKeys;
+std::unordered_set<uint32_t> g_xnetSocketTokens;
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -63,6 +65,7 @@ extern "C" int WINAPI XNetCleanup() {
         XboxNetCleanup();
         for (auto& entry : g_registeredKeys) SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
+        g_xnetSocketTokens.clear(); // XboxNetCleanup invalidates the backend token table too.
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup complete.");
     }
@@ -311,22 +314,36 @@ extern "C" DWORD WINAPI XNetGetDebugXnAddr(XNADDR* output) {
 // XSocket handles are guest 32-bit tokens. They are deliberately not host
 // SOCKET values, because the host runtime may be a separate 64-bit process.
 extern "C" SOCKET WINAPI XSocketCreate(int af, int type, int protocol) {
-    if (af != AF_INET) return INVALID_SOCKET;
-    if (type == SOCK_STREAM) {
-        if (protocol != 0 && protocol != IPPROTO_TCP) return INVALID_SOCKET;
-        const uint32_t handle = XboxNetSocketCreate(1);
-        return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
+    if (af != AF_INET) { WSASetLastError(WSAEAFNOSUPPORT); return INVALID_SOCKET; }
+    int transport = 0;
+    if (type == SOCK_STREAM && (protocol == 0 || protocol == IPPROTO_TCP)) transport = 1;
+    else if (type == SOCK_DGRAM && (protocol == 0 || protocol == IPPROTO_UDP)) transport = 2;
+    else { WSASetLastError(WSAEPROTONOSUPPORT); return INVALID_SOCKET; }
+
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) { WSASetLastError(WSANOTINITIALISED); return INVALID_SOCKET; }
+    const size_t limit = g_startupParams.cfgSockMaxSockets ? g_startupParams.cfgSockMaxSockets : 64;
+    if (g_xnetSocketTokens.size() >= limit) { WSASetLastError(WSAEMFILE); return INVALID_SOCKET; }
+    const uint32_t handle = XboxNetSocketCreate(transport);
+    if (!handle) { WSASetLastError(WSAGetLastError()); return INVALID_SOCKET; }
+    try { g_xnetSocketTokens.insert(handle); }
+    catch (...) {
+        XboxNetSocketClose(handle);
+        WSASetLastError(WSAENOBUFS);
+        return INVALID_SOCKET;
     }
-    if (type == SOCK_DGRAM) {
-        if (protocol != 0 && protocol != IPPROTO_UDP) return INVALID_SOCKET;
-        const uint32_t handle = XboxNetSocketCreate(2);
-        return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
-    }
-    return INVALID_SOCKET;
+    return static_cast<SOCKET>(handle);
 }
 
 extern "C" int WINAPI XSocketClose(SOCKET socket) {
-    if (socket == INVALID_SOCKET || socket == 0) return SOCKET_ERROR;
+    if (socket == INVALID_SOCKET || socket == 0) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        if (g_xnetSocketTokens.erase(static_cast<uint32_t>(socket)) == 0) {
+            WSASetLastError(WSAENOTSOCK);
+            return SOCKET_ERROR;
+        }
+    }
     return XboxNetSocketClose(static_cast<uint32_t>(socket)) == 0 ? 0 : SOCKET_ERROR;
 }
 
@@ -361,9 +378,31 @@ extern "C" SOCKET WINAPI XSocketAccept(SOCKET socket, sockaddr* address, int* ad
     }
     uint32_t length = addressLength && *addressLength > 0
         ? static_cast<uint32_t>(*addressLength) : 0;
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        if (!g_xnetUsers || g_xnetSocketTokens.find(static_cast<uint32_t>(socket)) == g_xnetSocketTokens.end()) {
+            WSASetLastError(WSAENOTSOCK);
+            return INVALID_SOCKET;
+        }
+    }
     const uint32_t accepted = XboxNetSocketAccept(static_cast<uint32_t>(socket),
         address, addressLength ? &length : nullptr);
     if (!accepted) return INVALID_SOCKET;
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        const size_t limit = g_startupParams.cfgSockMaxSockets ? g_startupParams.cfgSockMaxSockets : 64;
+        if (!g_xnetUsers || g_xnetSocketTokens.size() >= limit) {
+            XboxNetSocketClose(accepted);
+            WSASetLastError(g_xnetUsers ? WSAEMFILE : WSANOTINITIALISED);
+            return INVALID_SOCKET;
+        }
+        try { g_xnetSocketTokens.insert(accepted); }
+        catch (...) {
+            XboxNetSocketClose(accepted);
+            WSASetLastError(WSAENOBUFS);
+            return INVALID_SOCKET;
+        }
+    }
     if (addressLength && address) *addressLength = static_cast<int>(length);
     return static_cast<SOCKET>(accepted);
 }
