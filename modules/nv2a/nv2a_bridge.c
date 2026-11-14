@@ -2249,54 +2249,168 @@ static void nv2a_flush_vertex_constants(void)
 }
 
 
+int __cdecl XboxNV2A_ExpandPrimitive(uint32_t mode,
+    const XboxNV2A_VERTEX* source, uint32_t source_count,
+    XboxNV2A_VERTEX* destination, uint32_t destination_capacity,
+    uint32_t* primitive_type_out, uint32_t* primitive_count_out,
+    uint32_t* vertex_count_out)
+{
+    if (primitive_type_out) *primitive_type_out = 0;
+    if (primitive_count_out) *primitive_count_out = 0;
+    if (vertex_count_out) *vertex_count_out = 0;
+    if (!source || !destination || !source_count ||
+        source_count > NV2A_MAX_BATCH_VERTICES ||
+        !primitive_type_out || !primitive_count_out || !vertex_count_out)
+        return 1;
+
+    uint32_t primitive_type = 0, primitive_count = 0, vertex_count = source_count;
+    switch (mode) {
+    case NV097_SET_BEGIN_END_OP_POINTS:
+        primitive_type = D3DPT_POINTLIST;
+        primitive_count = source_count;
+        break;
+    case NV097_SET_BEGIN_END_OP_LINES:
+        if (source_count < 2u || (source_count & 1u)) return 2;
+        primitive_type = D3DPT_LINELIST;
+        primitive_count = source_count / 2u;
+        break;
+    case NV097_SET_BEGIN_END_OP_LINE_STRIP:
+        if (source_count < 2u) return 2;
+        primitive_type = D3DPT_LINESTRIP;
+        primitive_count = source_count - 1u;
+        break;
+    case NV097_SET_BEGIN_END_OP_LINE_LOOP:
+        if (source_count < 2u) return 2;
+        vertex_count = source_count + 1u;
+        primitive_type = D3DPT_LINESTRIP;
+        primitive_count = source_count;
+        break;
+    case NV097_SET_BEGIN_END_OP_TRIANGLES:
+        if (source_count < 3u || (source_count % 3u)) return 2;
+        primitive_type = D3DPT_TRIANGLELIST;
+        primitive_count = source_count / 3u;
+        break;
+    case NV097_SET_BEGIN_END_OP_TRIANGLE_STRIP:
+        if (source_count < 3u) return 2;
+        primitive_type = D3DPT_TRIANGLESTRIP;
+        primitive_count = source_count - 2u;
+        break;
+    case NV097_SET_BEGIN_END_OP_TRIANGLE_FAN:
+    case NV097_SET_BEGIN_END_OP_POLYGON:
+        if (source_count < 3u) return 2;
+        primitive_type = D3DPT_TRIANGLEFAN;
+        primitive_count = source_count - 2u;
+        break;
+    case NV097_SET_BEGIN_END_OP_QUADS:
+        if (source_count < 4u || (source_count % 4u)) return 2;
+        vertex_count = (source_count / 4u) * 6u;
+        primitive_type = D3DPT_TRIANGLELIST;
+        primitive_count = vertex_count / 3u;
+        break;
+    case NV097_SET_BEGIN_END_OP_QUAD_STRIP:
+        if (source_count < 4u || (source_count & 1u)) return 2;
+        vertex_count = (source_count / 2u - 1u) * 6u;
+        primitive_type = D3DPT_TRIANGLELIST;
+        primitive_count = vertex_count / 3u;
+        break;
+    default:
+        return 4;
+    }
+
+    if (vertex_count > destination_capacity ||
+        (size_t)vertex_count > SIZE_MAX / sizeof(*destination))
+        return 3;
+
+    switch (mode) {
+    case NV097_SET_BEGIN_END_OP_LINE_LOOP:
+        memcpy(destination, source, (size_t)source_count * sizeof(*source));
+        destination[source_count] = source[0];
+        break;
+    case NV097_SET_BEGIN_END_OP_QUADS:
+        for (uint32_t q = 0, out = 0; q < source_count; q += 4u) {
+            destination[out++] = source[q];
+            destination[out++] = source[q + 1u];
+            destination[out++] = source[q + 2u];
+            destination[out++] = source[q];
+            destination[out++] = source[q + 2u];
+            destination[out++] = source[q + 3u];
+        }
+        break;
+    case NV097_SET_BEGIN_END_OP_QUAD_STRIP:
+        for (uint32_t q = 0, out = 0; q < source_count / 2u - 1u; ++q) {
+            const uint32_t i = q * 2u;
+            destination[out++] = source[i];
+            destination[out++] = source[i + 1u];
+            destination[out++] = source[i + 3u];
+            destination[out++] = source[i];
+            destination[out++] = source[i + 3u];
+            destination[out++] = source[i + 2u];
+        }
+        break;
+    default:
+        memcpy(destination, source, (size_t)source_count * sizeof(*source));
+        break;
+    }
+
+    *primitive_type_out = primitive_type;
+    *primitive_count_out = primitive_count;
+    *vertex_count_out = vertex_count;
+    return 0;
+}
+
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
 {
-    const uint32_t mode=g_primitive_mode[channel][subchannel];
-    if(!indices||!count||count>NV2A_MAX_BATCH_VERTICES||mode==NV097_SET_BEGIN_END_OP_END)return 1;
-    XboxNV2A_VERTEX v[NV2A_MAX_BATCH_VERTICES],x[NV2A_MAX_BATCH_VERTICES * 2u]; uint32_t stride=0,fvf=0;
-    if(XboxNV2A_BuildIndexedVertexStream(channel,subchannel,indices,count,v,sizeof(v),&stride,&fvf)!=0)return 2;
-    const XboxNV2A_VERTEX* draw=v; uint32_t draw_count=count,pc=0; D3DPRIMITIVETYPE pt=D3DPT_TRIANGLELIST;
-    switch(mode){
-    case NV097_SET_BEGIN_END_OP_POINTS: pt=D3DPT_POINTLIST;pc=count;break;
-    case NV097_SET_BEGIN_END_OP_LINES: if(count<2u||(count&1u))return 3;pt=D3DPT_LINELIST;pc=count/2u;break;
-    case NV097_SET_BEGIN_END_OP_LINE_STRIP: if(count<2u)return 3;pt=D3DPT_LINESTRIP;pc=count-1u;break;
-    case NV097_SET_BEGIN_END_OP_LINE_LOOP: if(count<2u)return 3;memcpy(x,v,count*sizeof(*v));x[count]=v[0];draw=x;draw_count=count+1u;pt=D3DPT_LINESTRIP;pc=count;break;
-    case NV097_SET_BEGIN_END_OP_TRIANGLES: if(count<3u||count%3u)return 3;pt=D3DPT_TRIANGLELIST;pc=count/3u;break;
-    case NV097_SET_BEGIN_END_OP_TRIANGLE_STRIP: if(count<3u)return 3;pt=D3DPT_TRIANGLESTRIP;pc=count-2u;break;
-    case NV097_SET_BEGIN_END_OP_TRIANGLE_FAN: case NV097_SET_BEGIN_END_OP_POLYGON: if(count<3u)return 3;pt=D3DPT_TRIANGLEFAN;pc=count-2u;break;
-    case NV097_SET_BEGIN_END_OP_QUADS:
-        if(count<4u||count%4u)return 3;draw_count=count/4u*6u;
-        for(uint32_t q=0,o=0;q<count;q+=4u){x[o++]=v[q];x[o++]=v[q+1];x[o++]=v[q+2];x[o++]=v[q];x[o++]=v[q+2];x[o++]=v[q+3];}
-        draw=x;pt=D3DPT_TRIANGLELIST;pc=draw_count/3u;break;
-    case NV097_SET_BEGIN_END_OP_QUAD_STRIP:
-        if(count<4u||(count&1u))return 3;{uint32_t quads=count/2u-1u;draw_count=quads*6u;
-        for(uint32_t q=0,o=0;q<quads;++q){uint32_t i=q*2u;x[o++]=v[i];x[o++]=v[i+1];x[o++]=v[i+3];x[o++]=v[i];x[o++]=v[i+3];x[o++]=v[i+2];}}
-        draw=x;pt=D3DPT_TRIANGLELIST;pc=draw_count/3u;break;
-    default:return 4;
-    }
-    IDirect3DDevice8* d=xbox_GetD3DDevice();
-    if(!d||!d->lpVtbl||!d->lpVtbl->SetVertexShader||!d->lpVtbl->DrawPrimitiveUP)return 5;
-    const void *draw_data = draw;
+    const uint32_t mode = g_primitive_mode[channel][subchannel];
+    if (!indices || !count || count > NV2A_MAX_BATCH_VERTICES ||
+        mode == NV097_SET_BEGIN_END_OP_END)
+        return 1;
+
+    XboxNV2A_VERTEX vertices[NV2A_MAX_BATCH_VERTICES];
+    /* QUAD_STRIP expands 1,024 source vertices into 3,066 triangle-list
+     * vertices. Keep the staging capacity tied to that true worst case. */
+    XboxNV2A_VERTEX expanded[NV2A_MAX_BATCH_VERTICES * 3u];
+    uint32_t stride = 0, fvf = 0;
+    if (XboxNV2A_BuildIndexedVertexStream(channel, subchannel, indices,
+            count, vertices, (uint32_t)sizeof(vertices), &stride, &fvf) != 0)
+        return 2;
+
+    uint32_t primitive_type = 0, primitive_count = 0, draw_count = 0;
+    if (XboxNV2A_ExpandPrimitive(mode, vertices, count, expanded,
+            (uint32_t)(sizeof(expanded) / sizeof(expanded[0])),
+            &primitive_type, &primitive_count, &draw_count) != 0)
+        return 3;
+
+    IDirect3DDevice8* d = xbox_GetD3DDevice();
+    if (!d || !d->lpVtbl || !d->lpVtbl->SetVertexShader ||
+        !d->lpVtbl->DrawPrimitiveUP)
+        return 5;
+
+    const void *draw_data = expanded;
     uint32_t draw_stride = stride;
     if ((g_transform_execution_mode & 3u) == 2u) {
-        /* Select the FVF so the D3D11 translator builds the matching ATTR
-         * input layout, then bind the cached programmable vertex shader. */
         if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
             return 6;
         nv2a_flush_vertex_constants();
         if (!nv2a_prepare_gpu_vertex_shader(d))
             return 9;
         const uint8_t* packed = NULL;
-        if (!nv2a_pack_gpu_vertex_stream(draw, draw_count,
+        if (!nv2a_pack_gpu_vertex_stream(expanded, draw_count,
                 g_nv2a_vsh_input_mask, &packed, &draw_stride))
             return 10;
         draw_data = packed;
-    } else if (FAILED(d->lpVtbl->SetVertexShader(d,fvf))) {
+    } else if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) {
         return 6;
     }
-    if(bind_nv2a_textures(channel,subchannel,d)!=0)return 8;
-    if(FAILED(d->lpVtbl->DrawPrimitiveUP(d,pt,pc,draw_data,draw_stride)))return 7;
-    ++g_pgraph_custom_methods;++g_pgraph_custom_draws;g_pgraph_custom_vertices+=count;(void)draw_count;return 0;
+    if (bind_nv2a_textures(channel, subchannel, d) != 0)
+        return 8;
+    if (FAILED(d->lpVtbl->DrawPrimitiveUP(d, (D3DPRIMITIVETYPE)primitive_type,
+            primitive_count, draw_data, draw_stride)))
+        return 7;
+
+    ++g_pgraph_custom_methods;
+    ++g_pgraph_custom_draws;
+    g_pgraph_custom_vertices += count;
+    return 0;
 }
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)
 {
