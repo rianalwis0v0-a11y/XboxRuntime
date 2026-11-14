@@ -28,8 +28,8 @@ The guest object manager provides one shared 32-bit guest-handle namespace for k
 | Invalid handle | `STATUS_INVALID_HANDLE` |
 | Expected type differs | `STATUS_OBJECT_TYPE_MISMATCH` via lookup status |
 | Invalid arguments/options | `STATUS_INVALID_PARAMETER` |
-| Handle table is shutting down | `STATUS_INVALID_DEVICE_STATE` |
-| Token/object allocation failure | `STATUS_INSUFFICIENT_RESOURCES` |
+| Handle table is shutting down | `STATUS_INVALID_DEVICE_STATE` (`0xC0000184`) |
+| Token/object allocation failure | `STATUS_INSUFFICIENT_RESOURCES` (`0xC000009A`) |
 | Unsupported cross-process duplication | `STATUS_NOT_SUPPORTED` (not implemented) |
 
 `K_NtClose` and `K_NtDuplicateObject` route manager-owned tokens through this table. Unrelated native Win32 handles retain the existing native fallback path. Same-process duplicate handles share the same payload; `DUPLICATE_CLOSE_SOURCE` closes only the source entry after publishing the duplicate.
