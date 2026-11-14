@@ -1,0 +1,1148 @@
+{
+  "schema_version": 1,
+  "group": "A",
+  "generated_for_branch": "work/kernel-export-half-a",
+  "source_policy": "Signatures from pinned NXDK header. Ordinals are the assigned handoff values and checked against the repository export catalogue; do not infer ordinal provenance from the NXDK header.",
+  "exports": [
+    {
+      "ordinal": 2,
+      "name": "AvSendTVEncoderOption",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI AvSendTVEncoderOption\n(\n    IN PVOID RegisterBase,\n    IN ULONG Option,\n    IN ULONG Param,\n    OUT PULONG Result\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 3,
+      "name": "AvSetDisplayMode",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI ULONG NTAPI AvSetDisplayMode\n(\n    IN PVOID RegisterBase,\n    IN ULONG Step,\n    IN ULONG DisplayMode,\n    IN ULONG SourceColorFormat,\n    IN ULONG Pitch,\n    IN ULONG FrameBuffer\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 24,
+      "name": "ExQueryNonVolatileSetting",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting\n(\n    IN ULONG ValueIndex,\n    OUT PULONG Type,\n    OUT PVOID Value,\n    IN ULONG ValueLength,\n    OUT PULONG ResultLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 25,
+      "name": "ExReadWriteRefurbInfo",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo\n(\n    OUT XBOX_REFURB_INFO *RefurbInfo,\n    IN ULONG ValueLength,\n    BOOLEAN DoWrite\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 29,
+      "name": "ExSaveNonVolatileSetting",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting\n(\n    IN ULONG ValueIndex,\n    IN ULONG Type,\n    IN CONST PVOID Value,\n    IN ULONG ValueLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 38,
+      "name": "HalClearSoftwareInterrupt",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL HalClearSoftwareInterrupt\n(\n    IN KIRQL RequestIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 39,
+      "name": "HalDisableSystemInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalDisableSystemInterrupt\n(\n    IN ULONG BusInterruptLevel\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 43,
+      "name": "HalEnableSystemInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalEnableSystemInterrupt\n(\n    IN ULONG BusInterruptLevel,\n    IN KINTERRUPT_MODE InterruptMode\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 44,
+      "name": "HalGetInterruptVector",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI ULONG NTAPI HalGetInterruptVector\n(\n    IN ULONG BusInterruptLevel,\n    OUT PKIRQL Irql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 46,
+      "name": "HalReadWritePCISpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalReadWritePCISpace\n(\n    IN ULONG BusNumber,\n    IN ULONG SlotNumber,\n    IN ULONG RegisterNumber,\n    IN PVOID Buffer,\n    IN ULONG Length,\n    IN BOOLEAN WritePCISpace\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 48,
+      "name": "HalRequestSoftwareInterrupt",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL HalRequestSoftwareInterrupt\n(\n    KIRQL RequestIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 59,
+      "name": "IoAllocateIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoAllocateIrp\n(\n    IN CCHAR StackSize\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 60,
+      "name": "IoBuildAsynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL,\n    IN PIO_STATUS_BLOCK IoStatusBlock OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 61,
+      "name": "IoBuildDeviceIoControlRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest\n(\n    IN ULONG IoControlCode,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PVOID InputBuffer OPTIONAL,\n    IN ULONG InputBufferLength,\n    OUT PVOID OutputBuffer OPTIONAL,\n    IN ULONG OutputBufferLength,\n    IN BOOLEAN InternalDeviceIoControl,\n    IN PKEVENT Event,\n    OUT PIO_STATUS_BLOCK IoStatusBlock\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 62,
+      "name": "IoBuildSynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL,\n    IN PKEVENT Event,\n    OUT PIO_STATUS_BLOCK IoStatusBlock\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 63,
+      "name": "IoCheckShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCheckShareAccess\n(\n    IN ACCESS_MASK DesiredAccess,\n    IN ULONG DesiredShareAccess,\n    IN OUT PFILE_OBJECT FileObject,\n    IN OUT PSHARE_ACCESS ShareAccess,\n    IN BOOLEAN Update\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 65,
+      "name": "IoCreateDevice",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCreateDevice\n(\n    IN PDRIVER_OBJECT DriverObject,\n    IN ULONG DeviceExtensionSize,\n    IN POBJECT_STRING DeviceName OPTIONAL,\n    IN DEVICE_TYPE DeviceType,\n    IN BOOLEAN Exclusive,\n    OUT PDEVICE_OBJECT *DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 66,
+      "name": "IoCreateFile",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCreateFile\n(\n    OUT PHANDLE FileHandle,\n    IN ACCESS_MASK DesiredAccess,\n    IN POBJECT_ATTRIBUTES ObjectAttributes,\n    OUT PIO_STATUS_BLOCK IoStatusBlock,\n    IN PLARGE_INTEGER AllocationSize OPTIONAL,\n    IN ULONG FileAttributes,\n    IN ULONG ShareAccess,\n    IN ULONG Disposition,\n    IN ULONG CreateOptions,\n    IN ULONG Options\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 68,
+      "name": "IoDeleteDevice",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoDeleteDevice\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 72,
+      "name": "IoFreeIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoFreeIrp\n(\n    IN PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 73,
+      "name": "IoInitializeIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoInitializeIrp\n(\n    IN OUT PIRP Irp,\n    IN USHORT PacketSize,\n    IN CCHAR StackSize\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 75,
+      "name": "IoQueryFileInformation",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoQueryFileInformation\n(\n    IN PFILE_OBJECT FileObject,\n    IN FILE_INFORMATION_CLASS FileInformationClass,\n    IN ULONG Length,\n    OUT PVOID FileInformation,\n    OUT PULONG ReturnedLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 76,
+      "name": "IoQueryVolumeInformation",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoQueryVolumeInformation\n(\n    IN PFILE_OBJECT FileObject,\n    IN FS_INFORMATION_CLASS FsInformationClass,\n    IN ULONG Length,\n    OUT PVOID FsInformation,\n    OUT PULONG ReturnedLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 77,
+      "name": "IoQueueThreadIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoQueueThreadIrp\n(\n    IN PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 78,
+      "name": "IoRemoveShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoRemoveShareAccess\n(\n    IN PFILE_OBJECT FileObject,\n    IN OUT PSHARE_ACCESS ShareAccess\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 79,
+      "name": "IoSetIoCompletion",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSetIoCompletion\n(\n    IN PVOID IoCompletion,\n    IN PVOID KeyContext,\n    IN PVOID ApcContext,\n    IN NTSTATUS IoStatus,\n    IN ULONG_PTR IoStatusInformation\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 80,
+      "name": "IoSetShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoSetShareAccess\n(\n    IN ACCESS_MASK DesiredAccess,\n    IN ULONG DesiredShareAccess,\n    IN OUT PFILE_OBJECT FileObject,\n    OUT PSHARE_ACCESS ShareAccess\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 81,
+      "name": "IoStartNextPacket",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartNextPacket\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 82,
+      "name": "IoStartNextPacketByKey",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartNextPacketByKey\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN ULONG Key\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 83,
+      "name": "IoStartPacket",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartPacket\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PIRP Irp,\n    IN PULONG Key OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 84,
+      "name": "IoSynchronousDeviceIoControlRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest\n(\n    IN ULONG IoControlCode,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PVOID InputBuffer OPTIONAL,\n    IN ULONG InputBufferLength,\n    OUT PVOID OutputBuffer OPTIONAL,\n    IN ULONG OutputBufferLength,\n    OUT PULONG ReturnedOutputBufferLength OPTIONAL,\n    IN BOOLEAN InternalDeviceIoControl\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 85,
+      "name": "IoSynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 86,
+      "name": "IofCallDriver",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI NTSTATUS FASTCALL IofCallDriver\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 87,
+      "name": "IofCompleteRequest",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL IofCompleteRequest\n(\n    IN PIRP Irp,\n    IN CCHAR PriorityBoost\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 90,
+      "name": "IoDismountVolume",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoDismountVolume\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 91,
+      "name": "IoDismountVolumeByName",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoDismountVolumeByName\n(\n    IN POBJECT_STRING DeviceName\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 4 (I/O)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 93,
+      "name": "KeAlertThread",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeAlertThread\n(\n    IN PKTHREAD Thread,\n    IN KPROCESSOR_MODE ProcessorMode\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 98,
+      "name": "KeConnectInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeConnectInterrupt\n(\n    IN PKINTERRUPT Interrupt\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 100,
+      "name": "KeDisconnectInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeDisconnectInterrupt\n(\n    IN PKINTERRUPT Interrupt\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 105,
+      "name": "KeInitializeApc",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI KeInitializeApc\n(\n    IN PRKAPC Apc,\n    IN PRKTHREAD Thread,\n    IN PKKERNEL_ROUTINE KernelRoutine,\n    IN PKRUNDOWN_ROUTINE RundownRoutine OPTIONAL,\n    IN PKNORMAL_ROUTINE NormalRoutine OPTIONAL,\n    IN KPROCESSOR_MODE ProcessorMode OPTIONAL,\n    IN PVOID NormalContext OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 109,
+      "name": "KeInitializeInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI KeInitializeInterrupt\n(\n    IN PKINTERRUPT Interrupt,\n    IN PKSERVICE_ROUTINE ServiceRoutine,\n    IN PVOID ServiceContext,\n    IN ULONG Vector,\n    IN KIRQL Irql,\n    IN KINTERRUPT_MODE InterruptMode,\n    IN BOOLEAN ShareVector\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 118,
+      "name": "KeInsertQueueApc",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeInsertQueueApc\n(\n    IN PRKAPC Apc,\n    IN PVOID SystemArgument1,\n    IN PVOID SystemArgument2,\n    IN KPRIORITY Increment\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 139,
+      "name": "KeRestoreFloatingPointState",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState\n(\n    IN PKFLOATING_SAVE FloatSave\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 141,
+      "name": "KeRundownQueue",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PLIST_ENTRY NTAPI KeRundownQueue\n(\n    IN PRKQUEUE Queue\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 142,
+      "name": "KeSaveFloatingPointState",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI KeSaveFloatingPointState\n(\n    OUT PKFLOATING_SAVE FloatSave\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 153,
+      "name": "KeSynchronizeExecution",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeSynchronizeExecution\n(\n    IN PKINTERRUPT Interrupt,\n    IN PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,\n    IN PVOID SynchronizeContext\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 163,
+      "name": "KiUnlockDispatcherDatabase",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL KiUnlockDispatcherDatabase\n(\n    IN KIRQL OldIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 3 (threading/synchronization/APC)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 168,
+      "name": "MmClaimGpuInstanceMemory",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmClaimGpuInstanceMemory\n(\n    IN SIZE_T NumberOfBytes,\n    OUT SIZE_T *NumberOfPaddingBytes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 169,
+      "name": "MmCreateKernelStack",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmCreateKernelStack\n(\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN DebuggerThread\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 170,
+      "name": "MmDeleteKernelStack",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmDeleteKernelStack\n(\n    IN PVOID KernelStackBase,\n    IN PVOID KernelStackLimit\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 175,
+      "name": "MmLockUnlockBufferPages",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmLockUnlockBufferPages\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN UnlockPages\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 176,
+      "name": "MmLockUnlockPhysicalPage",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmLockUnlockPhysicalPage\n(\n    IN ULONG_PTR PhysicalAddress,\n    IN BOOLEAN UnlockPage\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 177,
+      "name": "MmMapIoSpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmMapIoSpace\n(\n    IN ULONG_PTR PhysicalAddress,\n    IN SIZE_T NumberOfBytes,\n    IN ULONG Protect\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 178,
+      "name": "MmPersistContiguousMemory",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmPersistContiguousMemory\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN Persist\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 181,
+      "name": "MmQueryStatistics",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI MmQueryStatistics\n(\n    IN OUT PMM_STATISTICS MemoryStatistics\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 183,
+      "name": "MmUnmapIoSpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmUnmapIoSpace\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "pending_owner_coordination",
+      "owner": "Developer 2 (memory)",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    },
+    {
+      "ordinal": 188,
+      "name": "NtCreateDirectoryObject",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI NtCreateDirectoryObject\n(\n    OUT PHANDLE DirectoryHandle,\n    IN POBJECT_ATTRIBUTES ObjectAttributes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "dispatcher_entry_present": false,
+      "implementation_status": "signature_verified_not_implemented",
+      "owner": "Developer A / coordinator confirmation",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      }
+    }
+  ]
+}
