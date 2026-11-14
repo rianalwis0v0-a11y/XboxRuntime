@@ -1067,7 +1067,7 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
 
 static LONG NtControlFileImpl(HANDLE file, HANDLE event, void* apcRoutine,
     GuestIoStatusBlock* io, ULONG controlCode, void* inputBuffer,
-    ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    ULONG inputLength, void* outputBuffer, ULONG outputLength, bool filesystemControl) {
     constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
     constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
     constexpr LONG statusNotSupported = LONG(0xC00000BBu);
@@ -1077,6 +1077,20 @@ static LONG NtControlFileImpl(HANDLE file, HANDLE event, void* apcRoutine,
     if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
     if ((inputLength && !inputBuffer) || (outputLength && !outputBuffer))
         return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    if (filesystemControl) {
+        using NativeNtFsControlFile = LONG (NTAPI*)(HANDLE, HANDLE, void*, void*,
+            GuestIoStatusBlock*, ULONG, void*, ULONG, void*, ULONG);
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto native = ntdll ? reinterpret_cast<NativeNtFsControlFile>(
+            GetProcAddress(ntdll, "NtFsControlFile")) : nullptr;
+        if (!native) return SetDirectoryIoStatus(io, statusNotSupported);
+        // The guest APC routine is not a host APC thunk; asynchronous APC delivery
+        // is owned by the threading provider. Synchronous FSCTLs use the native
+        // host filesystem path and its IO_STATUS_BLOCK/event completion semantics.
+        return native(file, event, nullptr, nullptr, io, controlCode,
+            inputBuffer, inputLength, outputBuffer, outputLength);
+    }
 
     DWORD bytesReturned = 0;
     const BOOL succeeded = DeviceIoControl(file, controlCode, inputBuffer,
@@ -1108,7 +1122,7 @@ extern "C" LONG __stdcall K_NtDeviceIoControlFile(HANDLE file, HANDLE event,
     void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
     (void)apcContext;
     return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
-        inputBuffer, inputLength, outputBuffer, outputLength);
+        inputBuffer, inputLength, outputBuffer, outputLength, false);
 }
 
 extern "C" LONG __stdcall K_NtFsControlFile(HANDLE file, HANDLE event,
@@ -1116,7 +1130,7 @@ extern "C" LONG __stdcall K_NtFsControlFile(HANDLE file, HANDLE event,
     void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
     (void)apcContext;
     return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
-        inputBuffer, inputLength, outputBuffer, outputLength);
+        inputBuffer, inputLength, outputBuffer, outputLength, true);
 }
 
 
