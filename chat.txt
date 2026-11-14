@@ -1444,3 +1444,23 @@ Changes:
 - NtCreateIoCompletion rejects non-null ObjectAttributes because the named object namespace is not implemented in this layer; no fake named-object success.
 CI: run #43583329328 is in progress. No IOCP test pass claimed until its x86 guest build and kernel_guest_backend_smoke result are green.
 Coordination: Developer 4 was told I own the four IOCP object exports/queue semantics, while they own IRP/device/file-side completion producers. Developer 2 was asked to preserve the narrow duplicate/close metadata hooks; no reply yet. Thread/TLS runtime contract still pending response from execution owner on PR #15.
+
+
+[2026-11-14 10:03 UTC] [Kernel Developer 4 — file I/O extension + NXDK OBJECT_ATTRIBUTES ABI correction]
+Branch head at this checkpoint: work/kernel-io-system-apis / 7f83e0c87abc5ad5815b82959f1232845ea5cb38
+New I/O work:
+- NtQueryDirectoryFile ordinal 207 now supports both FileDirectoryInformation (class 1) and FileNamesInformation (class 12); other classes still return STATUS_INVALID_INFO_CLASS.
+- FileNamesInformation uses the pinned NXDK OCHAR layout: NextEntryOffset, FileIndex, FileNameLength, FileName[1]. Current host-backed FileIndex is 0 because FindFirstFileW does not expose the Xbox index; this is documented as partial.
+- Synthetic guest test now prepares a temporary host directory containing alpha.bin; guest calls NtCreateFile (190), NtQueryDirectoryFile (207) for classes 12 and 1, and NtClose (187) through resolved import thunks, checking name lengths, file-name bytes and IO_STATUS_BLOCK.Information.
+NXDK ABI correction:
+- Pinned XboxDev/nxdk xboxkrnl.h at commit fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e confirms OBJECT_ATTRIBUTES is exactly 12 bytes on x86: HANDLE RootDirectory; PANSI_STRING ObjectName; ULONG Attributes.
+- Corrected GuestObjectAttributes and TranslateXboxPath to use ANSI_STRING/OCHAR paths, and corrected NtCreateFile/NtOpenFile/NtQueryFullAttributesFile/NtDeleteFile consumers. RootDirectory-relative paths are explicitly STATUS_NOT_SUPPORTED rather than misread.
+- Developer 2 was notified on PR #17 to use the same pinned 12-byte layout for future object-manager APIs.
+Changed files for this tranche:
+- guest32/kernel_compat.cpp (ANSI OBJECT_ATTRIBUTES/path translation and FileNamesInformation class 12)
+- tests/kernel_guest_backend_smoke.cpp (real import-thunk directory I/O test; NtClose dependency)
+CI:
+- https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43583333114 — IN PROGRESS at publication. x86 guest compile and host64 x86 guest-runtime build are running; do not claim the new directory I/O test passed until both CTest jobs finish.
+Coordination:
+- Developer 3's work/kernel-thread-apis branch contains initial NtCreateIoCompletion (191), NtQueryIoCompletion (212), NtRemoveIoCompletion (223), and NtSetIoCompletion (227) handlers/dispatch. I will not duplicate them. Asked whether they will implement APC/async NtReadFile/NtWriteFile integration; awaiting answer.
+- No new handle/object ownership internals added here; the synthetic guest test calls existing NtClose ordinal 187 only.
