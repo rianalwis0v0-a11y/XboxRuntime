@@ -1292,8 +1292,8 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
     if (format & 0x0000000Cu) return 6;
     const uint32_t dimensionality = (format >> 4) & 0xFu;
     const uint32_t context_slot = format & 3u;
-    /* NV097 texture context selection is DMA_A (0) or DMA_B (1). */
-    if (context_slot > 1u) return 7;
+    /* The two-bit NV097 context selector addresses DMA_A through DMA_D. */
+    if (context_slot > 3u) return 7;
     const uint32_t context_method = 0x0180u + context_slot * 4u;
     const uint32_t max_lod = (control0 >> 6) & 0xFFFu;
     const uint32_t encoded_levels = (format >> 16) & 0xFu;
