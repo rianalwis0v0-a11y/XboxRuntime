@@ -189,3 +189,9 @@ until the worker has finished writing it and signaled the event. Completed
 results remain caller-owned until released. The smoke test exercises release
 immediately after queuing a lookup and waits for worker completion, covering
 the former use-after-free risk.
+
+
+`XNetCleanup` now returns `WSANOTINITIALISED` when called without a matching
+successful startup, matching the original XNet lifecycle contract. The smoke
+test verifies both the final successful cleanup and the unmatched-cleanup
+error.
