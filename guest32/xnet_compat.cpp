@@ -26,6 +26,8 @@ struct DnsLookupWork { char* hostname; XNDNS* result; WSAEVENT eventHandle; bool
 std::mutex g_dnsMutex;
 std::unordered_map<XNDNS*, DnsLookupWork*> g_pendingDns;
 std::unordered_set<XNDNS*> g_dnsResults;
+std::mutex g_wsaMutex;
+unsigned g_wsaUsers = 0;
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -563,8 +565,14 @@ extern "C" u_short WINAPI XSocketNTOHS(u_short value) { return ntohs(value); }
 
 extern "C" int WINAPI XboxWSAStartup(WORD versionRequested, LPWSADATA data) {
     if (!data) return WSAEFAULT;
-    const int startup = XboxNetStartup();
-    if (startup != 0) return WSASYSNOTREADY;
+    const BYTE requestedMajor = LOBYTE(versionRequested);
+    const BYTE requestedMinor = HIBYTE(versionRequested);
+    if (requestedMajor > 2 || (requestedMajor == 2 && requestedMinor > 2))
+        return WSAVERNOTSUPPORTED;
+
+    std::lock_guard<std::mutex> lock(g_wsaMutex);
+    if (XboxNetStartup() != 0) return WSASYSNOTREADY;
+    ++g_wsaUsers;
     std::memset(data, 0, sizeof(*data));
     data->wVersion = versionRequested;
     data->wHighVersion = MAKEWORD(2, 2);
@@ -574,8 +582,15 @@ extern "C" int WINAPI XboxWSAStartup(WORD versionRequested, LPWSADATA data) {
 }
 
 extern "C" int WINAPI XboxWSACleanup() {
-    // XboxNetCleanup is intentionally void: it decrements the shared startup
-    // reference count and has no Winsock-style error return.
+    {
+        std::lock_guard<std::mutex> lock(g_wsaMutex);
+        if (!g_wsaUsers) {
+            WSASetLastError(WSANOTINITIALISED);
+            return SOCKET_ERROR;
+        }
+        --g_wsaUsers;
+    }
+    // The transport has a separate reference count shared with XNet and async DNS.
     XboxNetCleanup();
     return 0;
 }
