@@ -4,6 +4,7 @@
 #include <winioctl.h>
 
 #include "../include/fatx.h"
+#include "../../../third_party/libfatx/fatx.h"
 
 #include <new>
 #include <cwchar>
@@ -31,6 +32,10 @@ struct FatxVolume {
     ULONGLONG clusterCount = 0;
 
     SRWLOCK lock = SRWLOCK_INIT;
+
+    // Upstream XboxDev/libfatx read-only validation handle.
+    struct fatx_fs upstream{};
+    bool upstreamOpen = false;
 };
 
 struct FatxDirEntry {
@@ -525,6 +530,38 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     v->base = partitionOffset;
     v->length = partitionLength;
 
+    // Validate the same volume with the mature XboxDev/libfatx parser.
+    // The vendored library is patched to open images read-only.
+    const int pathBytes = WideCharToMultiByte(
+        CP_ACP, 0, devicePath, -1, nullptr, 0, nullptr, nullptr
+    );
+    if (pathBytes <= 0) {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_ARGUMENT;
+    }
+    std::vector<char> narrowPath(static_cast<size_t>(pathBytes));
+    if (!WideCharToMultiByte(
+        CP_ACP, 0, devicePath, -1, narrowPath.data(), pathBytes, nullptr, nullptr
+    )) {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_ARGUMENT;
+    }
+    if (fatx_open_device(
+        &v->upstream, narrowPath.data(), partitionOffset,
+        partitionLength, 512, FATX_READ_FROM_SUPERBLOCK
+    ) != FATX_STATUS_SUCCESS) {
+        if (v->upstream.device) {
+            fclose(v->upstream.device);
+            v->upstream.device = nullptr;
+        }
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_VOLUME;
+    }
+    v->upstreamOpen = true;
+
     BYTE header[0x1000]{};
 
     if (!ReadAt(v, 0, header, sizeof(header)) ||
@@ -607,6 +644,11 @@ extern "C" void __cdecl FATX_CloseVolume(
 
     if (!v)
         return;
+
+    if (v->upstreamOpen) {
+        fatx_close_device(&v->upstream);
+        v->upstreamOpen = false;
+    }
 
     if (v->file != INVALID_HANDLE_VALUE)
         CloseHandle(v->file);
