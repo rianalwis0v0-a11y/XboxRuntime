@@ -108,11 +108,11 @@ LONG XboxKernelDuplicateObjectHandle(HANDLE source, HANDLE* target, ULONG option
     if (!source || !target || (options & ~0x3u) != 0)
         return static_cast<LONG>(0xC000000Du);
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_shuttingDown) return static_cast<LONG>(0xC000010Eu);
+    if (g_shuttingDown) return static_cast<LONG>(0xC0000184u);
     auto it = g_handles.find(source);
     if (it == g_handles.end()) return static_cast<LONG>(0xC0000008u);
     HANDLE token = AllocateTokenLocked();
-    if (!token) return static_cast<LONG>(0xC0000017u);
+    if (!token) return static_cast<LONG>(0xC000009Au);
     ++it->second->references;
     g_handles.emplace(token, it->second);
     *target = token;
