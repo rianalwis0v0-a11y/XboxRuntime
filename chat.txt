@@ -1258,3 +1258,33 @@ Known issues / next steps:
 1. Verify the new fixture placement in CI; then debug any actual dispatcher thunk/ABI failures using the next exact test diagnostic.
 2. Keep timer DPC and mutant-abandonment behavior explicitly unsupported/fail-fast; do not interpret BOOLEAN previous-state return values as operation success.
 3. Await execution owner response before touching KTHREAD/TLS/thread environment state.
+
+
+[2026-11-14 09:47 UTC] [Kernel Developer 4 — symbolic-link I/O tranche added]
+Status: IN_PROGRESS — code and both host/guest tests committed; expanded CI is running.
+Branch head: work/kernel-io-system-apis / b19ece82fbd7aa52442c3d0e9ecf7aecaaca7ada
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 (draft, stacked on work/kernel-memory-apis)
+New APIs:
+- IoCreateSymbolicLink ordinal 67: validates NXDK OBJECT_STRING inputs, stores case-insensitive namespace mappings, rejects duplicate names with STATUS_OBJECT_NAME_COLLISION.
+- IoDeleteSymbolicLink ordinal 69: removes mappings and returns STATUS_OBJECT_NAME_NOT_FOUND for absent names.
+- The existing TranslateXboxPath now resolves registered prefixes before mapping \\Device\\Cdrom0 / \\Device\\Harddisk0\\Partition1. Resolver chooses the longest path-boundary match and rejects cycles or chains exceeding 16 links.
+- Both APIs are marked PARTIAL: no complete NT object manager or device-object stack is claimed.
+Files added/changed since the first system tranche:
+- guest32/kernel_system.h
+- guest32/kernel_system.cpp
+- guest32/kernel_compat.cpp (ordinals 67/69 and path-resolver hook; ordinal 256 PsQueryStatistics route retained)
+- guest32/CMakeLists.txt
+- tests/kernel_io_guest_smoke.cpp
+- tests/kernel_io_system_host_tests.cpp
+- modules/xbox_kernel/CMakeLists.txt
+- .github/workflows/kernel-io-system-apis.yml
+- docs/KERNEL-IO-SYSTEM-APIS.md
+Test coverage added:
+- x86 guest stdcall smoke: create/delete, case-insensitive prefix replacement, suffix preservation, duplicate collision, path-boundary safety, cycle rejection, missing-name status, invalid OBJECT_STRING.
+- x64 host tests: PsQueryStatistics process snapshot and symbolic-link namespace behavior.
+- Expanded CI run: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43582165810 — IN PROGRESS at publication; configure/build/ctest results not yet available.
+- Previous PsQueryStatistics-only x86 CI run 43581916368 is SUCCESS.
+Coordination:
+- Asked Developer 2 on PR #17 whether NtOpenSymbolicLinkObject/NtQuerySymbolicLinkObject/directory objects share their object-manager ownership; no reply observed yet. I have not modified NtDuplicateObject/NtClose.
+- Notified Developer 3 on PR #18 to preserve the ordinal-256 dispatch include/route; no thread/synchronization/async code changed.
+Next: resolve any first CI failure; obtain memory-team namespace ownership confirmation; then continue with file/device I/O beyond symbolic-link path mapping. No IRP, disk-control, or asynchronous I/O completion APIs are claimed complete.
