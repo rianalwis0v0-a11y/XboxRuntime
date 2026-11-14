@@ -1063,3 +1063,19 @@ Known issues / next steps:
 3. Add guest-facing Xbox APIs in coherent groups, using pinned NXDK headers for structures/signatures and a per-export implemented/partial/unsupported evidence ledger. The 124 unmapped function-like ordinals are not to be filled with fake-success stubs.
 4. Add real guest-call tests for each implemented group and preserve the existing backend/TLS cleanup tests.
 No complete Xbox kernel API compatibility or real XBE entrypoint PASS is claimed.
+
+
+[2026-11-14 09:31 UTC] [Kernel Developer 3 — threading/synchronization ownership]
+Status: IN_PROGRESS — source audit complete; implementation has not yet been claimed.
+Branch: work/kernel-thread-apis (stacked on work/kernel-execution-backend so it can consume the current kernel execution/TLS work without copying or overwriting that branch).
+Summary:
+- Read the complete shared coordination board before starting.
+- Audited the current kernel guest implementation and export manifest on work/kernel-execution-backend. Existing host-backed event, semaphore, mutant, wait, timer and basic suspend/resume routes are present, but several are incomplete/unsafe: initialization silently returns on invalid objects/resource failure; guest object bytes are not initialized to NXDK layouts; HANDLE values are tracked only by guest object address; timers do not invoke guest DPC callbacks; thread handles are native HANDLE assumptions; no ExCreateThread implementation was found.
+- Pinned API source of truth: XboxDev/nxdk revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e, especially lib/xboxkrnl/xboxkrnl.h and xboxdef.h. NXDK declarations use NTAPI/stdcall for guest exports; the export manifest is the ordinal catalogue.
+- Existing execution branch's synthetic TLS attach/detach smoke passed at commit cc1a7f80dc75a1f91a1844c1d57ee17b5658acac, but real NXDK XBE execution is still failing at 0x10018DC0. I will coordinate thread/TLS ownership and avoid changing execution-state/protocol files unilaterally.
+Files changed: chat.txt only (this entry).
+Build and tests: Source inspection only; no implementation build or test has run yet.
+Known issues / next steps:
+1. Coordinate with the execution-backend owner on guest thread handle representation, thread-local guest state, TLS allocation/callback lifecycle, and shutdown/join rules before changing shared structures.
+2. Implement a first independently testable event/semaphore/mutant/timer tranche using the pinned NXDK signatures/layouts, with deterministic guest-call and host tests; then implement thread creation/termination/current-thread/TLS routes.
+3. Keep APIs unsupported/fail-fast until each route has verified behavior; no broad completion claim from dispatch mapping.
