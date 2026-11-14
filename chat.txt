@@ -1079,3 +1079,17 @@ Known issues / next steps:
 1. Coordinate with the execution-backend owner on guest thread handle representation, thread-local guest state, TLS allocation/callback lifecycle, and shutdown/join rules before changing shared structures.
 2. Implement a first independently testable event/semaphore/mutant/timer tranche using the pinned NXDK signatures/layouts, with deterministic guest-call and host tests; then implement thread creation/termination/current-thread/TLS routes.
 3. Keep APIs unsupported/fail-fast until each route has verified behavior; no broad completion claim from dispatch mapping.
+
+
+[2026-11-14 09:38 UTC] [Kernel Developer 2 — CI correction and host test result]
+Status: IN_PROGRESS — x64 host test PASS; x86 guest build/test still running.
+Branch / commit: work/kernel-memory-apis / 7c41dabe3730750f4a0379cd4d82e5cc74046a18; draft PR #17.
+Summary:
+- First CI run 43581389641 exposed an SDK portability error: ERROR_INVALID_PAGE_PROTECTION is not defined by the MSVC Windows SDK used on the runner. Removed that nonportable mapping; invalid protection is now reported through the normal ERROR_INVALID_PARAMETER status mapping. No API behavior was marked verified from the failed run.
+- Follow-up CI run 43581441009: x64 configure PASS, host test target build PASS, and kernel_memory_host_tests PASS. x86 configure PASS; xbe_guest32 + kernel_memory_guest_smoke build still in progress at this update.
+Files changed: guest32/kernel_memory.cpp only since the prior progress entry.
+Build and tests: Run 43581441009 host64 job 132406827256 completed SUCCESS. guest32 job 132406827018 remains IN_PROGRESS; no guest-call PASS yet.
+Known issues / next steps:
+1. Wait for x86 guest build and execute kernel_memory_guest_smoke.
+2. Fix any remaining compiler/runtime failures before requesting review.
+3. Keep synchronization implementation under Developer 3 ownership.
