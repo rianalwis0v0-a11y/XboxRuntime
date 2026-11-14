@@ -219,6 +219,30 @@ int wmain(int argc, wchar_t** argv) {
             std::printf("Fault stack:");
             for (std::uint32_t value : faultContext.stack) std::printf(" %08X", value);
             std::printf("\\n");
+
+            // The guest and host share the mapped XBE pages. Snapshot the
+            // patched kernel thunk table after a fault so bad import targets
+            // can be distinguished from a corrupted return address.
+            for (std::uint32_t i = 0; i < 128 && image.kernelThunkAddress; ++i) {
+                const std::uint64_t slot64 = std::uint64_t(image.kernelThunkAddress) + i * 4ull;
+                if (slot64 > 0xFFFFFFFFull) break;
+                std::uint32_t target = 0;
+                SIZE_T thunkCopied = 0;
+                if (!ReadProcessMemory(GetCurrentProcess(),
+                        reinterpret_cast<const void*>(static_cast<std::uintptr_t>(slot64)),
+                        &target, sizeof(target), &thunkCopied) || thunkCopied != sizeof(target))
+                    break;
+                if (!target) break;
+                if (i == 69 || target == faultAddress ||
+                    (target >= image.baseAddress &&
+                     std::uint64_t(target) < std::uint64_t(image.baseAddress) + image.imageSize)) {
+                    std::printf("Kernel thunk[%u] @0x%08llX -> 0x%08X%s\\n",
+                        i, static_cast<unsigned long long>(slot64), target,
+                        target >= image.baseAddress &&
+                        std::uint64_t(target) < std::uint64_t(image.baseAddress) + image.imageSize
+                            ? " <inside XBE image>" : "");
+                }
+            }
         }
         if (exceptionInstruction) {
             std::uint8_t faultBytes[32]{};
