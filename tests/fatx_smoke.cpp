@@ -173,9 +173,11 @@ int main() {
         BYTE patch[16];
         std::memset(patch, 0xA5, sizeof(patch));
         DWORD bytesWritten = 0;
-        if (FATX_WriteFileW(volume, L"TEST.BIN", 1000, patch,
-                            sizeof(patch), &bytesWritten) != FATX_OK ||
-            bytesWritten != sizeof(patch)) {
+        const int overwriteStatus = FATX_WriteFileW(
+            volume, L"TEST.BIN", 1000, patch, sizeof(patch), &bytesWritten);
+        if (overwriteStatus != FATX_OK || bytesWritten != sizeof(patch)) {
+            std::fprintf(stderr, "overwrite status=%d bytes=%lu\\n",
+                         overwriteStatus, static_cast<unsigned long>(bytesWritten));
             Fail("FATX in-place overwrite failed");
             goto stop;
         }
