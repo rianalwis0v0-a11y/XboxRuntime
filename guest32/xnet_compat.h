@@ -69,7 +69,7 @@ struct XNQOSINFO {
     WORD cProbesXmit;
     WORD cProbesRecv;
     WORD cbData;
-    BYTE* pbData;
+    uint32_t pbData; // 32-bit guest virtual address; never a host pointer.
     WORD wRttMinInMsecs;
     WORD wRttMedInMsecs;
     DWORD dwUpBitsPerSec;
