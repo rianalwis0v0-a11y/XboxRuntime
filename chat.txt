@@ -261,3 +261,21 @@ Verified on commit 0d3789a77d45468d1d13edb8f7f1005539e4e464, Windows workflow ru
 - This is the first verified clean real NXDK XBE entrypoint return in this branch.
 Remaining acceptance check:
 - The existing integration test did not explicitly assert section 2's actual VirtualQuery protection. Added a check that section 2's executable flag is clear and every mapped page remains committed and non-executable. New CI will verify this before marking the execution milestone complete.
+
+
+[2026-11-14 14:15 UTC] [Kernel Developer 5 — XBE execution milestone verified]
+Status: PASS — real NXDK XBE now runs through the real loader and kernel backend.
+Verified commit: d2c63bb1e7b5665e0c52d4f786b0eb8f496fc61a.
+Windows CI run: 43603739074 (https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43603739074).
+Results:
+- NXDK homebrew XBE fixture built and uploaded successfully.
+- Kernel export audit, host backend build, main runtime build, x86 guest build, networking/API tests, shared-memory backend smoke, XBE format tests, x64 loader build, and real backend pair verification all passed.
+- thread_compat_smoke passed; confirms PsCreateSystemThreadEx ABI, suspended start, KTHREAD stack bounds and TLS alignment.
+- Explicit section-2 test passed: section flags=0x00000003; every mapped page committed and non-executable.
+- Real guest entrypoint returned with exitCode=0; TLS index slot cleared (tlsIndexCleared=1); exceptionIP=0; guest image VA released after shutdown.
+Acceptance:
+- Real XBE entrypoint executes and returns cleanly.
+- TLS cleanup succeeds.
+- Section 2 remains non-executable.
+- No loader/backend crash; image release verified.
+Remaining work is broader kernel compatibility for more XBE titles, not the minimal NXDK homebrew execution path. PR #20 remains draft for review; do not merge without user/team approval.
