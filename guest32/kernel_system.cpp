@@ -109,7 +109,7 @@ extern "C" LONG __stdcall K_IoDeleteSymbolicLink(XboxObjectString* symbolicLinkN
     constexpr LONG kIoStatusInvalidParameter = static_cast<LONG>(0xC000000Du);
     constexpr LONG kStatusObjectNameNotFound = static_cast<LONG>(0xC0000034u);
     std::wstring name;
-    if (!ReadObjectString(symbolicLinkName, &name)) return kStatusInvalidParameter;
+    if (!ReadObjectString(symbolicLinkName, &name)) return kIoStatusInvalidParameter;
     const std::wstring key = NormalizeObjectName(name);
     std::lock_guard<std::mutex> lock(g_symbolicLinkMutex);
     return g_symbolicLinks.erase(key) ? 0 : kStatusObjectNameNotFound;
