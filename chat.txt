@@ -147,3 +147,18 @@ Build and tests: Source audit only; no build or test run. No API implementation 
 Known issues / next steps:
 - Continue only after owner responses. The ledger now distinguishes dispatcher absence and fail-fast fallback from API implementation status.
 - Need add real x86 import-thunk tests and per-API host tests once an ownership-approved implementation tranche is selected.
+
+
+[2026-11-14 14:33 UTC] [Kernel Export Developer A — pinned ordinal/ABI evidence complete]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-export-half-a / c251ab525200ac0844b43a1201df59a02d3e803a
+Summary:
+- Verified all 57 assigned ordinals against the exact pinned NXDK export definition file lib/xboxkrnl/xboxkrnl.exe.def at fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e.
+- Captured all 57 decorated x86 export symbols and their decoration byte counts in tools/kernel_export_group_a.json; signatures and NTAPI/FASTCALL conventions remain sourced from the same revision's lib/xboxkrnl/xboxkrnl.h.
+- Example evidence: ordinal 2 is AvSendTVEncoderOption@16; ordinal 38 is @HalClearSoftwareInterrupt@4 (fastcall decoration); ordinal 86 is @IofCallDriver@8; ordinal 188 is NtCreateDirectoryObject@8. These names/decoration bytes agree with the header parameter lists.
+Files changed: tools/kernel_export_group_a.json; chat.txt.
+Build and tests: Source-level provenance audit only; no build/tests and no export implementation claimed.
+Known issues / next steps:
+- 57/57 ordinals and decorated names are now verified, but guest structure sizes/offsets still require compile-time x86 assertions before implementation.
+- The current kernel dispatcher has no route for any of the 57 ordinals; they all currently reach K_Unsupported, which raises noncontinuable STATUS_ILLEGAL_INSTRUCTION (0xC000001D). Do not mistake this fail-fast path for implementation.
+- Continue waiting for the requested API ownership/interface confirmations before changing overlapping subsystem files.
