@@ -65,7 +65,7 @@ extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
 
 extern "C" int WINAPI XNetCleanup() {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
-    if (!g_xnetUsers) return 0;
+    if (!g_xnetUsers) return WSANOTINITIALISED;
     if (--g_xnetUsers == 0) {
         XboxNetCleanup();
         for (auto& entry : g_registeredKeys) SecureZeroMemory(&entry, sizeof(entry));
