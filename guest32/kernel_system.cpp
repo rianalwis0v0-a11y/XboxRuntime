@@ -59,6 +59,7 @@ extern "C" LONG __stdcall K_PsQueryStatistics(XboxPsStatistics* statistics) {
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace {
 std::mutex g_symbolicLinkMutex;
