@@ -30,7 +30,7 @@ void Log(const wchar_t* message) {
 extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
     if (params && params->cfgSizeOfStruct != sizeof(XNetStartupParams))
-        return WSAEINVAL;
+        return WSAEFAULT;
     if (g_xnetUsers) {
         ++g_xnetUsers;
         return 0;
