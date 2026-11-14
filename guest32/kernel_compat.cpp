@@ -577,6 +577,7 @@ struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Informa
 std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     if(!name||!name->Buffer||!name->Length)return {};
     std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
+    if (!XboxKernelResolveSymbolicLinks(&p)) return {};
     const std::wstring cd=L"\\Device\\Cdrom0";
     const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
     if(p.rfind(cd,0)==0)p=g_titleDirectory+p.substr(cd.size());
@@ -1836,6 +1837,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
+        cmp eax, 67
+        je io_create_symbolic_link
+        cmp eax, 69
+        je io_delete_symbolic_link
         cmp eax, 74
         je io_invalid_device_request
         cmp eax, 361
@@ -2301,6 +2306,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    io_create_symbolic_link: jmp K_IoCreateSymbolicLink
+    io_delete_symbolic_link: jmp K_IoDeleteSymbolicLink
     io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
