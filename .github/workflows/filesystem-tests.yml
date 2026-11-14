@@ -6,6 +6,7 @@ on:
       - work/xdvdfs-fatx
     paths:
       - "modules/fatx/**"
+      - "third_party/libfatx/**"
       - "modules/xdvdfs/**"
       - "tests/fatx_smoke.cpp"
       - "tests/xdvdfs_smoke.cpp"
