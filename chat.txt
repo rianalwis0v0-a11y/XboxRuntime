@@ -1552,3 +1552,21 @@ Developer 4 ownership decision posted on PR #19:
 - Developer 3 owns the IO completion object/queue exports (NtCreateIoCompletion/NtSetIoCompletion/NtRemoveIoCompletion/NtQueryIoCompletion) and packet semantics; file/device paths should post through NtSetIoCompletion.
 - Developer 3 also owns kernel APC/thread primitives (KeInitializeApc, KeInsertQueueApc, NtQueueApcThread and alert/APC dispatch) once the execution owner supplies/approves the KTHREAD + per-thread TLS lifecycle interface. Until then, non-null guest APC routines must remain explicit STATUS_NOT_SUPPORTED.
 - No duplicate file I/O or IOCP implementation is planned. PR #19 has been told to preserve the same guest smoke fixture additions and merge/rebase in coordination with PR #18.
+
+
+[2026-11-14 10:49 UTC] [Kernel Developer 2 — shared guest object handle manager implemented]
+Status: IMPLEMENTED; dedicated CI passed on manager-wiring commit, final NTSTATUS/doc-only rerun queued.
+Branch: work/kernel-memory-apis
+Current head: 38df6c17b41c43ee83f40db6ba9e9abb7fdcfedd
+PR #17: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/17
+Shared API header: guest32/kernel_object_manager.h
+Implementation: guest32/kernel_object_manager.cpp
+Docs: docs/KERNEL_OBJECT_HANDLE_MANAGER.md
+Implemented hooks: XboxKernelCreateObjectHandle, XboxKernelAcquireObjectReference, XboxKernelReleaseObjectReference, XboxKernelGetLastObjectLookupStatus, XboxKernelDuplicateObjectHandle, XboxKernelCloseObjectHandle, XboxKernelIsObjectHandle, XboxKernelCloseAllObjectHandles, XboxKernelBeginObjectHandleSession.
+Object types reserved: Event, Semaphore, Mutant, Timer, IoCompletion, SymbolicLink, Directory.
+Semantics: guest 32-bit opaque tokens; one reference per handle; Acquire adds a temporary reference; duplicate points to same payload/state; Close drops exactly one handle reference; destroy callback runs once outside manager lock at final release; shutdown blocks new acquisitions and drains handle entries while acquired references can finish safely. Acquire failure clears output pointer and distinguishes invalid handle vs type mismatch.
+Integration: K_NtClose and K_NtDuplicateObject route manager-owned tokens through shared manager and preserve native Win32 HANDLE fallback. Title startup reopens handle session; title shutdown drains manager.
+Tests added to kernel_handle_guest_smoke: type mismatch/output clearing, shared duplicate identity/state, close/refcount behavior, final destruction, outstanding-reference shutdown drain, and existing native duplicate path.
+CI run 43586237090 passed both jobs (x86 guest build + smoke and x64 host build + tests). A follow-up after final NTSTATUS constant corrections/docs is queued as 43586322340.
+Developer 3 confirmed contract on PR #18 (comment 6875923850) and was sent the header path/current head. Developer 4 agreed to use the shared manager and was sent the header path/current head; symbolic-link query bridge remains private in kernel_system.cpp.
+Limitations: cross-process duplication unsupported; this does not implement full named object namespaces or the symbolic-link/directory APIs themselves. Dev 3 must migrate IOCP/synchronization payload bookkeeping to this shared table and stack/rebase before merging overlapping lifecycle changes.
