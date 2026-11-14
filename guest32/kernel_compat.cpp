@@ -1559,8 +1559,6 @@ extern "C" LONG __stdcall K_KeSetEvent(void* event, LONG, UCHAR) {
     if (!h || !event) return LONG(0xC0000008u);
     auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
     if (header->Type > 1u) return LONG(0xC0000024u);
-    if (header->Type > 1u) return LONG(0xC0000024u);
-    if (header->Type > 1u) return LONG(0xC0000024u);
     const LONG previous = InterlockedExchange(&header->SignalState, 1);
     if (!SetEvent(h)) {
         InterlockedExchange(&header->SignalState, previous);
@@ -1572,6 +1570,7 @@ extern "C" LONG __stdcall K_KeResetEvent(void* event) {
     HANDLE h = FindKernelObject(event);
     if (!h || !event) return LONG(0xC0000008u);
     auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
+    if (header->Type > 1u) return LONG(0xC0000024u);
     const LONG previous = InterlockedExchange(&header->SignalState, 0);
     if (!ResetEvent(h)) {
         InterlockedExchange(&header->SignalState, previous);
@@ -1583,6 +1582,7 @@ extern "C" LONG __stdcall K_KePulseEvent(void* event, LONG, UCHAR) {
     HANDLE h = FindKernelObject(event);
     if (!h || !event) return LONG(0xC0000008u);
     auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
+    if (header->Type > 1u) return LONG(0xC0000024u);
     const LONG previous = InterlockedExchange(&header->SignalState, 0);
     if (!PulseEvent(h)) {
         InterlockedExchange(&header->SignalState, previous);
