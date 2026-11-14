@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <cstdint>
+#include "guest_protocol.h"
 
 struct XboxKernelState {
     uint32_t imageBase;
@@ -26,3 +27,4 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
                                               std::uint32_t* faultAddress,
                                               std::uint32_t* faultProtection,
                                               std::uint32_t* faultState);
+void XboxKernelGetLastExceptionContext(XboxGuestFaultContext* context);
