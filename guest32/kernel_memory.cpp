@@ -154,13 +154,23 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
                                                 ULONG options) {
     if (!ValidHandle(source) || !target || (options & ~1u) != 0)
         return kInvalidParameter;
+    const bool closeSource = (options & 1u) != 0; // NXDK DUPLICATE_CLOSE_SOURCE
     HANDLE duplicate = nullptr;
     if (!DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(),
-                         &duplicate, 0, FALSE, options & 1u))
-        return StatusFromWin32(GetLastError());
+                         &duplicate, 0, FALSE, 0)) {
+        const DWORD error = GetLastError();
+        if (closeSource) CloseHandle(source);
+        return StatusFromWin32(error);
+    }
     if (!CopyToGuest(target, &duplicate, sizeof(duplicate))) {
         CloseHandle(duplicate);
+        if (closeSource) CloseHandle(source);
         return kInvalidParameter;
+    }
+    if (closeSource && !CloseHandle(source)) {
+        const DWORD error = GetLastError();
+        CloseHandle(duplicate);
+        return StatusFromWin32(error);
     }
     return kSuccess;
 }
