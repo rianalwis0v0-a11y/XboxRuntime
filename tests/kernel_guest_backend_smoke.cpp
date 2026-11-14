@@ -259,7 +259,7 @@ int main() {
     const std::uint32_t ordinals[] = {
         108u, 145u, 138u, 159u, 112u, 132u,
         110u, 131u, 113u, 149u, 150u, 97u, 146u, 99u,
-        191u, 212u, 223u, 227u, 198u, 187u, 0u
+        191u, 212u, 223u, 227u, 197u, 187u, 0u
     };
     for (std::size_t i = 0; i < sizeof(ordinals) / sizeof(ordinals[0]); ++i) {
         const std::uint32_t thunk = ordinals[i]
