@@ -29,3 +29,25 @@ extern "C" LONG __stdcall K_IoDeleteSymbolicLink(XboxObjectString* symbolicLinkN
 // Resolves the guest object-manager link prefix in-place. Returns false for cycles
 // or excessive link depth; true means the path is resolved or has no matching link.
 bool XboxKernelResolveSymbolicLinks(std::wstring* path);
+
+struct XboxListEntry {
+    XboxListEntry* Flink;
+    XboxListEntry* Blink;
+};
+struct XboxHalShutdownRegistration;
+using XboxHalShutdownNotification = void (__stdcall*)(XboxHalShutdownRegistration*);
+struct XboxHalShutdownRegistration {
+    XboxHalShutdownNotification NotificationRoutine;
+    LONG Priority;
+    XboxListEntry ListEntry;
+};
+static_assert(sizeof(XboxHalShutdownRegistration) == (sizeof(void*) == 4 ? 16 : 32),
+              "HAL_SHUTDOWN_REGISTRATION layout mismatch");
+static_assert(offsetof(XboxHalShutdownRegistration, ListEntry) ==
+                  (sizeof(void*) == 4 ? 8 : 16),
+              "HAL_SHUTDOWN_REGISTRATION list offset mismatch");
+
+extern "C" void __stdcall K_HalRegisterShutdownNotification(
+    XboxHalShutdownRegistration* registration, BOOLEAN registerNotification);
+void XboxKernelInvokeShutdownNotifications();
+void XboxKernelResetShutdownNotifications();
