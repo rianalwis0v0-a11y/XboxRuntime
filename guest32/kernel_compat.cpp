@@ -2232,6 +2232,124 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_semaphore
         cmp eax, 216
         je nt_query_timer
+
+        // Group B exports are explicitly routed to the fail-fast unsupported path
+        // until their guest ABI and host behavior have implementation + tests.
+        cmp eax, 201
+        je unsupported_export
+        cmp eax, 203
+        je unsupported_export
+        cmp eax, 206
+        je unsupported_export
+        cmp eax, 208
+        je unsupported_export
+        cmp eax, 215
+        je unsupported_export
+        cmp eax, 220
+        je unsupported_export
+        cmp eax, 228
+        je unsupported_export
+        cmp eax, 232
+        je unsupported_export
+        cmp eax, 237
+        je unsupported_export
+        cmp eax, 239
+        je unsupported_export
+        cmp eax, 241
+        je unsupported_export
+        cmp eax, 242
+        je unsupported_export
+        cmp eax, 243
+        je unsupported_export
+        cmp eax, 244
+        je unsupported_export
+        cmp eax, 246
+        je unsupported_export
+        cmp eax, 247
+        je unsupported_export
+        cmp eax, 248
+        je unsupported_export
+        cmp eax, 250
+        je unsupported_export
+        cmp eax, 251
+        je unsupported_export
+        cmp eax, 252
+        je unsupported_export
+        cmp eax, 253
+        je unsupported_export
+        cmp eax, 255
+        je unsupported_export
+        cmp eax, 257
+        je unsupported_export
+        cmp eax, 312
+        je unsupported_export
+        cmp eax, 327
+        je unsupported_export
+        cmp eax, 328
+        je unsupported_export
+        cmp eax, 329
+        je unsupported_export
+        cmp eax, 330
+        je unsupported_export
+        cmp eax, 331
+        je unsupported_export
+        cmp eax, 332
+        je unsupported_export
+        cmp eax, 333
+        je unsupported_export
+        cmp eax, 334
+        je unsupported_export
+        cmp eax, 335
+        je unsupported_export
+        cmp eax, 336
+        je unsupported_export
+        cmp eax, 337
+        je unsupported_export
+        cmp eax, 338
+        je unsupported_export
+        cmp eax, 339
+        je unsupported_export
+        cmp eax, 340
+        je unsupported_export
+        cmp eax, 341
+        je unsupported_export
+        cmp eax, 342
+        je unsupported_export
+        cmp eax, 343
+        je unsupported_export
+        cmp eax, 344
+        je unsupported_export
+        cmp eax, 345
+        je unsupported_export
+        cmp eax, 346
+        je unsupported_export
+        cmp eax, 347
+        je unsupported_export
+        cmp eax, 348
+        je unsupported_export
+        cmp eax, 349
+        je unsupported_export
+        cmp eax, 350
+        je unsupported_export
+        cmp eax, 351
+        je unsupported_export
+        cmp eax, 359
+        je unsupported_export
+        cmp eax, 365
+        je unsupported_export
+        cmp eax, 366
+        je unsupported_export
+        cmp eax, 374
+        je unsupported_export
+        cmp eax, 375
+        je unsupported_export
+        cmp eax, 376
+        je unsupported_export
+        cmp eax, 377
+        je unsupported_export
+        cmp eax, 378
+        je unsupported_export
+        unsupported_export:
         push eax
         call K_Unsupported
         add esp, 4
