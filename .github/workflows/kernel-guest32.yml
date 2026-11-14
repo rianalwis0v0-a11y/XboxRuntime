@@ -1,0 +1,168 @@
+name: Kernel host and guest32 build/tests
+
+on:
+  push:
+    branches:
+      - work/kernel-execution-backend
+  pull_request:
+    branches:
+      - work/kernel-execution-backend
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nxdk-homebrew-xbe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out XboxRuntime
+        uses: actions/checkout@v4
+      - name: Check out reviewed NXDK source
+        uses: actions/checkout@v4
+        with:
+          repository: XboxDev/nxdk
+          ref: fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e
+          path: nxdk
+          submodules: recursive
+      - name: Install NXDK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm lld pkgconf bison flex cmake
+      - name: Build a returnable NXDK homebrew XBE with TLS
+        run: |
+          # CXBE defaults to base 0x10000. Windows rejects that low mapping
+          # in the 32-bit guest process (ERROR_INVALID_ADDRESS 487); use a
+          # matching PE/XBE base of 0x10000000 for this real integration fixture.
+          sed -i 's/-base:0x00010000/-base:0x10000000/' nxdk/bin/nxdk-link
+          sed -i 's/m_Header.dwBaseAddr = 0x00010000;/m_Header.dwBaseAddr = 0x10000000;/' nxdk/tools/cxbe/Xbe.cpp
+          grep -q -- '-base:0x10000000' nxdk/bin/nxdk-link
+          grep -q 'm_Header.dwBaseAddr = 0x10000000;' nxdk/tools/cxbe/Xbe.cpp
+          cat > nxdk/samples/hello/main.c <<'EOF'
+          __declspec(thread) static volatile unsigned int kernel_smoke_tls = 0x58424532u;
+          int main(void) {
+              kernel_smoke_tls ^= 0x00000001u;
+              return kernel_smoke_tls == 0x58424533u ? 0 : 1;
+          }
+          EOF
+          eval "$(./nxdk/bin/activate -s)"
+          make -C nxdk/samples/hello -j2
+          test -s nxdk/samples/hello/bin/default.xbe
+          sha256sum nxdk/samples/hello/bin/default.xbe
+      - name: Upload NXDK XBE fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdk-kernel-smoke-xbe
+          path: nxdk/samples/hello/bin/default.xbe
+          if-no-files-found: error
+
+
+  kernel:
+    needs: nxdk-homebrew-xbe
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check out completed XBE loader implementation
+        uses: actions/checkout@v4
+        with:
+          repository: rianalwis0v0-a11y/XboxRuntime
+          ref: work/xbe-loader
+          path: loader-src
+
+      - name: Download NXDK XBE fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: nxdk-kernel-smoke-xbe
+          path: nxdk-fixture
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Audit kernel export catalogue
+        run: python tools/audit_kernel_exports.py --check
+
+      - name: Configure host kernel backend
+        run: cmake -S modules/xbox_kernel -B build-kernel-host -A x64
+
+      - name: Build host kernel backend
+        run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke
+
+      - name: Configure main runtime module
+        run: cmake -S main -B build-main -A x64
+
+      - name: Build main runtime module
+        run: cmake --build build-main --config Release --target main
+
+      - name: Configure x86 guest
+        run: cmake -S guest32 -B build-guest32 -A Win32
+
+      - name: Build x86 guest and networking tests
+        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke
+
+      - name: Run x86 networking and guest API tests
+        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke"
+
+      - name: Verify backend exports
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          if (!(Test-Path $vswhere)) { throw "vswhere.exe not found; cannot locate MSVC tools" }
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          if (!$vs) { throw "Visual Studio installation not found" }
+          $dumpbin = Get-ChildItem (Join-Path $vs "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -like "*Hostx64*x64*dumpbin.exe" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$dumpbin) { throw "MSVC dumpbin.exe not found" }
+          $exports = & $dumpbin /exports "build-kernel-host/out/xbox_kernel.dll"
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed with exit code $LASTEXITCODE" }
+          $exports | Out-Host
+          if (($exports -join "`n") -notmatch "XBE_GetExecutionBackendV2") { throw "ABI v2 backend export missing" }
+
+      - name: Stage guest process beside host kernel
+        shell: pwsh
+        run: Copy-Item "build-guest32/out/xbe_guest32.exe" "build-kernel-host/out/xbe_guest32.exe" -Force
+
+      - name: Run shared-memory guest execution smoke test
+        run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R kernel_guest_backend_smoke
+
+      - name: Build x64 XBE loader DLL for joint integration
+        shell: cmd
+        run: |
+          call "%ProgramFiles(x86)%/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath > vs-path.txt
+          set /p VS_PATH=<vs-path.txt
+          call "%VS_PATH%/VC/Auxiliary/Build/vcvars64.bat"
+          cd /d "%GITHUB_WORKSPACE%"
+          cl /nologo /std:c++17 /EHsc /W4 /WX /c loader-src/modules/xbe_loader/xbe_format.cpp loader-src/modules/xbe_loader/xbe_loader.cpp
+          if errorlevel 1 exit /b 1
+          link /nologo /DLL /DEF:loader-src/modules/xbe_loader/xbe_loader.def /OUT:xbe_loader.dll xbe_format.obj xbe_loader.obj
+          if errorlevel 1 exit /b 1
+          cl /nologo /std:c++17 /EHsc /W4 /permissive- /Fe:kernel_xbe_integration.exe tests/kernel_xbe_integration.cpp loader-src/modules/xbe_loader/xbe_format.cpp
+          if errorlevel 1 exit /b 1
+
+      - name: Stage real backend integration runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force integration | Out-Null
+          Copy-Item build-kernel-host/out/xbox_kernel.dll integration/
+          Copy-Item build-guest32/out/xbe_guest32.exe integration/
+          Copy-Item xbe_loader.dll integration/
+          Copy-Item kernel_xbe_integration.exe integration/
+          Copy-Item nxdk-fixture/default.xbe integration/
+          Get-FileHash integration/default.xbe -Algorithm SHA256 | Format-List
+
+      - name: Execute NXDK XBE through real loader and kernel backend
+        working-directory: integration
+        run: ./kernel_xbe_integration.exe ./default.xbe
+
+      - name: Verify backend pair
+        shell: pwsh
+        run: |
+          foreach ($file in @("build-kernel-host/out/xbox_kernel.dll", "build-kernel-host/out/xbe_guest32.exe", "build-main/out/main.dll")) {
+            if (!(Test-Path $file)) { throw "Expected output missing: $file" }
+            Get-Item $file | Format-List FullName,Length
+          }

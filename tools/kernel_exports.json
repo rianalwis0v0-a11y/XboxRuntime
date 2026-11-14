@@ -1,0 +1,1490 @@
+{
+  "source": "sp00nznet/xboxrecomp tools/xbe_parser/xbe_parser.py KERNEL_EXPORTS",
+  "source_ref": "main",
+  "exports": [
+    {
+      "ordinal": 1,
+      "name": "AvGetSavedDataAddress"
+    },
+    {
+      "ordinal": 2,
+      "name": "AvSendTVEncoderOption"
+    },
+    {
+      "ordinal": 3,
+      "name": "AvSetDisplayMode"
+    },
+    {
+      "ordinal": 4,
+      "name": "AvSetSavedDataAddress"
+    },
+    {
+      "ordinal": 5,
+      "name": "DbgBreakPoint"
+    },
+    {
+      "ordinal": 6,
+      "name": "DbgBreakPointWithStatus"
+    },
+    {
+      "ordinal": 7,
+      "name": "DbgLoadImageSymbols"
+    },
+    {
+      "ordinal": 8,
+      "name": "DbgPrint"
+    },
+    {
+      "ordinal": 9,
+      "name": "HalReadSMCTrayState"
+    },
+    {
+      "ordinal": 10,
+      "name": "DbgPrompt"
+    },
+    {
+      "ordinal": 11,
+      "name": "DbgUnLoadImageSymbols"
+    },
+    {
+      "ordinal": 12,
+      "name": "ExAcquireReadWriteLockExclusive"
+    },
+    {
+      "ordinal": 13,
+      "name": "ExAcquireReadWriteLockShared"
+    },
+    {
+      "ordinal": 14,
+      "name": "ExAllocatePool"
+    },
+    {
+      "ordinal": 15,
+      "name": "ExAllocatePoolWithTag"
+    },
+    {
+      "ordinal": 16,
+      "name": "ExEventObjectType"
+    },
+    {
+      "ordinal": 17,
+      "name": "ExFreePool"
+    },
+    {
+      "ordinal": 18,
+      "name": "ExInitializeReadWriteLock"
+    },
+    {
+      "ordinal": 19,
+      "name": "ExInterlockedAddLargeInteger"
+    },
+    {
+      "ordinal": 20,
+      "name": "ExInterlockedAddLargeStatistic"
+    },
+    {
+      "ordinal": 21,
+      "name": "ExInterlockedCompareExchange64"
+    },
+    {
+      "ordinal": 22,
+      "name": "ExMutantObjectType"
+    },
+    {
+      "ordinal": 23,
+      "name": "ExQueryPoolBlockSize"
+    },
+    {
+      "ordinal": 24,
+      "name": "ExQueryNonVolatileSetting"
+    },
+    {
+      "ordinal": 25,
+      "name": "ExReadWriteRefurbInfo"
+    },
+    {
+      "ordinal": 26,
+      "name": "ExRaiseException"
+    },
+    {
+      "ordinal": 27,
+      "name": "ExRaiseStatus"
+    },
+    {
+      "ordinal": 28,
+      "name": "ExReleaseReadWriteLock"
+    },
+    {
+      "ordinal": 29,
+      "name": "ExSaveNonVolatileSetting"
+    },
+    {
+      "ordinal": 30,
+      "name": "ExSemaphoreObjectType"
+    },
+    {
+      "ordinal": 31,
+      "name": "ExTimerObjectType"
+    },
+    {
+      "ordinal": 32,
+      "name": "ExfInterlockedInsertHeadList"
+    },
+    {
+      "ordinal": 33,
+      "name": "ExfInterlockedInsertTailList"
+    },
+    {
+      "ordinal": 34,
+      "name": "ExfInterlockedRemoveHeadList"
+    },
+    {
+      "ordinal": 35,
+      "name": "FscGetCacheSize"
+    },
+    {
+      "ordinal": 36,
+      "name": "FscInvalidateIdleBlocks"
+    },
+    {
+      "ordinal": 37,
+      "name": "FscSetCacheSize"
+    },
+    {
+      "ordinal": 38,
+      "name": "HalClearSoftwareInterrupt"
+    },
+    {
+      "ordinal": 39,
+      "name": "HalDisableSystemInterrupt"
+    },
+    {
+      "ordinal": 40,
+      "name": "HalDiskCachePartitionCount"
+    },
+    {
+      "ordinal": 41,
+      "name": "HalDiskModelNumber"
+    },
+    {
+      "ordinal": 42,
+      "name": "HalDiskSerialNumber"
+    },
+    {
+      "ordinal": 43,
+      "name": "HalEnableSystemInterrupt"
+    },
+    {
+      "ordinal": 44,
+      "name": "HalGetInterruptVector"
+    },
+    {
+      "ordinal": 45,
+      "name": "HalReadSMBusValue"
+    },
+    {
+      "ordinal": 46,
+      "name": "HalReadWritePCISpace"
+    },
+    {
+      "ordinal": 47,
+      "name": "HalRegisterShutdownNotification"
+    },
+    {
+      "ordinal": 48,
+      "name": "HalRequestSoftwareInterrupt"
+    },
+    {
+      "ordinal": 49,
+      "name": "HalReturnToFirmware"
+    },
+    {
+      "ordinal": 50,
+      "name": "HalWriteSMBusValue"
+    },
+    {
+      "ordinal": 51,
+      "name": "InterlockedCompareExchange"
+    },
+    {
+      "ordinal": 52,
+      "name": "InterlockedDecrement"
+    },
+    {
+      "ordinal": 53,
+      "name": "InterlockedIncrement"
+    },
+    {
+      "ordinal": 54,
+      "name": "InterlockedExchange"
+    },
+    {
+      "ordinal": 55,
+      "name": "InterlockedExchangeAdd"
+    },
+    {
+      "ordinal": 56,
+      "name": "InterlockedFlushSList"
+    },
+    {
+      "ordinal": 57,
+      "name": "InterlockedPopEntrySList"
+    },
+    {
+      "ordinal": 58,
+      "name": "InterlockedPushEntrySList"
+    },
+    {
+      "ordinal": 59,
+      "name": "IoAllocateIrp"
+    },
+    {
+      "ordinal": 60,
+      "name": "IoBuildAsynchronousFsdRequest"
+    },
+    {
+      "ordinal": 61,
+      "name": "IoBuildDeviceIoControlRequest"
+    },
+    {
+      "ordinal": 62,
+      "name": "IoBuildSynchronousFsdRequest"
+    },
+    {
+      "ordinal": 63,
+      "name": "IoCheckShareAccess"
+    },
+    {
+      "ordinal": 64,
+      "name": "IoCompletionObjectType"
+    },
+    {
+      "ordinal": 65,
+      "name": "IoCreateDevice"
+    },
+    {
+      "ordinal": 66,
+      "name": "IoCreateFile"
+    },
+    {
+      "ordinal": 67,
+      "name": "IoCreateSymbolicLink"
+    },
+    {
+      "ordinal": 68,
+      "name": "IoDeleteDevice"
+    },
+    {
+      "ordinal": 69,
+      "name": "IoDeleteSymbolicLink"
+    },
+    {
+      "ordinal": 70,
+      "name": "IoDeviceObjectType"
+    },
+    {
+      "ordinal": 71,
+      "name": "IoFileObjectType"
+    },
+    {
+      "ordinal": 72,
+      "name": "IoFreeIrp"
+    },
+    {
+      "ordinal": 73,
+      "name": "IoInitializeIrp"
+    },
+    {
+      "ordinal": 74,
+      "name": "IoInvalidDeviceRequest"
+    },
+    {
+      "ordinal": 75,
+      "name": "IoQueryFileInformation"
+    },
+    {
+      "ordinal": 76,
+      "name": "IoQueryVolumeInformation"
+    },
+    {
+      "ordinal": 77,
+      "name": "IoQueueThreadIrp"
+    },
+    {
+      "ordinal": 78,
+      "name": "IoRemoveShareAccess"
+    },
+    {
+      "ordinal": 79,
+      "name": "IoSetIoCompletion"
+    },
+    {
+      "ordinal": 80,
+      "name": "IoSetShareAccess"
+    },
+    {
+      "ordinal": 81,
+      "name": "IoStartNextPacket"
+    },
+    {
+      "ordinal": 82,
+      "name": "IoStartNextPacketByKey"
+    },
+    {
+      "ordinal": 83,
+      "name": "IoStartPacket"
+    },
+    {
+      "ordinal": 84,
+      "name": "IoSynchronousDeviceIoControlRequest"
+    },
+    {
+      "ordinal": 85,
+      "name": "IoSynchronousFsdRequest"
+    },
+    {
+      "ordinal": 86,
+      "name": "IofCallDriver"
+    },
+    {
+      "ordinal": 87,
+      "name": "IofCompleteRequest"
+    },
+    {
+      "ordinal": 88,
+      "name": "KdDebuggerEnabled"
+    },
+    {
+      "ordinal": 89,
+      "name": "KdDebuggerNotPresent"
+    },
+    {
+      "ordinal": 90,
+      "name": "IoDismountVolume"
+    },
+    {
+      "ordinal": 91,
+      "name": "IoDismountVolumeByName"
+    },
+    {
+      "ordinal": 92,
+      "name": "KeAlertResumeThread"
+    },
+    {
+      "ordinal": 93,
+      "name": "KeAlertThread"
+    },
+    {
+      "ordinal": 94,
+      "name": "KeBoostPriorityThread"
+    },
+    {
+      "ordinal": 95,
+      "name": "KeBugCheck"
+    },
+    {
+      "ordinal": 96,
+      "name": "KeBugCheckEx"
+    },
+    {
+      "ordinal": 97,
+      "name": "KeCancelTimer"
+    },
+    {
+      "ordinal": 98,
+      "name": "KeConnectInterrupt"
+    },
+    {
+      "ordinal": 99,
+      "name": "KeDelayExecutionThread"
+    },
+    {
+      "ordinal": 100,
+      "name": "KeDisconnectInterrupt"
+    },
+    {
+      "ordinal": 101,
+      "name": "KeEnterCriticalRegion"
+    },
+    {
+      "ordinal": 102,
+      "name": "MmGlobalData"
+    },
+    {
+      "ordinal": 103,
+      "name": "KeGetCurrentIrql"
+    },
+    {
+      "ordinal": 104,
+      "name": "KeGetCurrentThread"
+    },
+    {
+      "ordinal": 105,
+      "name": "KeInitializeApc"
+    },
+    {
+      "ordinal": 106,
+      "name": "KeInitializeDeviceQueue"
+    },
+    {
+      "ordinal": 107,
+      "name": "KeInitializeDpc"
+    },
+    {
+      "ordinal": 108,
+      "name": "KeInitializeEvent"
+    },
+    {
+      "ordinal": 109,
+      "name": "KeInitializeInterrupt"
+    },
+    {
+      "ordinal": 110,
+      "name": "KeInitializeMutant"
+    },
+    {
+      "ordinal": 111,
+      "name": "KeInitializeQueue"
+    },
+    {
+      "ordinal": 112,
+      "name": "KeInitializeSemaphore"
+    },
+    {
+      "ordinal": 113,
+      "name": "KeInitializeTimerEx"
+    },
+    {
+      "ordinal": 114,
+      "name": "KeInsertByKeyDeviceQueue"
+    },
+    {
+      "ordinal": 115,
+      "name": "KeInsertDeviceQueue"
+    },
+    {
+      "ordinal": 116,
+      "name": "KeInsertHeadQueue"
+    },
+    {
+      "ordinal": 117,
+      "name": "KeInsertQueue"
+    },
+    {
+      "ordinal": 118,
+      "name": "KeInsertQueueApc"
+    },
+    {
+      "ordinal": 119,
+      "name": "KeInsertQueueDpc"
+    },
+    {
+      "ordinal": 120,
+      "name": "KeInterruptTime"
+    },
+    {
+      "ordinal": 121,
+      "name": "KeIsExecutingDpc"
+    },
+    {
+      "ordinal": 122,
+      "name": "KeLeaveCriticalRegion"
+    },
+    {
+      "ordinal": 123,
+      "name": "KePulseEvent"
+    },
+    {
+      "ordinal": 124,
+      "name": "KeQueryBasePriorityThread"
+    },
+    {
+      "ordinal": 125,
+      "name": "KeQueryInterruptTime"
+    },
+    {
+      "ordinal": 126,
+      "name": "KeQueryPerformanceCounter"
+    },
+    {
+      "ordinal": 127,
+      "name": "KeQueryPerformanceFrequency"
+    },
+    {
+      "ordinal": 128,
+      "name": "KeQuerySystemTime"
+    },
+    {
+      "ordinal": 129,
+      "name": "KeRaiseIrqlToDpcLevel"
+    },
+    {
+      "ordinal": 130,
+      "name": "KeRaiseIrqlToSynchLevel"
+    },
+    {
+      "ordinal": 131,
+      "name": "KeReleaseMutant"
+    },
+    {
+      "ordinal": 132,
+      "name": "KeReleaseSemaphore"
+    },
+    {
+      "ordinal": 133,
+      "name": "KeRemoveByKeyDeviceQueue"
+    },
+    {
+      "ordinal": 134,
+      "name": "KeRemoveDeviceQueue"
+    },
+    {
+      "ordinal": 135,
+      "name": "KeRemoveEntryDeviceQueue"
+    },
+    {
+      "ordinal": 136,
+      "name": "KeRemoveQueue"
+    },
+    {
+      "ordinal": 137,
+      "name": "KeRemoveQueueDpc"
+    },
+    {
+      "ordinal": 138,
+      "name": "KeResetEvent"
+    },
+    {
+      "ordinal": 139,
+      "name": "KeRestoreFloatingPointState"
+    },
+    {
+      "ordinal": 140,
+      "name": "KeResumeThread"
+    },
+    {
+      "ordinal": 141,
+      "name": "KeRundownQueue"
+    },
+    {
+      "ordinal": 142,
+      "name": "KeSaveFloatingPointState"
+    },
+    {
+      "ordinal": 143,
+      "name": "KeSetBasePriorityThread"
+    },
+    {
+      "ordinal": 144,
+      "name": "KeSetDisableBoostThread"
+    },
+    {
+      "ordinal": 145,
+      "name": "KeSetEvent"
+    },
+    {
+      "ordinal": 146,
+      "name": "KeSetEventBoostPriority"
+    },
+    {
+      "ordinal": 147,
+      "name": "KeSetPriorityProcess"
+    },
+    {
+      "ordinal": 148,
+      "name": "KeSetPriorityThread"
+    },
+    {
+      "ordinal": 149,
+      "name": "KeSetTimer"
+    },
+    {
+      "ordinal": 150,
+      "name": "KeSetTimerEx"
+    },
+    {
+      "ordinal": 151,
+      "name": "KeStallExecutionProcessor"
+    },
+    {
+      "ordinal": 152,
+      "name": "KeSuspendThread"
+    },
+    {
+      "ordinal": 153,
+      "name": "KeSynchronizeExecution"
+    },
+    {
+      "ordinal": 154,
+      "name": "KeSystemTime"
+    },
+    {
+      "ordinal": 155,
+      "name": "KeTestAlertThread"
+    },
+    {
+      "ordinal": 156,
+      "name": "KeTickCount"
+    },
+    {
+      "ordinal": 157,
+      "name": "KeTimeIncrement"
+    },
+    {
+      "ordinal": 158,
+      "name": "KeWaitForMultipleObjects"
+    },
+    {
+      "ordinal": 159,
+      "name": "KeWaitForSingleObject"
+    },
+    {
+      "ordinal": 160,
+      "name": "KfRaiseIrql"
+    },
+    {
+      "ordinal": 161,
+      "name": "KfLowerIrql"
+    },
+    {
+      "ordinal": 162,
+      "name": "KiBugCheckData"
+    },
+    {
+      "ordinal": 163,
+      "name": "KiUnlockDispatcherDatabase"
+    },
+    {
+      "ordinal": 164,
+      "name": "LaunchDataPage"
+    },
+    {
+      "ordinal": 165,
+      "name": "MmAllocateContiguousMemory"
+    },
+    {
+      "ordinal": 166,
+      "name": "MmAllocateContiguousMemoryEx"
+    },
+    {
+      "ordinal": 167,
+      "name": "MmAllocateSystemMemory"
+    },
+    {
+      "ordinal": 168,
+      "name": "MmClaimGpuInstanceMemory"
+    },
+    {
+      "ordinal": 169,
+      "name": "MmCreateKernelStack"
+    },
+    {
+      "ordinal": 170,
+      "name": "MmDeleteKernelStack"
+    },
+    {
+      "ordinal": 171,
+      "name": "MmFreeContiguousMemory"
+    },
+    {
+      "ordinal": 172,
+      "name": "MmFreeSystemMemory"
+    },
+    {
+      "ordinal": 173,
+      "name": "MmGetPhysicalAddress"
+    },
+    {
+      "ordinal": 174,
+      "name": "MmIsAddressValid"
+    },
+    {
+      "ordinal": 175,
+      "name": "MmLockUnlockBufferPages"
+    },
+    {
+      "ordinal": 176,
+      "name": "MmLockUnlockPhysicalPage"
+    },
+    {
+      "ordinal": 177,
+      "name": "MmMapIoSpace"
+    },
+    {
+      "ordinal": 178,
+      "name": "MmPersistContiguousMemory"
+    },
+    {
+      "ordinal": 179,
+      "name": "MmQueryAddressProtect"
+    },
+    {
+      "ordinal": 180,
+      "name": "MmQueryAllocationSize"
+    },
+    {
+      "ordinal": 181,
+      "name": "MmQueryStatistics"
+    },
+    {
+      "ordinal": 182,
+      "name": "MmSetAddressProtect"
+    },
+    {
+      "ordinal": 183,
+      "name": "MmUnmapIoSpace"
+    },
+    {
+      "ordinal": 184,
+      "name": "NtAllocateVirtualMemory"
+    },
+    {
+      "ordinal": 185,
+      "name": "NtCancelTimer"
+    },
+    {
+      "ordinal": 186,
+      "name": "NtClearEvent"
+    },
+    {
+      "ordinal": 187,
+      "name": "NtClose"
+    },
+    {
+      "ordinal": 188,
+      "name": "NtCreateDirectoryObject"
+    },
+    {
+      "ordinal": 189,
+      "name": "NtCreateEvent"
+    },
+    {
+      "ordinal": 190,
+      "name": "NtCreateFile"
+    },
+    {
+      "ordinal": 191,
+      "name": "NtCreateIoCompletion"
+    },
+    {
+      "ordinal": 192,
+      "name": "NtCreateMutant"
+    },
+    {
+      "ordinal": 193,
+      "name": "NtCreateSemaphore"
+    },
+    {
+      "ordinal": 194,
+      "name": "NtCreateTimer"
+    },
+    {
+      "ordinal": 195,
+      "name": "NtDeleteFile"
+    },
+    {
+      "ordinal": 196,
+      "name": "NtDeviceIoControlFile"
+    },
+    {
+      "ordinal": 197,
+      "name": "NtDuplicateObject"
+    },
+    {
+      "ordinal": 198,
+      "name": "NtFlushBuffersFile"
+    },
+    {
+      "ordinal": 199,
+      "name": "NtFreeVirtualMemory"
+    },
+    {
+      "ordinal": 200,
+      "name": "NtFsControlFile"
+    },
+    {
+      "ordinal": 201,
+      "name": "NtOpenDirectoryObject"
+    },
+    {
+      "ordinal": 202,
+      "name": "NtOpenFile"
+    },
+    {
+      "ordinal": 203,
+      "name": "NtOpenSymbolicLinkObject"
+    },
+    {
+      "ordinal": 204,
+      "name": "NtProtectVirtualMemory"
+    },
+    {
+      "ordinal": 205,
+      "name": "NtPulseEvent"
+    },
+    {
+      "ordinal": 206,
+      "name": "NtQueueApcThread"
+    },
+    {
+      "ordinal": 207,
+      "name": "NtQueryDirectoryFile"
+    },
+    {
+      "ordinal": 208,
+      "name": "NtQueryDirectoryObject"
+    },
+    {
+      "ordinal": 209,
+      "name": "NtQueryEvent"
+    },
+    {
+      "ordinal": 210,
+      "name": "NtQueryFullAttributesFile"
+    },
+    {
+      "ordinal": 211,
+      "name": "NtQueryInformationFile"
+    },
+    {
+      "ordinal": 212,
+      "name": "NtQueryIoCompletion"
+    },
+    {
+      "ordinal": 213,
+      "name": "NtQueryMutant"
+    },
+    {
+      "ordinal": 214,
+      "name": "NtQuerySemaphore"
+    },
+    {
+      "ordinal": 215,
+      "name": "NtQuerySymbolicLinkObject"
+    },
+    {
+      "ordinal": 216,
+      "name": "NtQueryTimer"
+    },
+    {
+      "ordinal": 217,
+      "name": "NtQueryVirtualMemory"
+    },
+    {
+      "ordinal": 218,
+      "name": "NtQueryVolumeInformationFile"
+    },
+    {
+      "ordinal": 219,
+      "name": "NtReadFile"
+    },
+    {
+      "ordinal": 220,
+      "name": "NtReadFileScatter"
+    },
+    {
+      "ordinal": 221,
+      "name": "NtReleaseMutant"
+    },
+    {
+      "ordinal": 222,
+      "name": "NtReleaseSemaphore"
+    },
+    {
+      "ordinal": 223,
+      "name": "NtRemoveIoCompletion"
+    },
+    {
+      "ordinal": 224,
+      "name": "NtResumeThread"
+    },
+    {
+      "ordinal": 225,
+      "name": "NtSetEvent"
+    },
+    {
+      "ordinal": 226,
+      "name": "NtSetInformationFile"
+    },
+    {
+      "ordinal": 227,
+      "name": "NtSetIoCompletion"
+    },
+    {
+      "ordinal": 228,
+      "name": "NtSetSystemTime"
+    },
+    {
+      "ordinal": 229,
+      "name": "NtSetTimerEx"
+    },
+    {
+      "ordinal": 230,
+      "name": "NtSignalAndWaitForSingleObjectEx"
+    },
+    {
+      "ordinal": 231,
+      "name": "NtSuspendThread"
+    },
+    {
+      "ordinal": 232,
+      "name": "NtUserIoApcDispatcher"
+    },
+    {
+      "ordinal": 233,
+      "name": "NtWaitForSingleObject"
+    },
+    {
+      "ordinal": 234,
+      "name": "NtWaitForSingleObjectEx"
+    },
+    {
+      "ordinal": 235,
+      "name": "NtWaitForMultipleObjectsEx"
+    },
+    {
+      "ordinal": 236,
+      "name": "NtWriteFile"
+    },
+    {
+      "ordinal": 237,
+      "name": "NtWriteFileGather"
+    },
+    {
+      "ordinal": 238,
+      "name": "NtYieldExecution"
+    },
+    {
+      "ordinal": 239,
+      "name": "ObCreateObject"
+    },
+    {
+      "ordinal": 240,
+      "name": "ObDirectoryObjectType"
+    },
+    {
+      "ordinal": 241,
+      "name": "ObInsertObject"
+    },
+    {
+      "ordinal": 242,
+      "name": "ObMakeTemporaryObject"
+    },
+    {
+      "ordinal": 243,
+      "name": "ObOpenObjectByName"
+    },
+    {
+      "ordinal": 244,
+      "name": "ObOpenObjectByPointer"
+    },
+    {
+      "ordinal": 245,
+      "name": "ObpObjectHandleTable"
+    },
+    {
+      "ordinal": 246,
+      "name": "ObReferenceObjectByHandle"
+    },
+    {
+      "ordinal": 247,
+      "name": "ObReferenceObjectByName"
+    },
+    {
+      "ordinal": 248,
+      "name": "ObReferenceObjectByPointer"
+    },
+    {
+      "ordinal": 249,
+      "name": "ObSymbolicLinkObjectType"
+    },
+    {
+      "ordinal": 250,
+      "name": "ObfDereferenceObject"
+    },
+    {
+      "ordinal": 251,
+      "name": "ObfReferenceObject"
+    },
+    {
+      "ordinal": 252,
+      "name": "PhyGetLinkState"
+    },
+    {
+      "ordinal": 253,
+      "name": "PhyInitialize"
+    },
+    {
+      "ordinal": 254,
+      "name": "PsCreateSystemThread"
+    },
+    {
+      "ordinal": 255,
+      "name": "PsCreateSystemThreadEx"
+    },
+    {
+      "ordinal": 256,
+      "name": "PsQueryStatistics"
+    },
+    {
+      "ordinal": 257,
+      "name": "PsSetCreateThreadNotifyRoutine"
+    },
+    {
+      "ordinal": 258,
+      "name": "PsTerminateSystemThread"
+    },
+    {
+      "ordinal": 259,
+      "name": "PsThreadObjectType"
+    },
+    {
+      "ordinal": 260,
+      "name": "RtlAnsiStringToUnicodeString"
+    },
+    {
+      "ordinal": 261,
+      "name": "RtlAppendStringToString"
+    },
+    {
+      "ordinal": 262,
+      "name": "RtlAppendUnicodeStringToString"
+    },
+    {
+      "ordinal": 263,
+      "name": "RtlAppendUnicodeToString"
+    },
+    {
+      "ordinal": 264,
+      "name": "RtlAssert"
+    },
+    {
+      "ordinal": 265,
+      "name": "RtlCaptureContext"
+    },
+    {
+      "ordinal": 266,
+      "name": "RtlCaptureStackBackTrace"
+    },
+    {
+      "ordinal": 267,
+      "name": "RtlCharToInteger"
+    },
+    {
+      "ordinal": 268,
+      "name": "RtlCompareMemory"
+    },
+    {
+      "ordinal": 269,
+      "name": "RtlCompareMemoryUlong"
+    },
+    {
+      "ordinal": 270,
+      "name": "RtlCompareString"
+    },
+    {
+      "ordinal": 271,
+      "name": "RtlCompareUnicodeString"
+    },
+    {
+      "ordinal": 272,
+      "name": "RtlCopyString"
+    },
+    {
+      "ordinal": 273,
+      "name": "RtlCopyUnicodeString"
+    },
+    {
+      "ordinal": 274,
+      "name": "RtlCreateUnicodeString"
+    },
+    {
+      "ordinal": 275,
+      "name": "RtlDowncaseUnicodeChar"
+    },
+    {
+      "ordinal": 276,
+      "name": "RtlDowncaseUnicodeString"
+    },
+    {
+      "ordinal": 277,
+      "name": "RtlEnterCriticalSection"
+    },
+    {
+      "ordinal": 278,
+      "name": "RtlEnterCriticalSectionAndRegion"
+    },
+    {
+      "ordinal": 279,
+      "name": "RtlEqualString"
+    },
+    {
+      "ordinal": 280,
+      "name": "RtlEqualUnicodeString"
+    },
+    {
+      "ordinal": 281,
+      "name": "RtlExtendedIntegerMultiply"
+    },
+    {
+      "ordinal": 282,
+      "name": "RtlExtendedLargeIntegerDivide"
+    },
+    {
+      "ordinal": 283,
+      "name": "RtlExtendedMagicDivide"
+    },
+    {
+      "ordinal": 284,
+      "name": "RtlFillMemory"
+    },
+    {
+      "ordinal": 285,
+      "name": "RtlFillMemoryUlong"
+    },
+    {
+      "ordinal": 286,
+      "name": "RtlFreeAnsiString"
+    },
+    {
+      "ordinal": 287,
+      "name": "RtlFreeUnicodeString"
+    },
+    {
+      "ordinal": 288,
+      "name": "RtlGetCallersAddress"
+    },
+    {
+      "ordinal": 289,
+      "name": "RtlInitAnsiString"
+    },
+    {
+      "ordinal": 290,
+      "name": "RtlInitUnicodeString"
+    },
+    {
+      "ordinal": 291,
+      "name": "RtlInitializeCriticalSection"
+    },
+    {
+      "ordinal": 292,
+      "name": "RtlIntegerToChar"
+    },
+    {
+      "ordinal": 293,
+      "name": "RtlIntegerToUnicodeString"
+    },
+    {
+      "ordinal": 294,
+      "name": "RtlLeaveCriticalSection"
+    },
+    {
+      "ordinal": 295,
+      "name": "RtlLeaveCriticalSectionAndRegion"
+    },
+    {
+      "ordinal": 296,
+      "name": "RtlLowerChar"
+    },
+    {
+      "ordinal": 297,
+      "name": "RtlMapGenericMask"
+    },
+    {
+      "ordinal": 298,
+      "name": "RtlMoveMemory"
+    },
+    {
+      "ordinal": 299,
+      "name": "RtlMultiByteToUnicodeN"
+    },
+    {
+      "ordinal": 300,
+      "name": "RtlMultiByteToUnicodeSize"
+    },
+    {
+      "ordinal": 301,
+      "name": "RtlNtStatusToDosError"
+    },
+    {
+      "ordinal": 302,
+      "name": "RtlRaiseException"
+    },
+    {
+      "ordinal": 303,
+      "name": "RtlRaiseStatus"
+    },
+    {
+      "ordinal": 304,
+      "name": "RtlTimeFieldsToTime"
+    },
+    {
+      "ordinal": 305,
+      "name": "RtlTimeToTimeFields"
+    },
+    {
+      "ordinal": 306,
+      "name": "RtlTryEnterCriticalSection"
+    },
+    {
+      "ordinal": 307,
+      "name": "RtlUlongByteSwap"
+    },
+    {
+      "ordinal": 308,
+      "name": "RtlUnicodeStringToAnsiString"
+    },
+    {
+      "ordinal": 309,
+      "name": "RtlUnicodeStringToInteger"
+    },
+    {
+      "ordinal": 310,
+      "name": "RtlUnicodeToMultiByteN"
+    },
+    {
+      "ordinal": 311,
+      "name": "RtlUnicodeToMultiByteSize"
+    },
+    {
+      "ordinal": 312,
+      "name": "RtlUnwind"
+    },
+    {
+      "ordinal": 313,
+      "name": "RtlUpcaseUnicodeChar"
+    },
+    {
+      "ordinal": 314,
+      "name": "RtlUpcaseUnicodeString"
+    },
+    {
+      "ordinal": 315,
+      "name": "RtlUpcaseUnicodeToMultiByteN"
+    },
+    {
+      "ordinal": 316,
+      "name": "RtlUpperChar"
+    },
+    {
+      "ordinal": 317,
+      "name": "RtlUpperString"
+    },
+    {
+      "ordinal": 318,
+      "name": "RtlUshortByteSwap"
+    },
+    {
+      "ordinal": 319,
+      "name": "RtlWalkFrameChain"
+    },
+    {
+      "ordinal": 320,
+      "name": "RtlZeroMemory"
+    },
+    {
+      "ordinal": 321,
+      "name": "XboxEEPROMKey"
+    },
+    {
+      "ordinal": 322,
+      "name": "XboxHardwareInfo"
+    },
+    {
+      "ordinal": 323,
+      "name": "XboxHDKey"
+    },
+    {
+      "ordinal": 324,
+      "name": "XboxKrnlVersion"
+    },
+    {
+      "ordinal": 325,
+      "name": "XboxSignatureKey"
+    },
+    {
+      "ordinal": 326,
+      "name": "XeImageFileName"
+    },
+    {
+      "ordinal": 327,
+      "name": "XeLoadSection"
+    },
+    {
+      "ordinal": 328,
+      "name": "XeUnloadSection"
+    },
+    {
+      "ordinal": 329,
+      "name": "READ_PORT_BUFFER_UCHAR"
+    },
+    {
+      "ordinal": 330,
+      "name": "READ_PORT_BUFFER_USHORT"
+    },
+    {
+      "ordinal": 331,
+      "name": "READ_PORT_BUFFER_ULONG"
+    },
+    {
+      "ordinal": 332,
+      "name": "WRITE_PORT_BUFFER_UCHAR"
+    },
+    {
+      "ordinal": 333,
+      "name": "WRITE_PORT_BUFFER_USHORT"
+    },
+    {
+      "ordinal": 334,
+      "name": "WRITE_PORT_BUFFER_ULONG"
+    },
+    {
+      "ordinal": 335,
+      "name": "XcSHAInit"
+    },
+    {
+      "ordinal": 336,
+      "name": "XcSHAUpdate"
+    },
+    {
+      "ordinal": 337,
+      "name": "XcSHAFinal"
+    },
+    {
+      "ordinal": 338,
+      "name": "XcRC4Key"
+    },
+    {
+      "ordinal": 339,
+      "name": "XcRC4Crypt"
+    },
+    {
+      "ordinal": 340,
+      "name": "XcHMAC"
+    },
+    {
+      "ordinal": 341,
+      "name": "XcPKEncPublic"
+    },
+    {
+      "ordinal": 342,
+      "name": "XcPKDecPrivate"
+    },
+    {
+      "ordinal": 343,
+      "name": "XcPKGetKeyLen"
+    },
+    {
+      "ordinal": 344,
+      "name": "XcVerifyPKCS1Signature"
+    },
+    {
+      "ordinal": 345,
+      "name": "XcModExp"
+    },
+    {
+      "ordinal": 346,
+      "name": "XcDESKeyParity"
+    },
+    {
+      "ordinal": 347,
+      "name": "XcKeyTable"
+    },
+    {
+      "ordinal": 348,
+      "name": "XcBlockCrypt"
+    },
+    {
+      "ordinal": 349,
+      "name": "XcBlockCryptCBC"
+    },
+    {
+      "ordinal": 350,
+      "name": "XcCryptService"
+    },
+    {
+      "ordinal": 351,
+      "name": "XcUpdateCrypto"
+    },
+    {
+      "ordinal": 352,
+      "name": "RtlRip"
+    },
+    {
+      "ordinal": 353,
+      "name": "XboxLANKey"
+    },
+    {
+      "ordinal": 354,
+      "name": "XboxAlternateSignatureKeys"
+    },
+    {
+      "ordinal": 355,
+      "name": "XePublicKeyData"
+    },
+    {
+      "ordinal": 356,
+      "name": "HalBootSMCVideoMode"
+    },
+    {
+      "ordinal": 357,
+      "name": "IdexChannelObject"
+    },
+    {
+      "ordinal": 358,
+      "name": "HalIsResetOrShutdownPending"
+    },
+    {
+      "ordinal": 359,
+      "name": "IoMarkIrpMustComplete"
+    },
+    {
+      "ordinal": 360,
+      "name": "HalInitiateShutdown"
+    },
+    {
+      "ordinal": 361,
+      "name": "RtlSnprintf"
+    },
+    {
+      "ordinal": 362,
+      "name": "RtlSprintf"
+    },
+    {
+      "ordinal": 363,
+      "name": "RtlVsnprintf"
+    },
+    {
+      "ordinal": 364,
+      "name": "RtlVsprintf"
+    },
+    {
+      "ordinal": 365,
+      "name": "HalEnableSecureTrayEject"
+    },
+    {
+      "ordinal": 366,
+      "name": "HalWriteSMCScratchRegister"
+    },
+    {
+      "ordinal": 374,
+      "name": "MmDbgAllocateMemory"
+    },
+    {
+      "ordinal": 375,
+      "name": "MmDbgFreeMemory"
+    },
+    {
+      "ordinal": 376,
+      "name": "MmDbgQueryAvailablePages"
+    },
+    {
+      "ordinal": 377,
+      "name": "MmDbgReleaseAddress"
+    },
+    {
+      "ordinal": 378,
+      "name": "MmDbgWriteCheck"
+    }
+  ]
+}

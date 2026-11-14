@@ -257,9 +257,47 @@ namespace XboxRuntime
         return true;
     }
 
+    static bool RegisterGuestBackend()
+    {
+        Module* kernel = nullptr;
+        Module* loader = nullptr;
+        for (auto& module : modules) {
+            if (std::wstring(module.name) == L"xbox_kernel.dll") kernel = &module;
+            if (std::wstring(module.name) == L"xbe_loader.dll") loader = &module;
+        }
+        if (!kernel || !loader || !kernel->handle || !loader->handle) return false;
+
+        using GetBackend = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
+        using RegisterBackend = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
+        auto getBackend = reinterpret_cast<GetBackend>(
+            GetProcAddress(kernel->handle, "XBE_GetExecutionBackendV2"));
+        auto registerBackend = reinterpret_cast<RegisterBackend>(
+            GetProcAddress(loader->handle, "XBE_RegisterExecutionBackendV2"));
+        if (!getBackend || !registerBackend) {
+            Log(L"ABI v2 backend provider or loader registration export is missing.");
+            return false;
+        }
+
+        XBE_EXECUTION_BACKEND_V2 backend{};
+        backend.size = sizeof(backend);
+        backend.version = XBE_EXECUTION_BACKEND_V2_VERSION;
+        if (getBackend(&backend) != 0 ||
+            backend.size < sizeof(XBE_EXECUTION_BACKEND_V2) ||
+            backend.version != XBE_EXECUTION_BACKEND_V2_VERSION ||
+            registerBackend(&backend) != 0) {
+            Log(L"Could not register the ABI v2 guest execution backend.");
+            return false;
+        }
+        Log(L"ABI v2 guest execution backend registered.");
+        return true;
+    }
+
     static bool StartDashboard()
     {
         Module& loader = modules.back();
+
+        if (!RegisterGuestBackend())
+            return false;
 
         auto loadXbe = reinterpret_cast<LoadXbe>(
             GetProcAddress(loader.handle, "LoadXbe")
@@ -273,6 +311,17 @@ namespace XboxRuntime
 
         std::wstring dashboard =
             runtimeDirectory + L"\\dashboard.xbe";
+
+        Module* kernel = nullptr;
+        for (auto& module : modules)
+            if (std::wstring(module.name) == L"xbox_kernel.dll") kernel = &module;
+        using SetTitlePath = int (__cdecl*)(const wchar_t*);
+        auto setTitlePath = kernel ? reinterpret_cast<SetTitlePath>(
+            GetProcAddress(kernel->handle, "XboxKernelSetGuestTitlePath")) : nullptr;
+        if (!setTitlePath || setTitlePath(dashboard.c_str()) != 0) {
+            Log(L"Could not pass dashboard path to guest kernel.");
+            return false;
+        }
 
         Log(L"Loading dashboard.xbe");
 
