@@ -28,4 +28,7 @@ LONG __stdcall K_NtQueryEvent(HANDLE event, void* information);
 LONG __stdcall K_NtQueryMutant(HANDLE mutant, void* information);
 LONG __stdcall K_NtQuerySemaphore(HANDLE semaphore, void* information);
 LONG __stdcall K_NtQueryTimer(HANDLE timer, void* information);
+LONG __stdcall K_NtSetEvent(HANDLE event, LONG* previousState);
+LONG __stdcall K_NtClearEvent(HANDLE event);
+LONG __stdcall K_NtWaitForSingleObject(HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER* timeout);
 }
