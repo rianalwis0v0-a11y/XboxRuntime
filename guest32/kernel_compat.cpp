@@ -294,7 +294,7 @@ static void UpdateGuestDispatcherAfterWait(void* object, DWORD waitResult) {
         break;
     case 8: // TimerNotificationObject
         InterlockedExchange(&header->SignalState, 1);
-        InterlockedExchange8(reinterpret_cast<volatile CHAR*>(&header->Inserted), 0);
+        header->Inserted = 0;
         break;
     case 9: // TimerSynchronizationObject
         InterlockedExchange(&header->SignalState, 0);
