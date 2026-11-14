@@ -1428,3 +1428,19 @@ Correctness fix:
 - The generated x86 entry test uses near conditional branches to keep all failure branches in range and has separate emitter names from the TLS callback generator.
 Commits in this test tranche: cdb8f477f2ac97c00808ce0374a7cf182d73f3d0, f076a810242eebfa4fc3a516f8b5480cbb1efa12, 25b60a8e127805cfcf1a3367b07bb9efac3dfd64, 525fbcb799bb10b27995e0759121e1c930748ef0, 4b28ffd1437070f994b4ba1501ba7c79774c851f.
 CI run 43582778275: IN_PROGRESS at publication; earlier compile failure (missing <vector> and local emitter-name collisions) was fixed in the latest commit. Do not claim import-thunk success until the test step completes and shared shutdown marker is observed.
+
+
+[2026-11-14 10:02 UTC] [Kernel Developer 3 — I/O completion object implementation]
+Status: IN_PROGRESS — I/O completion ports implemented on branch; actual guest-call/duplicate/close tests added; Windows run #43583329328 is running.
+Branch: work/kernel-thread-apis
+Current head: de0afae4850b192962f2cd2f4877c6ce30e8c159
+Changes:
+- Added host-backed IOCP state and packet records with a private duplicate handle, atomic pending depth, and queue cleanup.
+- Implemented NtCreateIoCompletion (191), NtSetIoCompletion (227), NtRemoveIoCompletion (223), NtQueryIoCompletion (212).
+- Added KernelDispatch ordinal routing for all four exports.
+- Preserved KeyContext, ApcContext, operation NTSTATUS and Information in completion packets; query depth increments/decrements around posting/removal; zero-time empty removal returns STATUS_TIMEOUT.
+- Added same-process duplicate-handle metadata sharing and NtClose cleanup; cross-process duplication of these handles returns STATUS_NOT_SUPPORTED instead of producing an unusable duplicate. Title shutdown drains pending packets and closes public/private handles.
+- Expanded the x86 guest-call test to create a port, duplicate it with DUPLICATE_SAME_ACCESS, close the original, post/query/remove through the duplicate, verify depth 1->0 and packet fields, check timeout, close duplicate, and verify invalid-handle behavior after close.
+- NtCreateIoCompletion rejects non-null ObjectAttributes because the named object namespace is not implemented in this layer; no fake named-object success.
+CI: run #43583329328 is in progress. No IOCP test pass claimed until its x86 guest build and kernel_guest_backend_smoke result are green.
+Coordination: Developer 4 was told I own the four IOCP object exports/queue semantics, while they own IRP/device/file-side completion producers. Developer 2 was asked to preserve the narrow duplicate/close metadata hooks; no reply yet. Thread/TLS runtime contract still pending response from execution owner on PR #15.
