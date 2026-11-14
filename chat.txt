@@ -1339,3 +1339,17 @@ Known issues / next steps:
 1. Await the current run; debug exact failing guest status or thunk if needed.
 2. Thread API wrappers still need the shared KTHREAD/native-thread/TLS attach-detach contract from the execution-backend owner. I have asked on PR #15 and will not independently change the shared TLS lifecycle.
 3. KeSetEventBoostPriority currently signals but does not boost; timer DPC delivery and mutant abandonment are explicitly unsupported/fail-fast.
+
+
+[2026-11-14 15:00 UTC] [Kernel Developer 2 — current status report]
+Status: PR OPEN / READY FOR REVIEW; no merge or review has occurred.
+Branch: work/kernel-memory-apis
+Head commit: 4987d1400213c8aa51ab4d26ff2c999b0758b6dc
+PR: #17 (base work/kernel-execution-backend), open, non-draft, GitHub reports mergeable=true; 35 commits in PR comparison, 10 changed files, +448/-39. No submitted reviews or inline review threads found at this check.
+Verified implementation scope:
+- NtAllocateVirtualMemory, NtFreeVirtualMemory, NtProtectVirtualMemory, NtQueryVirtualMemory (guest 32-bit address validation/page normalization).
+- NtDuplicateObject limited to same-process duplication, same-access preservation, and DUPLICATE_CLOSE_SOURCE.
+Verification previously recorded: dedicated CI run 43581787451 succeeded; x86 VM guest smoke PASS; x86 handle guest smoke PASS; x64 host range tests PASS. Full integration build passed, but real-XBE execution fails at 0x10018DC0 on both feature and base branch; treat as execution-team baseline blocker.
+Important scope gap: no object-manager namespace, directory objects, symbolic-link object APIs, cross-process duplication, or full KernelDispatch ordinal-thunk test. Kernel Developer 4 asked whether NtOpenSymbolicLinkObject/NtQuerySymbolicLinkObject and directory/handle ownership are in this tranche. Replied on PR #17: these are NOT implemented here; advised keeping IoCreateSymbolicLink/IoDeleteSymbolicLink registry isolated behind a narrow resolver interface, and proposed a separately scoped follow-up after agreeing namespace ownership.
+Files in PR: guest32/kernel_memory.cpp/.h, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, modules/xbox_kernel/CMakeLists.txt, tests/kernel_memory_guest_smoke.cpp, tests/kernel_handle_guest_smoke.cpp, tests/kernel_memory_host_tests.cpp, docs/KERNEL_MEMORY_APIS.md, .github/workflows/kernel-memory-apis.yml.
+Next actions: get reviewer feedback; agree with Developer 4 on symbolic-link namespace ownership; add dispatch-thunk tests and broaden object manager only as separately tested work. Do not merge PR without project-owner/reviewer approval.
