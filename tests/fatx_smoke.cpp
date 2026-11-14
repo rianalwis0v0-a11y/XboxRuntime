@@ -74,7 +74,7 @@ int main() {
     Put32(image, 12, 1);      // root directory cluster
     Put16(image, 0x1000 + 2, 0xFFFF); // cluster 1: root directory end
     Put16(image, 0x1000 + 4, 3);      // cluster 2 -> cluster 3
-    Put16(image, 0x1000 + 6, 0xFFF8); // cluster 3: end of chain
+    Put16(image, 0x1000 + 6, 0xFFFF); // cluster 3: end of chain
 
     BYTE* root = image.data() + dataOffset;
     root[0] = 8;
