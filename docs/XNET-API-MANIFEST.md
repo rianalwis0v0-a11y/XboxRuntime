@@ -164,3 +164,12 @@ The invalid `XNetStartupParams.cfgSizeOfStruct` error is `WSAEFAULT`, matching
 the original XNet entry-point parameter check (rather than the generic
 `WSAEINVAL` used by the first smoke-test draft). The smoke test asserts this
 exact error result.
+
+
+The guest XSocket token registry now enforces the title's `cfgSockMaxSockets`
+limit, counts accepted sockets as well as newly created sockets, and returns
+`WSAEMFILE` when the configured ceiling is reached. Socket tokens are removed
+from the guest registry before backend close; final XNet cleanup invalidates
+the registry along with the backend socket table. The smoke test sets a four
+socket limit, allocates four simultaneous sockets, verifies the fifth is
+rejected, and closes all four.
