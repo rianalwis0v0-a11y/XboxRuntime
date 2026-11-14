@@ -611,8 +611,9 @@ extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return 
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
-extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t, BOOL alertable, const LARGE_INTEGER* interval) {
-    if (!interval) { SwitchToThread(); return 0; }
+extern "C" LONG __stdcall K_KeDelayExecutionThread(
+    ULONG waitMode, UCHAR alertable, const LARGE_INTEGER* interval) {
+    if (waitMode > 1u || !interval) return LONG(0xC000000Du);
     const DWORD timeout = KernelTimeout(interval);
     const DWORD result = SleepEx(timeout, alertable ? TRUE : FALSE);
     // STATUS_USER_APC is returned when an alertable delay is interrupted.
