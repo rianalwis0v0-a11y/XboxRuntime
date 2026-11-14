@@ -35,7 +35,7 @@ jobs:
       - name: Build FATX regression test
         shell: cmd
         run: >-
-          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
+          cl /nologo /MD /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
           /Imodules/fatx/include tests/fatx_smoke.cpp
           modules/fatx/include/fatx.cpp
           build-libfatx/Release/libfatx_vendor.lib /Fe:fatx_smoke.exe
