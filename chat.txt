@@ -1041,3 +1041,25 @@ Known issues / next steps:
 3. Add a compile-time ABI conformance check against the pinned NXDK xboxkrnl.h/XBE_SECTION_HEADER definitions; keep MSVC host headers isolated from NXDK's clang/GNU attributes.
 4. Continue Xbox guest thread/KPCR/TIB/FS semantics only after the real entrypoint path is understood. ABI v2 remains internal host↔guest backend transport; Xbox-native structures/calling conventions/ordinals remain guest-facing.
 No real guest-entry PASS or complete Xbox kernel compatibility claim is made.
+
+
+
+[2026-11-14 09:xx UTC] [Kernel team — loader/backend wiring audit and next integration diagnostic]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-execution-backend / dcda2c0a035a5aa169d0de9ab6d7518f25f7724b; PR #15: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/15
+Summary:
+- Confirmed the loader/kernel backend is already wired in the production startup path: main/main.cpp loads xbox_kernel.dll and xbe_loader.dll, obtains XBE_GetExecutionBackendV2, validates ABI v2 size/version, and registers it through XBE_RegisterExecutionBackendV2 before LoadXbe(dashboard.xbe). The joint CI harness separately exercises the same provider-registration path against a real NXDK-built default.xbe.
+- Audited tools/kernel_exports.json against guest32/kernel_compat.cpp. The catalogue contains 371 exports: 34 data exports have explicit DataFor storage; 213 function ordinals have KernelDispatch cases; 124 function-like exports have no dispatch case and therefore must remain unsupported/fail explicitly until implemented. This is a source audit, not a runtime compatibility score.
+- Latest real-XBE CI run 43579639178 failed after successful host/guest builds, ABI export audit, guest API/network smoke tests, and synthetic backend/TLS smoke. Actual NXDK XBE maps and starts through the real backend, then faults executing at 0x10018DC0 in section 2 (flags 0x3: writable+preload, not executable). TLS directory had start=0x1001A000, end=0x1001A114, index=0x10017D38, callbacks=0; TLS index cleanup and image release passed. This is evidence of an invalid control-flow target, not a reason to make data pages executable.
+- Added a bounded post-fault diagnostic to tests/kernel_xbe_integration.cpp: read/print 32 bytes at exceptionIP and query the page's base/state/protection/type. This should tell us whether 0x10018DC0 contains code-like bytes or a corrupted data target.
+Files changed: tests/kernel_xbe_integration.cpp
+Build and tests:
+- Existing run 43579639178: kernel and guest build PASS; network_smoke and guest_api_registry_smoke PASS; ABI v2 export verification PASS; synthetic shared-memory guest/TLS smoke PASS; real NXDK XBE entry execution FAIL with STATUS_ACCESS_VIOLATION at 0x10018DC0.
+- New diagnostic commit: dcda2c0a035a5aa169d0de9ab6d7518f25f7724b.
+- CI run 43580285749 / job 132403336701 was queued when this entry was written: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43580285749
+Known issues / next steps:
+1. Inspect 32-byte fault-site dump from run 43580285749. Trace the caller/return address and determine whether the target is a bad import, bad indirect call, stack/ABI corruption, or startup path error.
+2. Do not change XBE section protections to make data executable; fix the source of the invalid target.
+3. Add guest-facing Xbox APIs in coherent groups, using pinned NXDK headers for structures/signatures and a per-export implemented/partial/unsupported evidence ledger. The 124 unmapped function-like ordinals are not to be filled with fake-success stubs.
+4. Add real guest-call tests for each implemented group and preserve the existing backend/TLS cleanup tests.
+No complete Xbox kernel API compatibility or real XBE entrypoint PASS is claimed.
