@@ -129,7 +129,8 @@ int main() {
         }
         FATX_ENTRY entry{};
         if (FATX_ListDirectoryW(volume, L"\\", &entry, 1, &required) != FATX_OK ||
-            std::wcscmp(entry.name, L"TEST.BIN") != 0 || entry.size != payloadSize ||\n            entry.attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE)) {
+            std::wcscmp(entry.name, L"TEST.BIN") != 0 || entry.size != payloadSize ||
+            entry.attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE)) {
             Fail("root directory listing failed");
             goto stop;
         }
