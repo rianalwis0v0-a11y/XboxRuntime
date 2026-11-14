@@ -120,28 +120,13 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
     if (freeType == MEM_RELEASE) {
         if (regionSize && *regionSize != 0) return kInvalidParameter;
     } else {
+        std::uint32_t alignedBase = 0, alignedSize = 0;
         if (!regionSize || !*regionSize ||
             !XboxKernelNormalizeGuestRange32(static_cast<std::uint32_t>(requested),
-                static_cast<std::uint32_t>(*regionSize),
-                reinterpret_cast<std::uint32_t*>(&size),
-                reinterpret_cast<std::uint32_t*>(reinterpret_cast<std::uint8_t*>(&size) + 4))) {
-            // The x86 guest build has a 32-bit SIZE_T; avoid relying on this
-            // branch's host representation by normalizing into explicit words below.
-            std::uint32_t alignedBase = 0, alignedSize = 0;
-            if (!regionSize || !*regionSize ||
-                !XboxKernelNormalizeGuestRange32(static_cast<std::uint32_t>(requested),
-                    static_cast<std::uint32_t>(*regionSize), &alignedBase, &alignedSize))
-                return kInvalidParameter;
-            base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
-            size = alignedSize;
-        } else {
-            std::uint32_t alignedBase = 0, alignedSize = 0;
-            if (!XboxKernelNormalizeGuestRange32(static_cast<std::uint32_t>(requested),
-                    static_cast<std::uint32_t>(*regionSize), &alignedBase, &alignedSize))
-                return kInvalidParameter;
-            base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
-            size = alignedSize;
-        }
+                static_cast<std::uint32_t>(*regionSize), &alignedBase, &alignedSize))
+            return kInvalidParameter;
+        base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
+        size = alignedSize;
     }
     if (!VirtualFree(base, size, freeType)) return StatusFromWin32(GetLastError());
     if (freeType == MEM_RELEASE) {
@@ -246,4 +231,50 @@ extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, void* information) {
     struct TimerBasicInformation { LARGE_INTEGER remainingTime; BOOLEAN timerState; UCHAR padding[7]; };
     static_assert(sizeof(TimerBasicInformation) == 16, "NXDK TIMER_BASIC_INFORMATION ABI");
     return QueryNative(timer, information, sizeof(TimerBasicInformation), "NtQueryTimer");
+}
+
+extern "C" LONG __stdcall K_NtSetEvent(HANDLE event, LONG* previousState) {
+    if (!ValidHandle(event)) return kInvalidHandle;
+    const FARPROC address = NativeRoutine("NtSetEvent");
+    if (!address) return kNotSupported;
+    using SetEventNative = LONG (NTAPI*)(HANDLE, LONG*);
+    return reinterpret_cast<SetEventNative>(address)(event, previousState);
+}
+extern "C" LONG __stdcall K_NtClearEvent(HANDLE event) {
+    if (!ValidHandle(event)) return kInvalidHandle;
+    const FARPROC address = NativeRoutine("NtClearEvent");
+    if (!address) return kNotSupported;
+    using ClearEventNative = LONG (NTAPI*)(HANDLE);
+    return reinterpret_cast<ClearEventNative>(address)(event);
+}
+extern "C" LONG __stdcall K_NtWaitForSingleObject(
+    HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER* timeout) {
+    if (!ValidHandle(handle)) return kInvalidHandle;
+    DWORD milliseconds = INFINITE;
+    if (timeout) {
+        const LONGLONG ticks = timeout->QuadPart;
+        if (ticks == 0) milliseconds = 0;
+        else if (ticks < 0) {
+            const std::uint64_t magnitude = std::uint64_t(-(ticks + 1)) + 1u;
+            const std::uint64_t rounded = (magnitude + 9999u) / 10000u;
+            milliseconds = rounded >= INFINITE ? INFINITE - 1u : static_cast<DWORD>(rounded);
+        } else {
+            FILETIME nowFileTime{};
+            GetSystemTimeAsFileTime(&nowFileTime);
+            ULARGE_INTEGER now{};
+            now.LowPart = nowFileTime.dwLowDateTime;
+            now.HighPart = nowFileTime.dwHighDateTime;
+            const std::uint64_t deadline = static_cast<std::uint64_t>(ticks);
+            if (deadline <= now.QuadPart) milliseconds = 0;
+            else {
+                const std::uint64_t rounded = (deadline - now.QuadPart + 9999u) / 10000u;
+                milliseconds = rounded >= INFINITE ? INFINITE - 1u : static_cast<DWORD>(rounded);
+            }
+        }
+    }
+    const DWORD result = WaitForSingleObjectEx(handle, milliseconds, alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) return kSuccess;
+    if (result == WAIT_TIMEOUT) return static_cast<LONG>(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return static_cast<LONG>(0x000000C0u);
+    return StatusFromWin32(GetLastError());
 }
