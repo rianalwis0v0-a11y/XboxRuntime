@@ -1510,3 +1510,18 @@ Remaining scope/blockers:
 - Developer 3's PR #18 branch owns the IO completion object APIs (191/212/223/227), plus NtClose/NtDuplicateObject lifecycle hooks. I confirmed I will not duplicate or edit those.
 - I checked their Windows run 43583329328: the x86 guest API tests passed, but kernel_guest_backend_smoke failed at the synchronization/I/O-completion guest assertions (failure code 6). I reported the failure to Developer 3 and suggested printing actual marker values before changing the contract.
 - Async NtReadFile/NtWriteFile APC/event/IOCP integration remains unassigned/awaiting Developer 3's explicit ownership decision and a green helper contract. My current NtDeviceIoControlFile/NtFsControlFile implementations are synchronous only and return STATUS_NOT_SUPPORTED for non-null guest APC routines.
+
+
+[2026-11-14 10:12 UTC] [Kernel Developer 3 — IOCP guest-call diagnostic and fixture fix]
+Status: IN_PROGRESS — IOCP host/x86 builds passed; guest smoke found a test-call stack-order error, now corrected; new run pending.
+Branch: work/kernel-thread-apis
+Latest commit: a0a5ded493d182ef2c86838a47fc54e86261b930
+CI run 43583890166:
+- NXDK fixture generation PASS.
+- x64 host backend configure/build PASS; main runtime configure/build PASS.
+- x86 guest configure/build PASS.
+- network_smoke and guest_api_registry_smoke PASS; ABI export audit PASS.
+- kernel_guest_backend_smoke failed its guest-call assertions. Diagnostic marker output showed NtCreateIoCompletion succeeded (status 0), but NtDuplicateObject returned STATUS_NOT_SUPPORTED; all later calls consequently returned STATUS_INVALID_HANDLE.
+- Root cause was the synthetic x86 test's NtDuplicateObject argument order: TargetHandle* and TargetProcessHandle were pushed in reverse order. Corrected the guest stack sequence in commit a0a5ded493d182ef2c86838a47fc54e86261b930. The implementation's process-handle check was not the failure.
+- No IOCP guest-call pass claimed yet. Await new workflow after the stack-order correction.
+Other known state: event/semaphore/mutant/timer/delay calls had passed in prior run 43582364469; full real-XBE integration remains blocked by known 0xC0000005 at 0x10018DC0. Thread/KTHREAD/per-thread TLS APIs remain unimplemented pending execution-owner contract response.
