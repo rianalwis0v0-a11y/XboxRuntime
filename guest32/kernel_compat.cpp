@@ -1768,7 +1768,7 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
 
 extern "C" LONG __stdcall K_ExQueryNonVolatileSetting(
     std::uint32_t valueIndex, std::uint32_t* type, void* value,
-    std::uint32_t valueLength, SIZE_T* resultLength) {
+    std::uint32_t valueLength, std::uint32_t* resultLength) {
     // XC_MAX_ALL asks for the complete 256-byte XBOX_EEPROM image.
     constexpr std::uint32_t kXcMaxAll = 0xFFFFu;
     constexpr std::uint32_t kRegBinary = 3u;
