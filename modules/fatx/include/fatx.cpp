@@ -16,6 +16,7 @@ extern "C" int fatx_flush_fat_cache(struct fatx_fs* fs);
 #include <unordered_set>
 #include <algorithm>
 #include <limits>
+#include <climits>
 
 static bool g_initialized = false;
 
