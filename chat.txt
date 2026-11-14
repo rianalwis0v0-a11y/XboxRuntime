@@ -159,3 +159,28 @@ Next steps:
 2. Fix compile/test failures, run the retail/debug/Chihiro parser regression tests, then inspect new register/stack diagnostics from real NXDK fixture.
 3. Continue comparing the actual guest startup against Cxbx's startup sequence (preload semantics, kernel thunk patching, non-kernel imports, TLS data/index/callbacks and entry invocation) and implement only evidence-backed gaps.
 4. Do not mark PR ready or report execution success until default.xbe returns with section 2 still non-executable.
+
+
+[2026-11-14 13:21 UTC] [Kernel Developer 5 — root cause identified and corrected; verification pending]
+Status: FIX COMMITTED; awaiting real NXDK CI rerun
+Branch / commit: work/kernel-xbe-execution-fix / 4f6634bee63a624aa8c5b2e8a88b6a45f1b936f9; PR #20 remains draft.
+Evidence and root cause:
+- Downloaded the exact NXDK CI fixture artifact and disassembled section 0 with objdump.
+- Fault context EBP=0x10006F91 points at the instruction after a call in XBE code at 0x10006F8C. The call sequence uses kernel thunk slot 0x10016F1C, whose on-disk value is 0x800000C0 (ordinal 192, NtCreateMutant).
+- OpenXDK's authoritative xboxkrnl export definition decorates this export as `NtCreateMutant@12`, proving a 3-argument stdcall ABI. Reference: https://github.com/XboxDev/OpenXDK/blob/master/src/xboxkrnl/xboxkrnl.exe.def (ordinal 192).
+- XboxRuntime incorrectly declared K_NtCreateMutant with four arguments. Its stdcall return popped 16 bytes instead of the required 12, shifting the caller stack by four bytes. The disassembly and captured EBP/EIP are consistent with the saved frame pointer/return address being consumed and a data-buffer address 0x10018DC0 being used as the next instruction pointer.
+- The patched kernel thunk slot 69 (address 0x10016FAC, ordinal 335) is a valid guest stub at 0x0056029E, so the initial hypothesis that the thunk pointer itself was the bad target was disproven. The call through ordinal 192's wrong stack cleanup is the identified root cause.
+Fix:
+- Changed K_NtCreateMutant to the correct three-argument signature and set the initial-owner behavior to FALSE because the Xbox export has no fourth initial-owner parameter.
+- No guest ABI was changed; the implementation now matches the existing Xbox kernel ABI.
+- Added diagnostic output for patched kernel thunk targets to the integration harness. It confirmed thunk[69] is 0x0056029E, outside the XBE image.
+Files changed for this fix: guest32/kernel_compat.cpp. Diagnostic file changed earlier: tests/kernel_xbe_integration.cpp.
+Verification:
+- Prior run 43599057587: all host/guest builds, shared-memory smoke, parser regression tests and loader DLL build passed; real NXDK XBE still failed at 0x10018DC0 before this fix.
+- Parser regression output: PASS: retail, debug, and Chihiro XBE type/key decoding matches Cxbx semantics.
+- New CI runs triggered for fix commit 4f6634bee63a624aa8c5b2e8a88b6a45f1b936f9: run 43599305231 (kernel host/guest and real XBE) and run 43599305260 (kernel memory/object APIs). Both were queued when this entry was written.
+- Do not claim real XBE success until the new run completes and shows clean exit/TLS cleanup with section 2 non-executable.
+Next:
+1. Inspect run 43599305231 and verify the NXDK fixture no longer faults at 0x10018DC0.
+2. If a new failure appears, use the register/stack and thunk-table diagnostics to continue tracing.
+3. Update PR #20 with the root-cause evidence and add a focused regression assertion for the NtCreateMutant@12 stack ABI if practical.
