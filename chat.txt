@@ -1353,3 +1353,35 @@ Verification previously recorded: dedicated CI run 43581787451 succeeded; x86 VM
 Important scope gap: no object-manager namespace, directory objects, symbolic-link object APIs, cross-process duplication, or full KernelDispatch ordinal-thunk test. Kernel Developer 4 asked whether NtOpenSymbolicLinkObject/NtQuerySymbolicLinkObject and directory/handle ownership are in this tranche. Replied on PR #17: these are NOT implemented here; advised keeping IoCreateSymbolicLink/IoDeleteSymbolicLink registry isolated behind a narrow resolver interface, and proposed a separately scoped follow-up after agreeing namespace ownership.
 Files in PR: guest32/kernel_memory.cpp/.h, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, modules/xbox_kernel/CMakeLists.txt, tests/kernel_memory_guest_smoke.cpp, tests/kernel_handle_guest_smoke.cpp, tests/kernel_memory_host_tests.cpp, docs/KERNEL_MEMORY_APIS.md, .github/workflows/kernel-memory-apis.yml.
 Next actions: get reviewer feedback; agree with Developer 4 on symbolic-link namespace ownership; add dispatch-thunk tests and broaden object manager only as separately tested work. Do not merge PR without project-owner/reviewer approval.
+
+
+[2026-11-14 09:51 UTC] [Kernel Developer 4 — HAL shutdown notification CI PASS + object-namespace coordination]
+Tested branch commit: work/kernel-io-system-apis / 48092f1a4418c614948ea2a70498da8599faf1a7
+Workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43582414630 — SUCCESS.
+Guest32 job 132409781133:
+- Configure x86 guest PASS.
+- Build xbe_guest32, kernel_system_guest_smoke, kernel_io_guest_smoke, kernel_notification_guest_smoke PASS.
+- ctest result: `100% tests passed out of 3`.
+Host64 job 132409780942:
+- Configure/build kernel_io_system_host_tests PASS.
+- ctest result: `100% tests passed out of 1`.
+New API: HalRegisterShutdownNotification ordinal 47.
+- Uses pinned NXDK HAL_SHUTDOWN_REGISTRATION layout (function pointer, priority, LIST_ENTRY).
+- Validates writable registration storage and executable callback addresses before registration.
+- Maintains a descending-priority doubly-linked guest list; unregister removes and unlinks; duplicate registrations ignored.
+- Shutdown dispatch is one-shot, runs callbacks without the registry lock, and is invoked on orderly title teardown, HalReturnToFirmware and HalInitiateShutdown.
+- x86 guest test covers registration, duplicate suppression, unregister, priority order, list unlink, and one-shot behavior. x64 host test also verifies ordered callback invocation.
+- Status remains PARTIAL: callback test uses the guest ABI helper, not a retail XBE import-thunk path.
+Files changed for this tranche:
+- guest32/kernel_system.h / kernel_system.cpp
+- guest32/kernel_compat.cpp (ordinal 47 dispatch + orderly shutdown hooks)
+- guest32/CMakeLists.txt
+- tests/kernel_notification_guest_smoke.cpp
+- tests/kernel_io_system_host_tests.cpp
+- .github/workflows/kernel-io-system-apis.yml
+- docs/KERNEL-IO-SYSTEM-APIS.md
+Coordination:
+- Developer 2 confirmed they currently own only VM + NtDuplicateObject, not object-manager namespace; recommended isolated Io* registry and narrow resolver. Agreed: Io* map stays private; only XboxKernelResolveSymbolicLinks(std::wstring*) is exposed; no NtDuplicateObject/NtClose changes. Coordination comment: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/17#issuecomment-6875482206
+- Developer 3 has been asked whether IoCompletionObject/NtCreateIoCompletion/NtRemoveIoCompletion/NtSetIoCompletion and APC/overlapped semantics belong in their branch. Awaiting response; no async completion APIs touched.
+PR #19: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 (draft, stacked on work/kernel-memory-apis).
+Remaining: full I/O work is not complete. NtDeviceIoControlFile, NtFsControlFile, IRP/device objects, I/O completion objects, scatter/gather and APC/overlapped completion remain open. Next step is coordinate the completion contract and choose a bounded device-I/O group with real guest-call tests.
