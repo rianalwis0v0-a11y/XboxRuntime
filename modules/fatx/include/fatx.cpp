@@ -257,10 +257,10 @@ static int ReadDirectory(
         {
             const BYTE* entry = clusterData.data() + pos;
 
-            if (entry[0] == 0xFF)
+            if (entry[0] == 0xFF || entry[0] == 0)
                 return FATX_OK;
 
-            if (entry[0] == 0xE5 || entry[0] == 0)
+            if (entry[0] == 0xE5)
                 continue;
 
             BYTE nameLength = entry[0];
@@ -281,9 +281,14 @@ static int ReadDirectory(
                 if (character == 0 || character == 0xFF)
                     break;
 
-                item.name.push_back(
-                    static_cast<wchar_t>(character)
-                );
+                wchar_t decoded = static_cast<wchar_t>(character);
+                if (character >= 0x80) {
+                    // FATX names use the OEM code page; XboxRuntime targets CP437.
+                    char encoded = static_cast<char>(character);
+                    if (MultiByteToWideChar(437, 0, &encoded, 1, &decoded, 1) != 1)
+                        decoded = static_cast<wchar_t>(character);
+                }
+                item.name.push_back(decoded);
             }
 
             if (!item.name.empty())
@@ -557,7 +562,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     v->clusterSize = spc * 512;
 
     ULONGLONG maxClusters =
-        partitionLength / v->clusterSize + 1;
+        partitionLength / v->clusterSize + 2; // includes FATX reserved entries
 
     v->entrySize =
         maxClusters < 0xFFF0 ? 2 : 4;
