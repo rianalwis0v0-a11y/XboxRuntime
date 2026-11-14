@@ -48,6 +48,17 @@ target_compile_options(guest_api_registry_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(guest_api_registry_smoke PRIVATE ws2_32 iphlpapi)
 add_test(NAME guest_api_registry_smoke COMMAND guest_api_registry_smoke)
 
+# Validate the guest Xbox SHA-1 imports against standard SHA-1 vectors.
+add_executable(xbox_sha1_smoke
+  ../tests/xbox_sha1_smoke.cpp
+  xbox_sha1.cpp
+)
+target_include_directories(xbox_sha1_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(xbox_sha1_smoke PRIVATE cxx_std_17)
+target_compile_definitions(xbox_sha1_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(xbox_sha1_smoke PRIVATE /W4 /permissive-)
+add_test(NAME xbox_sha1_smoke COMMAND xbox_sha1_smoke)
+
 # Execute the x86 guest-facing memory/object entry points with their real stdcall ABI.
 add_executable(kernel_memory_guest_smoke
   ../tests/kernel_memory_guest_smoke.cpp
