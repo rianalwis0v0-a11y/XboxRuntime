@@ -1,4 +1,4 @@
-# FATX read-only filesystem module
+# FATX filesystem module
 
 The FATX module opens a FATX volume from a Windows file or device path and a caller-supplied partition range. It does not modify the volume.
 
@@ -20,18 +20,18 @@ Include `modules/fatx/include/fatx.h`.
 3. Use `FATX_GetInfo`, `FATX_ListDirectoryW`, and `FATX_ReadFileW`.
 4. Call `FATX_CloseVolume(volume)`, then `ModuleStop()`.
 
-The API is read-only. The vendored libfatx device open is patched to use `rb`; the runtime does not expose its write/format functions. The API does not create, rename, delete, or write files, and it does not mount a Windows drive letter.
+`FATX_OpenVolumeW` remains read-only. The opt-in `FATX_OpenImageReadWriteW` opens only ordinary drive-letter image files, never raw device paths. Write mode supports file creation, directory creation, overwrite/append, file deletion, empty-directory removal, no-replace rename, and shrink-only truncation. Each mutation flushes the upstream FAT cache and C stream. Physical-device writes and formatting are not exposed.
 
 ## Limitations
 
 - This is currently a host-side volume reader, not a guest Xbox kernel filesystem driver.
 - OEM filename decoding currently targets CP437; unusual non-CP437 Xbox locale/code-page variants are not yet handled.
-- No write support, journaling, repair, or recovery mode is provided.
+- No journaling, repair, or recovery mode is provided. Truncation is shrink-only; sparse writes and growth-by-truncate are rejected. The upstream library does not provide crash-atomic multi-step updates.
 - Callers must not close a volume concurrently with operations using that handle.
 
 ## Test coverage
 
-The Windows regression test builds synthetic FATX volumes and checks metadata, root listing, multi-cluster reads, offset reads crossing a cluster boundary, partition bounds, cyclic-chain rejection, strict end-of-chain marker handling (only `0xFFFF`/`0xFFFFFFFF`), and the 32-bit FAT geometry threshold. The module cross-checks computed cluster/FAT geometry against XboxDev/libfatx during mount. CI builds and links the vendored XboxDev/libfatx C library before running the module test. This does not yet constitute validation against a complete retail Xbox HDD image.
+The Windows regression test builds synthetic FATX volumes and checks metadata, root listing, multi-cluster reads, offset reads crossing a cluster boundary, partition bounds, cyclic-chain rejection, strict end-of-chain marker handling, FAT32 geometry, file and directory creation, overwrite, append, cluster allocation, persisted data, rename, deletion, directory removal, and shrink-only truncation. The module cross-checks computed cluster/FAT geometry against XboxDev/libfatx during mount. CI builds and links the vendored XboxDev/libfatx C library before running the module test. This does not yet constitute validation against a complete retail Xbox HDD image.
 
 
 ## FATX write support (initial image-only milestone)
