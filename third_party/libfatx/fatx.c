@@ -27,7 +27,7 @@
 /*
  * Open a device.
  */
-int fatx_open_device(struct fatx_fs *fs, char const *path, uint64_t offset, uint64_t size, size_t sector_size, size_t sectors_per_cluster)
+int fatx_open_device_ex(struct fatx_fs *fs, char const *path, uint64_t offset, uint64_t size, size_t sector_size, size_t sectors_per_cluster, bool read_only)
 {
     int retval = 0;
 
@@ -67,8 +67,8 @@ int fatx_open_device(struct fatx_fs *fs, char const *path, uint64_t offset, uint
 
     memset(&fs->fat_cache, 0, sizeof(fs->fat_cache));
 
-    /* Modified by XboxRuntime on 2026-11-14: this vendored integration is read-only. */
-    fs->device = fopen(fs->device_path, "rb");
+    /* XboxRuntime: writable access is explicit and only enabled by its image-write API. */
+    fs->device = fopen(fs->device_path, read_only ? "rb" : "r+b");
     if (!fs->device)
     {
         fatx_error(fs, "failed to open %s for reading and writing\n", path);
@@ -161,6 +161,12 @@ int fatx_open_device(struct fatx_fs *fs, char const *path, uint64_t offset, uint
 cleanup:
     fclose(fs->device);
     return retval;
+}
+
+/* Preserve the upstream API as a safe read-only default in XboxRuntime. */
+int fatx_open_device(struct fatx_fs *fs, char const *path, uint64_t offset, uint64_t size, size_t sector_size, size_t sectors_per_cluster)
+{
+    return fatx_open_device_ex(fs, path, offset, size, sector_size, sectors_per_cluster, true);
 }
 
 /*
