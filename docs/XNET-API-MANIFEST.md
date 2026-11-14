@@ -173,3 +173,10 @@ from the guest registry before backend close; final XNet cleanup invalidates
 the registry along with the backend socket table. The smoke test sets a four
 socket limit, allocates four simultaneous sockets, verifies the fifth is
 rejected, and closes all four.
+
+
+The `XNQOSINFO.pbData` member is represented internally as a 32-bit guest
+virtual address (`uint32_t`), not a native host pointer. This keeps the
+guest ABI's 24-byte `XNQOSINFO` / 32-byte `XNQOS` layout invariant when the
+same header is compiled by the x64 host-side smoke target; a 64-bit host
+pointer must never leak into an Xbox structure.
