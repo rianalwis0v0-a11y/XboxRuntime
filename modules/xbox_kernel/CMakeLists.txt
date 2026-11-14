@@ -36,6 +36,7 @@ add_test(NAME kernel_guest_backend_smoke COMMAND kernel_guest_backend_smoke)
 add_executable(kernel_memory_host_tests
   ../../tests/kernel_memory_host_tests.cpp
   ../../guest32/kernel_memory.cpp
+  ../../guest32/kernel_object_manager.cpp
 )
 target_compile_features(kernel_memory_host_tests PRIVATE cxx_std_17)
 target_compile_definitions(kernel_memory_host_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
