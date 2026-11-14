@@ -167,3 +167,8 @@ void XboxKernelCloseAllObjectHandles() {
     }
     for (const auto& item : destroyList) DestroyOutsideLock(item.first, item.second);
 }
+
+void XboxKernelBeginObjectHandleSession() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_shuttingDown = false;
+}
