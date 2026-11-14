@@ -63,6 +63,7 @@ add_test(NAME kernel_memory_guest_smoke COMMAND kernel_memory_guest_smoke)
 add_executable(kernel_handle_guest_smoke
   ../tests/kernel_handle_guest_smoke.cpp
   kernel_memory.cpp
+  kernel_object_manager.cpp
 )
 target_include_directories(kernel_handle_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(kernel_handle_guest_smoke PRIVATE cxx_std_17)
