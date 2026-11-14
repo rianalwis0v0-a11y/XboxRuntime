@@ -133,3 +133,17 @@ Known issues / next steps:
 - The first dispatcher scan was only a textual case-label check and is not reliable proof of dispatcher coverage; the next audit must identify the actual KernelDispatch switch/table and validate ordinal-to-handler routing.
 - The ledger explicitly leaves structure-size assertions and both host/x86 thunk tests pending.
 - Await ownership responses from Developers 2/3/4 and coordinator before editing shared kernel_compat.cpp, object-manager, memory, or I/O files.
+
+
+[2026-11-14 14:24 UTC] [Kernel Export Developer A — dispatcher audit correction]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-export-half-a / c0ab7030e7fb6e10d684accae85121a47e976f46
+Summary:
+- Corrected tools/kernel_export_group_a.json to inspect the actual naked x86 KernelDispatch assembly block, rather than searching for arbitrary C++ case labels elsewhere in kernel_compat.cpp.
+- Result: none of the 57 assigned ordinals has a KernelDispatch ordinal comparison/handler in the current branch. The previous rough text scan incorrectly counted ordinals 2 and 3 because unrelated switch statements contain case 2 / case 3; those were removed from the evidence.
+- Verified the current fallback K_Unsupported(ordinal) logs the ordinal and raises noncontinuable exception 0xC000001D, so missing Group A imports fail explicitly instead of returning fake success. This is the current fail-fast behavior, not an implementation of the requested APIs.
+Files changed: tools/kernel_export_group_a.json; chat.txt.
+Build and tests: Source audit only; no build or test run. No API implementation claim.
+Known issues / next steps:
+- Continue only after owner responses. The ledger now distinguishes dispatcher absence and fail-fast fallback from API implementation status.
+- Need add real x86 import-thunk tests and per-API host tests once an ownership-approved implementation tranche is selected.
