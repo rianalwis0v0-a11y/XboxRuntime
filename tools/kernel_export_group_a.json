@@ -2,7 +2,7 @@
   "schema_version": 1,
   "group": "A",
   "generated_for_branch": "work/kernel-export-half-a",
-  "source_policy": "Signatures from pinned NXDK header. Ordinals are the assigned handoff values and checked against the repository export catalogue; do not infer ordinal provenance from the NXDK header.",
+  "source_policy": "Signatures from pinned NXDK lib/xboxkrnl/xboxkrnl.h; ordinals and x86 decorated export names/stack-byte decorations from pinned NXDK lib/xboxkrnl/xboxkrnl.exe.def.",
   "exports": [
     {
       "ordinal": 2,
@@ -14,7 +14,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -23,7 +23,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "AvSendTVEncoderOption@16                 @   2 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "AvSendTVEncoderOption@16",
+      "decoration_stack_bytes": 16
     },
     {
       "ordinal": 3,
@@ -35,7 +39,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -44,7 +48,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "AvSetDisplayMode@24                      @   3 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "AvSetDisplayMode@24",
+      "decoration_stack_bytes": 24
     },
     {
       "ordinal": 24,
@@ -56,7 +64,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -65,7 +73,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExQueryNonVolatileSetting@20",
+      "decoration_stack_bytes": 20
     },
     {
       "ordinal": 25,
@@ -77,7 +89,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -86,7 +98,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "ExReadWriteRefurbInfo@12                 @  25 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExReadWriteRefurbInfo@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 29,
@@ -98,7 +114,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -107,7 +123,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExSaveNonVolatileSetting@16",
+      "decoration_stack_bytes": 16
     },
     {
       "ordinal": 38,
@@ -119,7 +139,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -128,7 +148,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@HalClearSoftwareInterrupt@4             @  38 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@HalClearSoftwareInterrupt@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 39,
@@ -140,7 +164,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -149,7 +173,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalDisableSystemInterrupt@4              @  39 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalDisableSystemInterrupt@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 43,
@@ -161,7 +189,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -170,7 +198,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalEnableSystemInterrupt@8               @  43 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalEnableSystemInterrupt@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 44,
@@ -182,7 +214,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -191,7 +223,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalGetInterruptVector@8                  @  44 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalGetInterruptVector@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 46,
@@ -203,7 +239,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -212,7 +248,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "HalReadWritePCISpace@24                  @  46 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalReadWritePCISpace@24",
+      "decoration_stack_bytes": 24
     },
     {
       "ordinal": 48,
@@ -224,7 +264,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -233,7 +273,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@HalRequestSoftwareInterrupt@4           @  48 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@HalRequestSoftwareInterrupt@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 59,
@@ -245,7 +289,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -254,7 +298,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoAllocateIrp@4                          @  59 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoAllocateIrp@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 60,
@@ -266,7 +314,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -275,7 +323,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoBuildAsynchronousFsdRequest@24         @  60 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildAsynchronousFsdRequest@24",
+      "decoration_stack_bytes": 24
     },
     {
       "ordinal": 61,
@@ -287,7 +339,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -296,7 +348,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoBuildDeviceIoControlRequest@36         @  61 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildDeviceIoControlRequest@36",
+      "decoration_stack_bytes": 36
     },
     {
       "ordinal": 62,
@@ -308,7 +364,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -317,7 +373,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoBuildSynchronousFsdRequest@28          @  62 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildSynchronousFsdRequest@28",
+      "decoration_stack_bytes": 28
     },
     {
       "ordinal": 63,
@@ -329,7 +389,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -338,7 +398,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoCheckShareAccess@20                    @  63 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCheckShareAccess@20",
+      "decoration_stack_bytes": 20
     },
     {
       "ordinal": 65,
@@ -350,7 +414,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -359,7 +423,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoCreateDevice@24                        @  65 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCreateDevice@24",
+      "decoration_stack_bytes": 24
     },
     {
       "ordinal": 66,
@@ -371,7 +439,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -380,7 +448,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoCreateFile@40                          @  66 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCreateFile@40",
+      "decoration_stack_bytes": 40
     },
     {
       "ordinal": 68,
@@ -392,7 +464,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -401,7 +473,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoDeleteDevice@4                         @  68 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDeleteDevice@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 72,
@@ -413,7 +489,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -422,7 +498,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoFreeIrp@4                              @  72 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoFreeIrp@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 73,
@@ -434,7 +514,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -443,7 +523,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoInitializeIrp@12                       @  73 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoInitializeIrp@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 75,
@@ -455,7 +539,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -464,7 +548,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoQueryFileInformation@20                @  75 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueryFileInformation@20",
+      "decoration_stack_bytes": 20
     },
     {
       "ordinal": 76,
@@ -476,7 +564,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -485,7 +573,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoQueryVolumeInformation@20              @  76 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueryVolumeInformation@20",
+      "decoration_stack_bytes": 20
     },
     {
       "ordinal": 77,
@@ -497,7 +589,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -506,7 +598,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoQueueThreadIrp@4                       @  77 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueueThreadIrp@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 78,
@@ -518,7 +614,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -527,7 +623,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoRemoveShareAccess@8                    @  78 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoRemoveShareAccess@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 79,
@@ -539,7 +639,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -548,7 +648,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSetIoCompletion@20                     @  79 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSetIoCompletion@20",
+      "decoration_stack_bytes": 20
     },
     {
       "ordinal": 80,
@@ -560,7 +664,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -569,7 +673,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSetShareAccess@16                      @  80 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSetShareAccess@16",
+      "decoration_stack_bytes": 16
     },
     {
       "ordinal": 81,
@@ -581,7 +689,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -590,7 +698,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoStartNextPacket@4                      @  81 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartNextPacket@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 82,
@@ -602,7 +714,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -611,7 +723,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoStartNextPacketByKey@8                 @  82 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartNextPacketByKey@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 83,
@@ -623,7 +739,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -632,7 +748,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoStartPacket@12                         @  83 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartPacket@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 84,
@@ -644,7 +764,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -653,7 +773,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSynchronousDeviceIoControlRequest@32   @  84 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSynchronousDeviceIoControlRequest@32",
+      "decoration_stack_bytes": 32
     },
     {
       "ordinal": 85,
@@ -665,7 +789,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -674,7 +798,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoSynchronousFsdRequest@20               @  85 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSynchronousFsdRequest@20",
+      "decoration_stack_bytes": 20
     },
     {
       "ordinal": 86,
@@ -686,7 +814,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -695,7 +823,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@IofCallDriver@8                         @  86 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@IofCallDriver@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 87,
@@ -707,7 +839,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -716,7 +848,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@IofCompleteRequest@8                    @  87 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@IofCompleteRequest@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 90,
@@ -728,7 +864,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -737,7 +873,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoDismountVolume@4                       @  90 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDismountVolume@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 91,
@@ -749,7 +889,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 4 (I/O)",
@@ -758,7 +898,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "IoDismountVolumeByName@4                 @  91 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDismountVolumeByName@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 93,
@@ -770,7 +914,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -779,7 +923,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeAlertThread@8                          @  93 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeAlertThread@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 98,
@@ -791,7 +939,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -800,7 +948,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeConnectInterrupt@4                     @  98 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeConnectInterrupt@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 100,
@@ -812,7 +964,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -821,7 +973,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeDisconnectInterrupt@4                  @ 100 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeDisconnectInterrupt@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 105,
@@ -833,7 +989,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -842,7 +998,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeInitializeApc@28                       @ 105 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInitializeApc@28",
+      "decoration_stack_bytes": 28
     },
     {
       "ordinal": 109,
@@ -854,7 +1014,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -863,7 +1023,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeInitializeInterrupt@28                 @ 109 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInitializeInterrupt@28",
+      "decoration_stack_bytes": 28
     },
     {
       "ordinal": 118,
@@ -875,7 +1039,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -884,7 +1048,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeInsertQueueApc@16                      @ 118 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInsertQueueApc@16",
+      "decoration_stack_bytes": 16
     },
     {
       "ordinal": 139,
@@ -896,7 +1064,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -905,7 +1073,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeRestoreFloatingPointState@4            @ 139 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeRestoreFloatingPointState@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 141,
@@ -917,7 +1089,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -926,7 +1098,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeRundownQueue@4                         @ 141 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeRundownQueue@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 142,
@@ -938,7 +1114,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -947,7 +1123,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeSaveFloatingPointState@4               @ 142 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeSaveFloatingPointState@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 153,
@@ -959,7 +1139,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -968,7 +1148,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "KeSynchronizeExecution@12                @ 153 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeSynchronizeExecution@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 163,
@@ -980,7 +1164,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 3 (threading/synchronization/APC)",
@@ -989,7 +1173,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "@KiUnlockDispatcherDatabase@4            @ 163 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@KiUnlockDispatcherDatabase@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 168,
@@ -1001,7 +1189,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1010,7 +1198,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmClaimGpuInstanceMemory@8               @ 168 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmClaimGpuInstanceMemory@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 169,
@@ -1022,7 +1214,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1031,7 +1223,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmCreateKernelStack@8                    @ 169 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmCreateKernelStack@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 170,
@@ -1043,7 +1239,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1052,7 +1248,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmDeleteKernelStack@8                    @ 170 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmDeleteKernelStack@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 175,
@@ -1064,7 +1264,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1073,7 +1273,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmLockUnlockBufferPages@12               @ 175 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmLockUnlockBufferPages@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 176,
@@ -1085,7 +1289,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1094,7 +1298,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmLockUnlockPhysicalPage@8               @ 176 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmLockUnlockPhysicalPage@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 177,
@@ -1106,7 +1314,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1115,7 +1323,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmMapIoSpace@12                          @ 177 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmMapIoSpace@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 178,
@@ -1127,7 +1339,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1136,7 +1348,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmPersistContiguousMemory@12             @ 178 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmPersistContiguousMemory@12",
+      "decoration_stack_bytes": 12
     },
     {
       "ordinal": 181,
@@ -1148,7 +1364,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1157,7 +1373,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmQueryStatistics@4                      @ 181 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmQueryStatistics@4",
+      "decoration_stack_bytes": 4
     },
     {
       "ordinal": 183,
@@ -1169,7 +1389,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "pending_owner_coordination",
       "owner": "Developer 2 (memory)",
@@ -1178,7 +1398,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "MmUnmapIoSpace@8                         @ 183 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmUnmapIoSpace@8",
+      "decoration_stack_bytes": 8
     },
     {
       "ordinal": 188,
@@ -1190,7 +1414,7 @@
         "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
-      "ordinal_provenance": "Assigned Group A handoff; cross-checked against tools/kernel_exports.json (whose catalogue provenance is sp00nznet/xboxrecomp, not NXDK)",
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "signature_verified_not_implemented",
       "owner": "Developer A / coordinator confirmation",
@@ -1199,7 +1423,11 @@
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported"
+      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "nxdk_export_definition": "NtCreateDirectoryObject@8                @ 188 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "NtCreateDirectoryObject@8",
+      "decoration_stack_bytes": 8
     }
   ]
 }
