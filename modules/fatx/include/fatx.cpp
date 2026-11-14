@@ -557,8 +557,12 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     DWORD spc = v->sectorsPerCluster;
 
-    if (spc < 2 || spc > 128 ||
-        (spc & (spc - 1)) != 0)
+    // Match libfatx's supported power-of-two cluster sizes. Retail Xbox
+    // volumes normally use up to 128 sectors; larger values are retained
+    // for compatible non-retail FATX images.
+    if (spc != 1 && spc != 2 && spc != 4 && spc != 8 &&
+        spc != 16 && spc != 32 && spc != 64 && spc != 128 &&
+        spc != 256 && spc != 512 && spc != 1024)
     {
         delete v;
         CloseHandle(file);
