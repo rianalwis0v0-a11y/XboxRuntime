@@ -215,11 +215,42 @@ extern "C" void __stdcall K_AvSetSavedDataAddress(void*p){g_savedAv=p;}
 
 struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
 
+// Xbox dispatcher-object layouts copied from the pinned NXDK revision
+// fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e (xboxkrnl.h/xboxdef.h).
+// This file is compiled only for the 32-bit guest, so these pointers are
+// guest-width pointers and the layouts must remain byte-for-byte x86.
 struct GuestDispatcherHeader {
     UCHAR Type, Absolute, Size, Inserted;
     LONG SignalState;
     GuestListEntry WaitListHead;
 };
+struct GuestKernelEvent {
+    GuestDispatcherHeader Header;
+};
+struct GuestKernelSemaphore {
+    GuestDispatcherHeader Header;
+    LONG Limit;
+};
+struct GuestKernelMutant {
+    GuestDispatcherHeader Header;
+    GuestListEntry MutantListEntry;
+    void* OwnerThread;
+    UCHAR Abandoned;
+    UCHAR Padding[3];
+};
+struct GuestKernelTimer {
+    GuestDispatcherHeader Header;
+    ULARGE_INTEGER DueTime;
+    GuestListEntry TimerListEntry;
+    void* Dpc;
+    LONG Period;
+};
+static_assert(sizeof(void*) == 4, "Xbox kernel compatibility must be built x86");
+static_assert(sizeof(GuestDispatcherHeader) == 16, "NXDK DISPATCHER_HEADER layout");
+static_assert(sizeof(GuestKernelEvent) == 16, "NXDK KEVENT layout");
+static_assert(sizeof(GuestKernelSemaphore) == 20, "NXDK KSEMAPHORE layout");
+static_assert(sizeof(GuestKernelMutant) == 32, "NXDK KMUTANT layout");
+static_assert(sizeof(GuestKernelTimer) == 40, "NXDK KTIMER layout");
 struct GuestKQueue {
     GuestDispatcherHeader Header;
     GuestListEntry EntryListHead;
@@ -237,6 +268,43 @@ static thread_local std::unordered_set<void*> g_activeGuestQueues;
 static void InitializeGuestList(GuestListEntry* head) {
     head->Flink = head;
     head->Blink = head;
+}
+static void InitializeGuestDispatcherHeader(GuestDispatcherHeader* header,
+                                            UCHAR type, ULONG objectSize,
+                                            LONG signalState) {
+    header->Type = type;
+    header->Absolute = 0;
+    header->Size = static_cast<UCHAR>(objectSize / sizeof(ULONG));
+    header->Inserted = 0;
+    header->SignalState = signalState;
+    InitializeGuestList(&header->WaitListHead);
+}
+static void UpdateGuestDispatcherAfterWait(void* object, DWORD waitResult) {
+    if (!object) return;
+    auto* header = static_cast<GuestDispatcherHeader*>(object);
+    switch (header->Type) {
+    case 1: // EventSynchronizationObject
+        InterlockedExchange(&header->SignalState, 0);
+        break;
+    case 2: // MutantObject
+        InterlockedDecrement(&header->SignalState);
+        break;
+    case 5: // SemaphoreObject
+        InterlockedDecrement(&header->SignalState);
+        break;
+    case 8: // TimerNotificationObject
+        InterlockedExchange(&header->SignalState, 1);
+        InterlockedExchange8(reinterpret_cast<volatile CHAR*>(&header->Inserted), 0);
+        break;
+    case 9: // TimerSynchronizationObject
+        InterlockedExchange(&header->SignalState, 0);
+        InterlockedExchange8(reinterpret_cast<volatile CHAR*>(&header->Inserted), 0);
+        break;
+    default:
+        break; // Notification events remain signaled.
+    }
+    if (waitResult == WAIT_ABANDONED_0 && header->Type == 2)
+        static_cast<GuestKernelMutant*>(object)->Abandoned = 1;
 }
 static std::shared_ptr<GuestQueueState> GetGuestQueueState(GuestKQueue* queue, bool create) {
     if (!queue) return {};
@@ -1467,69 +1535,215 @@ extern "C" void __stdcall K_KeSetDisableBoostThread(HANDLE thread, BOOL disable)
     if (thread) SetThreadPriorityBoost(thread, disable);
 }
 extern "C" void __stdcall K_KeBoostPriorityThread(HANDLE) { /* Windows schedules runnable threads. */ }
-extern "C" void __stdcall K_KeInitializeEvent(void* event, ULONG type, BOOL initialState) {
-    if (!event) return;
-    HANDLE h = CreateEventW(nullptr, type == 0, initialState, nullptr);
-    if (h) StoreKernelObject(event, h);
+static void RaiseGuestInitializationFailure(DWORD status) {
+    ULONG_PTR parameter = status;
+    RaiseException(status, EXCEPTION_NONCONTINUABLE, 1, &parameter);
 }
-extern "C" LONG __stdcall K_KeSetEvent(void* event, LONG, BOOL) {
+extern "C" void __stdcall K_KeInitializeEvent(void* event, ULONG type, UCHAR initialState) {
+    if (!event || type > 1u) {
+        RaiseGuestInitializationFailure(0xC000000Du);
+        return;
+    }
+    HANDLE h = CreateEventW(nullptr, type == 0u, initialState != 0, nullptr);
+    if (!h) {
+        RaiseGuestInitializationFailure(0xC0000017u);
+        return;
+    }
+    StoreKernelObject(event, h);
+    auto* guest = static_cast<GuestKernelEvent*>(event);
+    InitializeGuestDispatcherHeader(&guest->Header, static_cast<UCHAR>(type),
+                                    sizeof(*guest), initialState ? 1 : 0);
+}
+extern "C" LONG __stdcall K_KeSetEvent(void* event, LONG, UCHAR) {
     HANDLE h = FindKernelObject(event);
-    if (!h) return LONG(0xC0000008u);
-    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
-    return SetEvent(h) ? previous : LONG(0xC0000008u);
+    if (!h || !event) return LONG(0xC0000008u);
+    auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
+    const LONG previous = InterlockedExchange(&header->SignalState, 1);
+    if (!SetEvent(h)) {
+        InterlockedExchange(&header->SignalState, previous);
+        return LONG(0xC0000008u);
+    }
+    return previous;
 }
 extern "C" LONG __stdcall K_KeResetEvent(void* event) {
     HANDLE h = FindKernelObject(event);
-    if (!h) return LONG(0xC0000008u);
-    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
-    return ResetEvent(h) ? previous : LONG(0xC0000008u);
-}
-extern "C" LONG __stdcall K_KePulseEvent(void* event, LONG, BOOL) {
-    HANDLE h = FindKernelObject(event);
-    if (!h) return LONG(0xC0000008u);
-    const LONG previous = WaitForSingleObject(h, 0) == WAIT_OBJECT_0 ? 1 : 0;
-    if (!PulseEvent(h)) return LONG(0xC0000008u);
+    if (!h || !event) return LONG(0xC0000008u);
+    auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
+    const LONG previous = InterlockedExchange(&header->SignalState, 0);
+    if (!ResetEvent(h)) {
+        InterlockedExchange(&header->SignalState, previous);
+        return LONG(0xC0000008u);
+    }
     return previous;
 }
-extern "C" LONG __stdcall K_KeWaitForSingleObject(void* object, ULONG, ULONG, BOOL, const LARGE_INTEGER* timeout) {
+extern "C" LONG __stdcall K_KePulseEvent(void* event, LONG, UCHAR) {
+    HANDLE h = FindKernelObject(event);
+    if (!h || !event) return LONG(0xC0000008u);
+    auto* header = &static_cast<GuestKernelEvent*>(event)->Header;
+    const LONG previous = InterlockedExchange(&header->SignalState, 0);
+    if (!PulseEvent(h)) {
+        InterlockedExchange(&header->SignalState, previous);
+        return LONG(0xC0000008u);
+    }
+    return previous;
+}
+extern "C" LONG __stdcall K_KeWaitForSingleObject(
+    void* object, ULONG, ULONG, UCHAR alertable, const LARGE_INTEGER* timeout) {
     HANDLE h = FindKernelObject(object);
     if (!h) return LONG(0xC0000008u);
-    const DWORD result = WaitForSingleObject(h, KernelTimeout(timeout));
-    return result == WAIT_OBJECT_0 ? 0 : result == WAIT_TIMEOUT ? LONG(0x102) : LONG(0xC0000008u);
+    const DWORD result = WaitForSingleObjectEx(h, KernelTimeout(timeout),
+                                                 alertable ? TRUE : FALSE);
+    if (result == WAIT_OBJECT_0) {
+        UpdateGuestDispatcherAfterWait(object, result);
+        return 0;
+    }
+    if (result == WAIT_ABANDONED_0) {
+        UpdateGuestDispatcherAfterWait(object, result);
+        return LONG(0x00000080u); // STATUS_ABANDONED
+    }
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
+    return LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_KeWaitForMultipleObjects(ULONG count, void** objects, ULONG waitType, ULONG, ULONG,
-                                                       BOOL, const LARGE_INTEGER* timeout, void*) {
-    if (!objects || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
+extern "C" LONG __stdcall K_KeWaitForMultipleObjects(
+    ULONG count, void** objects, ULONG waitType, ULONG, ULONG,
+    UCHAR alertable, const LARGE_INTEGER* timeout, void*) {
+    if (!objects || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1)
+        return LONG(0xC000000Du);
     HANDLE handles[MAXIMUM_WAIT_OBJECTS]{};
     for (ULONG i = 0; i < count; ++i) {
         handles[i] = FindKernelObject(objects[i]);
         if (!handles[i]) return LONG(0xC0000008u);
     }
-    const DWORD result = WaitForMultipleObjects(count, handles, waitType == 0, KernelTimeout(timeout));
-    if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count) return LONG(result - WAIT_OBJECT_0);
-    if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + count) return LONG(0x80);
-    return result == WAIT_TIMEOUT ? LONG(0x102) : LONG(0xC0000008u);
+    const DWORD result = WaitForMultipleObjectsEx(
+        count, handles, waitType == 0, KernelTimeout(timeout),
+        alertable ? TRUE : FALSE);
+    if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count) {
+        const ULONG selected = result - WAIT_OBJECT_0;
+        if (waitType == 0) {
+            for (ULONG i = 0; i < count; ++i)
+                UpdateGuestDispatcherAfterWait(objects[i], result);
+        } else {
+            UpdateGuestDispatcherAfterWait(objects[selected], result);
+        }
+        return waitType == 0 ? 0 : LONG(selected);
+    }
+    if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + count) {
+        const ULONG selected = result - WAIT_ABANDONED_0;
+        UpdateGuestDispatcherAfterWait(objects[selected], WAIT_ABANDONED_0);
+        return LONG(0x00000080u);
+    }
+    if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
+    return LONG(0xC0000008u);
 }
 extern "C" void __stdcall K_KeInitializeSemaphore(void* semaphore, LONG count, LONG limit) {
-    if (!semaphore || limit <= 0 || count < 0 || count > limit) return;
+    if (!semaphore || limit <= 0 || count < 0 || count > limit) {
+        RaiseGuestInitializationFailure(0xC000000Du);
+        return;
+    }
     HANDLE h = CreateSemaphoreW(nullptr, count, limit, nullptr);
-    if (h) StoreKernelObject(semaphore, h);
+    if (!h) {
+        RaiseGuestInitializationFailure(0xC0000017u);
+        return;
+    }
+    StoreKernelObject(semaphore, h);
+    auto* guest = static_cast<GuestKernelSemaphore*>(semaphore);
+    InitializeGuestDispatcherHeader(&guest->Header, 5u, sizeof(*guest), count);
+    guest->Limit = limit;
 }
-extern "C" LONG __stdcall K_KeReleaseSemaphore(void* semaphore, LONG, LONG adjustment, BOOL) {
+extern "C" LONG __stdcall K_KeReleaseSemaphore(void* semaphore, LONG, LONG adjustment, UCHAR) {
     HANDLE h = FindKernelObject(semaphore);
-    if (!h || adjustment <= 0) return LONG(0xC000000Du);
+    if (!h || !semaphore || adjustment <= 0) return LONG(0xC000000Du);
     LONG previous = 0;
-    return ReleaseSemaphore(h, adjustment, &previous) ? previous : LONG(0xC0000008u);
+    if (!ReleaseSemaphore(h, adjustment, &previous))
+        return LONG(0xC000000Du);
+    InterlockedExchange(&static_cast<GuestKernelSemaphore*>(semaphore)->Header.SignalState,
+                        previous + adjustment);
+    return previous;
 }
-extern "C" void __stdcall K_KeInitializeMutant(void* mutant, BOOL initialOwner) {
-    if (!mutant) return;
-    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
-    if (h) StoreKernelObject(mutant, h);
+extern "C" void __stdcall K_KeInitializeMutant(void* mutant, UCHAR initialOwner) {
+    if (!mutant) {
+        RaiseGuestInitializationFailure(0xC000000Du);
+        return;
+    }
+    HANDLE h = CreateMutexW(nullptr, initialOwner != 0, nullptr);
+    if (!h) {
+        RaiseGuestInitializationFailure(0xC0000017u);
+        return;
+    }
+    StoreKernelObject(mutant, h);
+    auto* guest = static_cast<GuestKernelMutant*>(mutant);
+    std::memset(guest, 0, sizeof(*guest));
+    InitializeGuestDispatcherHeader(&guest->Header, 2u, sizeof(*guest),
+                                    initialOwner ? 0 : 1);
+    InitializeGuestList(&guest->MutantListEntry);
 }
-extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, BOOL, BOOL) {
+extern "C" LONG __stdcall K_KeReleaseMutant(void* mutant, LONG, UCHAR abandoned, UCHAR) {
     HANDLE h = FindKernelObject(mutant);
-    if (!h) return LONG(0xC0000008u);
-    return ReleaseMutex(h) ? 0 : LONG(0xC0000008u);
+    if (!h || !mutant) return LONG(0xC0000008u);
+    auto* guest = static_cast<GuestKernelMutant*>(mutant);
+    const LONG previous = InterlockedIncrement(&guest->Header.SignalState) - 1;
+    if (!ReleaseMutex(h)) {
+        InterlockedDecrement(&guest->Header.SignalState);
+        return LONG(0xC0000008u);
+    }
+    guest->OwnerThread = nullptr;
+    if (abandoned) guest->Abandoned = 1;
+    return previous;
+}
+extern "C" void __stdcall K_KeInitializeTimerEx(void* timer, ULONG type) {
+    if (!timer || type > 1u) {
+        RaiseGuestInitializationFailure(0xC000000Du);
+        return;
+    }
+    HANDLE h = CreateWaitableTimerW(nullptr, type == 0u, nullptr);
+    if (!h) {
+        RaiseGuestInitializationFailure(0xC0000017u);
+        return;
+    }
+    StoreKernelObject(timer, h);
+    auto* guest = static_cast<GuestKernelTimer*>(timer);
+    std::memset(guest, 0, sizeof(*guest));
+    InitializeGuestDispatcherHeader(&guest->Header,
+                                    static_cast<UCHAR>(8u + type),
+                                    sizeof(*guest), 0);
+    InitializeGuestList(&guest->TimerListEntry);
+}
+extern "C" UCHAR __stdcall K_KeSetTimer(
+    void* timer, LARGE_INTEGER dueTime, void* dpc) {
+    HANDLE h = FindKernelObject(timer);
+    if (!h || !timer || dpc) return FALSE;
+    auto* guest = static_cast<GuestKernelTimer*>(timer);
+    const UCHAR wasInserted = guest->Header.Inserted;
+    if (!SetWaitableTimer(h, &dueTime, 0, nullptr, nullptr, FALSE)) return FALSE;
+    guest->DueTime.QuadPart = dueTime.QuadPart;
+    guest->Dpc = nullptr;
+    guest->Period = 0;
+    guest->Header.Inserted = 1;
+    return wasInserted;
+}
+extern "C" UCHAR __stdcall K_KeSetTimerEx(
+    void* timer, LARGE_INTEGER dueTime, LONG period, void* dpc) {
+    HANDLE h = FindKernelObject(timer);
+    if (!h || !timer || period < 0 || dpc) return FALSE;
+    auto* guest = static_cast<GuestKernelTimer*>(timer);
+    const UCHAR wasInserted = guest->Header.Inserted;
+    if (!SetWaitableTimer(h, &dueTime, period, nullptr, nullptr, FALSE)) return FALSE;
+    guest->DueTime.QuadPart = dueTime.QuadPart;
+    guest->Dpc = nullptr;
+    guest->Period = period;
+    guest->Header.Inserted = 1;
+    return wasInserted;
+}
+extern "C" UCHAR __stdcall K_KeCancelTimer(void* timer) {
+    HANDLE h = FindKernelObject(timer);
+    if (!h || !timer) return FALSE;
+    if (!CancelWaitableTimer(h)) return FALSE;
+    auto* guest = static_cast<GuestKernelTimer*>(timer);
+    const UCHAR wasInserted = guest->Header.Inserted;
+    guest->Header.Inserted = 0;
+    return wasInserted;
 }
 
 
