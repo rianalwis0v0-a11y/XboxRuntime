@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <cstdint>
+#include <cstddef>
 
 // Original Xbox XNet address/link status flags.
 constexpr DWORD XNET_GET_XNADDR_NONE = 0x00000001u;
@@ -22,23 +23,24 @@ constexpr DWORD XNET_ETHERNET_LINK_WIRELESS = 0x00000020u;
 
 // Original Xbox XNet ABI structures. Keep these fixed-width: this file is
 // compiled only into the dedicated 32-bit guest process.
-#pragma pack(push, 4)
+#pragma pack(push, 1)
+// XDK-compatible winsockx.h uses one-byte packing for the public XNet ABI.
 struct XNetStartupParams {
     BYTE cfgSizeOfStruct;
     BYTE cfgFlags;
-    BYTE cfgSockMaxDgramSockets;
-    BYTE cfgSockMaxStreamSockets;
+    BYTE cfgPrivatePoolSizeInPages;
+    BYTE cfgEnetReceiveQueueLength;
+    BYTE cfgIpFragMaxSimultaneous;
+    BYTE cfgIpFragMaxPacketDiv256;
+    BYTE cfgSockMaxSockets;
     BYTE cfgSockDefaultRecvBufsizeInK;
     BYTE cfgSockDefaultSendBufsizeInK;
     BYTE cfgKeyRegMax;
     BYTE cfgSecRegMax;
     BYTE cfgQosDataLimitDiv4;
-    BYTE cfgQosProbeTimeoutInSeconds;
-    BYTE cfgQosProbeRetries;
-    BYTE cfgQosSrvMaxSimultaneousResponses;
-    BYTE cfgQosPairWaitTimeInSeconds;
 };
 struct XNKID { BYTE ab[8]; };
+struct XNKEY { BYTE ab[16]; };
 struct XNADDR {
     IN_ADDR ina;
     IN_ADDR inaOnline;
@@ -50,6 +52,23 @@ struct XNDNS {
     INT iStatus;
     UINT cina;
     IN_ADDR aina[8];
+};
+struct XNQOSINFO {
+    BYTE bFlags;
+    BYTE bReserved;
+    WORD cProbesXmit;
+    WORD cProbesRecv;
+    WORD cbData;
+    BYTE* pbData;
+    WORD wRttMinInMsecs;
+    WORD wRttMedInMsecs;
+    DWORD dwUpBitsPerSec;
+    DWORD dwDnBitsPerSec;
+};
+struct XNQOS {
+    UINT cxnqos;
+    UINT cxnqosPending;
+    XNQOSINFO axnqosinfo[1];
 };
 #pragma pack(pop)
 
@@ -64,14 +83,24 @@ static_assert(sizeof(UINT) == 4, "Xbox UINT ABI width (NXDK xboxdef.h)");
 static_assert(sizeof(DWORD) == 4, "Xbox DWORD ABI width (NXDK xboxdef.h)");
 static_assert(sizeof(ULONG) == 4, "Xbox ULONG ABI width (NXDK xboxdef.h)");
 
-static_assert(sizeof(XNetStartupParams) == 13, "XNetStartupParams ABI size");
+static_assert(sizeof(XNetStartupParams) == 12, "XNetStartupParams ABI size (XDK winsockx.h)");
+static_assert(offsetof(XNetStartupParams, cfgPrivatePoolSizeInPages) == 2, "XNetStartupParams field offset");
+static_assert(offsetof(XNetStartupParams, cfgSockMaxSockets) == 6, "XNetStartupParams field offset");
+static_assert(offsetof(XNetStartupParams, cfgQosDataLimitDiv4) == 11, "XNetStartupParams field offset");
 static_assert(sizeof(XNKID) == 8, "XNKID ABI size");
+static_assert(sizeof(XNKEY) == 16, "XNKEY ABI size");
 static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
 static_assert(sizeof(XNDNS) == 40, "XNDNS ABI size");
+static_assert(sizeof(XNQOSINFO) == 24, "XNQOSINFO x86 ABI size");
+static_assert(offsetof(XNQOSINFO, pbData) == 8, "XNQOSINFO guest pointer offset");
+static_assert(sizeof(XNQOS) == 32, "XNQOS first-result ABI size");
 
 extern "C" {
 int WINAPI XNetStartup(const XNetStartupParams* params);
 int WINAPI XNetCleanup();
+int WINAPI XNetCreateKey(XNKID* keyId, XNKEY* key);
+int WINAPI XNetRegisterKey(const XNKID* keyId, const XNKEY* key);
+int WINAPI XNetUnregisterKey(const XNKID* keyId);
 int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** result);
 int WINAPI XNetDnsRelease(XNDNS* result);
 int WINAPI XNetRandom(BYTE* buffer, UINT length);
