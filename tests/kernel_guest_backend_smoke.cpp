@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include <string>
 #include <cstring>
 
 #include "../modules/xbe_loader/xbe_backend_api.h"
@@ -27,6 +28,14 @@ struct TestSection {
 };
 #pragma pack(pop)
 static_assert(sizeof(TestSection) == 56, "XBE section header layout");
+struct TempDirectoryCleanup {
+    std::wstring directory;
+    std::wstring file;
+    ~TempDirectoryCleanup() {
+        if (!file.empty()) DeleteFileW(file.c_str());
+        if (!directory.empty()) RemoveDirectoryW(directory.c_str());
+    }
+};
 
 int Fail(const char* message, int code, XBE_EXECUTION_BACKEND_V2* backend,
          std::uint8_t* image, ModuleStopFn stop) {
@@ -69,6 +78,32 @@ int main() {
         return 3;
     }
 
+    WCHAR tempPath[MAX_PATH]{};
+    WCHAR tempDirectory[MAX_PATH]{};
+    if (!GetTempPathW(_countof(tempPath), tempPath) ||
+        !GetTempFileNameW(tempPath, L"XBR", 0, tempDirectory)) {
+        std::fprintf(stderr, "kernel_guest_backend_smoke: temporary directory allocation failed\\n");
+        stop(); FreeLibrary(module); return 4;
+    }
+    if (!DeleteFileW(tempDirectory) || !CreateDirectoryW(tempDirectory, nullptr)) {
+        DeleteFileW(tempDirectory);
+        std::fprintf(stderr, "kernel_guest_backend_smoke: temporary directory creation failed\\n");
+        stop(); FreeLibrary(module); return 5;
+    }
+    const std::wstring tempDirectoryPath(tempDirectory);
+    const std::wstring alphaPath = tempDirectoryPath + L"\\alpha.bin";
+    HANDLE alphaFile = CreateFileW(alphaPath.c_str(), GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (alphaFile == INVALID_HANDLE_VALUE) {
+        RemoveDirectoryW(tempDirectory);
+        std::fprintf(stderr, "kernel_guest_backend_smoke: temporary file creation failed\\n");
+        stop(); FreeLibrary(module); return 6;
+    }
+    CloseHandle(alphaFile);
+    TempDirectoryCleanup tempCleanup{tempDirectoryPath, alphaPath};
+    const std::wstring guestDirectoryPath = L"\\??\\" + tempDirectoryPath;
+
     constexpr std::uint32_t guestBase = 0x10000000u;
     constexpr std::uint32_t imageSize = 0x5000u;
     constexpr std::uint32_t headerSize = 0x1000u;
@@ -109,7 +144,7 @@ int main() {
     std::memcpy(image + tlsDirectoryOffset, tlsDirectory, sizeof(tlsDirectory));
     const std::uint32_t templateValue = 0x11223344u;
     std::memcpy(image + tlsTemplateOffset, &templateValue, sizeof(templateValue));
-    const std::uint32_t callbackVa = guestBase + 0x2100u;
+    const std::uint32_t callbackVa = guestBase + 0x3A00u;
     std::memcpy(image + tlsCallbacksOffset, &callbackVa, sizeof(callbackVa));
 
     std::uint8_t callback[128]{};
@@ -164,7 +199,7 @@ int main() {
         !patchBranch(skipFailure, attach) ||
         !patchBranch(skipDetach, returnOffset))
         return Fail("TLS callback test stub branch overflow", 4, &backend, image, stop);
-    std::memcpy(image + 0x2100, callback, used);
+    std::memcpy(image + 0x3A00, callback, used);
 
     // Build an actual guest entrypoint that calls four Xbox kernel imports
     // through the resolved x86 thunk table: PsQueryStatistics, IoCreateSymbolicLink,
@@ -205,16 +240,77 @@ int main() {
     std::memcpy(image + deviceNameStringOffset, &deviceNameString, sizeof(deviceNameString));
 
     const std::uint32_t shutdownRegistration[4] = {
-        guestBase + 0x2300u, 7u, 0u, 0u
+        guestBase + 0x3B00u, 7u, 0u, 0u
     };
     std::memcpy(image + shutdownRegistrationOffset, shutdownRegistration,
                 sizeof(shutdownRegistration));
 
-    const std::uint32_t thunkEntries[5] = {
+    const std::uint32_t thunkEntries[7] = {
         0x80000000u | 256u, 0x80000000u | 67u,
-        0x80000000u | 69u, 0x80000000u | 47u, 0u
+        0x80000000u | 69u, 0x80000000u | 47u,
+        0x80000000u | 190u, 0x80000000u | 207u, 0u
     };
     std::memcpy(image + kernelThunkOffset, thunkEntries, sizeof(thunkEntries));
+
+    constexpr std::uint32_t pathBufferOffset = 0x3600u;
+    constexpr std::uint32_t unicodeStringOffset = 0x3800u;
+    constexpr std::uint32_t objectAttributesOffset = 0x3810u;
+    constexpr std::uint32_t ioStatusOffset = 0x3830u;
+    constexpr std::uint32_t fileHandleOffset = 0x3840u;
+    constexpr std::uint32_t fileMaskOffset = 0x3850u;
+    constexpr std::uint32_t fileMaskStringOffset = 0x3860u;
+    constexpr std::uint32_t directoryInfoOffset = 0x3900u;
+
+    const size_t guestPathBytes = guestDirectoryPath.size() * sizeof(wchar_t);
+    if (guestPathBytes + sizeof(wchar_t) > 0x200u)
+        return Fail("temporary directory path exceeds guest test buffer", 9, &backend, image, stop);
+    std::memcpy(image + pathBufferOffset, guestDirectoryPath.c_str(),
+                guestPathBytes + sizeof(wchar_t));
+    struct GuestUnicodeString {
+        std::uint16_t length;
+        std::uint16_t maximumLength;
+        std::uint32_t buffer;
+    };
+    struct GuestObjectAttributes {
+        std::uint32_t length;
+        std::uint32_t rootDirectory;
+        std::uint32_t objectName;
+        std::uint32_t attributes;
+        std::uint32_t securityDescriptor;
+        std::uint32_t securityQualityOfService;
+    };
+    struct GuestObjectString {
+        std::uint16_t length;
+        std::uint16_t maximumLength;
+        std::uint32_t buffer;
+    };
+    static_assert(sizeof(GuestUnicodeString) == 8, "x86 UNICODE_STRING layout");
+    static_assert(sizeof(GuestObjectAttributes) == 24, "x86 OBJECT_ATTRIBUTES layout");
+    static_assert(sizeof(GuestObjectString) == 8, "x86 OBJECT_STRING layout");
+    const GuestUnicodeString guestUnicodeString{
+        static_cast<std::uint16_t>(guestPathBytes),
+        static_cast<std::uint16_t>(guestPathBytes + sizeof(wchar_t)),
+        guestBase + pathBufferOffset
+    };
+    const GuestObjectAttributes guestObjectAttributes{
+        sizeof(GuestObjectAttributes), 0u, guestBase + unicodeStringOffset,
+        0x40u, 0u, 0u
+    };
+    std::memcpy(image + unicodeStringOffset, &guestUnicodeString, sizeof(guestUnicodeString));
+    std::memcpy(image + objectAttributesOffset, &guestObjectAttributes, sizeof(guestObjectAttributes));
+    const std::uint32_t emptyIoStatus[2] = {0u, 0u};
+    const std::uint32_t emptyFileHandle = 0u;
+    std::memcpy(image + ioStatusOffset, emptyIoStatus, sizeof(emptyIoStatus));
+    std::memcpy(image + fileHandleOffset, &emptyFileHandle, sizeof(emptyFileHandle));
+    const char fileMask[] = "alpha.bin";
+    std::memcpy(image + fileMaskOffset, fileMask, sizeof(fileMask));
+    const GuestObjectString guestFileMask{
+        static_cast<std::uint16_t>(sizeof(fileMask) - 1),
+        static_cast<std::uint16_t>(sizeof(fileMask) - 1),
+        guestBase + fileMaskOffset
+    };
+    std::memcpy(image + fileMaskStringOffset, &guestFileMask, sizeof(guestFileMask));
+    std::memset(image + directoryInfoOffset, 0, 128u);
 
     std::vector<std::uint8_t> shutdownCallback;
     auto callbackEmit8 = [&](std::uint8_t value) { shutdownCallback.push_back(value); };
@@ -226,7 +322,7 @@ int main() {
     callbackEmit32(guestBase + shutdownMarkerOffset);
     callbackEmit32(1u);
     callbackEmit8(0xC2); callbackEmit8(0x04); callbackEmit8(0x00); // ret 4
-    std::memcpy(image + 0x2300, shutdownCallback.data(), shutdownCallback.size());
+    std::memcpy(image + 0x3B00, shutdownCallback.data(), shutdownCallback.size());
 
     std::vector<std::uint8_t> guestEntry;
     auto emitGuest8 = [&](std::uint8_t value) { guestEntry.push_back(value); };
@@ -235,6 +331,9 @@ int main() {
         guestEntry.insert(guestEntry.end(), bytes, bytes + sizeof(value));
     };
     auto pushGuest32 = [&](std::uint32_t value) { emitGuest8(0x68); emitGuest32(value); };
+    auto pushGuestMemory = [&](std::uint32_t address) {
+        emitGuest8(0xFF); emitGuest8(0x35); emitGuest32(address); // push dword ptr [absolute]
+    };
     auto callGuestThunk = [&](std::uint32_t slotAddress) {
         emitGuest8(0xFF); emitGuest8(0x15); emitGuest32(slotAddress); // call dword ptr [absolute]
     };
@@ -243,6 +342,9 @@ int main() {
         emitGuest8(0x81); emitGuest8(0x3D); emitGuest32(address); emitGuest32(value);
     };
     auto compareGuestEax = [&](std::uint32_t value) { emitGuest8(0x3D); emitGuest32(value); };
+    auto compareGuestByte = [&](std::uint32_t address, std::uint8_t value) {
+        emitGuest8(0x80); emitGuest8(0x3D); emitGuest32(address); emitGuest8(value);
+    };
     auto storeGuestMemory = [&](std::uint32_t address, std::uint32_t value) {
         emitGuest8(0xC7); emitGuest8(0x05); emitGuest32(address); emitGuest32(value);
     };
@@ -285,6 +387,58 @@ int main() {
     pushGuest32(guestBase + linkNameStringOffset);
     callGuestThunk(thunkTableVa + 8u);
     compareGuestEax(0xC0000034u);
+    branchGuestNotEqualToFailure();
+
+    // Open the host-created directory through the guest NtCreateFile thunk.
+    pushGuest32(1u); // FILE_DIRECTORY_FILE / backup semantics
+    pushGuest32(1u); // FILE_OPEN
+    pushGuest32(7u); // share read/write/delete
+    pushGuest32(0u); // attributes
+    pushGuest32(0u); // allocation size
+    pushGuest32(guestBase + ioStatusOffset);
+    pushGuest32(guestBase + objectAttributesOffset);
+    pushGuest32(1u); // FILE_LIST_DIRECTORY
+    pushGuest32(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 16u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+
+    // FileNamesInformation (class 12), then FileDirectoryInformation (class 1).
+    pushGuest32(1u); // RestartScan
+    pushGuest32(guestBase + fileMaskStringOffset);
+    pushGuest32(12u);
+    pushGuest32(128u);
+    pushGuest32(guestBase + directoryInfoOffset);
+    pushGuest32(guestBase + ioStatusOffset);
+    pushGuest32(0u); // ApcContext
+    pushGuest32(0u); // ApcRoutine
+    pushGuest32(0u); // Event
+    pushGuestMemory(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 20u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + ioStatusOffset + 4u, 21u);
+    branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + directoryInfoOffset + 8u, 9u);
+    branchGuestNotEqualToFailure();
+    compareGuestByte(guestBase + directoryInfoOffset + 12u, static_cast<std::uint8_t>('a'));
+    branchGuestNotEqualToFailure();
+
+    pushGuest32(1u); // RestartScan
+    pushGuest32(guestBase + fileMaskStringOffset);
+    pushGuest32(1u);
+    pushGuest32(128u);
+    pushGuest32(guestBase + directoryInfoOffset);
+    pushGuest32(guestBase + ioStatusOffset);
+    pushGuest32(0u);
+    pushGuest32(0u);
+    pushGuest32(0u);
+    pushGuestMemory(guestBase + fileHandleOffset);
+    callGuestThunk(thunkTableVa + 20u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + ioStatusOffset + 4u, 73u);
+    branchGuestNotEqualToFailure();
+    compareGuestMemory(guestBase + directoryInfoOffset + 60u, 9u);
+    branchGuestNotEqualToFailure();
+    compareGuestByte(guestBase + directoryInfoOffset + 64u, static_cast<std::uint8_t>('a'));
     branchGuestNotEqualToFailure();
 
     pushGuest32(1u);
