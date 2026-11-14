@@ -1704,9 +1704,9 @@ extern "C" void __stdcall K_RtlRip(const char* message, const char* file, ULONG 
 }
 extern "C" void __stdcall K_KeBugCheck(ULONG code) { ExitProcess(code); }
 extern "C" void __stdcall K_KeBugCheckEx(ULONG code, ULONG, ULONG, ULONG, ULONG) { ExitProcess(code); }
-extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { ExitProcess(0); }
+extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
 extern "C" BOOL __stdcall K_HalIsResetOrShutdownPending() { return FALSE; }
-extern "C" void __stdcall K_HalInitiateShutdown() { ExitProcess(0); }
+extern "C" void __stdcall K_HalInitiateShutdown() { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
 extern "C" ULONG __stdcall K_DbgPrompt(const char* prompt, char* response, ULONG length) {
     if (prompt) OutputDebugStringA(prompt);
     if (response && length) response[0] = 0;
@@ -1823,6 +1823,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
+        cmp eax, 47
+        je hal_register_shutdown_notification
         cmp eax, 45
         je smbus_read
         cmp eax, 50
@@ -2280,6 +2282,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     exf_insert_head: jmp K_ExfInterlockedInsertHeadList
     exf_insert_tail: jmp K_ExfInterlockedInsertTailList
     exf_remove_head: jmp K_ExfInterlockedRemoveHeadList
+    hal_register_shutdown_notification: jmp K_HalRegisterShutdownNotification
     hal_return_firmware: jmp K_HalReturnToFirmware
     rtl_assert: jmp K_RtlAssert
     hal_read_tray: jmp K_HalReadSMCTrayState
@@ -2602,10 +2605,12 @@ bool XboxKernelProtectImage() {
 }
 
 void XboxKernelSetStartupEvent(HANDLE eventHandle) {
+    XboxKernelResetShutdownNotifications();
     g_startupEvent = eventHandle;
 }
 
 void XboxKernelShutdownTitle() {
+    XboxKernelInvokeShutdownNotifications();
     g_startupEvent = nullptr;
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);
