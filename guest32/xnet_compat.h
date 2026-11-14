@@ -53,6 +53,17 @@ struct XNDNS {
 };
 #pragma pack(pop)
 
+// NXDK's xboxkrnl/xboxdef.h defines the original-Xbox scalar ABI:
+// BYTE/UCHAR=8-bit, WORD/USHORT=16-bit, and DWORD/ULONG/UINT=32-bit.
+// Keep this host-side compatibility header honest about those guest widths.
+// NXDK does not currently ship an XNet/XSocket declaration header; the
+// XNet-specific structures below therefore remain separately audited.
+static_assert(sizeof(BYTE) == 1, "Xbox BYTE ABI width (NXDK xboxdef.h)");
+static_assert(sizeof(WORD) == 2, "Xbox WORD ABI width (NXDK xboxdef.h)");
+static_assert(sizeof(UINT) == 4, "Xbox UINT ABI width (NXDK xboxdef.h)");
+static_assert(sizeof(DWORD) == 4, "Xbox DWORD ABI width (NXDK xboxdef.h)");
+static_assert(sizeof(ULONG) == 4, "Xbox ULONG ABI width (NXDK xboxdef.h)");
+
 static_assert(sizeof(XNetStartupParams) == 13, "XNetStartupParams ABI size");
 static_assert(sizeof(XNKID) == 8, "XNKID ABI size");
 static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
