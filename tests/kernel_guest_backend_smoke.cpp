@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 #include <cstring>
 
 #include "../modules/xbe_loader/xbe_backend_api.h"
