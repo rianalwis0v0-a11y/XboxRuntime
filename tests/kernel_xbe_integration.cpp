@@ -3,6 +3,7 @@
 
 #include "../loader-src/modules/xbe_loader/xbe_backend_api.h"
 #include "../loader-src/modules/xbe_loader/xbe_format.h"
+#include "../guest32/guest_protocol.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -14,7 +15,7 @@ using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
 using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
-using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
+using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, XboxGuestFaultContext*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
@@ -207,9 +208,18 @@ int wmain(int argc, wchar_t** argv) {
         std::uint32_t faultAddress = 0;
         std::uint32_t faultProtection = 0;
         std::uint32_t faultState = 0;
+        XboxGuestFaultContext faultContext{};
         const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
             &exceptionInstruction, &accessType, &faultAddress,
-            &faultProtection, &faultState);
+            &faultProtection, &faultState, &faultContext);
+        if (exceptionInstruction) {
+            std::printf("Fault registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X\\n",
+                faultContext.eax, faultContext.ebx, faultContext.ecx, faultContext.edx,
+                faultContext.esi, faultContext.edi, faultContext.ebp, faultContext.esp);
+            std::printf("Fault stack:");
+            for (std::uint32_t value : faultContext.stack) std::printf(" %08X", value);
+            std::printf("\\n");
+        }
         if (exceptionInstruction) {
             std::uint8_t faultBytes[32]{};
             SIZE_T faultCopied = 0;
