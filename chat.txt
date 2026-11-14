@@ -1525,3 +1525,22 @@ CI run 43583890166:
 - Root cause was the synthetic x86 test's NtDuplicateObject argument order: TargetHandle* and TargetProcessHandle were pushed in reverse order. Corrected the guest stack sequence in commit a0a5ded493d182ef2c86838a47fc54e86261b930. The implementation's process-handle check was not the failure.
 - No IOCP guest-call pass claimed yet. Await new workflow after the stack-order correction.
 Other known state: event/semaphore/mutant/timer/delay calls had passed in prior run 43582364469; full real-XBE integration remains blocked by known 0xC0000005 at 0x10018DC0. Thread/KTHREAD/per-thread TLS APIs remain unimplemented pending execution-owner contract response.
+
+
+[2026-11-14 10:15 UTC] [Kernel Developer 3 — IOCP guest-call milestone verified]
+Status: PARTIAL MILESTONE VERIFIED; PR remains draft because KTHREAD/thread/TLS tranche is not complete.
+Branch: work/kernel-thread-apis
+Latest commit: a0a5ded493d182ef2c86838a47fc54e86261b930
+PR #18: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/18
+Windows workflow 43584107336:
+- NXDK fixture generation PASS.
+- x64 host backend configure/build PASS.
+- main runtime configure/build PASS.
+- x86 guest configure/build PASS.
+- network_smoke and guest_api_registry_smoke PASS.
+- ABI export verification PASS.
+- kernel_guest_backend_smoke PASS (1/1): actual guest import-thunk calls passed for event initialize/set/reset/wait; semaphore initialize/release/wait; mutant initialize/release/wait; timer initialize/set/setEx/cancel (no DPC); KeSetEventBoostPriority; KeDelayExecutionThread; and IO completion create/duplicate/close/set/query/remove/timeout/invalid-handle lifecycle. The IOCP packet test verified KeyContext, ApcContext, IoStatus, Information, depth 1->0, duplicate survival after closing original, and cleanup after closing duplicate.
+- Full workflow failed only in real NXDK XBE integration: exit 0xC0000005 at instruction/fault address 0x10018DC0, access type 8, fault protection 0x4, TLS index cleared. This is the existing execution-backend integration fault already present in prior runs/branches; dedicated guest-call smoke passed before this step.
+Scope limitations (not claimed complete): KeSetEventBoostPriority signals and returns no boost candidate (no selected waiter priority boost); timer DPC callbacks are fail-fast unsupported; mutant owner-thread linkage/abandonment are incomplete; named IOCP objects and cross-process IOCP duplication are unsupported. Thread APIs (KTHREAD identity, PsCreateSystemThread/Ex, suspend/resume/priority/alert/APC) and per-thread XBE TLS attach/detach are still outstanding.
+Coordination: Developer 4 was notified of IOCP ownership and overlapping guest smoke fixture changes. Developer 2 was asked to preserve IOCP duplicate/close metadata hooks in NtDuplicateObject/NtClose. Execution owner was asked three times on PR #15 for KTHREAD/native-handle and TLS attach/detach contract; no response observed yet. I have not changed execution startup TLS code without that agreement.
+Next: execution owner must confirm/hand off thread/TLS helper contract; then implement thread exports and per-thread TLS, add guest tests, and re-run CI. Keep PR #18 draft until this is complete and integration blockers are resolved.
