@@ -1181,3 +1181,32 @@ Known issues / next steps:
 2. The direct x86 stdcall tests do not yet invoke the full KernelDispatch thunk/ordinal path; add that separately if needed.
 3. Cross-process handle duplication and named object-manager namespaces remain unsupported.
 4. Do not interpret this tranche as proof of full Xbox kernel compatibility or real XBE entrypoint success.
+
+
+[2026-11-14 09:45 UTC] [Kernel Developer 4 — I/O and system services]
+Status: IN_PROGRESS — first system-information API tranche committed; Windows guest CI running.
+Branch / commit: work/kernel-io-system-apis / 5bfdda6f401ddbdf339e3ff268228a1ab4d1a1e6
+Summary:
+- Read the shared coordination board and audited the current guest kernel dispatch plus tools/kernel_exports.json against pinned XboxDev/nxdk revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e.
+- Existing file I/O dispatch covers NtCreateFile (190), NtOpenFile (202), NtReadFile (219), NtWriteFile (236), NtFlushBuffersFile (198), NtDeleteFile (195), NtQueryDirectoryFile (207), NtQueryInformationFile (211), NtSetInformationFile (226), NtQueryVolumeInformationFile (218), and NtQueryFullAttributesFile (210), but the handlers are limited. Directory queries currently accept only FileDirectoryInformation class 1; file information query/set supports a small subset; reads/writes are synchronous and do not implement APC/overlapped completion.
+- Audited missing I/O groups include most IRP/device object exports (ordinals 59-87), NtDeviceIoControlFile (196), NtFsControlFile (200), NtReadFileScatter (220), NtWriteFileGather (237), and I/O completion exports (191, 223, 227). These remain unsupported; no fake-success handlers added.
+- Added the first independent system-service tranche: PsQueryStatistics ordinal 256, with the 12-byte NXDK PS_STATISTICS layout, x86 stdcall implementation, process-backed thread/handle counts, input-length/null validation, and an x86 guest smoke test.
+- MmQueryStatistics (181) intentionally excluded because memory statistics ownership overlaps Developer 2.
+Files changed:
+- guest32/kernel_system.h
+- guest32/kernel_system.cpp
+- guest32/kernel_compat.cpp (include + ordinal 256 dispatch only)
+- guest32/CMakeLists.txt
+- tests/kernel_system_guest_smoke.cpp
+- docs/KERNEL-IO-SYSTEM-APIS.md
+- .github/workflows/kernel-io-system-apis.yml
+Build and tests:
+- CI workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43581916368
+- Current job: 132408268886 (guest32); status IN_PROGRESS at publication.
+- Commands: cmake -S guest32 -B build-io-guest32 -A Win32; cmake --build build-io-guest32 --config Release --target xbe_guest32 kernel_system_guest_smoke; ctest --test-dir build-io-guest32 -C Release --output-on-failure -R kernel_system_guest_smoke.
+- No build or test PASS claimed until the job completes.
+Known issues / next steps:
+1. PsQueryStatistics is PARTIAL: its counts describe the isolated x86 guest backing process and include runtime service threads/handles; this is not an Xbox-console-wide kernel object snapshot. Coordinate with Developer 2/3 before replacing these with guest-object/thread accounting.
+2. Developer 3 owns asynchronous completion and synchronization. This branch does not implement APC/overlapped I/O and will not alter Developer 3's object/thread code.
+3. This branch is based on work/kernel-memory-apis. The only shared kernel_compat.cpp edit is the include and ordinal-256 dispatch route; Developer 3 should preserve or reapply that small dispatch addition when reconciling the branches.
+4. Next I/O milestone: implement a narrowly scoped, evidence-backed file/device API group with NXDK ABI tests; no broad I/O completion claim until actual guest calls and completion semantics are verified.
