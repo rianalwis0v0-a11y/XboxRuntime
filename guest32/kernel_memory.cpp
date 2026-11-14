@@ -152,8 +152,8 @@ extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* baseAddress,
 
 extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
                                                 ULONG options) {
-    if (!ValidHandle(source) || !target || (options & ~1u) != 0)
-        return kInvalidParameter;
+    if (!ValidHandle(source)) return kInvalidHandle;
+    if (!target || (options & ~1u) != 0) return kInvalidParameter;
     const bool closeSource = (options & 1u) != 0; // NXDK DUPLICATE_CLOSE_SOURCE
     HANDLE duplicate = nullptr;
     if (!DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(),
