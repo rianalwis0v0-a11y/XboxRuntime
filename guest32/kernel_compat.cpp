@@ -1930,8 +1930,13 @@ extern "C" int __cdecl K_RtlVsprintf(char* output, const char* format, va_list a
 
 extern "C" BOOL __stdcall K_KeIsExecutingDpc() { return g_insideDpc ? TRUE : FALSE; }
 extern "C" BOOL __stdcall K_KeTestAlertThread(ULONG) { return FALSE; }
-extern "C" LONG __stdcall K_KeSetEventBoostPriority(void* event, LONG increment, BOOL wait) {
-    return K_KeSetEvent(event, increment, wait);
+extern "C" void __stdcall K_KeSetEventBoostPriority(void* event, void** thread) {
+    // The guest ABI returns the selected waiter through PKTHREAD*. Windows
+    // SetEvent does not identify a waiter, so signal faithfully and report no
+    // boost candidate rather than fabricating a KTHREAD pointer.
+    if (thread) *thread = nullptr;
+    const LONG previous = K_KeSetEvent(event, 0, FALSE);
+    if (previous < 0) RaiseGuestInitializationFailure(static_cast<DWORD>(previous));
 }
 extern "C" ULONG __stdcall K_RtlWalkFrameChain(void** frames, ULONG count, ULONG) {
     if (!frames || !count) return 0;
