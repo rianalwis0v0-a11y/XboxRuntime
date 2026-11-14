@@ -44,6 +44,63 @@ std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
 std::unordered_map<void*, HANDLE> g_kernelObjects;
+
+struct GuestIoCompletionPacket {
+    OVERLAPPED overlapped{};
+    void* keyContext = nullptr;
+    void* apcContext = nullptr;
+    LONG ioStatus = 0;
+    ULONG_PTR information = 0;
+};
+struct GuestIoCompletionState {
+    HANDLE port = nullptr; // private duplicate keeps the port alive across guest handle closes
+    std::atomic<LONG> depth{0};
+    ~GuestIoCompletionState() {
+        if (!port) return;
+        for (;;) {
+            DWORD bytes = 0;
+            ULONG_PTR key = 0;
+            OVERLAPPED* overlapped = nullptr;
+            GetQueuedCompletionStatus(port, &bytes, &key, &overlapped, 0);
+            if (!overlapped) break;
+            delete reinterpret_cast<GuestIoCompletionPacket*>(overlapped);
+        }
+        CloseHandle(port);
+    }
+};
+std::mutex g_ioCompletionMutex;
+std::unordered_map<HANDLE, std::shared_ptr<GuestIoCompletionState>> g_ioCompletionObjects;
+static std::shared_ptr<GuestIoCompletionState> FindIoCompletionState(HANDLE handle) {
+    std::lock_guard<std::mutex> lock(g_ioCompletionMutex);
+    auto it = g_ioCompletionObjects.find(handle);
+    return it == g_ioCompletionObjects.end() ? nullptr : it->second;
+}
+static bool IsIoCompletionHandle(HANDLE handle) {
+    std::lock_guard<std::mutex> lock(g_ioCompletionMutex);
+    return g_ioCompletionObjects.find(handle) != g_ioCompletionObjects.end();
+}
+static void RegisterIoCompletionDuplicate(HANDLE source, HANDLE duplicate) {
+    std::lock_guard<std::mutex> lock(g_ioCompletionMutex);
+    auto it = g_ioCompletionObjects.find(source);
+    if (it != g_ioCompletionObjects.end())
+        g_ioCompletionObjects[duplicate] = it->second;
+}
+static void ForgetIoCompletionHandle(HANDLE handle) {
+    std::lock_guard<std::mutex> lock(g_ioCompletionMutex);
+    g_ioCompletionObjects.erase(handle);
+}
+static LONG IoCompletionStatusFromWin32(DWORD error) {
+    switch (error) {
+    case ERROR_SUCCESS: return 0;
+    case ERROR_INVALID_HANDLE: return LONG(0xC0000008u);
+    case ERROR_INVALID_PARAMETER: return LONG(0xC000000Du);
+    case ERROR_NOT_ENOUGH_MEMORY:
+    case ERROR_OUTOFMEMORY: return LONG(0xC0000017u);
+    case ERROR_ACCESS_DENIED: return LONG(0xC0000022u);
+    case WAIT_TIMEOUT: return LONG(0x00000102u);
+    default: return LONG(0xC0000001u);
+    }
+}
 struct GuestDirectorySearch {
     HANDLE search = INVALID_HANDLE_VALUE;
     WIN32_FIND_DATAW current{};
@@ -955,7 +1012,109 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     return 0;
 }
 
-extern "C" LONG __stdcall K_NtClose(HANDLE h){CloseGuestDirectorySearch(h);return CloseHandle(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    CloseGuestDirectorySearch(h);
+    if (!CloseHandle(h)) return LONG(0xC0000008u);
+    ForgetIoCompletionHandle(h);
+    return 0;
+}
+extern "C" LONG __stdcall K_NtCreateIoCompletion(
+    HANDLE* out, ACCESS_MASK, void* objectAttributes, ULONG count) {
+    if (!out) return LONG(0xC000000Du);
+    *out = nullptr;
+    if (objectAttributes) return LONG(0xC00000BBu); // named object namespace is not implemented here
+    HANDLE publicPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, count);
+    if (!publicPort) return IoCompletionStatusFromWin32(GetLastError());
+    HANDLE privatePort = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), publicPort, GetCurrentProcess(),
+                         &privatePort, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+        const DWORD error = GetLastError();
+        CloseHandle(publicPort);
+        return IoCompletionStatusFromWin32(error);
+    }
+    std::shared_ptr<GuestIoCompletionState> state;
+    try {
+        state = std::make_shared<GuestIoCompletionState>();
+    } catch (...) {
+        CloseHandle(privatePort);
+        CloseHandle(publicPort);
+        return LONG(0xC0000017u);
+    }
+    state->port = privatePort;
+    try {
+        std::lock_guard<std::mutex> lock(g_ioCompletionMutex);
+        g_ioCompletionObjects.emplace(publicPort, state);
+    } catch (...) {
+        CloseHandle(publicPort);
+        return LONG(0xC0000017u);
+    }
+    *out = publicPort;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtSetIoCompletion(
+    HANDLE handle, void* keyContext, void* apcContext,
+    LONG ioStatus, ULONG_PTR information) {
+    auto state = FindIoCompletionState(handle);
+    if (!state) return LONG(0xC0000008u);
+    auto* packet = new (std::nothrow) GuestIoCompletionPacket{};
+    if (!packet) return LONG(0xC0000017u);
+    packet->keyContext = keyContext;
+    packet->apcContext = apcContext;
+    packet->ioStatus = ioStatus;
+    packet->information = information;
+    packet->overlapped.Internal = static_cast<ULONG_PTR>(static_cast<ULONG>(ioStatus));
+    packet->overlapped.InternalHigh = information;
+    state->depth.fetch_add(1, std::memory_order_acq_rel);
+    if (!PostQueuedCompletionStatus(state->port, static_cast<DWORD>(information),
+                                    reinterpret_cast<ULONG_PTR>(keyContext),
+                                    &packet->overlapped)) {
+        const DWORD error = GetLastError();
+        state->depth.fetch_sub(1, std::memory_order_acq_rel);
+        delete packet;
+        return IoCompletionStatusFromWin32(error);
+    }
+    return 0;
+}
+extern "C" LONG __stdcall K_NtRemoveIoCompletion(
+    HANDLE handle, void** keyContext, void** apcContext,
+    GuestIoStatusBlock* ioStatusBlock, const LARGE_INTEGER* timeout) {
+    if (!keyContext || !apcContext || !ioStatusBlock)
+        return LONG(0xC000000Du);
+    *keyContext = nullptr;
+    *apcContext = nullptr;
+    ioStatusBlock->Status = 0;
+    ioStatusBlock->Information = 0;
+    auto state = FindIoCompletionState(handle);
+    if (!state) return LONG(0xC0000008u);
+    DWORD bytes = 0;
+    ULONG_PTR completionKey = 0;
+    OVERLAPPED* overlapped = nullptr;
+    const BOOL removed = GetQueuedCompletionStatus(
+        state->port, &bytes, &completionKey, &overlapped, KernelTimeout(timeout));
+    if (!overlapped) {
+        const DWORD error = removed ? ERROR_INVALID_DATA : GetLastError();
+        return IoCompletionStatusFromWin32(error);
+    }
+    auto* packet = reinterpret_cast<GuestIoCompletionPacket*>(overlapped);
+    state->depth.fetch_sub(1, std::memory_order_acq_rel);
+    *keyContext = packet->keyContext;
+    *apcContext = packet->apcContext;
+    ioStatusBlock->Status = packet->ioStatus;
+    ioStatusBlock->Information = static_cast<ULONG>(packet->information);
+    delete packet;
+    return 0;
+}
+extern "C" LONG __stdcall K_NtQueryIoCompletion(
+    HANDLE handle, void* information) {
+    if (!information) return LONG(0xC000000Du);
+    auto state = FindIoCompletionState(handle);
+    if (!state) return LONG(0xC0000008u);
+    struct GuestIoCompletionBasicInformation { LONG Depth; };
+    auto* result = static_cast<GuestIoCompletionBasicInformation*>(information);
+    const LONG depth = state->depth.load(std::memory_order_acquire);
+    result->Depth = depth < 0 ? 0 : depth;
+    return 0;
+}
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
