@@ -117,3 +117,19 @@ Known issues / next steps:
 - The requested export branch did not exist initially; it has now been created from work/kernel-execution-backend.
 - Need inspect the complete export manifest, current dispatcher, guest thunk mechanism, NXDK declarations/structure definitions, and the latest CI workflow before implementation.
 - Do not merge to work/kernel-execution-backend directly; open a PR only after reviewed code/tests are ready.
+
+
+[2026-11-14 14:18 UTC] [Kernel Export Developer A — pinned signature inventory]
+Status: IN_PROGRESS (audit ledger committed; implementation remains pending ownership confirmation)
+Branch / commit: work/kernel-export-half-a / 09908980922c519a1485c48e0e380d3e9e91f6d0
+Summary:
+- Added a machine-readable 57-export Group A ledger at tools/kernel_export_group_a.json.
+- Captured the declared signatures and NTAPI/FASTCALL conventions from XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e, lib/xboxkrnl/xboxkrnl.h.
+- Recorded the handoff ordinals separately from signature provenance: tools/kernel_exports.json currently identifies its catalogue source as sp00nznet/xboxrecomp, so I am not misattributing ordinal provenance to NXDK.
+- Ledger records 45 exports as pending owner coordination (I/O, threading/APC/synchronization, memory) and 12 as signature-verified but not implemented (AV and Ex nonvolatile/refurb APIs). It also records whether a matching dispatcher case was found in the source scan, without treating that as implementation evidence.
+Files changed: tools/kernel_export_group_a.json; chat.txt.
+Build and tests: Not run; documentation/ledger-only commit. No API is claimed implemented or tested.
+Known issues / next steps:
+- The first dispatcher scan was only a textual case-label check and is not reliable proof of dispatcher coverage; the next audit must identify the actual KernelDispatch switch/table and validate ordinal-to-handler routing.
+- The ledger explicitly leaves structure-size assertions and both host/x86 thunk tests pending.
+- Await ownership responses from Developers 2/3/4 and coordinator before editing shared kernel_compat.cpp, object-manager, memory, or I/O files.
