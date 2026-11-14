@@ -80,7 +80,7 @@ bool XboxKernelNormalizeGuestRange32(std::uint32_t base, std::uint32_t size,
 extern "C" LONG __stdcall K_NtAllocateVirtualMemory(
     void** baseAddress, ULONG_PTR zeroBits, SIZE_T* regionSize,
     ULONG allocationType, ULONG protect) {
-    if (!baseAddress || !regionSize || !*regionSize || zeroBits != 0)
+    if (!baseAddress || !regionSize || !*regionSize || *regionSize > 0xFFFFFFFFu || zeroBits != 0)
         return kInvalidParameter;
     constexpr ULONG allowed = MEM_RESERVE | MEM_COMMIT;
     if (!allocationType || (allocationType & ~allowed) != 0)
@@ -121,7 +121,7 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
         if (regionSize && *regionSize != 0) return kInvalidParameter;
     } else {
         std::uint32_t alignedBase = 0, alignedSize = 0;
-        if (!regionSize || !*regionSize ||
+        if (!regionSize || !*regionSize || *regionSize > 0xFFFFFFFFu ||
             !XboxKernelNormalizeGuestRange32(static_cast<std::uint32_t>(requested),
                 static_cast<std::uint32_t>(*regionSize), &alignedBase, &alignedSize))
             return kInvalidParameter;
@@ -141,7 +141,7 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
 
 extern "C" LONG __stdcall K_NtProtectVirtualMemory(
     void** baseAddress, SIZE_T* regionSize, ULONG newProtect, ULONG* oldProtect) {
-    if (!baseAddress || !*baseAddress || !regionSize || !*regionSize || !oldProtect)
+    if (!baseAddress || !*baseAddress || !regionSize || !*regionSize || *regionSize > 0xFFFFFFFFu || !oldProtect)
         return kInvalidParameter;
     const std::uintptr_t requested = reinterpret_cast<std::uintptr_t>(*baseAddress);
     if (requested > 0xFFFFFFFFu) return kInvalidParameter;
