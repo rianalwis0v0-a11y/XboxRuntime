@@ -158,3 +158,9 @@ unimplemented and are not claimed.
 
 Reference: [RXDK-SDK winsockx.h](https://github.com/Team-Resurgent/RXDK-SDK/blob/main/include/winsockx.h);
 implementation reference: [RXDK-Libs ip.cpp](https://github.com/Team-Resurgent/RXDK-Libs/blob/main/libs/libxnet/net/ip.cpp).
+
+
+The invalid `XNetStartupParams.cfgSizeOfStruct` error is `WSAEFAULT`, matching
+the original XNet entry-point parameter check (rather than the generic
+`WSAEINVAL` used by the first smoke-test draft). The smoke test asserts this
+exact error result.
