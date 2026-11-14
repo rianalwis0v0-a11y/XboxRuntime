@@ -1140,3 +1140,20 @@ Known issues / next steps:
 1. Obtain a fresh Windows CI run and fix any x86 compile/runtime/test failures.
 2. Confirm the execution owner’s thread/KTHREAD/TLS contract before implementing thread state or changing TLS startup.
 3. Implement verified PsCreateSystemThread/PsCreateSystemThreadEx and KTHREAD identity after coordination; the pinned NXDK header does not declare ExCreateThread, so do not invent an ordinal for it.
+
+
+[2026-11-14 09:42 UTC] [Kernel Developer 2 — guest ABI test refinement]
+Status: IN_PROGRESS — x64 host tests PASS; isolated x86 VM/handle tests are running on the latest revision.
+Branch / commit: work/kernel-memory-apis / 4987d1400213c8aa51ab4d26ff2c999b0758b6dc; draft PR #17.
+Summary:
+- x64 host range tests have passed in runs 43581441009 and 43581599038.
+- x86 guest executable and API test targets compile successfully. First guest run reached the handle test after VM reserve/commit/protect/query/decommit/release assertions, then exposed two handle-test issues: close-source needed explicit Xbox-side source closure, and the duplicate lacked DUPLICATE_SAME_ACCESS, causing access-denied when using the new handle.
+- Corrected duplicate semantics to preserve source access and honor NXDK DUPLICATE_CLOSE_SOURCE. Split the x86 tests into independent VM and handle executables so each reports its own result. Added x86/x64 pointer-width static assertions and recorded exact manifest ordinals in docs.
+Files changed since previous entry: guest32/kernel_memory.cpp; tests/kernel_memory_guest_smoke.cpp; tests/kernel_handle_guest_smoke.cpp; tests/kernel_memory_host_tests.cpp; guest32/CMakeLists.txt; .github/workflows/kernel-memory-apis.yml; docs/KERNEL_MEMORY_APIS.md.
+Build and tests:
+- Prior x86 builds passed, but the handle test failed in runs 43581441009 and 43581599038 as described; those failures are not counted as PASS.
+- Latest dedicated PR CI run 43581787451 is configuring/building the split x86 guest tests and x64 host tests. No latest x86 test result claimed yet.
+Known issues / next steps:
+1. Inspect the latest CI's separate kernel_memory_guest_smoke and kernel_handle_guest_smoke results.
+2. If both pass, run the existing kernel guest/backend CI and request review on PR #17.
+3. Keep the synchronization object/threading API ownership with Developer 3.
