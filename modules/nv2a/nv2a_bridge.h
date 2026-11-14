@@ -179,6 +179,15 @@ typedef struct XboxNV2A_VERTEX {
     float u3, v3;
 } XboxNV2A_VERTEX;
 
+/* Expand NV097 primitive streams into D3D8-compatible topology. primitive_type
+ * uses D3DPT_* numeric values; destination_capacity is measured in vertices.
+ * Output parameters are zeroed on failure. */
+__declspec(dllexport) int __cdecl XboxNV2A_ExpandPrimitive(
+    uint32_t mode, const XboxNV2A_VERTEX* source, uint32_t source_count,
+    XboxNV2A_VERTEX* destination, uint32_t destination_capacity,
+    uint32_t* primitive_type_out, uint32_t* primitive_count_out,
+    uint32_t* vertex_count_out);
+
 /* Build a host FVF stream from position/normal/color and TEX0..TEX3 guest arrays. */
 __declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
     uint32_t channel, uint32_t subchannel, uint32_t first_vertex,
