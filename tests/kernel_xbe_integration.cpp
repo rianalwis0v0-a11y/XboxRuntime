@@ -210,6 +210,28 @@ int wmain(int argc, wchar_t** argv) {
         const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
             &exceptionInstruction, &accessType, &faultAddress,
             &faultProtection, &faultState);
+        if (exceptionInstruction) {
+            std::uint8_t faultBytes[32]{};
+            SIZE_T faultCopied = 0;
+            if (ReadProcessMemory(GetCurrentProcess(),
+                    reinterpret_cast<const void*>(static_cast<std::uintptr_t>(exceptionInstruction)),
+                    faultBytes, sizeof(faultBytes), &faultCopied) && faultCopied) {
+                std::printf("Fault instruction bytes at 0x%08X:", exceptionInstruction);
+                for (SIZE_T i = 0; i < faultCopied; ++i)
+                    std::printf(" %02X", faultBytes[i]);
+                std::printf("\\n");
+            } else {
+                std::printf("Fault instruction bytes unavailable: %lu\\n", GetLastError());
+            }
+            MEMORY_BASIC_INFORMATION faultMemory{};
+            if (VirtualQuery(reinterpret_cast<const void*>(static_cast<std::uintptr_t>(exceptionInstruction)),
+                    &faultMemory, sizeof(faultMemory)) == sizeof(faultMemory)) {
+                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\\n",
+                    faultMemory.BaseAddress, faultMemory.RegionSize, faultMemory.State,
+                    faultMemory.Protect, faultMemory.Type);
+            }
+        }
+
         std::printf("Guest exit: wait=%d exitCode=0x%08X tlsIndexCleared=%u "
                     "exceptionIP=0x%08X accessType=%u faultAddress=0x%08X "
                     "faultProtect=0x%08X faultState=0x%08X\n",
