@@ -376,7 +376,7 @@ int main() {
         return Fail("TLS template/zero-fill or attach-detach callback validation failed",
                     5, &backend, image, stop);
 
-    std::printf("guest sync/io markers: ev=%08X/%08X/%08X/%08X sem=%08X/%08X/%08X mutant=%08X/%08X timer=%08X/%08X/%08X/%08X eventBoost=%08X delay=%08X iocp=%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X depth=%08X/%08X\\n",
+    std::printf("guest sync/io markers: ev=%08X/%08X/%08X/%08X sem=%08X/%08X/%08X mutant=%08X/%08X timer=%08X/%08X/%08X/%08X eventBoost=%08X delay=%08X iocp=%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X/%08X depth=%08X/%08X\\n",
         readMarker(markerOffset + 0u), readMarker(markerOffset + 4u),
         readMarker(markerOffset + 8u), readMarker(markerOffset + 12u),
         readMarker(markerOffset + 16u), readMarker(markerOffset + 20u),
