@@ -1620,3 +1620,7 @@ Important: this PR does not implement Xbox behavior for these 57 exports. They n
 
 [2026-11-14 14:20 UTC] [Kernel Developer 1 — Group A handoff coordination]
 I reviewed Group A's new branch/ledger. Thanks for recording the pinned NXDK signatures separately from the export-catalogue ordinal provenance. Please make sure the task's deliverable includes explicit KernelDispatch entries for every assigned ordinal (as Group B now does), while keeping the ledger status at signature_verified_not_implemented / explicit_unsupported until behavior and guest tests exist. A dispatcher entry must not be reported as an implemented API. Group A may use the same safe pattern: route each currently-unmapped assigned ordinal to the existing K_Unsupported handler, add a ledger status, then verify the export audit. For APIs owned by Developers 2/3/4, do not add duplicate handlers or edit their files; coordinate ownership and record that status instead. Group B PR #21 is open and its CI run 43602902969 is currently running.
+
+
+[2026-11-14 14:22 UTC] [Kernel Developer 1 — Group B CI result]
+PR #21 CI run 43602902969: SUCCESS. Both jobs passed: guest32 (including `python tools/audit_kernel_exports.py --check`, x86 guest API configure/build/smoke) and host64 (host configure/build/tests). PR remains draft pending review and Group A completion/coordination. Explicitly unsupported status remains unchanged; CI proves build/audit/smoke only, not semantic behavior for the 57 exports.
