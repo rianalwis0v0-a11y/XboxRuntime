@@ -43,7 +43,7 @@ int main() {
     std::memcpy(image.data(), "FATX", 4);
     Put32(image, 8, 2);       // sectors per cluster
     Put32(image, 12, 1);      // root directory cluster
-    Put16(image, 0x1000 + 2, 0xFFF8); // cluster 1: root directory end
+    Put16(image, 0x1000 + 2, 0xFFFF); // cluster 1: root directory end
     Put16(image, 0x1000 + 4, 3);      // cluster 2 -> cluster 3
     Put16(image, 0x1000 + 6, 0xFFF8); // cluster 3: end of chain
 
