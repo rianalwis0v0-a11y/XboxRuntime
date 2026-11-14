@@ -67,7 +67,8 @@ int fatx_open_device(struct fatx_fs *fs, char const *path, uint64_t offset, uint
 
     memset(&fs->fat_cache, 0, sizeof(fs->fat_cache));
 
-    fs->device = fopen(fs->device_path, "r+b");
+    /* Modified by XboxRuntime on 2026-11-14: this vendored integration is read-only. */
+    fs->device = fopen(fs->device_path, "rb");
     if (!fs->device)
     {
         fatx_error(fs, "failed to open %s for reading and writing\n", path);
@@ -76,7 +77,8 @@ int fatx_open_device(struct fatx_fs *fs, char const *path, uint64_t offset, uint
 
     if (fatx_init_superblock(fs, sectors_per_cluster))
     {
-        return FATX_STATUS_ERROR;
+        retval = FATX_STATUS_ERROR;
+        goto cleanup;
     }
 
     /* Validate that an acceptable cluster+sector combo was configured */
