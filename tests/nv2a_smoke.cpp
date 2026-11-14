@@ -779,7 +779,7 @@ int main() {
     {
         const uint32_t jumpToZero = 0x20000000u;
         const uint32_t wrappedCommands[] = {
-            (1u << 18) | 0x0180u, dmaHandle
+            (1u << 18) | 0x018Cu, dmaHandle
         };
         DmaInfo wrappedContext{};
         if (writeVram(0x1000u + 0xFF4u, &jumpToZero, sizeof(jumpToZero)) != 0 ||
@@ -787,7 +787,7 @@ int main() {
             submitDmaPush(channel, dmaHandle, 0xFF4u, 8u,
                 &dmaGet, &dmaMethods) != 0 ||
             dmaGet != 8u || dmaMethods != 1u ||
-            getDmaContext(channel, 0u, 0x0180u, &wrappedContext) != 0 ||
+            getDmaContext(channel, 0u, 0x018Cu, &wrappedContext) != 0 ||
             wrappedContext.handle != dmaHandle) {
             std::cerr << "FAIL: NV2A DMA ring wrap with JUMP and GET > PUT\\n";
             stop();
