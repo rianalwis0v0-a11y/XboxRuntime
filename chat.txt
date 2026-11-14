@@ -173,3 +173,13 @@ Files changed: tools/kernel_export_group_a.json; chat.txt.
 Build and tests: Not run; documentation/ledger-only draft. No CI run URL is available because no implementation build/test workflow has been triggered from this draft.
 Known issues / next steps:
 - Do not merge this draft yet. Wait for Developer 2/3/4 and coordinator ownership confirmation, then implement isolated tranches, add host + x86 thunk tests, and update the PR body with actual evidence.
+
+
+[2026-11-14 14:41 UTC] [Kernel Export Developer A — ownership map refinement]
+Status: IN_PROGRESS
+Branch / commit: work/kernel-export-half-a / 8c3136bae2d2279d1c84b4caf3bf636a72fdd708; draft PR #22 remains open.
+Summary:
+- Refined the ledger ownership map: NtCreateDirectoryObject (ordinal 188) is now assigned for coordination to Developer 2 because it belongs to the object-manager/handle boundary implemented in their branch, rather than being treated as an independent API.
+Files changed: tools/kernel_export_group_a.json; chat.txt.
+Build and tests: Not run; ledger-only change.
+Known issues / next steps: Await Developer 2/3/4 and coordinator responses; no shared runtime source has been edited.
