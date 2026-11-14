@@ -65,7 +65,7 @@ jobs:
       - name: Build and verify XDVDFS reader against NXDK XISO
         shell: cmd
         run: |
-          cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/xdvdfs tests/xdvdfs_real_xiso.cpp modules/xdvdfs/xdvdfs.cpp /Fe:xdvdfs_real_xiso.exe
+          cl /nologo /MD /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /Imodules/xdvdfs tests/xdvdfs_real_xiso.cpp modules/xdvdfs/xdvdfs.cpp /Fe:xdvdfs_real_xiso.exe
           xdvdfs_real_xiso.exe media\hello.iso
       - name: Build vendored XboxDev libfatx
         run: |
