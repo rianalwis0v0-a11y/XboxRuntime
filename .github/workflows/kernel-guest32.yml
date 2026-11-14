@@ -95,10 +95,10 @@ jobs:
         run: cmake -S guest32 -B build-guest32 -A Win32
 
       - name: Build x86 guest and networking tests
-        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke xbox_sha1_smoke
+        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke xbox_sha1_smoke privileged_instruction_smoke
 
       - name: Run x86 networking and guest API tests
-        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke|xbox_sha1_smoke"
+        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke|xbox_sha1_smoke|privileged_instruction_smoke"
 
       - name: Verify backend exports
         shell: pwsh
