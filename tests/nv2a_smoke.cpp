@@ -40,6 +40,8 @@ using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
 struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1, u2, v2, u3, v3; };
+using ExpandPrimitiveFn = int (__cdecl*)(uint32_t, const HostVertex*, uint32_t,
+    HostVertex*, uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
@@ -96,6 +98,8 @@ int main() {
     auto submit = reinterpret_cast<SubmitFn>(Need(module, "XboxNV2A_SubmitMethod"));
     auto flush = reinterpret_cast<FlushFn>(Need(module, "XboxNV2A_Flush"));
     auto getStats = reinterpret_cast<StatsFn>(Need(module, "XboxNV2A_GetStats"));
+    auto expandPrimitive = reinterpret_cast<ExpandPrimitiveFn>(
+        Need(module, "XboxNV2A_ExpandPrimitive"));
 
     auto readVram = reinterpret_cast<ReadMemoryFn>(Need(module, "XboxNV2A_ReadVRAM"));
     auto writeVram = reinterpret_cast<WriteMemoryFn>(Need(module, "XboxNV2A_WriteVRAM"));
@@ -390,10 +394,35 @@ int main() {
     }
 
     if (start() != 0) {
-        std::cerr << "FAIL: NV2A module initialization\n";
+        std::cerr << "FAIL: NV2A module initialization\\n";
         return 1;
     }
 
+    /* The largest accepted QUAD_STRIP expands to 3,066 vertices. */
+    {
+        std::vector<HostVertex> input(1024), output(3072);
+        for (uint32_t i = 0; i < input.size(); ++i)
+            input[i].x = static_cast<float>(i);
+        uint32_t type = 0, primitives = 0, outputCount = 0;
+        if (expandPrimitive(9u, input.data(), 1024u, output.data(),
+                static_cast<uint32_t>(output.size()), &type, &primitives,
+                &outputCount) != 0 ||
+            type != 4u || primitives != 1022u || outputCount != 3066u ||
+            output[0].x != 0.0f || output[1].x != 1.0f ||
+            output[2].x != 3.0f || output[3065].x != 1022.0f) {
+            std::cerr << "FAIL: maximum QUAD_STRIP expansion\\n";
+            stop();
+            return 1;
+        }
+        type = primitives = outputCount = 99u;
+        if (expandPrimitive(9u, input.data(), 1024u, output.data(),
+                3065u, &type, &primitives, &outputCount) == 0 ||
+            type != 0u || primitives != 0u || outputCount != 0u) {
+            std::cerr << "FAIL: QUAD_STRIP output-capacity rejection\\n";
+            stop();
+            return 1;
+        }
+    }
 
     const uint32_t pattern[4] = {0x11223344u, 0x55667788u, 0xAABBCCDDu, 0x01020304u};
     uint32_t copy[4]{};
