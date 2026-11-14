@@ -321,9 +321,10 @@ int main() {
     // closed-handle behavior. The packet preserves both guest contexts,
     // NTSTATUS and Information.
     push(0u); push(0u); push(0x001F0003u); push(completionHandleVa); call(14u); save(60u);
-    push(2u); push(0u); push(0u); push(0xFFFFFFFFu); // DUPLICATE_SAME_ACCESS
-    push(duplicateHandleVa); guest.PushMemory(completionHandleVa);
-    push(0xFFFFFFFFu); call(18u); save(64u);
+    push(2u); push(0u); push(0u); // Options, attributes, desired access
+    push(duplicateHandleVa); push(0xFFFFFFFFu); // TargetHandle*, target process
+    guest.PushMemory(completionHandleVa); push(0xFFFFFFFFu); // Source handle, source process
+    call(18u); save(64u);
     guest.PushMemory(completionHandleVa); call(19u); save(68u);
     push(0x1234u); push(0xC0000001u); push(0x33334444u); push(0x11112222u);
     guest.PushMemory(duplicateHandleVa); call(17u); save(72u);
