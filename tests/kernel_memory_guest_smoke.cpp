@@ -63,13 +63,12 @@ int main() {
     status = K_NtDuplicateObject(eventHandle, &duplicate, 0);
     if (status != 0 || !duplicate) return Fail("duplicate event handle", status);
     LONG previous = -1;
-    if (!SetEvent(eventHandle)) return Fail("signal event", GetLastError());
+    status = K_NtSetEvent(eventHandle, &previous);
+    if (status != 0) return Fail("signal event", status);
     status = K_NtWaitForSingleObject(duplicate, FALSE, nullptr);
     if (status != 0) return Fail("wait duplicated event", status);
-    status = K_NtClose(duplicate);
-    if (status != 0) return Fail("close duplicate", status);
-    status = K_NtClose(eventHandle);
-    if (status != 0) return Fail("close event", status);
+    if (!CloseHandle(duplicate) || !CloseHandle(eventHandle))
+        return Fail("close event handles", static_cast<LONG>(GetLastError()));
 
     HANDLE semaphore = nullptr;
     status = K_NtCreateSemaphore(&semaphore, nullptr, 1, 3);
@@ -78,14 +77,12 @@ int main() {
     status = K_NtQuerySemaphore(semaphore, &semaphoreInfo);
     if (status != 0 || semaphoreInfo.currentCount != 1 ||
         semaphoreInfo.maximumCount != 3) return Fail("query semaphore", status);
-    status = K_NtClose(semaphore);
-    if (status != 0) return Fail("close semaphore", status);
+    if (!CloseHandle(semaphore)) return Fail("close semaphore", static_cast<LONG>(GetLastError()));
 
     HANDLE mutant = nullptr;
     status = K_NtCreateMutant(&mutant, nullptr, TRUE);
     if (status != 0 || !mutant) return Fail("create mutant", status);
-    status = K_NtClose(mutant);
-    if (status != 0) return Fail("close mutant", status);
+    if (!CloseHandle(mutant)) return Fail("close mutant", static_cast<LONG>(GetLastError()));
 
     std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release, event/duplicate/wait/close, semaphore/mutant)");
     return 0;
