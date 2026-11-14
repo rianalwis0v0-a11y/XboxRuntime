@@ -134,3 +134,28 @@ Known issues / next steps:
 2. Use the return chain/register state to isolate a bad indirect call, stack/return corruption, import stub, or startup ABI mismatch.
 3. Implement a root-cause correction and add a regression test that proves the actual NXDK fixture executes with section 2 still non-executable.
 4. PR #20 remains draft; no real-XBE success or completed integration workflow is claimed.
+
+
+[2026-11-14 13:15 UTC] [Kernel Developer 5 — Cxbx XBE processing port]
+Status: IN_PROGRESS (Cxbx-compatible XBE type fix and self-contained loader integration committed; real execution CI not yet verified)
+Branch / commit: work/kernel-xbe-execution-fix / a1cf06a238a8be1c638df18b05ccc4b74922c63e; draft PR #20 retitled and updated: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/20
+Reference source inspected:
+- Cxbx-Reloaded src/common/xbe/Xbe.cpp: Xbe::GetXbeType() determines Chihiro using `(dwEntryAddr & XBOX_WRITE_COMBINED_BASE) == SEGABOOT_EP_XOR`, and debug using the KSEG0 bit in the encoded kernel thunk.
+- Cxbx-Reloaded src/core/kernel/init/CxbxKrnl.cpp: XOR_EP_KEY/XOR_KT_KEY, MapThunkTable, ImportLibraries, preload sections via XeLoadSection, TLS setup and XBE launch.
+- Existing XboxRuntime loader already implemented retail/debug/Chihiro XOR keys, entry/thunk decoding, file-backed parsing, virtual image mapping, and kernel/non-kernel import processing. This work reuses that implementation and makes it part of this PR's integration build rather than relying on a separate mutable branch checkout.
+Changes:
+- Added the existing XboxRuntime XBE loader implementation to this branch under modules/xbe_loader (format parser, loader, exports definition and loader header); backend API header was already present.
+- Changed CI to compile the loader from this branch, removing checkout of work/xbe-loader. Integration test now includes the branch-local loader headers.
+- Fixed a concrete Cxbx semantic mismatch: Chihiro detection now tests bit 0x40000000 rather than requiring upper nibble exactly 0x4. Cxbx's mask is XBOX_WRITE_COMBINED_BASE, so values with additional upper-nibble bits must still be identified as Chihiro.
+- Added tests/xbe_format_tests.cpp covering retail, debug and Chihiro type/key decoding, and added CI build/run step for the tests.
+- Updated PR #20 title/body with source references and explicit unresolved execution status.
+Files changed since last update: modules/xbe_loader/xbe_format.h, modules/xbe_loader/xbe_format.cpp, modules/xbe_loader/xbe_loader.h, modules/xbe_loader/xbe_loader.cpp, modules/xbe_loader/xbe_loader.def, .github/workflows/kernel-guest32.yml, tests/kernel_xbe_integration.cpp, tests/xbe_format_tests.cpp, chat.txt.
+Build and tests:
+- No new CI run has yet been observed for commit a1cf06a238a8be1c638df18b05ccc4b74922c63e; do not report these changes as compiled or tested until Actions completes.
+- The earlier diagnostic workflow run 43597802105 was still in progress during the previous check; it predates the loader-port commits and does not verify them.
+- No claim that the original real NXDK fault is fixed. Section 2 remains non-executable and no protection workaround was added.
+Next steps:
+1. Confirm workflow triggered for PR #20 after the latest commit. If not, use the repository's Actions UI/workflow_dispatch to run kernel-guest32.yml.
+2. Fix compile/test failures, run the retail/debug/Chihiro parser regression tests, then inspect new register/stack diagnostics from real NXDK fixture.
+3. Continue comparing the actual guest startup against Cxbx's startup sequence (preload semantics, kernel thunk patching, non-kernel imports, TLS data/index/callbacks and entry invocation) and implement only evidence-backed gaps.
+4. Do not mark PR ready or report execution success until default.xbe returns with section 2 still non-executable.
