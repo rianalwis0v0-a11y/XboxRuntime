@@ -1766,9 +1766,6 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
     return status;
 }
 
-// Xbox kernel ordinal 192 is NtCreateMutant@12: exactly three 32-bit
-// arguments (HANDLE*, ACCESS_MASK, OBJECT_ATTRIBUTES*). A fourth stdcall
-// argument over-pops ESP and turns the caller's stack data into a return IP.
 extern "C" LONG __stdcall K_ExQueryNonVolatileSetting(
     std::uint32_t valueIndex, std::uint32_t* type, void* value,
     std::uint32_t valueLength, SIZE_T* resultLength) {
@@ -1790,6 +1787,9 @@ extern "C" LONG __stdcall K_ExQueryNonVolatileSetting(
     return 0;
 }
 
+// Xbox kernel ordinal 192 is NtCreateMutant@12: exactly three 32-bit
+// arguments (HANDLE*, ACCESS_MASK, OBJECT_ATTRIBUTES*). A fourth stdcall
+// argument over-pops ESP and turns the caller's stack data into a return IP.
 extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*) {
     if (!out) return LONG(0xC000000Du);
     HANDLE h = CreateMutexW(nullptr, FALSE, nullptr);
