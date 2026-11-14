@@ -1001,19 +1001,11 @@ extern "C" int __cdecl FATX_ReadFileW(
 }
 
 
-extern "C" int __cdecl FATX_CreateFileW(
-    FATX_VOLUME handle,
-    LPCWSTR path)
+static int ValidateNewPath(
+    FatxVolume* v,
+    LPCWSTR path,
+    std::string& fatxPath)
 {
-    FatxVolume* v = static_cast<FatxVolume*>(handle);
-    if (!g_initialized || !v || !path)
-        return FATX_INVALID_ARGUMENT;
-
-    VolumeOperationGuard operationGuard(v);
-    if (!v->writable)
-        return FATX_INVALID_ARGUMENT;
-
-    std::string fatxPath;
     int status = ConvertPathToFatx(path, fatxPath);
     if (status != FATX_OK)
         return status;
@@ -1029,8 +1021,6 @@ extern "C" int __cdecl FATX_CreateFileW(
             return FATX_INVALID_ARGUMENT;
     }
 
-    // Resolve the parent independently so malformed/cyclic directory chains
-    // are rejected before upstream allocation or directory-entry mutation.
     std::wstring widePath(path);
     for (wchar_t& ch : widePath) {
         if (ch == L'/') ch = L'\\';
@@ -1060,8 +1050,28 @@ extern "C" int __cdecl FATX_CreateFileW(
     bool isRoot = false;
     status = ResolvePath(v, path, &existing, &isRoot);
     if (status == FATX_OK)
-        return FATX_INVALID_ARGUMENT; // no replacement on create
+        return FATX_INVALID_ARGUMENT;
     if (status != FATX_NOT_FOUND)
+        return status;
+
+    return FATX_OK;
+}
+
+extern "C" int __cdecl FATX_CreateFileW(
+    FATX_VOLUME handle,
+    LPCWSTR path)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path)
+        return FATX_INVALID_ARGUMENT;
+
+    VolumeOperationGuard operationGuard(v);
+    if (!v->writable)
+        return FATX_INVALID_ARGUMENT;
+
+    std::string fatxPath;
+    const int status = ValidateNewPath(v, path, fatxPath);
+    if (status != FATX_OK)
         return status;
 
     if (fatx_mknod(&v->upstream, fatxPath.c_str()) != FATX_STATUS_SUCCESS)
@@ -1069,7 +1079,31 @@ extern "C" int __cdecl FATX_CreateFileW(
     if (fatx_flush_fat_cache(&v->upstream) != FATX_STATUS_SUCCESS ||
         fflush(v->upstream.device) != 0)
         return FATX_IO_ERROR;
+    return FATX_OK;
+}
 
+extern "C" int __cdecl FATX_CreateDirectoryW(
+    FATX_VOLUME handle,
+    LPCWSTR path)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path)
+        return FATX_INVALID_ARGUMENT;
+
+    VolumeOperationGuard operationGuard(v);
+    if (!v->writable)
+        return FATX_INVALID_ARGUMENT;
+
+    std::string fatxPath;
+    const int status = ValidateNewPath(v, path, fatxPath);
+    if (status != FATX_OK)
+        return status;
+
+    if (fatx_mkdir(&v->upstream, fatxPath.c_str()) != FATX_STATUS_SUCCESS)
+        return FATX_IO_ERROR;
+    if (fatx_flush_fat_cache(&v->upstream) != FATX_STATUS_SUCCESS ||
+        fflush(v->upstream.device) != 0)
+        return FATX_IO_ERROR;
     return FATX_OK;
 }
 
