@@ -320,13 +320,13 @@ int main() {
         return Fail("TLS template/zero-fill or attach-detach callback validation failed",
                     5, &backend, image, stop);
 
-    if (readMarker(0u) != 0u || readMarker(4u) != 0u ||
-        readMarker(8u) != 1u || readMarker(12u) != 0x102u ||
-        readMarker(16u) != 0u || readMarker(20u) != 0u ||
-        readMarker(24u) != 0x102u || readMarker(28u) != 0u ||
-        readMarker(32u) != 0u || readMarker(36u) != 0u ||
-        readMarker(40u) != 1u || readMarker(44u) != 0u ||
-        readMarker(48u) != 1u)
+    if (readMarker(markerOffset + 0u) != 0u || readMarker(markerOffset + 4u) != 0u ||
+        readMarker(markerOffset + 8u) != 1u || readMarker(markerOffset + 12u) != 0x102u ||
+        readMarker(markerOffset + 16u) != 0u || readMarker(markerOffset + 20u) != 0u ||
+        readMarker(markerOffset + 24u) != 0x102u || readMarker(markerOffset + 28u) != 0u ||
+        readMarker(markerOffset + 32u) != 0u || readMarker(markerOffset + 36u) != 0u ||
+        readMarker(markerOffset + 40u) != 1u || readMarker(markerOffset + 44u) != 0u ||
+        readMarker(markerOffset + 48u) != 1u)
         return Fail("guest-call event/semaphore/mutant/timer ABI assertions failed",
                     6, &backend, image, stop);
 
