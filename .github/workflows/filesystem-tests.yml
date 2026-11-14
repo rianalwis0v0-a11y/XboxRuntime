@@ -27,12 +27,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure MSVC
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Build vendored XboxDev libfatx
+        run: |
+          cmake -S third_party/libfatx -B build-libfatx -A x64
+          cmake --build build-libfatx --config Release
       - name: Build FATX regression test
         shell: cmd
         run: >-
           cl /nologo /std:c++17 /EHsc /W4 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
           /Imodules/fatx/include tests/fatx_smoke.cpp
-          modules/fatx/include/fatx.cpp /Fe:fatx_smoke.exe
+          modules/fatx/include/fatx.cpp
+          build-libfatx/Release/libfatx_vendor.lib /Fe:fatx_smoke.exe
       - name: Run FATX regression test
         shell: cmd
         run: fatx_smoke.exe
