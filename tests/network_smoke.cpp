@@ -302,7 +302,7 @@ int main() {
         if (XSocketClose(socket) != 0) { XNetCleanup(); return 38; }
     }
 
-    XNetCleanup();
+    if (XNetCleanup() != 0 || XNetCleanup() != WSANOTINITIALISED) return 40;
     std::puts("network_smoke: XNet startup/DNS event, XSocket UDP/TCP/select loopback, byte-order helpers passed");
     return 0;
 }
