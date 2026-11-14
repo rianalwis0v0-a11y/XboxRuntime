@@ -43,7 +43,8 @@ write directly to a physical Xbox HDD.
 
 `FATX_WriteFileW` currently supports overwriting bytes in an existing
 non-empty file and appending at the current EOF, including allocation of
-additional clusters. It validates the existing cluster chain for cycles,
+additional clusters. Each write is limited to the signed upstream offset range
+(ending at or before `INT_MAX`, currently about 2 GiB). It validates the existing cluster chain for cycles,
 bounds, and invalid FAT markers before calling the vendored writer, serializes
 operations per volume, flushes FAT metadata and file data, and reports the
 number of bytes written.
