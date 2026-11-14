@@ -65,6 +65,12 @@ int __cdecl FATX_OpenImageReadWriteW(
 );
 
 __declspec(dllexport)
+int __cdecl FATX_CreateDirectoryW(
+    FATX_VOLUME volume,
+    LPCWSTR path
+);
+
+__declspec(dllexport)
 int __cdecl FATX_CreateFileW(
     FATX_VOLUME volume,
     LPCWSTR path
