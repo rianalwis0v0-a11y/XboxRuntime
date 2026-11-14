@@ -573,6 +573,7 @@ extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+static_assert(sizeof(GuestAnsiString) == 8, "NXDK ANSI_STRING must be 8 bytes on x86");
 struct GuestObjectAttributes { HANDLE RootDirectory; GuestAnsiString* ObjectName; ULONG Attributes; };
 static_assert(sizeof(GuestObjectAttributes) == 12, "NXDK OBJECT_ATTRIBUTES must be 12 bytes on x86");
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
