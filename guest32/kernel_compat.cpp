@@ -2220,10 +2220,21 @@ extern "C" LONG __stdcall K_NtResumeThread(HANDLE thread, ULONG* previous) {
 extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE sourceProcess, HANDLE source, HANDLE targetProcess,
                                                 HANDLE* target, ACCESS_MASK access, ULONG attributes, ULONG options) {
     if (!target) return LONG(0xC000000Du);
-    HANDLE process = targetProcess ? targetProcess : GetCurrentProcess();
-    if (!DuplicateHandle(sourceProcess ? sourceProcess : GetCurrentProcess(), source, process, target,
+    HANDLE fromProcess = sourceProcess ? sourceProcess : GetCurrentProcess();
+    HANDLE toProcess = targetProcess ? targetProcess : GetCurrentProcess();
+    const bool sourceIsCurrent = fromProcess == GetCurrentProcess();
+    const bool targetIsCurrent = toProcess == GetCurrentProcess();
+    const bool sourceIsIoCompletion = sourceIsCurrent && IsIoCompletionHandle(source);
+    if (sourceIsIoCompletion && !targetIsCurrent)
+        return LONG(0xC00000BBu); // Cross-process completion-port metadata is not supported.
+    if (!DuplicateHandle(fromProcess, source, toProcess, target,
                          access, (attributes & 2u) != 0, options))
-        return LONG(0xC0000008u);
+        return IoCompletionStatusFromWin32(GetLastError());
+    if (sourceIsIoCompletion && targetIsCurrent) {
+        RegisterIoCompletionDuplicate(source, *target);
+        if (options & DUPLICATE_CLOSE_SOURCE)
+            ForgetIoCompletionHandle(source);
+    }
     return 0;
 }
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
