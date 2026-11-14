@@ -12,6 +12,7 @@ int Fail(const char* what, LONG status) {
 }
 }
 int main() {
+    static_assert(sizeof(void*) == 4, "Xbox guest ABI test must be x86");
     void* base = nullptr;
     SIZE_T size = 0x1801;
     LONG status = K_NtAllocateVirtualMemory(&base, 0, &size,
