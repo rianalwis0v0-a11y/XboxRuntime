@@ -1115,3 +1115,28 @@ Windows filesystem CI on commit `a415dabdcc69cda02f59a0111ce87a00c3c51662` passe
 Test coverage includes read-only write rejection, overwrite, 700-byte append that allocates a third cluster, empty-file creation, duplicate-create rejection, writing to the new file, and read-back verification. The current docs-only follow-up is commit `3d3354f344d10ddfbe6f02eb38ad8bba01f871c5`.
 
 Still not a complete FATX write stack: no sparse gap writes, directory creation, delete, rename, truncate, format, repair, raw physical-device writes, or crash-atomic journaling. Writes are image-only and limited to end offsets at or below `INT_MAX` (~2 GiB); existing non-empty file chains are validated before writes. Retail HDD compatibility still needs real partition images and extensive testing.
+
+
+[2026-11-14 09:42 UTC] [Kernel Developer 3 — synchronization guest-call tranche / CI fix]
+Status: IN_PROGRESS — first CI caught duplicate legacy timer definitions; corrected and awaiting a fresh run.
+Branch: work/kernel-thread-apis
+Commits:
+- 88e9daab8fdf2b9ea5924b32ca4411096662cce2 — NXDK dispatcher object layouts and synchronization behavior.
+- 0cac9b4aa8b2fbaceb63da5bc4da2ec78f290cce — x86 guest-call tests for event/semaphore/mutant/timer imports.
+- b51a52a5f7550163723c05b160a523678a42c3f1 — timer state portability fix and marker offsets.
+- 3af626f61173e35b0376960f947decefbe9c5682 — test marker assertion correction.
+- 9f468679a5250fc05014f1b012a7032b2b138925 — removed superseded duplicate timer definitions after CI compile diagnostics.
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/18 (draft, stacked on work/kernel-execution-backend).
+Summary:
+- Added 32-bit NXDK layouts/static assertions for DISPATCHER_HEADER, KEVENT, KSEMAPHORE, KMUTANT and KTIMER.
+- Guest initialization now populates object type/size/signal-state and self-linked list heads; waits/releases update signal state.
+- KeSetTimer/KeSetTimerEx now take LARGE_INTEGER by value per pinned NXDK declaration. Non-null DPC callbacks are explicitly rejected rather than passed as host pointers.
+- Extended the existing backend integration harness with x86 machine code that calls actual kernel import thunks and verifies event/semaphore/mutant/timer results and guest structure bytes.
+Build and tests:
+- Workflow 43581575515: pinned NXDK homebrew XBE generation PASS; x64 host configure/build PASS; main module configure/build PASS; x86 guest configure PASS.
+- x86 guest build FAILED because the new timer implementation duplicated older K_KeInitializeTimerEx/K_KeSetTimer/K_KeSetTimerEx/K_KeCancelTimer definitions later in kernel_compat.cpp. Exact compiler diagnostics were inspected; duplicate legacy block was removed in commit 9f468679a5250fc05014f1b012a7032b2b138925.
+- The guest-call smoke test and full real-XBE integration have NOT run yet. A new workflow run is pending; no API is marked complete.
+Known issues / next steps:
+1. Obtain a fresh Windows CI run and fix any x86 compile/runtime/test failures.
+2. Confirm the execution owner’s thread/KTHREAD/TLS contract before implementing thread state or changing TLS startup.
+3. Implement verified PsCreateSystemThread/PsCreateSystemThreadEx and KTHREAD identity after coordination; the pinned NXDK header does not declare ExCreateThread, so do not invent an ordinal for it.
