@@ -4,7 +4,7 @@
 #include <winioctl.h>
 
 #include "../include/fatx.h"
-#include "../../../third_party/libfatx/fatx.h"
+#include "../../../third_party/libfatx/fatx_internal.h"
 
 #include <new>
 #include <cwchar>
@@ -33,6 +33,8 @@ struct FatxVolume {
     ULONGLONG clusterCount = 0;
 
     SRWLOCK lock = SRWLOCK_INIT;
+    SRWLOCK operationLock = SRWLOCK_INIT;
+    bool writable = false;
 
     // Upstream XboxDev/libfatx read-only validation handle.
     struct fatx_fs upstream{};
@@ -44,6 +46,20 @@ struct FatxDirEntry {
     DWORD attributes = 0;
     DWORD firstCluster = 0;
     DWORD size = 0;
+};
+
+class VolumeOperationGuard {
+public:
+    explicit VolumeOperationGuard(FatxVolume* volume) : volume_(volume) {
+        AcquireSRWLockExclusive(&volume_->operationLock);
+    }
+    ~VolumeOperationGuard() {
+        ReleaseSRWLockExclusive(&volume_->operationLock);
+    }
+    VolumeOperationGuard(const VolumeOperationGuard&) = delete;
+    VolumeOperationGuard& operator=(const VolumeOperationGuard&) = delete;
+private:
+    FatxVolume* volume_;
 };
 
 static uint16_t Read16(const BYTE* p)
@@ -449,10 +465,11 @@ extern "C" void __cdecl ModuleStop()
     );
 }
 
-extern "C" int __cdecl FATX_OpenVolumeW(
+static int OpenVolumeWInternal(
     LPCWSTR devicePath,
     ULONGLONG partitionOffset,
     ULONGLONG partitionLength,
+    bool writable,
     FATX_VOLUME* output)
 {
     if (!g_initialized || !devicePath || !output)
@@ -460,9 +477,13 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     *output = nullptr;
 
+    // Writable access is restricted to ordinary drive-letter image files.
+    if (writable && (devicePath[1] != L':' || devicePath[2] != L'\\'))
+        return FATX_INVALID_ARGUMENT;
+
     HANDLE file = CreateFileW(
         devicePath,
-        GENERIC_READ,
+        writable ? (GENERIC_READ | GENERIC_WRITE) : GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr,
         OPEN_EXISTING,
@@ -536,6 +557,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     v->file = file;
     v->base = partitionOffset;
     v->length = partitionLength;
+    v->writable = writable;
 
 
     BYTE header[0x1000]{};
@@ -627,9 +649,9 @@ extern "C" int __cdecl FATX_OpenVolumeW(
         CloseHandle(file);
         return FATX_INVALID_ARGUMENT;
     }
-    if (fatx_open_device(
+    if (fatx_open_device_ex(
         &v->upstream, narrowPath.data(), partitionOffset,
-        partitionLength, 512, FATX_READ_FROM_SUPERBLOCK
+        partitionLength, 512, FATX_READ_FROM_SUPERBLOCK, !writable
     ) != FATX_STATUS_SUCCESS) {
         // fatx_open_device closes its FILE* on initialization failure.
         // Clear the stale pointer; do not fclose it a second time.
@@ -664,6 +686,24 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     );
 
     return FATX_OK;
+}
+
+extern "C" int __cdecl FATX_OpenVolumeW(
+    LPCWSTR devicePath,
+    ULONGLONG partitionOffset,
+    ULONGLONG partitionLength,
+    FATX_VOLUME* output)
+{
+    return OpenVolumeWInternal(devicePath, partitionOffset, partitionLength, false, output);
+}
+
+extern "C" int __cdecl FATX_OpenImageReadWriteW(
+    LPCWSTR imagePath,
+    ULONGLONG partitionOffset,
+    ULONGLONG partitionLength,
+    FATX_VOLUME* output)
+{
+    return OpenVolumeWInternal(imagePath, partitionOffset, partitionLength, true, output);
 }
 
 extern "C" void __cdecl FATX_CloseVolume(
@@ -713,6 +753,7 @@ extern "C" int __cdecl FATX_ListDirectoryW(
     DWORD capacity,
     DWORD* required)
 {
+    VolumeOperationGuard operationGuard(v);
     FatxVolume* v = static_cast<FatxVolume*>(handle);
 
     if (!g_initialized || !v || !path || !required)
@@ -782,6 +823,7 @@ extern "C" int __cdecl FATX_ReadFileW(
     DWORD bytesToRead,
     DWORD* bytesRead)
 {
+    VolumeOperationGuard operationGuard(v);
     FatxVolume* v = static_cast<FatxVolume*>(handle);
 
     if (!g_initialized || !v || !path ||
