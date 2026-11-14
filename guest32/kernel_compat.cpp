@@ -27,6 +27,7 @@
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 #include "xbox_sha1.h"
+#include "privileged_instruction.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -2711,6 +2712,24 @@ std::uint32_t g_lastGuestFaultState = 0;
 XboxGuestFaultContext g_lastGuestFaultContext{};
 
 int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
+    if (exception && exception->ExceptionRecord &&
+        exception->ExceptionRecord->ExceptionCode == EXCEPTION_PRIV_INSTRUCTION &&
+        exception->ContextRecord) {
+        CONTEXT* cpu = exception->ContextRecord;
+        const auto ip = static_cast<std::uintptr_t>(cpu->Eip);
+        MEMORY_BASIC_INFORMATION instructionMemory{};
+        if (VirtualQuery(reinterpret_cast<const void*>(ip), &instructionMemory,
+                         sizeof(instructionMemory)) == sizeof(instructionMemory) &&
+            instructionMemory.State == MEM_COMMIT &&
+            !(instructionMemory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+            ip + 2u <= reinterpret_cast<std::uintptr_t>(instructionMemory.BaseAddress) +
+                       instructionMemory.RegionSize) {
+            std::uint8_t opcode[2]{};
+            std::memcpy(opcode, reinterpret_cast<const void*>(ip), sizeof(opcode));
+            if (XboxGuestEmulateRdmsr(cpu, opcode, sizeof(opcode)))
+                return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    }
     if (exception && exception->ExceptionRecord) {
         const auto* record = exception->ExceptionRecord;
         if (exception->ContextRecord) {
