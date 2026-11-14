@@ -34,25 +34,6 @@ bool ValidHandle(HANDLE handle) noexcept {
     return handle != nullptr && handle != INVALID_HANDLE_VALUE;
 }
 
-using NtQueryNativeFn = LONG (NTAPI*)(HANDLE, ULONG, void*, ULONG, ULONG*);
-FARPROC NativeRoutine(const char* name) noexcept {
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    return ntdll ? GetProcAddress(ntdll, name) : nullptr;
-}
-LONG QueryNative(HANDLE handle, void* output, ULONG outputSize,
-                 const char* routine) noexcept {
-    if (!ValidHandle(handle)) return kInvalidHandle;
-    if (!output) return kInvalidParameter;
-    const FARPROC address = NativeRoutine(routine);
-    if (!address) return static_cast<LONG>(0xC0000002u); // STATUS_NOT_IMPLEMENTED
-    ULONG returned = 0;
-    const auto query = reinterpret_cast<NtQueryNativeFn>(address);
-    const LONG status = query(handle, 0, output, outputSize, &returned);
-    if (status < 0) return status;
-    return returned == 0 || returned <= outputSize ? status
-        : static_cast<LONG>(0xC0000023u); // STATUS_BUFFER_TOO_SMALL
-}
-
 bool CopyToGuest(void* destination, const void* source, SIZE_T bytes) noexcept {
     if (!destination || !source || !bytes) return false;
     SIZE_T written = 0;
@@ -169,37 +150,6 @@ extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* baseAddress,
         ? kSuccess : kInvalidParameter;
 }
 
-extern "C" LONG __stdcall K_NtCreateEvent(HANDLE* out, void* objectAttributes,
-                                            ULONG eventType, BOOLEAN initialState) {
-    if (!out || eventType > 1) return kInvalidParameter;
-    if (objectAttributes) return kNotSupported; // Named object namespace is not implemented.
-    HANDLE handle = CreateEventW(nullptr, eventType == 0, initialState != FALSE, nullptr);
-    if (!handle) return StatusFromWin32(GetLastError());
-    *out = handle;
-    return kSuccess;
-}
-
-extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, void* objectAttributes,
-                                                LONG initialCount, LONG maximumCount) {
-    if (!out || objectAttributes || maximumCount <= 0 ||
-        initialCount < 0 || initialCount > maximumCount)
-        return objectAttributes ? kNotSupported : kInvalidParameter;
-    HANDLE handle = CreateSemaphoreW(nullptr, initialCount, maximumCount, nullptr);
-    if (!handle) return StatusFromWin32(GetLastError());
-    *out = handle;
-    return kSuccess;
-}
-
-extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, void* objectAttributes,
-                                             BOOLEAN initialOwner) {
-    if (!out) return kInvalidParameter;
-    if (objectAttributes) return kNotSupported;
-    HANDLE handle = CreateMutexW(nullptr, initialOwner != FALSE, nullptr);
-    if (!handle) return StatusFromWin32(GetLastError());
-    *out = handle;
-    return kSuccess;
-}
-
 extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
                                                 ULONG options) {
     if (!ValidHandle(source) || !target || (options & ~1u) != 0)
@@ -233,48 +183,3 @@ extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, void* information) {
     return QueryNative(timer, information, sizeof(TimerBasicInformation), "NtQueryTimer");
 }
 
-extern "C" LONG __stdcall K_NtSetEvent(HANDLE event, LONG* previousState) {
-    if (!ValidHandle(event)) return kInvalidHandle;
-    const FARPROC address = NativeRoutine("NtSetEvent");
-    if (!address) return kNotSupported;
-    using SetEventNative = LONG (NTAPI*)(HANDLE, LONG*);
-    return reinterpret_cast<SetEventNative>(address)(event, previousState);
-}
-extern "C" LONG __stdcall K_NtClearEvent(HANDLE event) {
-    if (!ValidHandle(event)) return kInvalidHandle;
-    const FARPROC address = NativeRoutine("NtClearEvent");
-    if (!address) return kNotSupported;
-    using ClearEventNative = LONG (NTAPI*)(HANDLE);
-    return reinterpret_cast<ClearEventNative>(address)(event);
-}
-extern "C" LONG __stdcall K_NtWaitForSingleObject(
-    HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER* timeout) {
-    if (!ValidHandle(handle)) return kInvalidHandle;
-    DWORD milliseconds = INFINITE;
-    if (timeout) {
-        const LONGLONG ticks = timeout->QuadPart;
-        if (ticks == 0) milliseconds = 0;
-        else if (ticks < 0) {
-            const std::uint64_t magnitude = std::uint64_t(-(ticks + 1)) + 1u;
-            const std::uint64_t rounded = (magnitude + 9999u) / 10000u;
-            milliseconds = rounded >= INFINITE ? INFINITE - 1u : static_cast<DWORD>(rounded);
-        } else {
-            FILETIME nowFileTime{};
-            GetSystemTimeAsFileTime(&nowFileTime);
-            ULARGE_INTEGER now{};
-            now.LowPart = nowFileTime.dwLowDateTime;
-            now.HighPart = nowFileTime.dwHighDateTime;
-            const std::uint64_t deadline = static_cast<std::uint64_t>(ticks);
-            if (deadline <= now.QuadPart) milliseconds = 0;
-            else {
-                const std::uint64_t rounded = (deadline - now.QuadPart + 9999u) / 10000u;
-                milliseconds = rounded >= INFINITE ? INFINITE - 1u : static_cast<DWORD>(rounded);
-            }
-        }
-    }
-    const DWORD result = WaitForSingleObjectEx(handle, milliseconds, alertable ? TRUE : FALSE);
-    if (result == WAIT_OBJECT_0) return kSuccess;
-    if (result == WAIT_TIMEOUT) return static_cast<LONG>(0x00000102u);
-    if (result == WAIT_IO_COMPLETION) return static_cast<LONG>(0x000000C0u);
-    return StatusFromWin32(GetLastError());
-}
