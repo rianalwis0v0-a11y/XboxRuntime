@@ -1818,23 +1818,6 @@ extern "C" BOOL __stdcall K_KeRemoveQueueDpc(void* dpc) {
     auto it = g_dpcs.find(dpc);
     return it != g_dpcs.end() && it->second->pending.exchange(false);
 }
-extern "C" void __stdcall K_KeInitializeTimerEx(void* timer, ULONG type) {
-    if (!timer) return;
-    HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
-    if (h) StoreKernelObject(timer, h);
-}
-extern "C" BOOL __stdcall K_KeSetTimer(void* timer, const LARGE_INTEGER* dueTime, void*) {
-    HANDLE h = FindKernelObject(timer);
-    return h && dueTime ? SetWaitableTimer(h, dueTime, 0, nullptr, nullptr, FALSE) : FALSE;
-}
-extern "C" BOOL __stdcall K_KeSetTimerEx(void* timer, const LARGE_INTEGER* dueTime, LONG period, void*) {
-    HANDLE h = FindKernelObject(timer);
-    return h && dueTime && period >= 0 ? SetWaitableTimer(h, dueTime, period, nullptr, nullptr, FALSE) : FALSE;
-}
-extern "C" BOOL __stdcall K_KeCancelTimer(void* timer) {
-    HANDLE h = FindKernelObject(timer);
-    return h ? CancelWaitableTimer(h) : FALSE;
-}
 extern "C" uint64_t __stdcall K_KeQueryInterruptTime() {
     return GetTickCount64() * 10000ull;
 }
