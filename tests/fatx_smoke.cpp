@@ -17,6 +17,35 @@ static void Put16(std::vector<BYTE>& b, size_t offset, uint16_t value) {
     b[offset] = BYTE(value);
     b[offset + 1] = BYTE(value >> 8);
 }
+static bool WriteAt(HANDLE file, ULONGLONG offset, const void* data, DWORD size) {
+    LARGE_INTEGER position{};
+    position.QuadPart = static_cast<LONGLONG>(offset);
+    if (!SetFilePointerEx(file, position, nullptr, FILE_BEGIN)) return false;
+    DWORD written = 0;
+    return WriteFile(file, data, size, &written, nullptr) && written == size;
+}
+static bool WriteSparseFat32(const wchar_t* path) {
+    constexpr ULONGLONG imageSize = 64ULL * 1024 * 1024;
+    constexpr ULONGLONG dataOffset = 0x42000;
+    HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER end{};
+    end.QuadPart = imageSize - 1;
+    bool ok = SetFilePointerEx(file, end, nullptr, FILE_BEGIN) && SetEndOfFile(file);
+    BYTE header[0x1000]{};
+    std::memcpy(header, "FATX", 4);
+    header[8] = 2;
+    header[12] = 1;
+    BYTE fatEntry[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    BYTE root[64]{};
+    root[0] = 0xFF;
+    ok = ok && WriteAt(file, 0, header, sizeof(header)) &&
+         WriteAt(file, 0x1000 + 4, fatEntry, sizeof(fatEntry)) &&
+         WriteAt(file, dataOffset, root, sizeof(root));
+    CloseHandle(file);
+    return ok;
+}
 static int Fail(const char* message) {
     std::fprintf(stderr, "FATX smoke test failed: %s\n", message);
     return 1;
@@ -168,7 +197,30 @@ int main() {
     FATX_CloseVolume(volume);
     volume = nullptr;
 
-    std::puts("PASS: FATX mount, metadata, directory listing, multi-cluster reads, bounds, and cycle detection and strict end-marker validation");
+    // Exercise FAT32-width geometry selected above the FATX 0xFFF0 threshold.
+    if (!WriteSparseFat32(filePath)) {
+        Fail("could not create sparse FAT32-width FATX image");
+        goto stop;
+    }
+    if (FATX_OpenVolumeW(filePath, 0, 64ULL * 1024 * 1024, &volume) != FATX_OK) {
+        Fail("could not open FAT32-width FATX image");
+        goto stop;
+    }
+    {
+        FATX_INFO info{};
+        DWORD required = 99;
+        if (FATX_GetInfo(volume, &info) != FATX_OK ||
+            info.fatEntrySize != 4 || info.dataOffset != 0x42000 ||
+            FATX_ListDirectoryW(volume, L"\\\\", nullptr, 0, &required) != FATX_OK ||
+            required != 0) {
+            Fail("FAT32-width geometry or empty root listing failed");
+            goto stop;
+        }
+    }
+    FATX_CloseVolume(volume);
+    volume = nullptr;
+
+    std::puts("PASS: FATX mount, metadata, directory listing, multi-cluster reads, bounds, cycle detection, strict end-marker validation, and FAT32 geometry");
     result = 0;
 stop:
     if (volume) FATX_CloseVolume(volume);
