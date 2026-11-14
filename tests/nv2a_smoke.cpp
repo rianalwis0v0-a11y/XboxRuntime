@@ -983,6 +983,27 @@ int main() {
         return 1;
     }
 
+    /* The two-bit live texture selector must reach DMA_C and DMA_D too. */
+    for (uint32_t slot = 2u; slot < 4u; ++slot) {
+        const uint32_t selectedFormat = (textureFormat & ~3u) | slot;
+        if (submit(0u, 0x1B04u, selectedFormat) != 0 ||
+            getTextureInfo(channel, 0u, 0u, &textureInfo) != 0 ||
+            textureInfo.context_method != 0x0180u + slot * 4u ||
+            decodeTextureStage(channel, 0u, 0u, stagePixels,
+                sizeof(stagePixels), stageOffsets, stageSizes) != 0 ||
+            stageOffsets[1] != 16u || stageSizes[1] != 4u ||
+            stagePixels[0] != 1u || stagePixels[16] != 13u) {
+            std::cerr << "FAIL: live NV097 texture DMA_C/D context selection\\n";
+            stop();
+            return 1;
+        }
+    }
+    if (submit(0u, 0x1B04u, textureFormat) != 0) {
+        std::cerr << "FAIL: restore NV097 texture DMA_B context\\n";
+        stop();
+        return 1;
+    }
+
     /* Linear stage dimensions and row pitch come from IMAGE_RECT/CONTROL1. */
     const uint32_t linearStageFormat = 1u | (2u << 4) | (0x12u << 8) | (1u << 16);
     TextureInfo linearStageInfo{};
