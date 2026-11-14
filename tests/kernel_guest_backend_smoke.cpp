@@ -247,10 +247,10 @@ int main() {
     };
     std::vector<std::size_t> failBranches;
     auto branchNotEqualToFailure = [&]() {
-        emit8(0x75); failBranches.push_back(guestEntry.size()); emit8(0);
+        emit8(0x0F); emit8(0x85); failBranches.push_back(guestEntry.size()); emit32(0);
     };
     auto branchLessEqualToFailure = [&]() {
-        emit8(0x7E); failBranches.push_back(guestEntry.size()); emit8(0);
+        emit8(0x0F); emit8(0x8E); failBranches.push_back(guestEntry.size()); emit32(0);
     };
 
     const std::uint32_t thunkTableVa = guestBase + kernelThunkOffset;
@@ -296,12 +296,9 @@ int main() {
     storeMemory(guestBase + apiMarkerOffset, 0xBADu);
     emit8(0xC3);
     for (const std::size_t displacement : failBranches) {
-        const int delta = static_cast<int>(failureOffset) -
-                          static_cast<int>(displacement + 1u);
-        if (delta < -128 || delta > 127)
-            return Fail("kernel API guest entry branch overflow", 6, &backend, image, stop);
-        guestEntry[displacement] = static_cast<std::uint8_t>(
-            static_cast<std::int8_t>(delta));
+        const std::int32_t delta = static_cast<std::int32_t>(failureOffset) -
+                                   static_cast<std::int32_t>(displacement + sizeof(delta));
+        std::memcpy(guestEntry.data() + displacement, &delta, sizeof(delta));
     }
     std::memcpy(image + 0x2000, guestEntry.data(), guestEntry.size());
 
