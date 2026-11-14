@@ -192,6 +192,13 @@ bool IsExecutableGuestAddress(const void* address) {
 }
 
 void RebuildShutdownNotificationListLocked() {
+    g_shutdownNotifications.erase(
+        std::remove_if(g_shutdownNotifications.begin(), g_shutdownNotifications.end(),
+            [](const XboxHalShutdownRegistration* registration) {
+                return !IsGuestRangeAccessible(registration, sizeof(*registration), true) ||
+                       !registration->NotificationRoutine ||
+                       !IsExecutableGuestAddress(reinterpret_cast<const void*>(registration->NotificationRoutine));
+            }), g_shutdownNotifications.end());
     g_shutdownNotificationHead.Flink = &g_shutdownNotificationHead;
     g_shutdownNotificationHead.Blink = &g_shutdownNotificationHead;
     if (g_shutdownNotifications.empty()) return;
