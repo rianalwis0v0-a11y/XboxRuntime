@@ -1107,6 +1107,92 @@ extern "C" int __cdecl FATX_CreateDirectoryW(
     return FATX_OK;
 }
 
+
+static int FlushWritableVolume(FatxVolume* v)
+{
+    if (fatx_flush_fat_cache(&v->upstream) != FATX_STATUS_SUCCESS)
+        return FATX_IO_ERROR;
+    return fflush(v->upstream.device) == 0 ? FATX_OK : FATX_IO_ERROR;
+}
+
+extern "C" int __cdecl FATX_DeleteFileW(FATX_VOLUME handle, LPCWSTR path)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path) return FATX_INVALID_ARGUMENT;
+    VolumeOperationGuard guard(v);
+    if (!v->writable) return FATX_INVALID_ARGUMENT;
+    FatxDirEntry entry; bool root = false;
+    int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK) return status;
+    if (root || (entry.attributes & FATX_ATTRIBUTE_DIRECTORY)) return FATX_IS_DIRECTORY;
+    if (entry.attributes & FATX_ATTRIBUTE_READONLY) return FATX_INVALID_ARGUMENT;
+    std::string p;
+    status = ConvertPathToFatx(path, p);
+    if (status != FATX_OK) return status;
+    if (fatx_unlink(&v->upstream, p.c_str()) != FATX_STATUS_SUCCESS) return FATX_IO_ERROR;
+    return FlushWritableVolume(v);
+}
+
+extern "C" int __cdecl FATX_RemoveDirectoryW(FATX_VOLUME handle, LPCWSTR path)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path) return FATX_INVALID_ARGUMENT;
+    VolumeOperationGuard guard(v);
+    if (!v->writable) return FATX_INVALID_ARGUMENT;
+    FatxDirEntry entry; bool root = false;
+    int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK) return status;
+    if (root || !(entry.attributes & FATX_ATTRIBUTE_DIRECTORY)) return FATX_NOT_DIRECTORY;
+    std::string p;
+    status = ConvertPathToFatx(path, p);
+    if (status != FATX_OK) return status;
+    if (fatx_rmdir(&v->upstream, p.c_str()) != FATX_STATUS_SUCCESS) return FATX_IO_ERROR;
+    return FlushWritableVolume(v);
+}
+
+extern "C" int __cdecl FATX_RenameW(FATX_VOLUME handle, LPCWSTR source, LPCWSTR destination)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !source || !destination) return FATX_INVALID_ARGUMENT;
+    VolumeOperationGuard guard(v);
+    if (!v->writable) return FATX_INVALID_ARGUMENT;
+    FatxDirEntry entry; bool root = false;
+    int status = ResolvePath(v, source, &entry, &root);
+    if (status != FATX_OK) return status;
+    if (root) return FATX_INVALID_ARGUMENT;
+    std::string from, to;
+    status = ConvertPathToFatx(source, from);
+    if (status != FATX_OK) return status;
+    status = ValidateNewPath(v, destination, to);
+    if (status != FATX_OK) return status;
+    if (fatx_rename(&v->upstream, from.c_str(), to.c_str(), false, true) != FATX_STATUS_SUCCESS)
+        return FATX_IO_ERROR;
+    return FlushWritableVolume(v);
+}
+
+extern "C" int __cdecl FATX_TruncateFileW(FATX_VOLUME handle, LPCWSTR path, ULONGLONG newSize)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path || newSize > static_cast<ULONGLONG>(INT_MAX))
+        return FATX_INVALID_ARGUMENT;
+    VolumeOperationGuard guard(v);
+    if (!v->writable) return FATX_INVALID_ARGUMENT;
+    FatxDirEntry entry; bool root = false;
+    int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK) return status;
+    if (root || (entry.attributes & FATX_ATTRIBUTE_DIRECTORY)) return FATX_IS_DIRECTORY;
+    if (entry.attributes & FATX_ATTRIBUTE_READONLY) return FATX_INVALID_ARGUMENT;
+    if (newSize > entry.size) return FATX_INVALID_ARGUMENT; // shrink-only: avoid exposing uninitialized clusters
+    status = ValidateFileChain(v, entry);
+    if (status != FATX_OK) return status;
+    std::string p;
+    status = ConvertPathToFatx(path, p);
+    if (status != FATX_OK) return status;
+    if (fatx_truncate(&v->upstream, p.c_str(), static_cast<off_t>(newSize)) != FATX_STATUS_SUCCESS)
+        return FATX_IO_ERROR;
+    return FlushWritableVolume(v);
+}
+
 extern "C" int __cdecl FATX_WriteFileW(
     FATX_VOLUME handle,
     LPCWSTR path,
