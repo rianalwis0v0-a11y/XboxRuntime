@@ -41,16 +41,16 @@ The legacy `FATX_OpenVolumeW` API remains read-only. The opt-in
 file paths; it rejects device-namespace paths so this initial write path cannot
 write directly to a physical Xbox HDD.
 
-`FATX_WriteFileW` currently supports overwriting bytes in an existing
-non-empty file and appending at the current EOF, including allocation of
+`FATX_CreateFileW` creates a new empty file without replacing an existing path.
+`FATX_WriteFileW` supports writing to that new file, overwriting bytes in an
+existing file, and appending at the current EOF, including allocation of
 additional clusters. Each write is limited to the signed upstream offset range
 (ending at or before `INT_MAX`, currently about 2 GiB). It validates the existing cluster chain for cycles,
 bounds, and invalid FAT markers before calling the vendored writer, serializes
 operations per volume, flushes FAT metadata and file data, and reports the
 number of bytes written.
 
-Not yet supported by this first write milestone: creating empty files,
-sparse writes beyond EOF, file/directory creation, delete, rename, truncate,
+Not yet supported by this first write milestone: sparse writes beyond EOF, file/directory creation, delete, rename, truncate,
 format, repair, or direct physical-device writes. FATX has no journal, so a
 power loss or I/O failure during a multi-step update can still leave an image
 inconsistent. Always work on a backup copy.
