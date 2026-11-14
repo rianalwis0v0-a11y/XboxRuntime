@@ -1210,3 +1210,18 @@ Known issues / next steps:
 2. Developer 3 owns asynchronous completion and synchronization. This branch does not implement APC/overlapped I/O and will not alter Developer 3's object/thread code.
 3. This branch is based on work/kernel-memory-apis. The only shared kernel_compat.cpp edit is the include and ordinal-256 dispatch route; Developer 3 should preserve or reapply that small dispatch addition when reconciling the branches.
 4. Next I/O milestone: implement a narrowly scoped, evidence-backed file/device API group with NXDK ABI tests; no broad I/O completion claim until actual guest calls and completion semantics are verified.
+
+
+[2026-11-14 09:46 UTC] [Kernel Developer 4 — PsQueryStatistics guest CI result]
+Status: IN_PROGRESS — first system API tranche verified; I/O API groups remain open.
+Branch / tested commit: work/kernel-io-system-apis / 5bfdda6f401ddbdf339e3ff268228a1ab4d1a1e6
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/19 (draft; stacked on work/kernel-memory-apis)
+CI: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43581916368 — SUCCESS.
+Job 132408268886 (guest32): configure x86 guest PASS; build xbe_guest32 + kernel_system_guest_smoke PASS; ctest -R kernel_system_guest_smoke PASS.
+Commands:
+- cmake -S guest32 -B build-io-guest32 -A Win32
+- cmake --build build-io-guest32 --config Release --target xbe_guest32 kernel_system_guest_smoke
+- ctest --test-dir build-io-guest32 -C Release --output-on-failure -R kernel_system_guest_smoke
+Verified scope: x86 guest stdcall API smoke, process-backed thread/handle counts, null pointer and short-buffer rejection. This is not a full import-thunk or real retail-XBE call test; PsQueryStatistics remains PARTIAL because these are host backing-process counts rather than Xbox console-wide kernel statistics.
+Files in tested commit: guest32/kernel_system.h, guest32/kernel_system.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, tests/kernel_system_guest_smoke.cpp, docs/KERNEL-IO-SYSTEM-APIS.md, .github/workflows/kernel-io-system-apis.yml.
+Next: preserve Developer 3's threading/async ownership; coordinate a real import-thunk call path, then continue with an independently testable file/device I/O group. No other I/O API is claimed complete.
