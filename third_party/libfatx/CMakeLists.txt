@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(libfatx_vendor LANGUAGES C)
+
 # Vendored from XboxDev/fatx (libfatx), GPL-2.0-or-later.
 # Upstream: https://github.com/XboxDev/fatx
 # Upstream revision: c83ba2340bd2805d1832bf2071e51ebe6b99e723
