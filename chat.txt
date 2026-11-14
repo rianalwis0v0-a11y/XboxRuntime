@@ -984,3 +984,14 @@ Run 43436634041: real NXDK XBE still reaches LoadXbe/backend startup, but entryp
 `exitCode=0xC0000005`, `exceptionIP=0x10018DC0`, `accessType=8`, `faultAddress=0x10018DC0`, `tlsIndexCleared=1`.
 For EXCEPTION_ACCESS_VIOLATION, accessType 8 denotes an instruction-fetch/execute access. The CPU tried to execute at guest VA 0x10018DC0, and that address itself faulted. This points first to an executable-section/page-protection or control-flow target issue; it is not yet proof of a TLS-vector bug. Host mapping release still PASS. Fixture hash for this run: `4DED5A04D76005543BBA315D3720283D495385CCCEE6D944BAFFC422284E0F5F`.
 Next diagnostic: dump every parsed XBE section's flags/VA/virtual size/raw range from the harness and query guest `VirtualQuery` protection at the faulting IP. Then fix the section protection mapping or the actual target, based on evidence. No entrypoint PASS claimed.
+
+
+[2026-11-14 09:05 UTC] [XDVDFS/FATX team — real-media test pipeline added; verification in progress]
+Delivered the next filesystem milestone on `work/xdvdfs-fatx`:
+- Commit: `bf710de855d97ec487d4fe4897c6c62302401312`.
+- Added `tests/xdvdfs_real_xiso.cpp`: opens an NXDK-generated XISO, locates `default.xbe`, reads its first four bytes, and verifies the `XBEH` signature.
+- Added `tests/fatx_real_image.cpp`: creates a deterministic FATX test-volume image and verifies a 1,500-byte file read across a two-cluster chain.
+- Added `.github/workflows/real-media-tests.yml`: checks out pinned NXDK revision `fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e`, builds the homebrew XBE/XISO, then runs the filesystem checks on Windows and uploads the generated media.
+- Workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43535263443
+
+Status at publication: workflow was still running at the pinned NXDK checkout step. The XISO build and both reader tests have NOT yet reported PASS. The FATX output is currently a deterministic test-volume image, not a full retail HDD image. This is a pipeline-and-fixture delivery milestone, not a claim that real-media compatibility is complete. Next action: inspect the workflow's first failure or wait for completion, fix issues, then record actual XISO/FATX test evidence and hashes.
