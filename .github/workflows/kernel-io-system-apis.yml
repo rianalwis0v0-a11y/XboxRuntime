@@ -24,3 +24,14 @@ jobs:
         run: cmake --build build-io-guest32 --config Release --target xbe_guest32 kernel_system_guest_smoke kernel_io_guest_smoke
       - name: Run x86 guest ABI tests
         run: ctest --test-dir build-io-guest32 -C Release --output-on-failure -R "kernel_(system|io)_guest_smoke"
+
+  host64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x64 host API tests
+        run: cmake -S modules/xbox_kernel -B build-io-host64 -A x64
+      - name: Build x64 host API tests
+        run: cmake --build build-io-host64 --config Release --target kernel_io_system_host_tests
+      - name: Run x64 host API tests
+        run: ctest --test-dir build-io-host64 -C Release --output-on-failure -R kernel_io_system_host_tests
