@@ -2605,7 +2605,7 @@ bool XboxKernelProtectImage() {
 }
 
 void XboxKernelSetStartupEvent(HANDLE eventHandle) {
-    XboxKernelResetShutdownNotifications();
+    if (eventHandle) XboxKernelResetShutdownNotifications();
     g_startupEvent = eventHandle;
 }
 
