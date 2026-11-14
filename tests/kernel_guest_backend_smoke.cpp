@@ -221,18 +221,17 @@ int main() {
     constexpr std::uint32_t shutdownMarkerOffset = 0x3314u;
     constexpr std::uint32_t statsOffset = 0x3400u;
     constexpr std::uint32_t linkNameOffset = 0x3420u;
-    constexpr std::uint32_t deviceNameOffset = 0x3430u;
     constexpr std::uint32_t linkNameStringOffset = 0x3450u;
     constexpr std::uint32_t deviceNameStringOffset = 0x3460u;
     constexpr std::uint32_t shutdownRegistrationOffset = 0x3470u;
     constexpr std::uint32_t kernelThunkOffset = 0x3500u;
+    constexpr std::uint32_t pathBufferOffset = 0x3600u;
+    const size_t guestPathBytes = guestDirectoryPath.size();
 
     std::uint32_t stats[3] = {12u, 0u, 0u};
     std::memcpy(image + statsOffset, stats, sizeof(stats));
     const char linkName[] = "\\??\\Z:";
-    const char deviceName[] = "\\Device\\Harddisk0\\Partition1";
     std::memcpy(image + linkNameOffset, linkName, sizeof(linkName));
-    std::memcpy(image + deviceNameOffset, deviceName, sizeof(deviceName));
     struct GuestObjectString {
         std::uint16_t length;
         std::uint16_t maximumLength;
@@ -245,9 +244,9 @@ int main() {
         guestBase + linkNameOffset
     };
     const GuestObjectString deviceNameString{
-        static_cast<std::uint16_t>(sizeof(deviceName) - 1),
-        static_cast<std::uint16_t>(sizeof(deviceName) - 1),
-        guestBase + deviceNameOffset
+        static_cast<std::uint16_t>(guestPathBytes),
+        static_cast<std::uint16_t>(guestPathBytes + 1u),
+        guestBase + pathBufferOffset
     };
     std::memcpy(image + linkNameStringOffset, &linkNameString, sizeof(linkNameString));
     std::memcpy(image + deviceNameStringOffset, &deviceNameString, sizeof(deviceNameString));
@@ -266,8 +265,6 @@ int main() {
     };
     std::memcpy(image + kernelThunkOffset, thunkEntries, sizeof(thunkEntries));
 
-    constexpr std::uint32_t pathBufferOffset = 0x3600u;
-    constexpr std::uint32_t unicodeStringOffset = 0x3800u;
     constexpr std::uint32_t objectAttributesOffset = 0x3810u;
     constexpr std::uint32_t ioStatusOffset = 0x3830u;
     constexpr std::uint32_t fileHandleOffset = 0x3840u;
@@ -275,7 +272,6 @@ int main() {
     constexpr std::uint32_t fileMaskStringOffset = 0x3860u;
     constexpr std::uint32_t directoryInfoOffset = 0x3900u;
 
-    const size_t guestPathBytes = guestDirectoryPath.size();
     if (guestPathBytes + 1u > 0x200u)
         return Fail("temporary directory path exceeds guest test buffer", 9, &backend, image, stop);
     std::memcpy(image + pathBufferOffset, guestDirectoryPath.c_str(), guestPathBytes + 1u);
@@ -285,15 +281,9 @@ int main() {
         std::uint32_t attributes;
     };
     static_assert(sizeof(GuestObjectAttributes) == 12, "NXDK x86 OBJECT_ATTRIBUTES layout");
-    const GuestObjectString guestDirectoryName{
-        static_cast<std::uint16_t>(guestPathBytes),
-        static_cast<std::uint16_t>(guestPathBytes + 1u),
-        guestBase + pathBufferOffset
-    };
     const GuestObjectAttributes guestObjectAttributes{
-        0u, guestBase + unicodeStringOffset, 0x40u
+        0u, guestBase + linkNameStringOffset, 0x40u
     };
-    std::memcpy(image + unicodeStringOffset, &guestDirectoryName, sizeof(guestDirectoryName));
     std::memcpy(image + objectAttributesOffset, &guestObjectAttributes, sizeof(guestObjectAttributes));
     const std::uint32_t emptyIoStatus[2] = {0u, 0u};
     const std::uint32_t emptyFileHandle = 0u;
@@ -376,16 +366,6 @@ int main() {
     compareGuestEax(0xC0000035u);
     branchGuestNotEqualToFailure();
 
-    pushGuest32(guestBase + linkNameStringOffset);
-    callGuestThunk(thunkTableVa + 8u);
-    testGuestEax(); branchGuestNotEqualToFailure();
-
-    // A second delete must report STATUS_OBJECT_NAME_NOT_FOUND.
-    pushGuest32(guestBase + linkNameStringOffset);
-    callGuestThunk(thunkTableVa + 8u);
-    compareGuestEax(0xC0000034u);
-    branchGuestNotEqualToFailure();
-
     // Open the host-created directory through the guest NtCreateFile thunk.
     pushGuest32(1u); // FILE_DIRECTORY_FILE / backup semantics
     pushGuest32(1u); // FILE_OPEN
@@ -442,6 +422,16 @@ int main() {
     pushGuestMemory(guestBase + fileHandleOffset);
     callGuestThunk(thunkTableVa + 24u);
     testGuestEax(); branchGuestNotEqualToFailure();
+
+    pushGuest32(guestBase + linkNameStringOffset);
+    callGuestThunk(thunkTableVa + 8u);
+    testGuestEax(); branchGuestNotEqualToFailure();
+
+    // A second delete must report STATUS_OBJECT_NAME_NOT_FOUND.
+    pushGuest32(guestBase + linkNameStringOffset);
+    callGuestThunk(thunkTableVa + 8u);
+    compareGuestEax(0xC0000034u);
+    branchGuestNotEqualToFailure();
 
     pushGuest32(1u);
     pushGuest32(guestBase + shutdownRegistrationOffset);
