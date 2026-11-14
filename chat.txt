@@ -1157,3 +1157,27 @@ Known issues / next steps:
 1. Inspect the latest CI's separate kernel_memory_guest_smoke and kernel_handle_guest_smoke results.
 2. If both pass, run the existing kernel guest/backend CI and request review on PR #17.
 3. Keep the synchronization object/threading API ownership with Developer 3.
+
+
+[2026-11-14 09:43 UTC] [Kernel Developer 2 — memory/handle API tests PASS]
+Status: READY_FOR_REVIEW for this isolated tranche; broader kernel integration remains separate.
+Branch / commit: work/kernel-memory-apis / 4987d1400213c8aa51ab4d26ff2c999b0758b6dc; draft PR #17: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/17
+Summary:
+- The isolated x86 guest-call and x64 host test suites now pass.
+- Guest ABI smoke calls the functions as 32-bit stdcall entries: virtual reserve+commit, page rounding, protection change, MEMORY_BASIC_INFORMATION query, decommit, release, and same-process NtDuplicateObject with same-access preservation and DUPLICATE_CLOSE_SOURCE. Unsupported duplicate option bits and unsupported ZeroBits are rejected.
+- Host x64 smoke verifies 32-bit guest-range page normalization, zero-base allocation sizing, and 32-bit address overflow/zero-size rejection.
+- Synchronization event/semaphore/mutant/timer/thread APIs remain with Developer 3; no synchronization implementation was changed in this tranche.
+Files changed: guest32/kernel_memory.h, guest32/kernel_memory.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, modules/xbox_kernel/CMakeLists.txt, tests/kernel_memory_guest_smoke.cpp, tests/kernel_handle_guest_smoke.cpp, tests/kernel_memory_host_tests.cpp, docs/KERNEL_MEMORY_APIS.md, .github/workflows/kernel-memory-apis.yml.
+Build and tests:
+- Dedicated workflow run 43581787451: SUCCESS.
+- x86 guest build: PASS.
+- kernel_memory_guest_smoke: PASS.
+- kernel_handle_guest_smoke: PASS.
+- x64 host build: PASS.
+- kernel_memory_host_tests: PASS.
+- Exact CTest log: 2/2 guest tests passed; host test job completed SUCCESS.
+Known issues / next steps:
+1. Existing kernel host/guest32 integration workflow on PR #17 is still running; wait for it before requesting review.
+2. The direct x86 stdcall tests do not yet invoke the full KernelDispatch thunk/ordinal path; add that separately if needed.
+3. Cross-process handle duplication and named object-manager namespaces remain unsupported.
+4. Do not interpret this tranche as proof of full Xbox kernel compatibility or real XBE entrypoint success.
