@@ -28,8 +28,11 @@ int main() {
     if (!CloseHandle(duplicate))
         return Fail("close duplicate", static_cast<LONG>(GetLastError()));
 
+    HANDLE optionSource = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!optionSource) return Fail("create option-validation source", static_cast<LONG>(GetLastError()));
     HANDLE invalidTarget = nullptr;
-    status = K_NtDuplicateObject(source, &invalidTarget, 2u);
+    status = K_NtDuplicateObject(optionSource, &invalidTarget, 2u);
+    CloseHandle(optionSource);
     if (status != static_cast<LONG>(0xC000000Du))
         return Fail("reject unsupported duplicate options", status);
 
