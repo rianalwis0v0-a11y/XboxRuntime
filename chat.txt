@@ -222,3 +222,24 @@ Next:
 1. Read the new exception metadata from the diagnostic run; confirm the unsupported ordinal is 46 before treating this as the confirmed runtime blocker.
 2. Verify pci_compat_smoke and the real NXDK XBE path on Windows CI.
 3. Continue resolving subsequent missing imports based on exact exception parameters until the XBE returns and TLS cleanup passes.
+
+
+[2026-11-14 14:xx UTC] [Kernel Developer 5 — ordinal 255 and KTHREAD compatibility]
+Status: IN PROGRESS; Windows CI pending.
+Evidence:
+- Latest real-XBE run 43602563925 reached the intentional K_Unsupported path and the new exception metadata reported parameter0=0x000000FF: missing kernel import ordinal 255.
+- NXDK's pinned xboxkrnl.exe.def identifies ordinal 255 as PsCreateSystemThreadEx@40. The NXDK header confirms ten 32-bit stdcall arguments; NXDK's WinAPI thread.c passes WinapiThreadStartup as SystemRoutine, with the title start routine/context as the first two system-routine arguments.
+- NXDK WinapiThreadStartup dereferences KeGetCurrentThread()->TlsData and expects a 16-byte-aligned TLS payload after a 4-byte self-pointer. XboxRuntime's previous KeGetCurrentThread returned a Windows pseudo-HANDLE, which was not a valid Xbox KTHREAD pointer. A simple thread-creation stub alone would therefore have crashed immediately.
+- OXOS's clean-room spec confirms KTHREAD size 0x110 and offsets StackBase=0x1C, StackLimit=0x20, KernelStack=0x24, TlsData=0x28; PsCreateSystemThreadEx uses a minimum 0x3000 stack and invokes SystemRoutine(StartRoutine, StartContext). This is used as semantic reference only; no GPL-2.0 implementation source was copied.
+Changes:
+- Added guest32/thread_compat.{h,cpp} with the Xbox KTHREAD layout/prefix, per-native-thread current-thread context, TLS allocation/alignment, PsCreateSystemThreadEx, and the correct five-argument PsCreateSystemThread wrapper.
+- Mapped ordinal 255 and corrected ordinal 254 to the Xbox ABI.
+- KeGetCurrentThread now returns a KTHREAD-compatible pointer with valid host stack bounds rather than a Windows pseudo-handle.
+- Thread-control helpers resolve KTHREAD pointers to their native Win32 handles; NtClose releases the compatibility mapping.
+- Added a dedicated x86 smoke test covering PsCreateSystemThreadEx ABI, CREATE_SUSPENDED, thread start, KTHREAD stack bounds and TLS alignment.
+Files changed: guest32/thread_compat.h, guest32/thread_compat.cpp, guest32/kernel_compat.cpp, guest32/CMakeLists.txt, tests/thread_compat_smoke.cpp, .github/workflows/kernel-guest32.yml, docs/KERNEL_API.md, chat.txt.
+Verification: Not yet compiled or tested. Previous run 43602563925 verified PCI smoke, guest build, API tests, XBE parser tests and loader build; real-XBE run failed on ordinal 255.
+Next:
+1. Run Windows CI and confirm the thread module compiles and the thread smoke test passes.
+2. Re-run the real NXDK XBE; inspect any next unsupported ordinal or KTHREAD/TLS failure.
+3. Do not claim full execution until the XBE entrypoint returns, TLS cleanup passes, and section 2 stays non-executable.

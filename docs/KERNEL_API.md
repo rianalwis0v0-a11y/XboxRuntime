@@ -148,3 +148,21 @@ MHz to 133.333... MHz), which combines with the 5.5x CPU multiplier to produce
 the 733.333 MHz Xbox TSC frequency. Other PCI functions currently read as
 absent (`0xFF` bytes); this is a deliberately narrow initial model, not a
 claim of complete MCPX/NV2A PCI emulation. Unknown bus/device writes are ignored.
+
+
+## System-thread startup
+
+Kernel ordinal 255, `PsCreateSystemThreadEx`, is implemented as a Win32
+thread-backed compatibility path. It preserves the ten-argument Xbox stdcall
+ABI, optional thread-ID output, suspended creation, the system-routine
+(StartRoutine, StartContext) call shape, and per-thread TLS storage. Ordinal
+254, `PsCreateSystemThread`, now uses the five-argument Xbox ABI and routes
+through the same implementation.
+
+Ordinal 104, `KeGetCurrentThread`, returns a guest KTHREAD-compatible object,
+not a Windows thread HANDLE. Its Xbox layout is 0x110 bytes; the verified
+NXDK offsets include StackBase 0x1C, StackLimit 0x20, KernelStack 0x24 and
+TlsData 0x28. The current implementation provides these fields and uses
+Windows scheduling underneath. It is **not** a complete Xbox dispatcher,
+scheduler, APC, IRQL, or object-manager implementation; those semantics still
+need dedicated work and tests.
