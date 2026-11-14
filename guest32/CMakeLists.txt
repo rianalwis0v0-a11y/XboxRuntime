@@ -59,6 +59,17 @@ target_compile_definitions(xbox_sha1_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbox_sha1_smoke PRIVATE /W4 /permissive-)
 add_test(NAME xbox_sha1_smoke COMMAND xbox_sha1_smoke)
 
+# Verify the narrowly scoped RDMSR emulation used by the Xbox Pentium III XBE.
+add_executable(privileged_instruction_smoke
+  ../tests/privileged_instruction_smoke.cpp
+  privileged_instruction.cpp
+)
+target_include_directories(privileged_instruction_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(privileged_instruction_smoke PRIVATE cxx_std_17)
+target_compile_definitions(privileged_instruction_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(privileged_instruction_smoke PRIVATE /W4 /permissive-)
+add_test(NAME privileged_instruction_smoke COMMAND privileged_instruction_smoke)
+
 # Execute the x86 guest-facing memory/object entry points with their real stdcall ABI.
 add_executable(kernel_memory_guest_smoke
   ../tests/kernel_memory_guest_smoke.cpp
