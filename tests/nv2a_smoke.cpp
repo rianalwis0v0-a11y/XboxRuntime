@@ -513,7 +513,10 @@ int main() {
     {
         const uint32_t pciPhysicalBase = 0x00200000u;
         std::vector<uint8_t> guestPhysical(0x1000u, 0u);
-        const uint32_t pciStream[] = { (1u << 18) | 0x1D90u, 0xFF123456u };
+        const uint32_t pciStream[] = {
+            (1u << 18) | 0x0000u, dmaHandle, /* Bind the PGRAPH engine first. */
+            (1u << 18) | 0x1D90u, 0xFF123456u
+        };
         std::memcpy(guestPhysical.data(), pciStream, sizeof(pciStream));
         const uint32_t pciDmaObject[3] = {
             0x00020002u, 0x00000FFFu, pciPhysicalBase
@@ -530,7 +533,7 @@ int main() {
         const int restoreResult = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
         if (bindResult != 0 || objectWrite != 0 || resolveResult != 0 ||
             pciInfo.dma_target != 0x00020000u || pciInfo.base_address != 0u ||
-            submitResult != 0 || pciGet != sizeof(pciStream) || pciMethods != 1u ||
+            submitResult != 0 || pciGet != sizeof(pciStream) || pciMethods != 2u ||
             unbindResult != 0 || restoreResult != 0) {
             std::cerr << "FAIL: PCI-target guest-physical DMA pushbuffer mapping"
                       << " bind=" << bindResult << " object=" << objectWrite
