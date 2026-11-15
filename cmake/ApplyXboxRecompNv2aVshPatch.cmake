@@ -374,12 +374,12 @@ static DXGI_FORMAT default_input_format(int vreg, DWORD fvf)
     case 0:  return DXGI_FORMAT_R32G32B32_FLOAT;    /* Position (xyz) */
     case 1:  return DXGI_FORMAT_R32G32B32A32_FLOAT; /* Blend weights */
     case 2:  return DXGI_FORMAT_R32G32B32_FLOAT;    /* Normal */
-    case 3:  return DXGI_FORMAT_R8G8B8A8_UNORM;     /* Diffuse */
-    case 4:  return DXGI_FORMAT_R8G8B8A8_UNORM;     /* Specular */
+    case 3:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* D3DCOLOR diffuse (BGRA bytes) */
+    case 4:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* D3DCOLOR specular (BGRA bytes) */
     case 5:  return DXGI_FORMAT_R32_FLOAT;          /* Fog */
     case 6:  return DXGI_FORMAT_R32_FLOAT;          /* Point size */
-    case 7:  return DXGI_FORMAT_R8G8B8A8_UNORM;     /* Backface diffuse */
-    case 8:  return DXGI_FORMAT_R8G8B8A8_UNORM;     /* Backface specular */
+    case 7:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* Backface diffuse (BGRA bytes) */
+    case 8:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* Backface specular (BGRA bytes) */
     case 9:  return vsh_fvf_texcoord_size(fvf, 0) == 1 ? DXGI_FORMAT_R32_FLOAT
                  : vsh_fvf_texcoord_size(fvf, 0) == 3 ? DXGI_FORMAT_R32G32B32_FLOAT
                  : vsh_fvf_texcoord_size(fvf, 0) == 4 ? DXGI_FORMAT_R32G32B32A32_FLOAT
