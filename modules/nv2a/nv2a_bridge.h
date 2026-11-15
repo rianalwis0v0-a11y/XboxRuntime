@@ -9,6 +9,12 @@ extern "C" {
 
 #include "nv2a_vertex_shader.h"
 
+/* NV_DMA_TARGET values from the NV2A DMA object format. */
+#define XBOX_NV2A_DMA_TARGET_LOCAL       0x00000000u
+#define XBOX_NV2A_DMA_TARGET_LOCAL_TILED 0x00010000u
+#define XBOX_NV2A_DMA_TARGET_PCI         0x00020000u
+#define XBOX_NV2A_DMA_TARGET_AGP         0x00030000u
+
 
 
 
