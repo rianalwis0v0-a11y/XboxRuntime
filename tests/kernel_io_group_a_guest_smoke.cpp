@@ -91,6 +91,7 @@ extern "C" LONG __stdcall K_IoQueryVolumeInformation(
 
 
 namespace {
+int Fail(int code, const char* message) { std::fprintf(stderr, "FAIL %d: %s\n", code, message); return code; }
 volatile LONG g_deviceDeleteCalls = 0;
 volatile LONG g_startIoCalls = 0;
 volatile LONG g_dismountCalls = 0;
@@ -217,31 +218,31 @@ int main() {
         shares.OpenCount != 1 || shares.Readers != 1 ||
         shares.SharedRead != 1 || shares.SharedWrite != 1 ||
         shares.SharedDelete != 1)
-        return 15;
+        return Fail(15, "first shared read open");
     if (K_IoCheckShareAccess(writeData, 0x1u, &writer, &shares, TRUE) != 0 ||
         shares.OpenCount != 2 || shares.Writers != 1)
-        return 16;
+        return Fail(16, "second shared write open");
     if (K_IoCheckShareAccess(readData, 0, &thirdReader, &shares, TRUE) !=
         static_cast<LONG>(0xC0000043u))
-        return 17;
+        return Fail(17, "sharing violation");
     K_IoRemoveShareAccess(&writer, &shares);
     if (shares.OpenCount != 1 || shares.Writers != 0)
-        return 18;
+        return Fail(18, "remove writer share");
     if (K_IoCheckShareAccess(readData, 0x1u, &thirdReader, &shares, TRUE) != 0 ||
         shares.OpenCount != 2 || shares.Readers != 2)
-        return 19;
+        return Fail(19, "third reader open");
     K_IoRemoveShareAccess(&thirdReader, &shares);
     K_IoRemoveShareAccess(&reader, &shares);
     if (shares.OpenCount != 0 || shares.Readers != 0 ||
         shares.SharedRead != 0 || shares.SharedWrite != 0 ||
         shares.SharedDelete != 0)
-        return 20;
+        return Fail(20, "share counters empty");
     K_IoSetShareAccess(writeData, 0, &resetFile, &shares);
     if (shares.OpenCount != 1 || shares.Writers != 1 ||
         shares.SharedRead != 0 || shares.SharedWrite != 0)
-        return 21;
+        return Fail(21, "IoSetShareAccess");
     K_IoRemoveShareAccess(&resetFile, &shares);
-    if (shares.OpenCount != 0 || shares.Writers != 0) return 22;
+    if (shares.OpenCount != 0 || shares.Writers != 0) return Fail(22, "remove reset share");
 
 
     GuestDriverObject driver{};
@@ -251,7 +252,7 @@ int main() {
     void* deviceRaw = nullptr;
     if (K_IoCreateDevice(&driver, 64, nullptr, 7, TRUE, &deviceRaw) != 0 ||
         !deviceRaw)
-        return 23;
+        return Fail(23, "IoCreateDevice");
     auto* device = static_cast<GuestDeviceObject*>(deviceRaw);
     if (device->Type != 3 || device->Size != sizeof(GuestDeviceObject) + 64 ||
         device->ReferenceCount != 1 || device->DriverObject != &driver ||
@@ -261,28 +262,28 @@ int main() {
         device->DeviceQueue.Type != 4 || device->DeviceQueue.Size != 12 ||
         device->DeviceQueue.Busy != FALSE ||
         device->DeviceLock.WaitListHead.Flink != &device->DeviceLock.WaitListHead)
-        return 24;
+        return Fail(24, "DEVICE_OBJECT layout");
     for (ULONG i = 0; i < 64; ++i)
-        if (static_cast<UCHAR*>(device->DeviceExtension)[i] != 0) return 25;
+        if (static_cast<UCHAR*>(device->DeviceExtension)[i] != 0) return Fail(25, "zeroed device extension");
     int irp1 = 1, irp2 = 2, irp3 = 3;
     ULONG key2 = 20, key3 = 30;
     K_IoStartPacket(device, &irp1, nullptr);
     K_IoStartPacket(device, &irp2, &key2);
     K_IoStartPacket(device, &irp3, &key3);
-    if (g_startIoCalls != 1 || device->CurrentIrp != &irp1 || device->StartIoKey != 0) return 27;
+    if (g_startIoCalls != 1 || device->CurrentIrp != &irp1 || device->StartIoKey != 0) return Fail(27, "first StartIo");
     K_IoStartNextPacketByKey(device, key3);
     if (g_startIoCalls != 2 || g_lastStartedIrp != &irp3 ||
-        device->CurrentIrp != &irp3 || device->StartIoKey != key3) return 28;
+        device->CurrentIrp != &irp3 || device->StartIoKey != key3) return Fail(28, "keyed StartIo");
     K_IoStartNextPacket(device);
     if (g_startIoCalls != 3 || g_lastStartedIrp != &irp2 ||
-        device->CurrentIrp != &irp2 || device->StartIoKey != key2) return 29;
+        device->CurrentIrp != &irp2 || device->StartIoKey != key2) return Fail(29, "next StartIo");
     K_IoStartNextPacket(device);
     if (device->CurrentIrp != nullptr || device->DeviceQueue.Busy != FALSE || device->StartIoKey != 0)
-        return 30;
+        return Fail(30, "device queue idle");
     if (K_IoDismountVolume(device) != 0 || g_dismountCalls != 1)
-        return 31;
+        return Fail(31, "IoDismountVolume callback");
     K_IoDeleteDevice(device);
-    if (g_deviceDeleteCalls != 1) return 26;
+    if (g_deviceDeleteCalls != 1) return Fail(26, "IoDeleteDevice callback");
 
     std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
     return 0;
