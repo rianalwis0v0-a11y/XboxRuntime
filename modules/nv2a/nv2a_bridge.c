@@ -2311,6 +2311,40 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
 }
 
 
+static int nv2a_get_active_vertex_program_info(
+    uint32_t* instruction_count_out, XboxNV2A_VERTEX_PROGRAM_INFO* metadata_out,
+    uint32_t* hash_out)
+{
+    if (instruction_count_out) *instruction_count_out = 0;
+    if (hash_out) *hash_out = 0;
+    if (!instruction_count_out || !metadata_out || !hash_out ||
+        g_nv2a_vsh_start_slot >= 136u)
+        return 0;
+
+    uint32_t instruction_count = 0;
+    for (uint32_t slot = g_nv2a_vsh_start_slot; slot < 136u; ++slot) {
+        ++instruction_count;
+        if (g_nv2a_vsh_program[slot][3] & 1u)
+            break;
+    }
+    if (!instruction_count ||
+        !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
+        return 0;
+
+    const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
+    memset(metadata_out, 0, sizeof(*metadata_out));
+    if (XboxNV2A_ValidateVertexProgram(words, instruction_count, metadata_out) != 0)
+        return 0;
+
+    uint32_t hash = 2166136261u;
+    for (uint32_t i = 0; i < instruction_count * 4u; ++i)
+        hash = (hash ^ words[i]) * 16777619u;
+
+    *instruction_count_out = instruction_count;
+    *hash_out = hash;
+    return 1;
+}
+
 static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
 {
     if (!device || !device->lpVtbl || !device->lpVtbl->SetVertexShader)
@@ -2321,29 +2355,17 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
      * back to CPU vertex execution. */
     if (g_nv2a_vsh_context_write)
         return 0;
-    if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle) {
-        uint32_t instruction_count = 0;
-        XboxNV2A_VERTEX_PROGRAM_INFO metadata;
-        if (g_nv2a_vsh_start_slot >= 136u)
-            return 0;
-        for (uint32_t slot = g_nv2a_vsh_start_slot; slot < 136u; ++slot) {
-            ++instruction_count;
-            if (g_nv2a_vsh_program[slot][3] & 1u)
-                break;
-        }
-        if (!instruction_count ||
-            !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
-            return 0;
-        if (XboxNV2A_ValidateVertexProgram(
-                &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
-                instruction_count, &metadata) != 0)
-            return 0;
-        g_nv2a_vsh_input_mask = metadata.input_mask;
-        uint32_t hash = 2166136261u;
-        const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
-        for (uint32_t i = 0; i < instruction_count * 4u; ++i)
-            hash = (hash ^ words[i]) * 16777619u;
 
+    uint32_t instruction_count = 0, hash = 0;
+    XboxNV2A_VERTEX_PROGRAM_INFO metadata;
+    if (!nv2a_get_active_vertex_program_info(
+            &instruction_count, &metadata, &hash))
+        return 0;
+    g_nv2a_vsh_input_mask = metadata.input_mask;
+
+    if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle ||
+        hash != g_nv2a_vsh_program_hash) {
+        const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
         /* Writes to inactive slots must not churn the active shader handle. */
         if (g_nv2a_vsh_handle && hash == g_nv2a_vsh_program_hash) {
             g_nv2a_vsh_dirty = 0;
@@ -2655,8 +2677,15 @@ static int nv2a_build_translated_draw_packet(
     if (fvf & D3DFVF_SPECULAR) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_SPECULAR;
     packet->texture_coordinate_count = (fvf & 0x0F00u) >> 8;
     packet->vertex_shader_mode = g_transform_execution_mode & 3u;
-    packet->vertex_shader_input_mask = g_nv2a_vsh_input_mask;
-    packet->vertex_shader_hash = g_nv2a_vsh_program_hash;
+    if (packet->vertex_shader_mode == 2u) {
+        uint32_t instruction_count = 0;
+        XboxNV2A_VERTEX_PROGRAM_INFO metadata;
+        if (g_nv2a_vsh_context_write ||
+            !nv2a_get_active_vertex_program_info(
+                &instruction_count, &metadata, &packet->vertex_shader_hash))
+            return 0;
+        packet->vertex_shader_input_mask = metadata.input_mask;
+    }
     for (uint32_t stage = 0; stage < 4u; ++stage) {
         const uint32_t base = 0x1B00u + stage * 0x40u;
         if (g_gpu->pgraph.regs[(base + 0x0Cu) / 4u] & (1u << 30))
@@ -2689,10 +2718,15 @@ static int nv2a_submit_d3d8_draw_packet(
         nv2a_flush_vertex_constants();
         if (!nv2a_prepare_gpu_vertex_shader(d))
             return 9;
+        /* The backend must compile/bind exactly the shader and input layout
+         * captured by the neutral packet, never silently use newer globals. */
+        if (packet->vertex_shader_hash != g_nv2a_vsh_program_hash ||
+            packet->vertex_shader_input_mask != g_nv2a_vsh_input_mask)
+            return 12;
         const uint8_t* packed = NULL;
         if (!nv2a_pack_gpu_vertex_stream(
                 (const XboxNV2A_VERTEX*)packet->vertex_data,
-                packet->vertex_count, g_nv2a_vsh_input_mask,
+                packet->vertex_count, packet->vertex_shader_input_mask,
                 &packed, &draw_stride))
             return 10;
         draw_data = packed;
