@@ -71,7 +71,7 @@ int main() {
         reinterpret_cast<std::uintptr_t>(stackLimit) > 0xFFFFFFFFu)
         return Fail("kernel stack must be guest-addressable", 0xC000000DL);
     K_MmDeleteKernelStack(stackBase, reinterpret_cast<void*>(
-        static_cast<std::uintptr_t>(stackLimit) + 0x1000));
+        reinterpret_cast<std::uintptr_t>(stackLimit) + 0x1000));
     // A mismatched limit must not release the allocation.
     MEMORY_BASIC_INFORMATION stackInfo{};
     if (!VirtualQuery(stackLimit, &stackInfo, sizeof(stackInfo)) ||
