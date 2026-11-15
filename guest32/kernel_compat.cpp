@@ -1782,6 +1782,7 @@ extern "C" LONG __stdcall K_NtResumeThread(HANDLE thread, ULONG* previous) {
     return 0;
 }
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
+extern "C" void __stdcall K_AvSendTVEncoderOption(void*, uint32_t, uint32_t, uint32_t*) { K_Unsupported(2); }
 }
 extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
@@ -2232,11 +2233,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
         add esp, 4
         ret
     av_get: jmp K_AvGetSavedDataAddress
-    av_send_unsupported:
-        push 2
-        call K_Unsupported
-        add esp, 4
-        ret
+    av_send_unsupported: jmp K_AvSendTVEncoderOption
     av_set_display_unsupported: jmp K_AvSetDisplayMode
     ex_query_nv: jmp K_ExQueryNonVolatileSetting
     ex_refurb: jmp K_ExReadWriteRefurbInfo
