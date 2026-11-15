@@ -603,6 +603,70 @@ int main() {
     }
 
 
+    /* PCI-target vertex and texture DMA must use the same checked guest
+     * physical mapping as the DMA pusher, not be rejected or read from VRAM. */
+    {
+        const uint32_t pciPhysicalBase = 0x00200000u;
+        std::vector<uint8_t> guestPhysical(0x1000u, 0u);
+        const uint32_t pciContextStream[] = {
+            (1u << 18) | 0x019Cu, dmaHandle, /* VERTEX_A */
+            (1u << 18) | 0x0180u, dmaHandle  /* texture DMA_A */
+        };
+        const float pciVertexData[6] = { 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f };
+        const uint8_t pciTextureData[20] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF, 0xDE,0xAD,0xBE,0xEF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
+        };
+        std::memcpy(guestPhysical.data(), pciContextStream, sizeof(pciContextStream));
+        std::memcpy(guestPhysical.data() + 0x300u, pciVertexData, sizeof(pciVertexData));
+        std::memcpy(guestPhysical.data() + 0x500u, pciTextureData, sizeof(pciTextureData));
+        const uint32_t pciDmaObject[3] = {
+            0x00020002u, 0x00000FFFu, pciPhysicalBase
+        };
+        float pciFetchedVertices[6]{};
+        uint8_t pciDecodedTexture[16]{};
+        uint32_t pciTexturePitch = 0, pciGet = 0, pciMethods = 0;
+        const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
+            guestPhysical.data(), (uint32_t)guestPhysical.size());
+        const int objectResult = writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject));
+        const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(pciContextStream), &pciGet, &pciMethods);
+        const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
+            submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) == 0
+            ? readVertexArray(channel, 0u, 0u, 0u, 2u, pciFetchedVertices,
+                sizeof(pciFetchedVertices), &vertexStride, &vertexElementBytes) : -1;
+        const int textureResult = decodeTextureFromDma(channel, 0u, 0x0180u,
+            0x500u, 0x1200u, 2u, 2u, 12u, pciDecodedTexture,
+            sizeof(pciDecodedTexture), &pciTexturePitch);
+        const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const uint32_t restoreContexts[] = {
+            0x019Cu, dmaHandle, 0x0180u, dmaHandle
+        };
+        const int restoreStream = writeVram(0x1000u, restoreContexts,
+            sizeof(restoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
+                &pciGet, &pciMethods) : -1;
+        const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        if (bindResult != 0 || objectResult != 0 || pushResult != 0 ||
+            pciGet != sizeof(pciContextStream) || pciMethods != 2u ||
+            vertexResult != 0 ||
+            std::memcmp(pciVertexData, pciFetchedVertices, sizeof(pciVertexData)) != 0 ||
+            textureResult != 0 || pciTexturePitch != 8u ||
+            pciDecodedTexture[0] != 1u || pciDecodedTexture[1] != 2u ||
+            pciDecodedTexture[2] != 3u || pciDecodedTexture[8] != 7u ||
+            restoreObject != 0 || restoreStream != 0 || unbindResult != 0) {
+            std::cerr << "FAIL: PCI-target guest vertex/texture translation"
+                      << " bind=" << bindResult << " object=" << objectResult
+                      << " push=" << pushResult << " methods=" << pciMethods
+                      << " vertex=" << vertexResult << " texture=" << textureResult
+                      << " pitch=" << pciTexturePitch << " restore="
+                      << restoreObject << "/" << restoreStream
+                      << " unbind=" << unbindResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
     const uint32_t vertexIndices[3] = {1u, 0u, 1u};
     HostVertex indexedVertices[3]{};
     uint32_t indexedStride = 0, indexedFvf = 0;
