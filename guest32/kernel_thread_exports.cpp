@@ -139,3 +139,14 @@ extern "C" BOOLEAN __stdcall K_KeSynchronizeExecution(
     std::lock_guard<std::mutex> lock(record->synchronization);
     return synchronizeRoutine(synchronizeContext);
 }
+
+void XboxKernelResetThreadExports() {
+    {
+        std::lock_guard<std::mutex> lock(g_apcMutex);
+        g_apcs.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_interruptMutex);
+        g_interrupts.clear();
+    }
+}
