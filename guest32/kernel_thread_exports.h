@@ -23,3 +23,5 @@ void __stdcall K_KeInitializeInterrupt(void* interrupt,
 BOOLEAN __stdcall K_KeSynchronizeExecution(void* interrupt,
     BOOLEAN (__stdcall* synchronizeRoutine)(void*), void* synchronizeContext);
 }
+
+void XboxKernelResetThreadExports();
