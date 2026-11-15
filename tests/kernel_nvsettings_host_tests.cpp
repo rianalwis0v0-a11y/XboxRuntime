@@ -24,6 +24,11 @@ int main() {
         std::fprintf(stderr, "FAIL: unknown index accepted\n");
         return 1;
     }
+    if (!XboxNvGetSettingInfo(0x00FF, &info) || info.offset != 0x60 ||
+        info.length != 0x60 || info.type != 3 || info.writable) {
+        std::fprintf(stderr, "FAIL: XC_MAX_OS descriptor\\n");
+        return 1;
+    }
     const std::uint8_t zeroWord[4]{};
     const std::uint8_t oneWord[4]{1, 0, 0, 0};
     if (XboxNvComputeChecksum(zeroWord, sizeof(zeroWord)) != 0xFFFFFFFFu ||
