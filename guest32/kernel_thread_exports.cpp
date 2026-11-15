@@ -161,6 +161,10 @@ void XboxKernelResetThreadExports() {
         std::lock_guard<std::mutex> lock(g_interruptMutex);
         g_interrupts.clear();
     }
+    {
+        std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
+        g_systemInterrupts.clear();
+    }
 }
 
 
