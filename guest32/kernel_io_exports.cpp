@@ -1,5 +1,6 @@
 #include "kernel_io_exports.h"
 
+#include <algorithm>
 #include <mutex>
 #include <deque>
 
@@ -249,6 +250,11 @@ extern "C" LONG __stdcall K_IoCreateDevice(
         g_deviceObjects.emplace(device, totalSize);
         g_devicePacketQueues.emplace(device, std::deque<QueuedDeviceIrp>{});
     } catch (...) {
+        {
+            std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
+            g_deviceObjects.erase(device);
+            g_devicePacketQueues.erase(device);
+        }
         HeapFree(GetProcessHeap(), 0, device);
         return LONG(0xC0000017u);
     }
