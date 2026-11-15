@@ -562,7 +562,6 @@ extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
     LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){LARGE_INTEGER f{};QueryPerformanceFrequency(&f);return f.QuadPart;}
-extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){if(out){FILETIME ft{};GetSystemTimeAsFileTime(&ft);out->LowPart=ft.dwLowDateTime;out->HighPart=LONG(ft.dwHighDateTime);}}
 extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
 extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
 
