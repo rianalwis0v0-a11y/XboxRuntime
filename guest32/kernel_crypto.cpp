@@ -14,7 +14,11 @@ struct Sha1Context {
     std::uint32_t count[2];
     std::uint8_t buffer[64];
 };
-static_assert(sizeof(Sha1Context) == 92, "Xbox SHA1 context layout must remain 92 bytes");
+static_assert(sizeof(Sha1Context) == 92, "SHA1 core context layout must remain 92 bytes");
+constexpr std::size_t kXboxShaContextPrefix = 24;
+constexpr std::size_t kXboxShaContextSize = kXboxShaContextPrefix + sizeof(Sha1Context);
+struct Rc4Context { std::uint8_t state[256]; std::uint32_t i; std::uint32_t j; };
+static_assert(sizeof(Rc4Context) == 264, "Xbox RC4 context layout must remain 264 bytes");
 
 bool SpanHasProtection(const void* pointer, std::size_t length, bool write) {
     if (length == 0) return true;
@@ -127,11 +131,11 @@ void HashSegments(const std::uint8_t* a, std::uint32_t aLength,
 }
 
 extern "C" void __stdcall K_XcSHAInit(std::uint8_t* context) {
-    if (!SpanHasProtection(context, sizeof(Sha1Context), true)) {
+    if (!SpanHasProtection(context, kXboxShaContextSize, true)) {
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
         return;
     }
-    Sha1Context c{}; Init(c); std::memcpy(context, &c, sizeof(c));
+    Sha1Context c{}; Init(c); std::memcpy(context + kXboxShaContextPrefix, &c, sizeof(c));
     SecureZeroMemory(&c, sizeof(c));
 }
 extern "C" void __stdcall K_XcSHAUpdate(std::uint8_t* context, std::uint8_t* input, std::uint32_t length) {
@@ -140,9 +144,9 @@ extern "C" void __stdcall K_XcSHAUpdate(std::uint8_t* context, std::uint8_t* inp
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
         return;
     }
-    Sha1Context c{}; std::memcpy(&c, context, sizeof(c));
+    Sha1Context c{}; std::memcpy(&c, context + kXboxShaContextPrefix, sizeof(c));
     if (length) Update(c, input, length);
-    std::memcpy(context, &c, sizeof(c));
+    std::memcpy(context + kXboxShaContextPrefix, &c, sizeof(c));
     SecureZeroMemory(&c, sizeof(c));
 }
 extern "C" void __stdcall K_XcSHAFinal(std::uint8_t* context, std::uint8_t* digest) {
@@ -153,7 +157,46 @@ extern "C" void __stdcall K_XcSHAFinal(std::uint8_t* context, std::uint8_t* dige
     }
     Sha1Context c{}; std::memcpy(&c, context, sizeof(c));
     Final(c, digest);
-    std::memset(context, 0, sizeof(Sha1Context));
+    std::memset(context + kXboxShaContextPrefix, 0, sizeof(Sha1Context));
+}
+extern "C" void __stdcall K_XcRC4Key(std::uint8_t* keyStruct, std::uint32_t keyLength, std::uint8_t* key) {
+    if (!keyLength || !SpanHasProtection(keyStruct, sizeof(Rc4Context), true) ||
+        !SpanHasProtection(key, keyLength, false)) {
+        RaiseException(0xC000000Du, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+        return;
+    }
+    Rc4Context context{};
+    for (std::uint32_t i=0;i<256;++i) context.state[i]=static_cast<std::uint8_t>(i);
+    std::uint32_t j=0;
+    for (std::uint32_t i=0;i<256;++i) {
+        j=(j + context.state[i] + key[i % keyLength]) & 0xFFu;
+        const std::uint8_t temp=context.state[i];
+        context.state[i]=context.state[j];
+        context.state[j]=temp;
+    }
+    context.i=0; context.j=0;
+    std::memcpy(keyStruct, &context, sizeof(context));
+    SecureZeroMemory(&context, sizeof(context));
+}
+extern "C" void __stdcall K_XcRC4Crypt(std::uint8_t* keyStruct, std::uint32_t inputLength, std::uint8_t* input) {
+    if (!SpanHasProtection(keyStruct, sizeof(Rc4Context), true) ||
+        !SpanHasProtection(input, inputLength, true)) {
+        RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+        return;
+    }
+    Rc4Context context{};
+    std::memcpy(&context, keyStruct, sizeof(context));
+    for (std::uint32_t n=0;n<inputLength;++n) {
+        context.i=(context.i + 1u) & 0xFFu;
+        context.j=(context.j + context.state[context.i]) & 0xFFu;
+        const std::uint8_t temp=context.state[context.i];
+        context.state[context.i]=context.state[context.j];
+        context.state[context.j]=temp;
+        const std::uint8_t stream=context.state[(context.state[context.i] + context.state[context.j]) & 0xFFu];
+        input[n]^=stream;
+    }
+    std::memcpy(keyStruct, &context, sizeof(context));
+    SecureZeroMemory(&context, sizeof(context));
 }
 extern "C" void __stdcall K_XcHMAC(std::uint8_t* key, std::uint32_t keyLength,
                                     std::uint8_t* input1, std::uint32_t input1Length,
@@ -167,8 +210,8 @@ extern "C" void __stdcall K_XcHMAC(std::uint8_t* key, std::uint32_t keyLength,
         return;
     }
     std::uint8_t keyBlock[64]{}, innerPad[64], outerPad[64], innerDigest[20];
-    if (keyLength > sizeof(keyBlock)) HashSegments(key, keyLength, nullptr, 0, keyBlock);
-    else if (keyLength) std::memcpy(keyBlock, key, keyLength);
+    const std::uint32_t effectiveKeyLength=(std::min)(keyLength, static_cast<std::uint32_t>(sizeof(keyBlock)));
+    if (effectiveKeyLength) std::memcpy(keyBlock, key, effectiveKeyLength);
     for (unsigned i=0;i<64;++i) { innerPad[i]=keyBlock[i]^0x36; outerPad[i]=keyBlock[i]^0x5c; }
     Sha1Context inner{}; Init(inner); Update(inner, innerPad, 64);
     if (input1Length) Update(inner, input1, input1Length);
