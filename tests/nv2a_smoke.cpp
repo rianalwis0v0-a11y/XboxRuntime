@@ -1041,6 +1041,9 @@ int main() {
     };
     const float vertexFog[2] = { 0.25f,0.75f };
     const float vertexPointSize[2] = { 1.0f,2.0f };
+    const float vertexGeneric0[8] = { 13.1f,13.2f,13.3f,13.4f, 13.5f,13.6f,13.7f,13.8f };
+    const float vertexGeneric1[8] = { 14.1f,14.2f,14.3f,14.4f, 14.5f,14.6f,14.7f,14.8f };
+    const float vertexGeneric2[8] = { 15.1f,15.2f,15.3f,15.4f, 15.5f,15.6f,15.7f,15.8f };
     const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
     const float vertexTexcoords1[4] = { 0.125f, 0.25f, 0.625f, 0.875f };
     const float vertexTexcoords2[4] = { 0.2f, 0.3f, 0.4f, 0.5f };
@@ -1052,6 +1055,9 @@ int main() {
         writeVram(0x1B00u, vertexWeights, sizeof(vertexWeights)) != 0 ||
         writeVram(0x1C00u, vertexFog, sizeof(vertexFog)) != 0 ||
         writeVram(0x1D00u, vertexPointSize, sizeof(vertexPointSize)) != 0 ||
+        writeVram(0x1E00u, vertexGeneric0, sizeof(vertexGeneric0)) != 0 ||
+        writeVram(0x1E40u, vertexGeneric1, sizeof(vertexGeneric1)) != 0 ||
+        writeVram(0x1E80u, vertexGeneric2, sizeof(vertexGeneric2)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
@@ -1081,6 +1087,12 @@ int main() {
         submit(0u, 0x1784u, (8u << 8) | (2u << 4) | 2u) != 0 ||
         submit(0u, 0x1748u, 0xA00u) != 0 ||
         submit(0u, 0x1788u, (8u << 8) | (2u << 4) | 2u) != 0 ||
+        submit(0u, 0x1754u, 0xE00u) != 0 ||
+        submit(0u, 0x1794u, (16u << 8) | (4u << 4) | 2u) != 0 ||
+        submit(0u, 0x1758u, 0xE40u) != 0 ||
+        submit(0u, 0x1798u, (16u << 8) | (4u << 4) | 2u) != 0 ||
+        submit(0u, 0x175Cu, 0xE80u) != 0 ||
+        submit(0u, 0x179Cu, (16u << 8) | (4u << 4) | 2u) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
         hostVertexStride != sizeof(HostVertex) || hostFvf != 0x4D2u ||
@@ -1096,8 +1108,16 @@ int main() {
         hostVertices[1].weights[3] != 0.8f ||
         hostVertices[0].fog != 0.25f || hostVertices[1].fog != 0.75f ||
         hostVertices[0].point_size != 1.0f || hostVertices[1].point_size != 2.0f ||
-        (hostVertices[0].input_valid_mask & ((1u << 1) | (1u << 5) | (1u << 6))) !=
-            ((1u << 1) | (1u << 5) | (1u << 6)) ||
+        (hostVertices[0].input_valid_mask & ((1u << 1) | (1u << 5) | (1u << 6) |
+            (1u << 13) | (1u << 14) | (1u << 15))) !=
+            ((1u << 1) | (1u << 5) | (1u << 6) |
+             (1u << 13) | (1u << 14) | (1u << 15)) ||
+        hostVertices[0].generic[0][0] != 13.1f ||
+        hostVertices[1].generic[0][3] != 13.8f ||
+        hostVertices[0].generic[1][0] != 14.1f ||
+        hostVertices[1].generic[1][3] != 14.8f ||
+        hostVertices[0].generic[2][0] != 15.1f ||
+        hostVertices[1].generic[2][3] != 15.8f ||
         hostVertices[0].u != 0.25f || hostVertices[0].v != 0.5f ||
         hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
         hostVertices[0].u1 != 0.125f || hostVertices[0].v1 != 0.25f ||
