@@ -98,7 +98,7 @@ add_executable(kernel_io_group_a_guest_smoke
   ../tests/kernel_io_group_a_guest_smoke.cpp
   kernel_compat.cpp kernel_nvsettings.cpp kernel_memory.cpp
   kernel_object_manager.cpp kernel_thread_exports.cpp
-  network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
+  kernel_io_completion.cpp kernel_io_exports.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
 )
 target_include_directories(kernel_io_group_a_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
