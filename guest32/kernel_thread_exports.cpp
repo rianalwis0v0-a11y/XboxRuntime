@@ -2,11 +2,12 @@
 
 #include <algorithm>
 #include <memory>
+#include <new>
 #include <mutex>
 #include <unordered_map>
 
 namespace {
-using KernelApcRoutine = void (__stdcall*)(void*, void**, void**, void**, void**);
+using KernelApcRoutine = void (__stdcall*)(void*, XboxKernelNormalRoutine*, void**, void**, void**);
 using RundownRoutine = void (__stdcall*)(void*);
 using NormalRoutine = void (__stdcall*)(void*, void*, void*);
 using ServiceRoutine = BOOLEAN (__stdcall*)(void*, void*);
@@ -56,7 +57,7 @@ void CALLBACK DispatchApc(ULONG_PTR parameter) {
     void* arg1 = work->arg1;
     void* arg2 = work->arg2;
     if (record.kernel)
-        record.kernel(work->apc, reinterpret_cast<void**>(&normal),
+        record.kernel(work->apc, &normal,
                       &normalContext, &arg1, &arg2);
     if (normal) normal(normalContext, arg1, arg2);
 }
