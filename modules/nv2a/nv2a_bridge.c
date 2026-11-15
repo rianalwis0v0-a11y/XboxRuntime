@@ -2495,9 +2495,11 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     const uint16_t supported_mask =
         (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
                    (1u << 4) | (1u << 5) | (1u << 6) |
-                   (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12));
+                   (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12) |
+                   (1u << 13) | (1u << 14) | (1u << 15));
     const uint16_t required_array_mask =
-        (uint16_t)((1u << 1) | (1u << 5) | (1u << 6));
+        (uint16_t)((1u << 1) | (1u << 5) | (1u << 6) |
+                   (1u << 13) | (1u << 14) | (1u << 15));
     uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
     size_t required;
     if (output) *output = NULL;
@@ -2517,6 +2519,7 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
         /* NV097 array slots 7..10 supply TEX0..TEX3, which map to
          * programmable shader inputs v9..v12; v7/v8 are backface colors. */
         case 9u: case 10u: case 11u: case 12u: sizes[reg] = 8u; break;
+        case 13u: case 14u: case 15u: sizes[reg] = 16u; break;
         default: return 0;
         }
         if (stride > UINT32_MAX - sizes[reg]) return 0;
@@ -2554,6 +2557,8 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
             case 10u: memcpy(dst, &v->u1, 8u); break;
             case 11u: memcpy(dst, &v->u2, 8u); break;
             case 12u: memcpy(dst, &v->u3, 8u); break;
+            case 13u: case 14u: case 15u:
+                memcpy(dst, v->generic[reg - 13u], 16u); break;
             default: return 0;
             }
         }
