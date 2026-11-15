@@ -77,6 +77,13 @@ int main() {
     type = length = 0;
     ok &= Check(query(7, &type, &queried, sizeof(queried), &length) == 0, "ordinal 24 queries language");
     ok &= Check(queried == language && type == 4 && length == sizeof(language), "language value/type/length");
+    std::uint8_t updatedUserBlock[0x60]{};
+    ok &= Check(query(0x00FFu, &type, updatedUserBlock, sizeof(updatedUserBlock), &length) == 0,
+                "query user section after setting save");
+    std::uint32_t storedChecksum = 0;
+    std::memcpy(&storedChecksum, updatedUserBlock, sizeof(storedChecksum));
+    ok &= Check(storedChecksum == XboxNvComputeChecksum(updatedUserBlock + 4, 0x5C),
+                "save recomputes the EEPROM user-section checksum");
     ok &= Check(raw[0] == 0xFF, "raw EEPROM snapshot buffer was not aliased");
 
     std::uint8_t tooSmall[3] = {0xA5, 0xA5, 0xA5};
