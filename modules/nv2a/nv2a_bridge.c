@@ -2757,10 +2757,20 @@ static int nv2a_build_translated_draw_packet(
                 &instruction_count, &metadata, &packet->vertex_shader_hash))
             return 0;
         const uint16_t supported_input_mask =
-            (uint16_t)((1u << 0) | (1u << 2) | (1u << 3) | (1u << 4) |
+            (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
+                       (1u << 4) | (1u << 5) | (1u << 6) |
                        (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12));
         if (metadata.input_mask & (uint16_t)~supported_input_mask)
             return 0;
+        const uint16_t required_array_mask =
+            (uint16_t)((1u << 1) | (1u << 5) | (1u << 6));
+        const XboxNV2A_VERTEX* staged_vertices =
+            (const XboxNV2A_VERTEX*)vertex_data;
+        for (uint32_t i = 0; i < packet->vertex_count; ++i) {
+            if ((staged_vertices[i].input_valid_mask & required_array_mask) !=
+                (metadata.input_mask & required_array_mask))
+                return 0;
+        }
         packet->vertex_shader_input_mask = metadata.input_mask;
     }
     for (uint32_t stage = 0; stage < 4u; ++stage) {
