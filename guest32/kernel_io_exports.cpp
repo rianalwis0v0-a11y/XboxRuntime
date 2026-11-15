@@ -383,6 +383,7 @@ extern "C" void __stdcall K_IoStartNextPacketByKey(
         next = *packet;
         it->second.erase(packet);
         device->CurrentIrp = next.irp;
+        device->StartIoKey = next.key;
         device->DeviceQueue.Busy = TRUE;
         haveNext = true;
     }
