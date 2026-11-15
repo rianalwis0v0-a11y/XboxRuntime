@@ -52,12 +52,18 @@ int main() {
              nullptr, 0, digest);
     if (!EqualHex(digest, "b617318655057264e28bc0b6fb378c8ef146be00", 20)) return Fail("HMAC-SHA1 RFC 2202 vector");
 
+    std::uint8_t serviceArgs[8]={1,2,3,4,5,6,7,8};
+    const std::uint8_t serviceBefore[8]={1,2,3,4,5,6,7,8};
+    if (K_XcCryptService(0xFFFFFFFFu, serviceArgs) != 0 ||
+        std::memcmp(serviceArgs, serviceBefore, sizeof(serviceArgs)) != 0)
+        return Fail("crypto service zero/no-mutation contract");
+
     std::uint8_t desKey[8]={0x00,0x01,0x02,0x03,0x7f,0x80,0xfe,0xff};
     K_XcDESKeyParity(desKey, sizeof(desKey));
     for (std::uint8_t byte : desKey) {
         unsigned ones=0; for (unsigned bit=0;bit<8;++bit) ones+=(byte>>bit)&1u;
         if ((ones & 1u)!=1u) return Fail("DES odd parity");
     }
-    std::puts("kernel_crypto_guest_smoke: PASS (x86 stdcall, SHA1 streaming, RC4, HMAC-SHA1, DES odd parity)");
+    std::puts("kernel_crypto_guest_smoke: PASS (x86 stdcall, SHA1 streaming, RC4, HMAC-SHA1, DES odd parity, crypto service no-op)");
     return 0;
 }
