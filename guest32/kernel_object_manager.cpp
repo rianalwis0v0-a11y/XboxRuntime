@@ -87,6 +87,28 @@ bool XboxKernelAcquireObjectReference(HANDLE handle, XboxKernelObjectType expect
     return true;
 }
 
+bool XboxKernelAcquireAnyObjectReference(HANDLE handle, void** object) {
+    if (object) *object = nullptr;
+    if (!object || !handle) {
+        g_lastLookup = XboxKernelObjectLookupStatus::InvalidParameter;
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_shuttingDown) {
+        g_lastLookup = XboxKernelObjectLookupStatus::ShuttingDown;
+        return false;
+    }
+    auto it = g_handles.find(handle);
+    if (it == g_handles.end()) {
+        g_lastLookup = XboxKernelObjectLookupStatus::InvalidHandle;
+        return false;
+    }
+    ++it->second->references;
+    *object = it->second->payload;
+    g_lastLookup = XboxKernelObjectLookupStatus::Success;
+    return true;
+}
+
 bool XboxKernelReferenceObject(void* object) {
     if (!object) return false;
     std::lock_guard<std::mutex> lock(g_mutex);
