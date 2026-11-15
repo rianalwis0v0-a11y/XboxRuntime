@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include "kernel_thread_exports.h"
 
 #pragma pack(push, 4)
 struct GuestAnsiString { USHORT Length, MaximumLength; char* Buffer; };
