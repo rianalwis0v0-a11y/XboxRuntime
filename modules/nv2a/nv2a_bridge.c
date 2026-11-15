@@ -2218,6 +2218,7 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     float normals[255u * 3u];
     float fog_coords[255u];
     float point_sizes[255u];
+    float generic[3][255u * 4u];
     uint32_t colors[255u];
     uint32_t specular[255u];
     float texcoords[255u * 2u];
@@ -2255,6 +2256,18 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         read_vertex_float_array(channel, subchannel, 6u,
             first_vertex, vertex_count, 1u, point_sizes, sizeof(point_sizes)) == 0)
         has_point_size = 1;
+
+    int has_generic[3] = { 0, 0, 0 };
+    for (uint32_t generic_index = 0; generic_index < 3u; ++generic_index) {
+        const uint32_t array_index = 13u + generic_index;
+        const uint32_t format = g_gpu->pgraph.regs[
+            (0x1760u + array_index * 4u) / 4u];
+        if (format != 0u && ((format >> 4) & 0xFu) == 4u &&
+            read_vertex_float_array(channel, subchannel, array_index,
+                first_vertex, vertex_count, 4u, generic[generic_index],
+                sizeof(generic[generic_index])) == 0)
+            has_generic[generic_index] = 1;
+    }
 
     int has_normal = 0;
     const uint32_t normal_format = g_gpu->pgraph.regs[0x1768u / 4u];
@@ -2371,10 +2384,22 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
             memset(vertex->weights, 0, sizeof(vertex->weights));
         vertex->fog = has_fog ? fog_coords[i] : 0.0f;
         vertex->point_size = has_point_size ? point_sizes[i] : 0.0f;
+        for (uint32_t generic_index = 0; generic_index < 3u; ++generic_index) {
+            if (has_generic[generic_index])
+                memcpy(vertex->generic[generic_index],
+                    &generic[generic_index][i * 4u],
+                    sizeof(vertex->generic[generic_index]));
+            else
+                memset(vertex->generic[generic_index], 0,
+                    sizeof(vertex->generic[generic_index]));
+        }
         vertex->input_valid_mask = (uint16_t)(
             (has_weights ? (1u << 1) : 0u) |
             (has_fog ? (1u << 5) : 0u) |
-            (has_point_size ? (1u << 6) : 0u));
+            (has_point_size ? (1u << 6) : 0u) |
+            (has_generic[0] ? (1u << 13) : 0u) |
+            (has_generic[1] ? (1u << 14) : 0u) |
+            (has_generic[2] ? (1u << 15) : 0u));
         vertex->reserved = 0u;
     }
 
