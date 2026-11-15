@@ -777,6 +777,11 @@ int main() {
             0x500u, 0x1200u, 2u, 2u, 8u, agpDecodedTexture,
             sizeof(agpDecodedTexture), &agpTexturePitch);
         const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const uint32_t restoreContexts[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
         const int restoreStream = writeVram(0x1000u, restoreContexts,
             sizeof(restoreContexts)) == 0
             ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
