@@ -159,8 +159,13 @@ extern "C" LONG __stdcall K_IoSetIoCompletion(
     void* ioCompletion, void* keyContext, void* apcContext,
     LONG ioStatus, ULONG_PTR information) {
     if (!ioCompletion) return LONG(0xC000000Du);
-    return PostCompletion(FindCompletionPayload(ioCompletion), keyContext,
-                          apcContext, ioStatus, information);
+    auto state = FindCompletionPayload(ioCompletion);
+    if (!state) {
+        LONG status = 0;
+        state = AcquireCompletionHandle(reinterpret_cast<HANDLE>(ioCompletion), &status);
+        if (!state) return status;
+    }
+    return PostCompletion(state, keyContext, apcContext, ioStatus, information);
 }
 
 extern "C" LONG __stdcall K_NtRemoveIoCompletion(
