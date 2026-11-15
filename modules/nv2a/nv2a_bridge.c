@@ -2186,7 +2186,10 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     if (((position_format >> 4) & 0xFu) != 3u) return 3;
 
     float positions[255u * 3u];
+    float weights[255u * 4u];
     float normals[255u * 3u];
+    float fog_coords[255u];
+    float point_sizes[255u];
     uint32_t colors[255u];
     uint32_t specular[255u];
     float texcoords[255u * 2u];
@@ -2197,6 +2200,36 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     int result=read_vertex_float_array(channel,subchannel,0u,
         first_vertex,vertex_count,3u,positions,sizeof(positions));
     if(result!=0)return 4;
+
+    int has_weights = 0;
+    const uint32_t weight_format = g_gpu->pgraph.regs[0x1764u / 4u];
+    if (weight_format != 0u) {
+        if (((weight_format >> 4) & 0xFu) != 4u) return 17;
+        result = read_vertex_float_array(channel, subchannel, 1u,
+            first_vertex, vertex_count, 4u, weights, sizeof(weights));
+        if (result != 0) return 18;
+        has_weights = 1;
+    }
+
+    int has_fog = 0;
+    const uint32_t fog_format = g_gpu->pgraph.regs[0x1774u / 4u];
+    if (fog_format != 0u) {
+        if (((fog_format >> 4) & 0xFu) != 1u) return 19;
+        result = read_vertex_float_array(channel, subchannel, 5u,
+            first_vertex, vertex_count, 1u, fog_coords, sizeof(fog_coords));
+        if (result != 0) return 20;
+        has_fog = 1;
+    }
+
+    int has_point_size = 0;
+    const uint32_t point_size_format = g_gpu->pgraph.regs[0x1778u / 4u];
+    if (point_size_format != 0u) {
+        if (((point_size_format >> 4) & 0xFu) != 1u) return 21;
+        result = read_vertex_float_array(channel, subchannel, 6u,
+            first_vertex, vertex_count, 1u, point_sizes, sizeof(point_sizes));
+        if (result != 0) return 22;
+        has_point_size = 1;
+    }
 
     int has_normal = 0;
     const uint32_t normal_format = g_gpu->pgraph.regs[0x1768u / 4u];
@@ -2307,6 +2340,17 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         vertex->v2 = has_texcoord2 ? texcoords2[i * 2u + 1u] : 0.0f;
         vertex->u3 = has_texcoord3 ? texcoords3[i * 2u + 0u] : 0.0f;
         vertex->v3 = has_texcoord3 ? texcoords3[i * 2u + 1u] : 0.0f;
+        if (has_weights)
+            memcpy(vertex->weights, &weights[i * 4u], sizeof(vertex->weights));
+        else
+            memset(vertex->weights, 0, sizeof(vertex->weights));
+        vertex->fog = has_fog ? fog_coords[i] : 0.0f;
+        vertex->point_size = has_point_size ? point_sizes[i] : 0.0f;
+        vertex->input_valid_mask = (uint16_t)(
+            (has_weights ? (1u << 1) : 0u) |
+            (has_fog ? (1u << 5) : 0u) |
+            (has_point_size ? (1u << 6) : 0u));
+        vertex->reserved = 0u;
     }
 
     if (stride_out) *stride_out = (uint32_t)sizeof(XboxNV2A_VERTEX);
