@@ -62,7 +62,11 @@ int main() {
     // convention and only releases an exact pair returned by the allocator.
     void* stackBase = K_MmCreateKernelStack(0x2801, FALSE);
     if (!stackBase) return Fail("MmCreateKernelStack", 0xC0000017L);
-    void* stackLimit = static_cast<std::uint8_t*>(stackBase) - 0x3000;
+    MEMORY_BASIC_INFORMATION stackAllocation{};
+    if (!VirtualQuery(static_cast<std::uint8_t*>(stackBase) - 1,
+                      &stackAllocation, sizeof(stackAllocation)))
+        return Fail("query kernel stack allocation", 0xC0000001L);
+    void* stackLimit = stackAllocation.AllocationBase;
     if (static_cast<std::uintptr_t>(stackBase) > 0xFFFFFFFFu ||
         static_cast<std::uintptr_t>(stackLimit) > 0xFFFFFFFFu)
         return Fail("kernel stack must be guest-addressable", 0xC000000DL);
