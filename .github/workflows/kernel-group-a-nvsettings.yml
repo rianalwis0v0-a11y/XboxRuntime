@@ -1,0 +1,37 @@
+name: Xbox kernel Group A nonvolatile export tests
+
+on:
+  push:
+    branches:
+      - work/kernel-export-half-a
+  pull_request:
+    branches:
+      - work/kernel-execution-backend
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-group-a-nv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guest32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x86 guest
+        run: cmake -S guest32 -B build-group-a-guest32 -A Win32
+      - name: Build x86 guest and import-thunk smoke
+        run: cmake --build build-group-a-guest32 --config Release --target xbe_guest32 kernel_nvsettings_guest_smoke
+      - name: Run x86 import-thunk smoke
+        run: ctest --test-dir build-group-a-guest32 -C Release --output-on-failure -R kernel_nvsettings_guest_smoke
+
+  host64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x64 host tests
+        run: cmake -S modules/xbox_kernel -B build-group-a-host64 -A x64
+      - name: Build host contract tests
+        run: cmake --build build-group-a-host64 --config Release --target kernel_nvsettings_host_tests
+      - name: Run host contract tests
+        run: ctest --test-dir build-group-a-host64 -C Release --output-on-failure -R kernel_nvsettings_host_tests
