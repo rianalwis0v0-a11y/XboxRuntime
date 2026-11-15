@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - work/kernel-io-system-apis
+      - work/kernel-combined-clean-import
   pull_request:
     branches:
       - main
+      - work/kernel-execution-backend
   workflow_dispatch:
 
 concurrency:
