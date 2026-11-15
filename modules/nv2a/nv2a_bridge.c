@@ -49,6 +49,8 @@ static uint32_t g_nv2a_vsh_context_write;
 static DWORD g_nv2a_vsh_handle;
 static uint16_t g_nv2a_vsh_input_mask;
 static uint32_t g_nv2a_vsh_program_hash;
+static uint32_t g_nv2a_vsh_cached_instruction_count;
+static DWORD g_nv2a_vsh_cached_program[136][4];
 static uint8_t* g_nv2a_gpu_vertex_stream;
 static size_t g_nv2a_gpu_vertex_capacity;
 static int g_nv2a_vsh_dirty = 1;
@@ -720,6 +722,8 @@ int __cdecl ModuleStart(void)
     g_nv2a_vsh_constant_word = 0;
     g_nv2a_vsh_context_write = 0;
     g_nv2a_vsh_program_hash = 0;
+    g_nv2a_vsh_cached_instruction_count = 0;
+    memset(g_nv2a_vsh_cached_program, 0, sizeof(g_nv2a_vsh_cached_program));
     if (g_nv2a_vsh_handle) {
         (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
         g_nv2a_vsh_handle = 0;
@@ -2363,24 +2367,26 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
         return 0;
     g_nv2a_vsh_input_mask = metadata.input_mask;
 
-    if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle ||
-        hash != g_nv2a_vsh_program_hash) {
-        const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
-        /* Writes to inactive slots must not churn the active shader handle. */
-        if (g_nv2a_vsh_handle && hash == g_nv2a_vsh_program_hash) {
-            g_nv2a_vsh_dirty = 0;
-        } else {
-            if (g_nv2a_vsh_handle) {
-                (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
-                g_nv2a_vsh_handle = 0;
-            }
-            if (FAILED(d3d8_vsh_create_shader(
-                    words, (int)instruction_count, &g_nv2a_vsh_handle)))
-                return 0;
-            g_nv2a_vsh_program_hash = hash;
-            g_nv2a_vsh_dirty = 0;
+    const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
+    const int cached_program_matches = g_nv2a_vsh_handle &&
+        instruction_count == g_nv2a_vsh_cached_instruction_count &&
+        hash == g_nv2a_vsh_program_hash &&
+        memcmp(words, g_nv2a_vsh_cached_program,
+            (size_t)instruction_count * 4u * sizeof(DWORD)) == 0;
+    if (!cached_program_matches) {
+        if (g_nv2a_vsh_handle) {
+            (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+            g_nv2a_vsh_handle = 0;
         }
+        if (FAILED(d3d8_vsh_create_shader(
+                words, (int)instruction_count, &g_nv2a_vsh_handle)))
+            return 0;
+        memcpy(g_nv2a_vsh_cached_program, words,
+            (size_t)instruction_count * 4u * sizeof(DWORD));
+        g_nv2a_vsh_cached_instruction_count = instruction_count;
+        g_nv2a_vsh_program_hash = hash;
     }
+    g_nv2a_vsh_dirty = 0;
     /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
      * compiles it on cache miss, and binds the cached GPU vertex shader. */
     return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
