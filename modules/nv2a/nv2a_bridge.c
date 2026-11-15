@@ -1275,13 +1275,15 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,
         const uint32_t base=0x1B00u+stage*0x40u;
         const uint32_t control0=g_gpu->pgraph.regs[(base+0x0Cu)/4u];
         NV2A_TEXTURE_CACHE* e=&g_texture_cache[channel][subchannel][stage];
-        if(!(stage_mask&(1u<<stage))){
+        const int packet_enabled = (stage_mask & (1u << stage)) != 0;
+        const int state_enabled = (control0 & (1u << 30)) != 0;
+        /* The draw packet owns the active-stage decision. A mismatch means
+         * guest state changed after packet construction and must not be drawn. */
+        if (packet_enabled != state_enabled) return 11;
+        if(!packet_enabled){
             if(FAILED(device->lpVtbl->SetTexture(device,stage,NULL)))return 2;
             continue;
         }
-        /* The draw packet owns the active-stage decision. A mismatch means
-         * guest state changed after packet construction and must not be drawn. */
-        if(!(control0&(1u<<30)))return 11;
         XboxNV2A_TEXTURE_INFO info;
         if(XboxNV2A_GetTextureInfo(channel,subchannel,stage,&info)!=0)return 3;
         if(!info.level_count||info.level_count>16u)return 4;
