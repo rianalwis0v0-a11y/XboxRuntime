@@ -120,14 +120,7 @@ void Final(Sha1Context& c, std::uint8_t digest[20]) {
     SecureZeroMemory(&c, sizeof(c));
     SecureZeroMemory(lengthBytes, sizeof(lengthBytes));
 }
-void HashSegments(const std::uint8_t* a, std::uint32_t aLength,
-                  const std::uint8_t* b, std::uint32_t bLength,
-                  std::uint8_t digest[20]) {
-    Sha1Context c{}; Init(c);
-    if (aLength) Update(c, a, aLength);
-    if (bLength) Update(c, b, bLength);
-    Final(c, digest);
-}
+
 }
 
 extern "C" void __stdcall K_XcSHAInit(std::uint8_t* context) {
@@ -139,7 +132,7 @@ extern "C" void __stdcall K_XcSHAInit(std::uint8_t* context) {
     SecureZeroMemory(&c, sizeof(c));
 }
 extern "C" void __stdcall K_XcSHAUpdate(std::uint8_t* context, std::uint8_t* input, std::uint32_t length) {
-    if (!SpanHasProtection(context, sizeof(Sha1Context), true) ||
+    if (!SpanHasProtection(context, kXboxShaContextSize, true) ||
         !SpanHasProtection(input, length, false)) {
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
         return;
@@ -155,7 +148,7 @@ extern "C" void __stdcall K_XcSHAFinal(std::uint8_t* context, std::uint8_t* dige
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
         return;
     }
-    Sha1Context c{}; std::memcpy(&c, context, sizeof(c));
+    Sha1Context c{}; std::memcpy(&c, context + kXboxShaContextPrefix, sizeof(c));
     Final(c, digest);
     std::memset(context + kXboxShaContextPrefix, 0, sizeof(Sha1Context));
 }
