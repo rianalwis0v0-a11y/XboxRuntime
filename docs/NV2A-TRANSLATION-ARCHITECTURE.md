@@ -140,3 +140,22 @@ The resolver is used by:
 This removes the earlier local-VRAM-only rejection for those resource paths while retaining strict bounds checks. AGP/GART is still rejected; it needs actual guest page-table translation and is not mapped by this helper.
 
 Regression coverage has been added for PCI-backed vertex-array reads and linear texture decoding, including restoring the original local-VRAM DMA object/context after the test. The test is awaiting the Windows GitHub Actions result in PR #25.
+
+## Six-part translation sprint status (2026-11-15)
+
+1. **Unify DMA reads through one address resolver — implemented on this branch.**
+   Pushbuffer parsing, vertex fetch, linear textures, mip chains, and paletted texture/palette reads now share the checked span resolver. The resolver accepts local VRAM and an explicitly bound PCI physical-memory window; it never converts guest addresses directly into host pointers.
+2. **AGP/GART translation — not implemented.**
+   The AGP specification deliberately leaves the concrete GART table format and control interface to the platform. A generic 4-KiB PTE assumption would be unsafe here. Implement this only after the Xbox AGP bridge's aperture, GART-base, valid-bit, and page-size behavior are identified and tested.
+3. **Vertex/pixel shader coverage — existing translators reused; coverage remains partial.**
+   Keep the pinned NV2A microcode-to-HLSL translator and D3D8/D3D11 combiner path. Extend operations through focused shader tests; do not add a second interpreter/compiler.
+4. **PGRAPH-to-host operations — partial.**
+   The bridge already maps selected render, texture-stage, combiner, surface, and draw methods. Remaining methods must be implemented from verified NV097 semantics and tested rather than silently forwarded or approximated.
+5. **Backend-neutral draw packet — planned, not yet complete.**
+   The current bridge still prepares and submits its custom draw directly through the D3D8 compatibility interface. Introduce a semantic packet boundary before adding another backend.
+6. **Guest XBE to D3D11 rendered-frame test — not yet complete.**
+   The standalone NV2A tests exercise translation components, but the original guest D3D device lifecycle and complete guest-command-to-host-draw path still need to be connected and verified with a deterministic homebrew XBE.
+
+### Additional PCI regression coverage
+
+The PCI-backed regression now covers vertex-array reads, a linear texture, a two-level swizzled mip chain, and palette plus paletted-texture reads. The DMA pusher itself also obtains its command stream through the same checked span resolver. Windows CI must pass on the current branch head before these newest changes are called verified.
