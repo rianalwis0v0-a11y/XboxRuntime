@@ -34,10 +34,10 @@ struct SettingRow {
 constexpr SettingRow kSettings[] = {
     {0x0000, 0x64, 4, kRegDword, false}, // XC_TIMEZONE_BIAS
     {0x0001, 0x68, 4, kRegBinary, true }, // XC_TZ_STD_NAME
-    {0x0002, 0x78, 4, kRegBinary, true }, // XC_TZ_STD_DATE
+    {0x0002, 0x78, 4, kRegDword, true }, // XC_TZ_STD_DATE
     {0x0003, 0x88, 4, kRegDword, false}, // XC_TZ_STD_BIAS
     {0x0004, 0x6C, 4, kRegBinary, false}, // XC_TZ_DLT_NAME
-    {0x0005, 0x7C, 4, kRegBinary, false}, // XC_TZ_DLT_DATE
+    {0x0005, 0x7C, 4, kRegDword, false}, // XC_TZ_DLT_DATE
     {0x0006, 0x8C, 4, kRegDword, false}, // XC_TZ_DLT_BIAS
     {0x0007, 0x90, 4, kRegDword, true }, // XC_LANGUAGE
     {0x0008, 0x94, 4, kRegDword, true }, // XC_VIDEO
@@ -51,10 +51,7 @@ constexpr SettingRow kSettings[] = {
     {0x0010, 0xB4, 4, kRegBinary, false}, // XC_ONLINE_SUBNET_ADDRESS
     {0x0011, 0xB8, 4, kRegDword, true }, // XC_MISC
     {0x0012, 0xBC, 4, kRegDword, false}, // XC_DVD_REGION
-    {0x0100, 0x34, 12, kRegBinary, false}, // XC_FACTORY_SERIAL_NUMBER
-    {0x0101, 0x40, 6, kRegBinary, false}, // XC_FACTORY_ETHERNET_ADDR
-    {0x0102, 0x48, 16, kRegBinary, false}, // XC_FACTORY_ONLINE_KEY
-    {0x0103, 0x58, 4, kRegDword, false}, // XC_FACTORY_AV_REGION
+    {0x00FF, 0x60, 0x60, kRegBinary, false}, // XC_MAX_OS: complete user-settings section
 };
 
 bool PersistLocked() {
