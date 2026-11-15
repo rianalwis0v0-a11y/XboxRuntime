@@ -117,13 +117,22 @@ extern "C" void __stdcall K_KeInitializeInterrupt(
     g_interrupts[interrupt] = std::move(record);
 }
 extern "C" BOOLEAN __stdcall K_KeConnectInterrupt(void* interrupt) {
-    // No physical interrupt controller is attached to this Windows-backed guest.
-    (void)interrupt;
-    return FALSE;
+    if (!interrupt) return FALSE;
+    std::lock_guard<std::mutex> lock(g_interruptMutex);
+    auto it = g_interrupts.find(interrupt);
+    if (it == g_interrupts.end() || it->second->connected) return FALSE;
+    // This registers the virtual interrupt object. Physical device interrupt
+    // delivery remains unavailable until a bus/interrupt-controller backend exists.
+    it->second->connected = true;
+    return TRUE;
 }
 extern "C" BOOLEAN __stdcall K_KeDisconnectInterrupt(void* interrupt) {
-    (void)interrupt;
-    return FALSE;
+    if (!interrupt) return FALSE;
+    std::lock_guard<std::mutex> lock(g_interruptMutex);
+    auto it = g_interrupts.find(interrupt);
+    if (it == g_interrupts.end() || !it->second->connected) return FALSE;
+    it->second->connected = false;
+    return TRUE;
 }
 extern "C" BOOLEAN __stdcall K_KeSynchronizeExecution(
     void* interrupt, SynchronizeRoutine synchronizeRoutine,
@@ -133,7 +142,7 @@ extern "C" BOOLEAN __stdcall K_KeSynchronizeExecution(
     {
         std::lock_guard<std::mutex> lock(g_interruptMutex);
         auto it = g_interrupts.find(interrupt);
-        if (it == g_interrupts.end()) return FALSE;
+        if (it == g_interrupts.end() || !it->second->connected) return FALSE;
         record = it->second;
     }
     std::lock_guard<std::mutex> lock(record->synchronization);
