@@ -23,6 +23,7 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "kernel_nvsettings.h"
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
@@ -39,9 +40,6 @@ static void* g_savedAv=nullptr;
 static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
 ULONG g_fileCacheSize = 1024 * 1024;
-std::array<uint8_t, 256> g_eeprom{};
-std::wstring g_eepromPath;
-std::mutex g_eepromMutex;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
@@ -152,38 +150,25 @@ bool FreeStringAllocation(void* p) {
     HeapFree(GetProcessHeap(), 0, p);
     return true;
 }
-bool g_eepromReady = false;
-
 constexpr uint32_t kStatusInvalidParameter = 0xC000000Du;
 constexpr uint32_t kStatusDeviceNotConnected = 0xC000009Du;
 
 extern "C" uint32_t __stdcall K_HalReadSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t* value) {
     if (!value) return kStatusInvalidParameter;
-    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    if (address != 0xA8) return kStatusDeviceNotConnected;
     const uint32_t count = word ? 2u : 1u;
-    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    *value = g_eeprom[command];
-    if (word) *value |= uint32_t(g_eeprom[uint32_t(command) + 1]) << 8;
+    uint8_t bytes[2]{};
+    if (!XboxNvReadRaw(command, bytes, count)) return kStatusDeviceNotConnected;
+    *value = bytes[0];
+    if (word) *value |= uint32_t(bytes[1]) << 8;
     return 0;
 }
 
 extern "C" uint32_t __stdcall K_HalWriteSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t value) {
-    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    if (address != 0xA8) return kStatusDeviceNotConnected;
     const uint32_t count = word ? 2u : 1u;
-    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    g_eeprom[command] = uint8_t(value & 0xFFu);
-    if (word) g_eeprom[uint32_t(command) + 1] = uint8_t((value >> 8) & 0xFFu);
-    // Persist each SMBus write so a guest crash does not discard EEPROM changes.
-    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return kStatusDeviceNotConnected;
-    DWORD written = 0;
-    BOOL ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
-    if (ok) ok = (written == DWORD(g_eeprom.size())) && FlushFileBuffers(f);
-    CloseHandle(f);
-    return ok ? 0u : kStatusDeviceNotConnected;
+    uint8_t bytes[2] = { uint8_t(value & 0xFFu), uint8_t((value >> 8) & 0xFFu) };
+    return XboxNvWriteRaw(command, bytes, count) ? 0u : kStatusDeviceNotConnected;
 }
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
@@ -1804,8 +1789,18 @@ extern "C" __declspec(naked) void KernelDispatch(){
         add esp, 4
         cmp eax, 1
         je av_get
+        cmp eax, 2
+        je av_send_unsupported
+        cmp eax, 3
+        je av_set_display_unsupported
         cmp eax, 4
         je av_set
+        cmp eax, 24
+        je ex_query_nv
+        cmp eax, 25
+        je ex_refurb
+        cmp eax, 29
+        je ex_save_nv
         cmp eax, 5
         je dbg_break
         cmp eax, 6
@@ -2237,6 +2232,15 @@ extern "C" __declspec(naked) void KernelDispatch(){
         add esp, 4
         ret
     av_get: jmp K_AvGetSavedDataAddress
+    av_send_unsupported:
+        push 2
+        call K_Unsupported
+        add esp, 4
+        ret
+    av_set_display_unsupported: jmp K_AvSetDisplayMode
+    ex_query_nv: jmp K_ExQueryNonVolatileSetting
+    ex_refurb: jmp K_ExReadWriteRefurbInfo
+    ex_save_nv: jmp K_ExSaveNonVolatileSetting
     av_set: jmp K_AvSetSavedDataAddress
     dbg_break: jmp K_DbgBreakPoint
     dbg_break_status: jmp K_DbgBreakPointWithStatus
@@ -2452,43 +2456,13 @@ extern "C" __declspec(naked) void KernelDispatch(){
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
-    if (!path || !*path) return false;
-    g_eepromPath = path;
-    HANDLE f = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    LARGE_INTEGER size{};
-    bool ok = GetFileSizeEx(f, &size) != FALSE;
-    if (ok && size.QuadPart == 0) {
-        // Blank EEPROM is intentionally unprovisioned, not a fabricated Xbox identity.
-        g_eeprom.fill(0xFF);
-        DWORD written = 0;
-        ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr) &&
-             written == g_eeprom.size() && FlushFileBuffers(f);
-    } else if (ok && size.QuadPart == static_cast<LONGLONG>(g_eeprom.size())) {
-        DWORD read = 0;
-        ok = SetFilePointer(f, 0, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
-             ReadFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &read, nullptr) &&
-             read == g_eeprom.size();
-    } else {
-        ok = false; // Never silently truncate or replace a user's EEPROM backup.
-    }
-    CloseHandle(f);
-    g_eepromReady = ok;
+    const bool ok = XboxNvInitialize(path);
     if (ok) OutputDebugStringW(L"[XboxEEPROM] Persistent 256-byte EEPROM loaded. A blank all-FF image is unprovisioned and cannot register with Insignia.\\n");
     return ok;
 }
 
 void XboxKernelFlushEeprom() {
-    if (!g_eepromReady || g_eepromPath.empty()) return;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
-    FlushFileBuffers(f);
-    CloseHandle(f);
+    XboxNvFlush();
 }
 
 void XboxKernelSetTitlePath(const wchar_t* path){
