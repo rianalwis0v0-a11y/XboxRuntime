@@ -87,17 +87,32 @@ bool XboxKernelAcquireObjectReference(HANDLE handle, XboxKernelObjectType expect
     return true;
 }
 
-void XboxKernelReleaseObjectReference(void* object) {
-    if (!object) return;
+bool XboxKernelReferenceObject(void* object) {
+    if (!object) return false;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_shuttingDown) return false;
+    auto it = g_objects.find(object);
+    if (it == g_objects.end() || !it->second) return false;
+    ++it->second->references;
+    return true;
+}
+
+bool XboxKernelDereferenceObject(void* object) {
+    if (!object) return false;
     XboxKernelObjectDestroy destroy = nullptr;
     void* payload = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         auto it = g_objects.find(object);
-        if (it == g_objects.end()) return;
+        if (it == g_objects.end()) return false;
         destroy = DropReferenceLocked(it->second, &payload);
     }
     DestroyOutsideLock(destroy, payload);
+    return true;
+}
+
+void XboxKernelReleaseObjectReference(void* object) {
+    (void)XboxKernelDereferenceObject(object);
 }
 
 XboxKernelObjectLookupStatus XboxKernelGetLastObjectLookupStatus() {
