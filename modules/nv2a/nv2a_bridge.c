@@ -2814,11 +2814,13 @@ static int nv2a_build_translated_draw_packet(
         const uint16_t supported_input_mask =
             (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
                        (1u << 4) | (1u << 5) | (1u << 6) |
-                       (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12));
+                       (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12) |
+                        (1u << 13) | (1u << 14) | (1u << 15));
         if (metadata.input_mask & (uint16_t)~supported_input_mask)
             return 0;
         const uint16_t required_array_mask =
-            (uint16_t)((1u << 1) | (1u << 5) | (1u << 6));
+            (uint16_t)((1u << 1) | (1u << 5) | (1u << 6) |
+                       (1u << 13) | (1u << 14) | (1u << 15));
         const XboxNV2A_VERTEX* staged_vertices =
             (const XboxNV2A_VERTEX*)vertex_data;
         for (uint32_t i = 0; i < packet->vertex_count; ++i) {
