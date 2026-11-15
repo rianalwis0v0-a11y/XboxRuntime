@@ -9,6 +9,27 @@ struct GuestAnsiString { USHORT Length, MaximumLength; char* Buffer; };
 struct GuestObjectAttributes { HANDLE RootDirectory; GuestAnsiString* ObjectName; ULONG Attributes; };
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
 #pragma pack(pop)
+
+struct GuestListEntry { GuestListEntry* Flink; GuestListEntry* Blink; };
+struct GuestDispatcherHeader {
+    UCHAR Type, Absolute, Size, Inserted;
+    LONG SignalState;
+    GuestListEntry WaitListHead;
+};
+struct GuestKQueue {
+    GuestDispatcherHeader Header;
+    GuestListEntry EntryListHead;
+    ULONG CurrentCount;
+    ULONG MaximumCount;
+    GuestListEntry ThreadListHead;
+};
+extern "C" void __stdcall K_KeInitializeQueue(GuestKQueue*, ULONG);
+extern "C" LONG __stdcall K_KeInsertQueue(GuestKQueue*, GuestListEntry*);
+extern "C" GuestListEntry* __stdcall K_KeRundownQueue(GuestKQueue*);
+extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR);
+extern "C" void __fastcall K_KfLowerIrql(UCHAR);
+extern "C" DWORD __stdcall K_KeGetCurrentIrql();
+
 extern "C" LONG __stdcall K_IoCreateFile(
     HANDLE*, ACCESS_MASK, GuestObjectAttributes*, GuestIoStatusBlock*,
     const LARGE_INTEGER*, ULONG, ULONG, ULONG, ULONG, ULONG);
@@ -83,6 +104,35 @@ int main() {
 
     CloseHandle(file);
     DeleteFileA(path);
+
+    // Queue rundown returns a detached, null-terminated FIFO list and empties
+    // the dispatcher queue.
+    GuestKQueue queue{};
+    K_KeInitializeQueue(&queue, 1);
+    GuestListEntry first{}, second{};
+    K_KeInsertQueue(&queue, &first);
+    K_KeInsertQueue(&queue, &second);
+    GuestListEntry* rundown = K_KeRundownQueue(&queue);
+    if (rundown != &first || first.Flink != &second ||
+        first.Blink != nullptr || second.Flink != nullptr ||
+        K_KeRundownQueue(&queue) != nullptr)
+        return 8;
+
+    // KiUnlockDispatcherDatabase shares the exact lower-IRQL primitive.
+    if (K_KfRaiseIrql(2) != 0 || K_KeGetCurrentIrql() != 2)
+        return 9;
+    K_KfLowerIrql(0);
+    if (K_KeGetCurrentIrql() != 0) return 10;
+
+    K_HalRequestSoftwareInterrupt(1);
+    if (XboxKernelGetPendingSoftwareIrql() != 1) return 11;
+    K_HalRequestSoftwareInterrupt(2);
+    if (XboxKernelGetPendingSoftwareIrql() != 2) return 12;
+    K_HalClearSoftwareInterrupt(1);
+    if (XboxKernelGetPendingSoftwareIrql() != 2) return 13;
+    K_HalClearSoftwareInterrupt(2);
+    if (XboxKernelGetPendingSoftwareIrql() != 0) return 14;
+
     std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
     return 0;
 }
