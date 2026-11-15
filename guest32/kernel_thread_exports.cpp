@@ -1,6 +1,7 @@
 #include "kernel_thread_exports.h"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <new>
 #include <mutex>
@@ -42,7 +43,7 @@ std::mutex g_interruptMutex;
 std::unordered_map<void*, std::shared_ptr<InterruptRecord>> g_interrupts;
 struct SystemInterruptRecord { bool enabled = false; ULONG mode = 0; };
 std::mutex g_systemInterruptMutex;
-std::unordered_map<ULONG, SystemInterruptRecord> g_systemInterrupts;
+std::array<SystemInterruptRecord, 256> g_systemInterrupts{};
 thread_local UCHAR g_pendingSoftwareIrql = 0;
 
 void CALLBACK DispatchApc(ULONG_PTR parameter) {
@@ -163,7 +164,7 @@ void XboxKernelResetThreadExports() {
     }
     {
         std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
-        g_systemInterrupts.clear();
+        g_systemInterrupts = {};
     }
 }
 
@@ -175,11 +176,13 @@ namespace {
 }
 }
 extern "C" void __stdcall K_HalDisableSystemInterrupt(ULONG busInterruptLevel) {
+    if (busInterruptLevel >= g_systemInterrupts.size()) return;
     std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
     g_systemInterrupts[busInterruptLevel].enabled = false;
 }
 extern "C" void __stdcall K_HalEnableSystemInterrupt(
     ULONG busInterruptLevel, ULONG interruptMode) {
+    if (busInterruptLevel >= g_systemInterrupts.size()) return;
     std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
     auto& record = g_systemInterrupts[busInterruptLevel];
     record.mode = interruptMode;
@@ -203,12 +206,12 @@ extern "C" LONG __stdcall K_KeRestoreFloatingPointState(void*) {
 UCHAR XboxKernelGetPendingSoftwareIrql() { return g_pendingSoftwareIrql; }
 
 BOOLEAN XboxKernelIsSystemInterruptEnabled(ULONG level) {
+    if (level >= g_systemInterrupts.size()) return FALSE;
     std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
-    auto it = g_systemInterrupts.find(level);
-    return it != g_systemInterrupts.end() && it->second.enabled ? TRUE : FALSE;
+    return g_systemInterrupts[level].enabled ? TRUE : FALSE;
 }
 ULONG XboxKernelGetSystemInterruptMode(ULONG level) {
+    if (level >= g_systemInterrupts.size()) return 0;
     std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
-    auto it = g_systemInterrupts.find(level);
-    return it == g_systemInterrupts.end() ? 0 : it->second.mode;
+    return g_systemInterrupts[level].mode;
 }
