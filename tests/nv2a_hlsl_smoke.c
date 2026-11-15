@@ -128,7 +128,7 @@ int main(void)
         instructions[5] = (1u << 21) | (7u << 13) | 0x1Bu; /* MAC MOV c[7] */
         instructions[6] = (3u << 26); /* Source A selects constant bank. */
         instructions[7] = (0xFu << 12) | (1u << 11) |
-                          (1u << 13) | 1u; /* Relative a0 + final. */
+                          (1u << 1) | 1u; /* Relative-address bit 1 + final. */
         const int result = compile_program(
             "nv2a_arl_relative_constant", instructions, 2,
             "c[a0 + 7]", (uint16_t)(1u << 0));
