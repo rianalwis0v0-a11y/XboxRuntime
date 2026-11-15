@@ -656,7 +656,7 @@
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
       "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "owner": "Developer 3 (I/O completion object boundary; PR #19 explicitly reserves I/O completion objects)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -666,7 +666,8 @@
       "nxdk_export_definition": "IoSetIoCompletion@20                     @  79 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoSetIoCompletion@20",
-      "decoration_stack_bytes": 20
+      "decoration_stack_bytes": 20,
+      "coordination_note": "PR #19 reserves Nt* I/O completion objects for Developer 3 (ordinals 191, 212, 223, 227). IoSetIoCompletion (79) is grouped with that ownership boundary pending direct confirmation; do not duplicate."
     },
     {
       "ordinal": 80,
