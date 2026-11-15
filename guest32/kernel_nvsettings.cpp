@@ -52,6 +52,8 @@ constexpr SettingRow kSettings[] = {
     {0x0011, 0xB8, 4, kRegDword, true }, // XC_MISC
     {0x0012, 0xBC, 4, kRegDword, false}, // XC_DVD_REGION
     {0x00FF, 0x60, 0x60, kRegBinary, false}, // XC_MAX_OS: complete user-settings section
+    {0x01FF, 0x30, 0x30, kRegBinary, false}, // XC_MAX_FACTORY: clear factory section
+    {0xFFFE, 0x00, 0x30, kRegBinary, false}, // XC_ENCRYPTED_SECTION: raw encrypted factory section
 };
 
 bool PersistLocked() {
@@ -69,22 +71,21 @@ bool PersistLocked() {
 
 std::uint32_t XboxNvComputeChecksum(const std::uint8_t* bytes, std::size_t length) {
     if (!bytes || (length & 3u)) return 0;
-    std::uint32_t low = 0;
-    std::uint32_t high = 0;
-    for (std::size_t offset = 0; offset < length; offset += 4) {
+    std::uint32_t checksum = 0;
+    for (std::size_t offset = 0; offset + 4 <= length; offset += 4) {
         std::uint32_t word = 0;
         std::memcpy(&word, bytes + offset, sizeof(word));
-        const std::uint64_t sum = (std::uint64_t(high) << 32) | low;
-        high = static_cast<std::uint32_t>((sum + word) >> 32);
-        low += word;
+        const std::uint64_t sum = std::uint64_t(checksum) + word;
+        checksum = static_cast<std::uint32_t>(sum);
+        if (sum > 0xFFFFFFFFull) ++checksum;
     }
-    return ~(high + low);
+    return ~checksum;
 }
 
 bool XboxNvGetSettingInfo(std::uint32_t index, XboxNvSettingInfo* info) {
     if (!info) return false;
     if (index == 0xFFFFu) {
-        *info = {0, kEepromBytes, kRegBinary, false};
+        *info = {0, kEepromBytes, kRegBinary, false}; // XC_MAX_ALL
         return true;
     }
     for (const auto& row : kSettings) {
@@ -155,8 +156,11 @@ extern "C" XboxNvStatus __stdcall K_ExQueryNonVolatileSetting(
     std::uint32_t valueLength, std::uint32_t* resultLength) {
     if (!value) return static_cast<XboxNvStatus>(kStatusInvalidParameter);
     XboxNvSettingInfo info{};
-    if (!XboxNvGetSettingInfo(valueIndex, &info))
+    if (!XboxNvGetSettingInfo(valueIndex, &info)) {
+        if (valueIndex >= 0x0100u && valueIndex <= 0x0104u)
+            return static_cast<XboxNvStatus>(kStatusNotSupported);
         return static_cast<XboxNvStatus>(kStatusInvalidParameter);
+    }
     if (resultLength) *resultLength = info.length;
     if (valueLength < info.length)
         return static_cast<XboxNvStatus>(kStatusBufferTooSmall);
@@ -172,8 +176,11 @@ extern "C" XboxNvStatus __stdcall K_ExSaveNonVolatileSetting(
     std::uint32_t valueLength) {
     if (!value) return static_cast<XboxNvStatus>(kStatusInvalidParameter);
     XboxNvSettingInfo info{};
-    if (!XboxNvGetSettingInfo(valueIndex, &info))
+    if (!XboxNvGetSettingInfo(valueIndex, &info)) {
+        if (valueIndex >= 0x0100u && valueIndex <= 0x0104u)
+            return static_cast<XboxNvStatus>(kStatusNotSupported);
         return static_cast<XboxNvStatus>(kStatusInvalidParameter);
+    }
     if (!info.writable)
         return static_cast<XboxNvStatus>(kStatusNotSupported);
     if (type != info.type || valueLength != info.length)
