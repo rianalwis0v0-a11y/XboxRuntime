@@ -70,12 +70,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "implemented_unverified",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
-        "host": "Updated tests added; rerun pending after XConfig carry/checksum correction",
-        "guest_x86_thunk": "Updated x86 thunk tests added; rerun pending after section-query/checksum correction"
+        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed in workflow 43697175322",
+        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; 1/1 passed in workflow 43697175322"
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 24 route",
       "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
@@ -85,7 +85,7 @@
       "implementation_file": "guest32/kernel_nvsettings.cpp",
       "dispatcher_handler": "K_ExQueryNonVolatileSetting",
       "limitations": "Supports XC_* indices 0x0000-0x0012; XC_MAX_OS 0x00FF (96-byte user section); XC_MAX_FACTORY 0x01FF (48-byte clear factory section); XC_ENCRYPTED_SECTION 0xFFFE (raw 48-byte encrypted section); and XC_MAX_ALL 0xFFFF (256-byte raw EEPROM). Individual factory indices 0x0100-0x0104 are explicitly STATUS_NOT_SUPPORTED; encrypted section is not decrypted.",
-      "ci_run": "Previous passing run 43696882443 predates checksum carry-vector additions; latest validation pending."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322"
     },
     {
       "ordinal": 25,
@@ -126,12 +126,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "implemented_unverified",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
-        "host": "Updated tests added; rerun pending after XConfig carry/checksum correction",
-        "guest_x86_thunk": "Updated x86 thunk tests added; rerun pending after section-query/checksum correction"
+        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed in workflow 43697175322",
+        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; 1/1 passed in workflow 43697175322"
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 29 route",
       "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
@@ -141,7 +141,7 @@
       "implementation_file": "guest32/kernel_nvsettings.cpp",
       "dispatcher_handler": "K_ExSaveNonVolatileSetting",
       "limitations": "Writes only documented user-configurable EEPROM settings with exact type/length and recalculates the user-section XConfig checksum.",
-      "ci_run": "Previous passing run 43696882443 predates checksum carry-vector additions; latest validation pending."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322"
     },
     {
       "ordinal": 38,
