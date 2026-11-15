@@ -28,6 +28,7 @@
 #include "kernel_thread_exports.h"
 #include "kernel_io_completion.h"
 #include "kernel_io_exports.h"
+#include "kernel_directory_objects.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 
@@ -1937,6 +1938,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je io_query_volume_information
         cmp eax, 79
         je io_set_completion
+        cmp eax, 188
+        je nt_create_directory_object
         cmp eax, 191
         je nt_create_io_completion
         cmp eax, 212
@@ -2510,6 +2513,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     io_query_file_information: jmp K_IoQueryFileInformation
     io_query_volume_information: jmp K_IoQueryVolumeInformation
     io_set_completion: jmp K_IoSetIoCompletion
+    nt_create_directory_object: jmp K_NtCreateDirectoryObject
     nt_create_io_completion: jmp K_NtCreateIoCompletion
     nt_query_io_completion: jmp K_NtQueryIoCompletion
     nt_remove_io_completion: jmp K_NtRemoveIoCompletion
