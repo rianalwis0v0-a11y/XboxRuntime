@@ -32,3 +32,5 @@ BOOLEAN __stdcall K_KeSynchronizeExecution(void* interrupt,
 }
 
 void XboxKernelResetThreadExports();
+
+UCHAR XboxKernelGetPendingSoftwareIrql();
