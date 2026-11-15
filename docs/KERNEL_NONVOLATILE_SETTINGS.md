@@ -11,10 +11,10 @@ The export signatures and calling convention are taken from `XboxDev/nxdk@fafbe4
 
 ## Query behavior
 
-- Supports the documented OS setting indices 0x0000–0x0012 and XC_MAX_OS (0x00FF), the complete 0x60-byte user-settings section.
+- Supports OS setting indices 0x0000–0x0012; XC_MAX_OS (0x00FF, 0x60-byte user section); XC_MAX_FACTORY (0x01FF, 0x30-byte clear factory section); XC_ENCRYPTED_SECTION (0xFFFE, raw 0x30-byte encrypted section); and XC_MAX_ALL (0xFFFF, all 256 EEPROM bytes).
 - Index 0xFFFF returns the complete raw 256-byte EEPROM image as REG_BINARY.
 - Returns the exact value type and required byte count; a short caller buffer returns `STATUS_BUFFER_TOO_SMALL` without modifying the caller's buffer.
-- Unknown and not-yet-verified factory indices return `STATUS_INVALID_PARAMETER`.
+- Unknown indices return `STATUS_INVALID_PARAMETER`. Individual factory fields 0x0100–0x0104 return `STATUS_NOT_SUPPORTED` because their per-field type/decoding contract is not verified.
 - EEPROM access before successful initialization returns `STATUS_DEVICE_NOT_CONNECTED`.
 
 ## Save behavior
@@ -25,7 +25,7 @@ The export signatures and calling convention are taken from `XboxDev/nxdk@fafbe4
 - Updates the user-section XConfig checksum at offset 0x60 and flushes the complete 256-byte image to the configured EEPROM file.
 - Raw SMBus writes remain raw hardware writes and do not silently rewrite checksums.
 
-The setting-index mapping comes from the pinned NXDK `XC_*` definitions. EEPROM byte offsets, writable-field classifications, and the user-section checksum range are cross-checked against the Original Xbox EEPROM layout reference: https://github.com/feudalnate/Original-Xbox-Data-Structures/blob/master/EEPROM/README.md (sections at 0x60–0xBF; user data 0x64–0xBF).
+The setting-index mapping comes from the pinned NXDK `XC_*` definitions. EEPROM section offsets, writable-field classifications, and the user-section checksum range/algorithm are cross-checked against the Original Xbox EEPROM layout reference: https://github.com/feudalnate/Original-Xbox-Data-Structures/blob/master/EEPROM/README.md (encrypted factory 0x00–0x2F; clear factory 0x30–0x5F; user 0x60–0xBF; XConfigChecksum uses an end-around carry for each 32-bit addition).
 
 ## Explicitly unsupported Group A exports
 
@@ -41,4 +41,4 @@ The setting-index mapping comes from the pinned NXDK `XC_*` definitions. EEPROM 
 
 ## Limitations
 
-This does not implement EEPROM cryptographic verification/decryption, factory-index queries/provisioning, encrypted-section writes, full UEM/refurb handling, or actual Xbox AV hardware. A newly created EEPROM remains an all-0xFF unprovisioned image; this implementation does not fabricate console identity keys or a MAC address.
+This does not implement EEPROM cryptographic verification/decryption, individual factory-field queries/provisioning, encrypted-section writes, full UEM/refurb handling, or actual Xbox AV hardware. A newly created EEPROM remains an all-0xFF unprovisioned image; this implementation does not fabricate console identity keys or a MAC address.
