@@ -12,9 +12,9 @@ All 57 assigned Group A ordinals have exactly one `KernelDispatch` comparison an
 
 | Status | Count |
 |---|---:|
-| Implemented and tested | 23 |
+| Implemented and tested | 24 |
 | Partial implementation, tested | 6 |
-| Explicitly unsupported | 28 |
+| Explicitly unsupported | 27 |
 | **Total** | **57** |
 
 The machine-readable per-export status, handler, evidence and limitations are in `tools/kernel_export_group_a.json`.
@@ -24,7 +24,7 @@ The machine-readable per-export status, handler, evidence and limitations are in
 - EEPROM settings: `ExQueryNonVolatileSetting`, `ExSaveNonVolatileSetting` (24, 29).
 - File operations: `IoCreateFile`, `IoQueryFileInformation`, `IoQueryVolumeInformation` (66, 75, 76). The query helpers currently accept the adapter's handle-backed file-object representation.
 - Share access: `IoCheckShareAccess`, `IoRemoveShareAccess`, `IoSetShareAccess` (63, 78, 80), using the pinned 72-byte x86 FILE_OBJECT layout and 7-byte SHARE_ACCESS layout.
-- Device/packet handling: `IoCreateDevice`, `IoDeleteDevice`, `IoStartPacket`, `IoStartNextPacket`, `IoStartNextPacketByKey`, `IoDismountVolume` (65, 68, 83, 81, 82, 90). Device objects use the pinned 72-byte x86 layout, with a 68-byte DRIVER_OBJECT and 12-byte KDEVICE_QUEUE. The packet queue is adapter-side metadata; named devices and full IRP stack integration are not implemented.
+- Device/packet handling: `IoCreateDevice`, `IoDeleteDevice`, `IoStartPacket`, `IoStartNextPacket`, `IoStartNextPacketByKey`, `IoDismountVolume`, `IoDismountVolumeByName` (65, 68, 83, 81, 82, 90, 91). Device objects use the pinned 72-byte x86 layout, with a 68-byte DRIVER_OBJECT and 12-byte KDEVICE_QUEUE. Named devices use an adapter-local case-insensitive namespace; the packet queue is adapter-side metadata; full IRP stack integration is not implemented.
 - I/O completion: `IoSetIoCompletion` (79), backed by typed completion objects and a host I/O completion port. Related NtCreate/Set/Remove/QueryIoCompletion helpers are also routed for testing.
 - Thread/APC: `KeAlertThread`, `KeInitializeApc`, `KeInsertQueueApc`, `KeInitializeInterrupt`, `KeSynchronizeExecution` (93, 105, 118, 109, 153).
 - Memory: `MmCreateKernelStack`, `MmDeleteKernelStack` (169, 170).
