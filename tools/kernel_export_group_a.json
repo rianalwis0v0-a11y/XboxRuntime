@@ -1,0 +1,1637 @@
+{
+  "schema_version": 1,
+  "group": "A",
+  "generated_for_branch": "work/kernel-export-half-a",
+  "source_policy": "NXDK signatures, calling conventions and ordinals from XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e (xboxkrnl.h and xboxkrnl.exe.def). EEPROM section layout, writable fields and XConfigChecksum carry behavior cross-checked against feudalnate/Original-Xbox-Data-Structures EEPROM README.",
+  "exports": [
+    {
+      "ordinal": 2,
+      "name": "AvSendTVEncoderOption",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI AvSendTVEncoderOption\n(\n    IN PVOID RegisterBase,\n    IN ULONG Option,\n    IN ULONG Param,\n    OUT PULONG Result\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 2; one-line jump to K_AvSendTVEncoderOption.",
+      "nxdk_export_definition": "AvSendTVEncoderOption@16                 @   2 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "AvSendTVEncoderOption@16",
+      "decoration_stack_bytes": 16,
+      "unsupported_reason": "No verified TV-encoder backend; the void export fails fast through the noncontinuable unsupported-import exception.",
+      "dispatcher_handler": "K_AvSendTVEncoderOption",
+      "implementation_file": "guest32/kernel_compat.cpp"
+    },
+    {
+      "ordinal": 3,
+      "name": "AvSetDisplayMode",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI ULONG NTAPI AvSetDisplayMode\n(\n    IN PVOID RegisterBase,\n    IN ULONG Step,\n    IN ULONG DisplayMode,\n    IN ULONG SourceColorFormat,\n    IN ULONG Pitch,\n    IN ULONG FrameBuffer\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 3; one-line jump to K_AvSetDisplayMode.",
+      "nxdk_export_definition": "AvSetDisplayMode@24                      @   3 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "AvSetDisplayMode@24",
+      "decoration_stack_bytes": 24,
+      "unsupported_reason": "No verified Xbox display-register to host display backend; returns STATUS_NOT_SUPPORTED.",
+      "dispatcher_handler": "K_AvSetDisplayMode",
+      "implementation_file": "guest32/kernel_compat.cpp"
+    },
+    {
+      "ordinal": 24,
+      "name": "ExQueryNonVolatileSetting",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting\n(\n    IN ULONG ValueIndex,\n    OUT PULONG Type,\n    OUT PVOID Value,\n    IN ULONG ValueLength,\n    OUT PULONG ResultLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed.",
+        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; import-thunk test passed."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 24; one-line jump to K_ExQueryNonVolatileSetting.",
+      "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExQueryNonVolatileSetting@20",
+      "decoration_stack_bytes": 20,
+      "implementation_file": "guest32/kernel_nvsettings.cpp",
+      "dispatcher_handler": "K_ExQueryNonVolatileSetting",
+      "limitations": "EEPROM-backed settings; supports documented OS indices and XC_MAX_* raw sections. Individual factory fields 0x0100-0x0104 remain STATUS_NOT_SUPPORTED; encrypted section is returned raw, not decrypted.",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322"
+    },
+    {
+      "ordinal": 25,
+      "name": "ExReadWriteRefurbInfo",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo\n(\n    OUT XBOX_REFURB_INFO *RefurbInfo,\n    IN ULONG ValueLength,\n    BOOLEAN DoWrite\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_16_byte_XBOX_REFURB_INFO_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 25; one-line jump to K_ExReadWriteRefurbInfo.",
+      "nxdk_export_definition": "ExReadWriteRefurbInfo@12                 @  25 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExReadWriteRefurbInfo@12",
+      "decoration_stack_bytes": 12,
+      "unsupported_reason": "The 16-byte XBOX_REFURB_INFO ABI is asserted, but refurb storage semantics and authenticated data handling are not implemented; returns STATUS_NOT_SUPPORTED.",
+      "dispatcher_handler": "K_ExReadWriteRefurbInfo",
+      "implementation_file": "guest32/kernel_compat.cpp"
+    },
+    {
+      "ordinal": 29,
+      "name": "ExSaveNonVolatileSetting",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting\n(\n    IN ULONG ValueIndex,\n    IN ULONG Type,\n    IN CONST PVOID Value,\n    IN ULONG ValueLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed.",
+        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; import-thunk test passed."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 29; one-line jump to K_ExSaveNonVolatileSetting.",
+      "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "ExSaveNonVolatileSetting@16",
+      "decoration_stack_bytes": 16,
+      "implementation_file": "guest32/kernel_nvsettings.cpp",
+      "dispatcher_handler": "K_ExSaveNonVolatileSetting",
+      "limitations": "Writes only documented user-writable settings, validates type/length, recomputes the user-section checksum, persists the shared EEPROM image, and rolls back on persistence failure.",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322"
+    },
+    {
+      "ordinal": 38,
+      "name": "HalClearSoftwareInterrupt",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL HalClearSoftwareInterrupt\n(\n    IN KIRQL RequestIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 38; one-line jump to K_HalClearSoftwareInterrupt.",
+      "nxdk_export_definition": "@HalClearSoftwareInterrupt@4             @  38 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@HalClearSoftwareInterrupt@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_HalClearSoftwareInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605"
+    },
+    {
+      "ordinal": 39,
+      "name": "HalDisableSystemInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalDisableSystemInterrupt\n(\n    IN ULONG BusInterruptLevel\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 39; one-line jump to K_HalDisableSystemInterrupt.",
+      "nxdk_export_definition": "HalDisableSystemInterrupt@4              @  39 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalDisableSystemInterrupt@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_HalDisableSystemInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43709075100",
+      "limitations": "Updates the adapter's bounded virtual bus-interrupt enabled mask; it does not mask a physical interrupt controller or stop hardware ISR delivery."
+    },
+    {
+      "ordinal": 43,
+      "name": "HalEnableSystemInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalEnableSystemInterrupt\n(\n    IN ULONG BusInterruptLevel,\n    IN KINTERRUPT_MODE InterruptMode\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 43; one-line jump to K_HalEnableSystemInterrupt.",
+      "nxdk_export_definition": "HalEnableSystemInterrupt@8               @  43 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalEnableSystemInterrupt@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_HalEnableSystemInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43709075100",
+      "limitations": "Updates the adapter's bounded virtual bus-interrupt mask and stores the requested interrupt mode; it does not enable physical hardware interrupt delivery."
+    },
+    {
+      "ordinal": 44,
+      "name": "HalGetInterruptVector",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI ULONG NTAPI HalGetInterruptVector\n(\n    IN ULONG BusInterruptLevel,\n    OUT PKIRQL Irql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 44; one-line jump to K_HalGetInterruptVector.",
+      "nxdk_export_definition": "HalGetInterruptVector@8                  @  44 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalGetInterruptVector@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_HalGetInterruptVector",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No bus interrupt routing table; returns vector 0 and IRQL 0 to report no mapping."
+    },
+    {
+      "ordinal": 46,
+      "name": "HalReadWritePCISpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI HalReadWritePCISpace\n(\n    IN ULONG BusNumber,\n    IN ULONG SlotNumber,\n    IN ULONG RegisterNumber,\n    IN PVOID Buffer,\n    IN ULONG Length,\n    IN BOOLEAN WritePCISpace\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 46; one-line jump to K_HalReadWritePCISpace.",
+      "nxdk_export_definition": "HalReadWritePCISpace@24                  @  46 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "HalReadWritePCISpace@24",
+      "decoration_stack_bytes": 24,
+      "dispatcher_handler": "K_HalReadWritePCISpace",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No PCI configuration-space backend; void handler fails fast."
+    },
+    {
+      "ordinal": 48,
+      "name": "HalRequestSoftwareInterrupt",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL HalRequestSoftwareInterrupt\n(\n    KIRQL RequestIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 48; one-line jump to K_HalRequestSoftwareInterrupt.",
+      "nxdk_export_definition": "@HalRequestSoftwareInterrupt@4           @  48 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@HalRequestSoftwareInterrupt@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_HalRequestSoftwareInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605"
+    },
+    {
+      "ordinal": 59,
+      "name": "IoAllocateIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoAllocateIrp\n(\n    IN CCHAR StackSize\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 59; one-line jump to K_IoAllocateIrp.",
+      "nxdk_export_definition": "IoAllocateIrp@4                          @  59 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoAllocateIrp@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoAllocateIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP and IO_STACK_LOCATION ABI/size are not verified against the Xbox kernel; returns nullptr rather than allocating an incompatible packet."
+    },
+    {
+      "ordinal": 60,
+      "name": "IoBuildAsynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL,\n    IN PIO_STATUS_BLOCK IoStatusBlock OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 60; one-line jump to K_IoBuildAsynchronousFsdRequest.",
+      "nxdk_export_definition": "IoBuildAsynchronousFsdRequest@24         @  60 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildAsynchronousFsdRequest@24",
+      "decoration_stack_bytes": 24,
+      "dispatcher_handler": "K_IoBuildAsynchronousFsdRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP, IO_STACK_LOCATION and DEVICE_OBJECT layouts are not verified; returns nullptr."
+    },
+    {
+      "ordinal": 61,
+      "name": "IoBuildDeviceIoControlRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest\n(\n    IN ULONG IoControlCode,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PVOID InputBuffer OPTIONAL,\n    IN ULONG InputBufferLength,\n    OUT PVOID OutputBuffer OPTIONAL,\n    IN ULONG OutputBufferLength,\n    IN BOOLEAN InternalDeviceIoControl,\n    IN PKEVENT Event,\n    OUT PIO_STATUS_BLOCK IoStatusBlock\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 61; one-line jump to K_IoBuildDeviceIoControlRequest.",
+      "nxdk_export_definition": "IoBuildDeviceIoControlRequest@36         @  61 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildDeviceIoControlRequest@36",
+      "decoration_stack_bytes": 36,
+      "dispatcher_handler": "K_IoBuildDeviceIoControlRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP, IO_STACK_LOCATION, KEVENT and IO_STATUS_BLOCK layouts are not verified; returns nullptr."
+    },
+    {
+      "ordinal": 62,
+      "name": "IoBuildSynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL,\n    IN PKEVENT Event,\n    OUT PIO_STATUS_BLOCK IoStatusBlock\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 62; one-line jump to K_IoBuildSynchronousFsdRequest.",
+      "nxdk_export_definition": "IoBuildSynchronousFsdRequest@28          @  62 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoBuildSynchronousFsdRequest@28",
+      "decoration_stack_bytes": 28,
+      "dispatcher_handler": "K_IoBuildSynchronousFsdRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP, IO_STACK_LOCATION, KEVENT and IO_STATUS_BLOCK layouts are not verified; returns nullptr."
+    },
+    {
+      "ordinal": 63,
+      "name": "IoCheckShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCheckShareAccess\n(\n    IN ACCESS_MASK DesiredAccess,\n    IN ULONG DesiredShareAccess,\n    IN OUT PFILE_OBJECT FileObject,\n    IN OUT PSHARE_ACCESS ShareAccess,\n    IN BOOLEAN Update\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_FILE_OBJECT_and_7_byte_SHARE_ACCESS_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 63; one-line jump to K_IoCheckShareAccess.",
+      "nxdk_export_definition": "IoCheckShareAccess@20                    @  63 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCheckShareAccess@20",
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoCheckShareAccess",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Implements symmetric read/write/delete and share-flag conflict checks against the verified Xbox FILE_OBJECT and SHARE_ACCESS x86 layouts; update=true updates both structures."
+    },
+    {
+      "ordinal": 65,
+      "name": "IoCreateDevice",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCreateDevice\n(\n    IN PDRIVER_OBJECT DriverObject,\n    IN ULONG DeviceExtensionSize,\n    IN POBJECT_STRING DeviceName OPTIONAL,\n    IN DEVICE_TYPE DeviceType,\n    IN BOOLEAN Exclusive,\n    OUT PDEVICE_OBJECT *DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 65; one-line jump to K_IoCreateDevice.",
+      "nxdk_export_definition": "IoCreateDevice@24                        @  65 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCreateDevice@24",
+      "decoration_stack_bytes": 24,
+      "dispatcher_handler": "K_IoCreateDevice",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Allocates and initializes a verified Xbox DEVICE_OBJECT plus zeroed device extension; supports named and unnamed devices in the adapter's case-insensitive namespace. The namespace is adapter-local rather than a full Object Manager directory hierarchy."
+    },
+    {
+      "ordinal": 66,
+      "name": "IoCreateFile",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoCreateFile\n(\n    OUT PHANDLE FileHandle,\n    IN ACCESS_MASK DesiredAccess,\n    IN POBJECT_ATTRIBUTES ObjectAttributes,\n    OUT PIO_STATUS_BLOCK IoStatusBlock,\n    IN PLARGE_INTEGER AllocationSize OPTIONAL,\n    IN ULONG FileAttributes,\n    IN ULONG ShareAccess,\n    IN ULONG Disposition,\n    IN ULONG CreateOptions,\n    IN ULONG Options\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_12_byte_OBJECT_ATTRIBUTES_and_8_byte_ANSI_STRING_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 66; one-line jump to K_IoCreateFile.",
+      "nxdk_export_definition": "IoCreateFile@40                          @  66 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoCreateFile@40",
+      "decoration_stack_bytes": 40,
+      "dispatcher_handler": "K_IoCreateFile",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Supports ANSI_STRING + 12-byte x86 OBJECT_ATTRIBUTES, absolute paths, no RootDirectory, no AllocationSize and Options must be zero. Uses the existing Windows file backend."
+    },
+    {
+      "ordinal": 68,
+      "name": "IoDeleteDevice",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoDeleteDevice\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 68; one-line jump to K_IoDeleteDevice.",
+      "nxdk_export_definition": "IoDeleteDevice@4                         @  68 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDeleteDevice@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoDeleteDevice",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Deletes only DEVICE_OBJECT instances created by this adapter, calls DriverDeleteDevice, and rejects deletion while a current or queued IRP remains."
+    },
+    {
+      "ordinal": 72,
+      "name": "IoFreeIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoFreeIrp\n(\n    IN PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 72; one-line jump to K_IoFreeIrp.",
+      "nxdk_export_definition": "IoFreeIrp@4                              @  72 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoFreeIrp@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoFreeIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP allocation/layout is not implemented; non-null input fails fast."
+    },
+    {
+      "ordinal": 73,
+      "name": "IoInitializeIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoInitializeIrp\n(\n    IN OUT PIRP Irp,\n    IN USHORT PacketSize,\n    IN CCHAR StackSize\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 73; one-line jump to K_IoInitializeIrp.",
+      "nxdk_export_definition": "IoInitializeIrp@12                       @  73 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoInitializeIrp@12",
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_IoInitializeIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP and IO_STACK_LOCATION layout is not verified; non-null input fails fast."
+    },
+    {
+      "ordinal": 75,
+      "name": "IoQueryFileInformation",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoQueryFileInformation\n(\n    IN PFILE_OBJECT FileObject,\n    IN FILE_INFORMATION_CLASS FileInformationClass,\n    IN ULONG Length,\n    OUT PVOID FileInformation,\n    OUT PULONG ReturnedLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 75; one-line jump to K_IoQueryFileInformation.",
+      "nxdk_export_definition": "IoQueryFileInformation@20                @  75 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueryFileInformation@20",
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoQueryFileInformation",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "The query helper currently accepts a handle-backed FileObject representation (native file HANDLE); a true guest FILE_OBJECT adapter remains unimplemented."
+    },
+    {
+      "ordinal": 76,
+      "name": "IoQueryVolumeInformation",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoQueryVolumeInformation\n(\n    IN PFILE_OBJECT FileObject,\n    IN FS_INFORMATION_CLASS FsInformationClass,\n    IN ULONG Length,\n    OUT PVOID FsInformation,\n    OUT PULONG ReturnedLength\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 76; one-line jump to K_IoQueryVolumeInformation.",
+      "nxdk_export_definition": "IoQueryVolumeInformation@20              @  76 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueryVolumeInformation@20",
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoQueryVolumeInformation",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "The query helper currently accepts a handle-backed FileObject representation (native file HANDLE); a true guest FILE_OBJECT adapter remains unimplemented."
+    },
+    {
+      "ordinal": 77,
+      "name": "IoQueueThreadIrp",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoQueueThreadIrp\n(\n    IN PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 77; one-line jump to K_IoQueueThreadIrp.",
+      "nxdk_export_definition": "IoQueueThreadIrp@4                       @  77 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoQueueThreadIrp@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoQueueThreadIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP thread-list layout and cancellation lifecycle are not verified; non-null input fails fast."
+    },
+    {
+      "ordinal": 78,
+      "name": "IoRemoveShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoRemoveShareAccess\n(\n    IN PFILE_OBJECT FileObject,\n    IN OUT PSHARE_ACCESS ShareAccess\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_FILE_OBJECT_and_7_byte_SHARE_ACCESS_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 78; one-line jump to K_IoRemoveShareAccess.",
+      "nxdk_export_definition": "IoRemoveShareAccess@8                    @  78 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoRemoveShareAccess@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IoRemoveShareAccess",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Decrements SHARE_ACCESS counters using the access/share flags stored in the verified FILE_OBJECT prefix."
+    },
+    {
+      "ordinal": 79,
+      "name": "IoSetIoCompletion",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSetIoCompletion\n(\n    IN PVOID IoCompletion,\n    IN PVOID KeyContext,\n    IN PVOID ApcContext,\n    IN NTSTATUS IoStatus,\n    IN ULONG_PTR IoStatusInformation\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_8_byte_IO_STATUS_BLOCK_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 79; one-line jump to K_IoSetIoCompletion.",
+      "nxdk_export_definition": "IoSetIoCompletion@20                     @  79 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSetIoCompletion@20",
+      "decoration_stack_bytes": 20,
+      "coordination_note": "PR #19 reserves Nt* I/O completion objects for Developer 3 (ordinals 191, 212, 223, 227). IoSetIoCompletion (79) is grouped with that ownership boundary pending direct confirmation; do not duplicate.",
+      "dispatcher_handler": "K_IoSetIoCompletion",
+      "implementation_file": "guest32/kernel_io_completion.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Uses typed IoCompletion object handles and a Win32 I/O completion port; IoSetIoCompletion accepts either the object payload pointer or guest completion handle."
+    },
+    {
+      "ordinal": 80,
+      "name": "IoSetShareAccess",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoSetShareAccess\n(\n    IN ACCESS_MASK DesiredAccess,\n    IN ULONG DesiredShareAccess,\n    IN OUT PFILE_OBJECT FileObject,\n    OUT PSHARE_ACCESS ShareAccess\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_FILE_OBJECT_and_7_byte_SHARE_ACCESS_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 80; one-line jump to K_IoSetShareAccess.",
+      "nxdk_export_definition": "IoSetShareAccess@16                      @  80 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSetShareAccess@16",
+      "decoration_stack_bytes": 16,
+      "dispatcher_handler": "K_IoSetShareAccess",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Initializes SHARE_ACCESS counters and FILE_OBJECT access/share bits for a new open."
+    },
+    {
+      "ordinal": 81,
+      "name": "IoStartNextPacket",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartNextPacket\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 81; one-line jump to K_IoStartNextPacket.",
+      "nxdk_export_definition": "IoStartNextPacket@4                      @  81 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartNextPacket@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoStartNextPacket",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Starts the next sidecar-queued IRP in FIFO order through DRIVER_OBJECT.DriverStartIo; supports devices created by this adapter."
+    },
+    {
+      "ordinal": 82,
+      "name": "IoStartNextPacketByKey",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartNextPacketByKey\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN ULONG Key\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 82; one-line jump to K_IoStartNextPacketByKey.",
+      "nxdk_export_definition": "IoStartNextPacketByKey@8                 @  82 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartNextPacketByKey@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IoStartNextPacketByKey",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Selects the queued IRP matching the requested key and invokes DRIVER_OBJECT.DriverStartIo; queue metadata is sidecar-backed."
+    },
+    {
+      "ordinal": 83,
+      "name": "IoStartPacket",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI IoStartPacket\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PIRP Irp,\n    IN PULONG Key OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 83; one-line jump to K_IoStartPacket.",
+      "nxdk_export_definition": "IoStartPacket@12                         @  83 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoStartPacket@12",
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_IoStartPacket",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Sets CurrentIrp/StartIoKey and either invokes DriverStartIo immediately or queues the IRP in the adapter's per-device FIFO sidecar."
+    },
+    {
+      "ordinal": 84,
+      "name": "IoSynchronousDeviceIoControlRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest\n(\n    IN ULONG IoControlCode,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN PVOID InputBuffer OPTIONAL,\n    IN ULONG InputBufferLength,\n    OUT PVOID OutputBuffer OPTIONAL,\n    IN ULONG OutputBufferLength,\n    OUT PULONG ReturnedOutputBufferLength OPTIONAL,\n    IN BOOLEAN InternalDeviceIoControl\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 84; one-line jump to K_IoSynchronousDeviceIoControlRequest.",
+      "nxdk_export_definition": "IoSynchronousDeviceIoControlRequest@32   @  84 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSynchronousDeviceIoControlRequest@32",
+      "decoration_stack_bytes": 32,
+      "dispatcher_handler": "K_IoSynchronousDeviceIoControlRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No verified IRP/device-driver dispatch backend; returns STATUS_NOT_SUPPORTED."
+    },
+    {
+      "ordinal": 85,
+      "name": "IoSynchronousFsdRequest",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest\n(\n    IN ULONG MajorFunction,\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PVOID Buffer OPTIONAL,\n    IN ULONG Length OPTIONAL,\n    IN PLARGE_INTEGER StartingOffset OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 85; one-line jump to K_IoSynchronousFsdRequest.",
+      "nxdk_export_definition": "IoSynchronousFsdRequest@20               @  85 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoSynchronousFsdRequest@20",
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoSynchronousFsdRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No verified IRP/device-driver dispatch backend; returns STATUS_NOT_SUPPORTED."
+    },
+    {
+      "ordinal": 86,
+      "name": "IofCallDriver",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI NTSTATUS FASTCALL IofCallDriver\n(\n    IN PDEVICE_OBJECT DeviceObject,\n    IN OUT PIRP Irp\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 86; one-line jump to K_IofCallDriver.",
+      "nxdk_export_definition": "@IofCallDriver@8                         @  86 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@IofCallDriver@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IofCallDriver",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No verified DEVICE_OBJECT dispatch-table and IRP stack ABI; returns STATUS_NOT_SUPPORTED."
+    },
+    {
+      "ordinal": 87,
+      "name": "IofCompleteRequest",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL IofCompleteRequest\n(\n    IN PIRP Irp,\n    IN CCHAR PriorityBoost\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 87; one-line jump to K_IofCompleteRequest.",
+      "nxdk_export_definition": "@IofCompleteRequest@8                    @  87 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@IofCompleteRequest@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IofCompleteRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP completion stack layout and completion-routine lifecycle are not verified; non-null input fails fast."
+    },
+    {
+      "ordinal": 90,
+      "name": "IoDismountVolume",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoDismountVolume\n(\n    IN PDEVICE_OBJECT DeviceObject\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 90; one-line jump to K_IoDismountVolume.",
+      "nxdk_export_definition": "IoDismountVolume@4                       @  90 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDismountVolume@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoDismountVolume",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Calls DRIVER_OBJECT.DriverDismountVolume for a device created by this adapter; missing callbacks return STATUS_NOT_SUPPORTED."
+    },
+    {
+      "ordinal": 91,
+      "name": "IoDismountVolumeByName",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI IoDismountVolumeByName\n(\n    IN POBJECT_STRING DeviceName\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_8_byte_OBJECT_STRING_and_72_byte_DEVICE_OBJECT_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 91; one-line jump to K_IoDismountVolumeByName.",
+      "nxdk_export_definition": "IoDismountVolumeByName@4                 @  91 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "IoDismountVolumeByName@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoDismountVolumeByName",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708313884",
+      "limitations": "Resolves names in the adapter's case-insensitive DEVICE_OBJECT namespace and calls DRIVER_OBJECT.DriverDismountVolume. It does not implement the full Xbox Object Manager namespace or RootDirectory-relative lookup."
+    },
+    {
+      "ordinal": 93,
+      "name": "KeAlertThread",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeAlertThread\n(\n    IN PKTHREAD Thread,\n    IN KPROCESSOR_MODE ProcessorMode\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 93; one-line jump to K_KeAlertThread.",
+      "nxdk_export_definition": "KeAlertThread@8                          @  93 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeAlertThread@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_KeAlertThread",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Implements alerting with a queued APC; target thread must enter an alertable wait."
+    },
+    {
+      "ordinal": 98,
+      "name": "KeConnectInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeConnectInterrupt\n(\n    IN PKINTERRUPT Interrupt\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 98; one-line jump to K_KeConnectInterrupt.",
+      "nxdk_export_definition": "KeConnectInterrupt@4                     @  98 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeConnectInterrupt@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeConnectInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550871",
+      "limitations": "Registers an initialized virtual interrupt object and reports successful connection; no physical interrupt controller or device ISR delivery is attached."
+    },
+    {
+      "ordinal": 100,
+      "name": "KeDisconnectInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeDisconnectInterrupt\n(\n    IN PKINTERRUPT Interrupt\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 100; one-line jump to K_KeDisconnectInterrupt.",
+      "nxdk_export_definition": "KeDisconnectInterrupt@4                  @ 100 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeDisconnectInterrupt@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeDisconnectInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550871",
+      "limitations": "Disconnects a previously connected virtual interrupt registration; no physical interrupt controller or device ISR delivery is attached."
+    },
+    {
+      "ordinal": 105,
+      "name": "KeInitializeApc",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI KeInitializeApc\n(\n    IN PRKAPC Apc,\n    IN PRKTHREAD Thread,\n    IN PKKERNEL_ROUTINE KernelRoutine,\n    IN PKRUNDOWN_ROUTINE RundownRoutine OPTIONAL,\n    IN PKNORMAL_ROUTINE NormalRoutine OPTIONAL,\n    IN KPROCESSOR_MODE ProcessorMode OPTIONAL,\n    IN PVOID NormalContext OPTIONAL\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 105; one-line jump to K_KeInitializeApc.",
+      "nxdk_export_definition": "KeInitializeApc@28                       @ 105 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInitializeApc@28",
+      "decoration_stack_bytes": 28,
+      "dispatcher_handler": "K_KeInitializeApc",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Stores APC metadata by guest APC address; no raw Xbox APC structure writes are performed."
+    },
+    {
+      "ordinal": 109,
+      "name": "KeInitializeInterrupt",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI KeInitializeInterrupt\n(\n    IN PKINTERRUPT Interrupt,\n    IN PKSERVICE_ROUTINE ServiceRoutine,\n    IN PVOID ServiceContext,\n    IN ULONG Vector,\n    IN KIRQL Irql,\n    IN KINTERRUPT_MODE InterruptMode,\n    IN BOOLEAN ShareVector\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 109; one-line jump to K_KeInitializeInterrupt.",
+      "nxdk_export_definition": "KeInitializeInterrupt@28                 @ 109 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInitializeInterrupt@28",
+      "decoration_stack_bytes": 28,
+      "dispatcher_handler": "K_KeInitializeInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Stores interrupt metadata by guest interrupt address; no physical interrupt vector is connected."
+    },
+    {
+      "ordinal": 118,
+      "name": "KeInsertQueueApc",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeInsertQueueApc\n(\n    IN PRKAPC Apc,\n    IN PVOID SystemArgument1,\n    IN PVOID SystemArgument2,\n    IN KPRIORITY Increment\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 118; one-line jump to K_KeInsertQueueApc.",
+      "nxdk_export_definition": "KeInsertQueueApc@16                      @ 118 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeInsertQueueApc@16",
+      "decoration_stack_bytes": 16,
+      "dispatcher_handler": "K_KeInsertQueueApc",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Queues kernel/normal APC callbacks through QueueUserAPC; callback runs when the target thread enters an alertable wait."
+    },
+    {
+      "ordinal": 139,
+      "name": "KeRestoreFloatingPointState",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState\n(\n    IN PKFLOATING_SAVE FloatSave\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 139; one-line jump to K_KeRestoreFloatingPointState.",
+      "nxdk_export_definition": "KeRestoreFloatingPointState@4            @ 139 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeRestoreFloatingPointState@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeRestoreFloatingPointState",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "Xbox KFLOATING_SAVE layout and exact x87/SSE preservation contract are not verified; returns STATUS_NOT_SUPPORTED."
+    },
+    {
+      "ordinal": 141,
+      "name": "KeRundownQueue",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PLIST_ENTRY NTAPI KeRundownQueue\n(\n    IN PRKQUEUE Queue\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 141; one-line jump to K_KeRundownQueue.",
+      "nxdk_export_definition": "KeRundownQueue@4                         @ 141 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeRundownQueue@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeRundownQueue",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Detaches queued LIST_ENTRY nodes into a null-terminated FIFO list and empties the queue; queue object layout is the emulator's verified internal dispatcher layout."
+    },
+    {
+      "ordinal": 142,
+      "name": "KeSaveFloatingPointState",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI KeSaveFloatingPointState\n(\n    OUT PKFLOATING_SAVE FloatSave\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 142; one-line jump to K_KeSaveFloatingPointState.",
+      "nxdk_export_definition": "KeSaveFloatingPointState@4               @ 142 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeSaveFloatingPointState@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeSaveFloatingPointState",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "Xbox KFLOATING_SAVE layout and exact x87/SSE preservation contract are not verified; returns STATUS_NOT_SUPPORTED."
+    },
+    {
+      "ordinal": 153,
+      "name": "KeSynchronizeExecution",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI BOOLEAN NTAPI KeSynchronizeExecution\n(\n    IN PKINTERRUPT Interrupt,\n    IN PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,\n    IN PVOID SynchronizeContext\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 153; one-line jump to K_KeSynchronizeExecution.",
+      "nxdk_export_definition": "KeSynchronizeExecution@12                @ 153 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "KeSynchronizeExecution@12",
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_KeSynchronizeExecution",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Executes the synchronization callback under a per-interrupt mutex; physical ISR delivery is unavailable."
+    },
+    {
+      "ordinal": 163,
+      "name": "KiUnlockDispatcherDatabase",
+      "calling_convention": "FASTCALL",
+      "signature": "XBAPI VOID FASTCALL KiUnlockDispatcherDatabase\n(\n    IN KIRQL OldIrql\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 163; one-line jump to K_KfLowerIrql.",
+      "nxdk_export_definition": "@KiUnlockDispatcherDatabase@4            @ 163 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "@KiUnlockDispatcherDatabase@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KfLowerIrql",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Routes to the existing K_KfLowerIrql primitive to lower guest IRQL."
+    },
+    {
+      "ordinal": 168,
+      "name": "MmClaimGpuInstanceMemory",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmClaimGpuInstanceMemory\n(\n    IN SIZE_T NumberOfBytes,\n    OUT SIZE_T *NumberOfPaddingBytes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 168; one-line jump to K_MmClaimGpuInstanceMemory.",
+      "nxdk_export_definition": "MmClaimGpuInstanceMemory@8               @ 168 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmClaimGpuInstanceMemory@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmClaimGpuInstanceMemory",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No NV2A/GPU instance-memory allocator is connected; returns nullptr and zero padding."
+    },
+    {
+      "ordinal": 169,
+      "name": "MmCreateKernelStack",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmCreateKernelStack\n(\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN DebuggerThread\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 169; one-line jump to K_MmCreateKernelStack.",
+      "nxdk_export_definition": "MmCreateKernelStack@8                    @ 169 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmCreateKernelStack@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmCreateKernelStack",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Allocates page-rounded guest-addressable stack storage; returns the high address corresponding to the requested stack size."
+    },
+    {
+      "ordinal": 170,
+      "name": "MmDeleteKernelStack",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmDeleteKernelStack\n(\n    IN PVOID KernelStackBase,\n    IN PVOID KernelStackLimit\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 170; one-line jump to K_MmDeleteKernelStack.",
+      "nxdk_export_definition": "MmDeleteKernelStack@8                    @ 170 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmDeleteKernelStack@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmDeleteKernelStack",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Releases only the exact base/limit pair returned by MmCreateKernelStack."
+    },
+    {
+      "ordinal": 175,
+      "name": "MmLockUnlockBufferPages",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmLockUnlockBufferPages\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN UnlockPages\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 175; one-line jump to K_MmLockUnlockBufferPages.",
+      "nxdk_export_definition": "MmLockUnlockBufferPages@12               @ 175 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmLockUnlockBufferPages@12",
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_MmLockUnlockBufferPages",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Uses VirtualLock/VirtualUnlock to model guest page residency; host pinning limits apply."
+    },
+    {
+      "ordinal": 176,
+      "name": "MmLockUnlockPhysicalPage",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmLockUnlockPhysicalPage\n(\n    IN ULONG_PTR PhysicalAddress,\n    IN BOOLEAN UnlockPage\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 176; one-line jump to K_MmLockUnlockPhysicalPage.",
+      "nxdk_export_definition": "MmLockUnlockPhysicalPage@8               @ 176 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmLockUnlockPhysicalPage@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmLockUnlockPhysicalPage",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No guest physical-page mapping/pinning backend exists; fails fast rather than pretending to pin a physical page."
+    },
+    {
+      "ordinal": 177,
+      "name": "MmMapIoSpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmMapIoSpace\n(\n    IN ULONG_PTR PhysicalAddress,\n    IN SIZE_T NumberOfBytes,\n    IN ULONG Protect\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 177; one-line jump to K_MmMapIoSpace.",
+      "nxdk_export_definition": "MmMapIoSpace@12                          @ 177 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmMapIoSpace@12",
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_MmMapIoSpace",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No chipset MMIO mapping backend exists; returns nullptr."
+    },
+    {
+      "ordinal": 178,
+      "name": "MmPersistContiguousMemory",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI VOID NTAPI MmPersistContiguousMemory\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes,\n    IN BOOLEAN Persist\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 178; one-line jump to K_MmPersistContiguousMemory.",
+      "nxdk_export_definition": "MmPersistContiguousMemory@12             @ 178 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmPersistContiguousMemory@12",
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_MmPersistContiguousMemory",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Uses VirtualLock/VirtualUnlock as the host-backed approximation of contiguous-memory persistence; it does not provide Xbox physical-contiguity guarantees."
+    },
+    {
+      "ordinal": 181,
+      "name": "MmQueryStatistics",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI MmQueryStatistics\n(\n    IN OUT PMM_STATISTICS MemoryStatistics\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 181; one-line jump to K_MmQueryStatistics.",
+      "nxdk_export_definition": "MmQueryStatistics@4                      @ 181 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmQueryStatistics@4",
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_MmQueryStatistics",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "MM_STATISTICS layout and guest accounting contract are not verified; returns STATUS_NOT_SUPPORTED rather than reporting host statistics."
+    },
+    {
+      "ordinal": 183,
+      "name": "MmUnmapIoSpace",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI PVOID NTAPI MmUnmapIoSpace\n(\n    IN PVOID BaseAddress,\n    IN SIZE_T NumberOfBytes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
+      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": null
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 183; one-line jump to K_MmUnmapIoSpace.",
+      "nxdk_export_definition": "MmUnmapIoSpace@8                         @ 183 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "MmUnmapIoSpace@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmUnmapIoSpace",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No MMIO mapping can be created without a chipset backend; returns nullptr."
+    },
+    {
+      "ordinal": 188,
+      "name": "NtCreateDirectoryObject",
+      "calling_convention": "NTAPI",
+      "signature": "XBAPI NTSTATUS NTAPI NtCreateDirectoryObject\n(\n    OUT PHANDLE DirectoryHandle,\n    IN POBJECT_ATTRIBUTES ObjectAttributes\n);",
+      "nxdk": {
+        "repository": "XboxDev/nxdk",
+        "revision": "fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e",
+        "header": "lib/xboxkrnl/xboxkrnl.h"
+      },
+      "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_12_byte_OBJECT_ATTRIBUTES_and_8_byte_ANSI_STRING_x86",
+      "tests": {
+        "host": null,
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
+      },
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 188; one-line jump to K_NtCreateDirectoryObject.",
+      "nxdk_export_definition": "NtCreateDirectoryObject@8                @ 188 NONAME",
+      "ordinal_verified_by_pinned_nxdk": true,
+      "decorated_symbol": "NtCreateDirectoryObject@8",
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_NtCreateDirectoryObject",
+      "implementation_file": "guest32/kernel_directory_objects.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Creates named or unnamed typed directory handles; duplicate names collide, and RootDirectory-relative creation is currently STATUS_NOT_SUPPORTED."
+    }
+  ]
+}
