@@ -2411,9 +2411,11 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
         offsets[reg] = stride;
         switch (reg) {
         case 0u: case 2u: sizes[reg] = 12u; break;
-        case 3u: case 4u: case 7u: sizes[reg] = 4u; break;
-        case 5u: case 6u: sizes[reg] = 4u; break;
-        case 8u: case 9u: case 10u: case 11u: sizes[reg] = 8u; break;
+        case 3u: case 4u: case 5u: case 6u: case 7u: case 8u:
+            sizes[reg] = 4u; break;
+        /* NV097 array slots 7..10 supply TEX0..TEX3, which map to
+         * programmable shader inputs v9..v12; v7/v8 are backface colors. */
+        case 9u: case 10u: case 11u: case 12u: sizes[reg] = 8u; break;
         default: sizes[reg] = 16u; break;
         }
         if (stride > UINT32_MAX - sizes[reg]) return 0;
@@ -2453,10 +2455,16 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
                 const uint32_t opaque_black = 0xFF000000u;
                 memcpy(dst, &opaque_black, sizeof(opaque_black)); break;
             }
-            case 8u: memcpy(dst, &v->u, 8u); break;
-            case 9u: memcpy(dst, &v->u1, 8u); break;
-            case 10u: memcpy(dst, &v->u2, 8u); break;
-            case 11u: memcpy(dst, &v->u3, 8u); break;
+            case 8u: {
+                const uint32_t transparent_black = 0u;
+                memcpy(dst, &transparent_black, sizeof(transparent_black)); break;
+            }
+            /* The four PGRAPH texture arrays (7..10) feed shader inputs
+             * v9..v12; do not shift them into the backface-color registers. */
+            case 9u: memcpy(dst, &v->u, 8u); break;
+            case 10u: memcpy(dst, &v->u1, 8u); break;
+            case 11u: memcpy(dst, &v->u2, 8u); break;
+            case 12u: memcpy(dst, &v->u3, 8u); break;
             default: {
                 const float generic[4] = {0.0f, 0.0f, 0.0f, 1.0f};
                 memcpy(dst, generic, sizeof(generic)); break;
