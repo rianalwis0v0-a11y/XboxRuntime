@@ -1,6 +1,7 @@
 #include "kernel_io_exports.h"
 
 #include <mutex>
+#include <deque>
 
 #pragma pack(push, 4)
 struct GuestFileObjectShareAccess {
@@ -189,6 +190,8 @@ static_assert(sizeof(GuestObjectStringDevice) == 8, "OBJECT_STRING x86 size");
 namespace {
 std::mutex g_deviceObjectMutex;
 std::unordered_map<GuestDeviceObject*, SIZE_T> g_deviceObjects;
+struct QueuedDeviceIrp { void* irp; ULONG key; };
+std::unordered_map<GuestDeviceObject*, std::deque<QueuedDeviceIrp>> g_devicePacketQueues;
 void InitializeDeviceList(GuestListEntryDevice* head) {
     head->Flink = head;
     head->Blink = head;
@@ -244,6 +247,7 @@ extern "C" LONG __stdcall K_IoCreateDevice(
     try {
         std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
         g_deviceObjects.emplace(device, totalSize);
+        g_devicePacketQueues.emplace(device, std::deque<QueuedDeviceIrp>{});
     } catch (...) {
         HeapFree(GetProcessHeap(), 0, device);
         return LONG(0xC0000017u);
@@ -264,6 +268,7 @@ extern "C" void __stdcall K_IoDeleteDevice(void* rawDeviceObject) {
         }
         allocationSize = it->second;
         g_deviceObjects.erase(it);
+        g_devicePacketQueues.erase(device);
     }
     device->DeletePending = TRUE;
     auto* driver = static_cast<GuestDriverObject*>(device->DriverObject);
@@ -281,14 +286,89 @@ extern "C" void __stdcall K_IoInitializeIrp(void* irp, USHORT, CHAR) {
 extern "C" void __stdcall K_IoQueueThreadIrp(void* irp) {
     if (irp) UnsupportedIoVoidExport(77);
 }
-extern "C" void __stdcall K_IoStartNextPacket(void* deviceObject) {
-    if (deviceObject) UnsupportedIoVoidExport(81);
+static void StartQueuedDeviceIrp(GuestDeviceObject* device,
+                                 const QueuedDeviceIrp& queued) {
+    auto* driver = static_cast<GuestDriverObject*>(device->DriverObject);
+    if (!driver || !driver->DriverStartIo) {
+        UnsupportedIoVoidExport(83);
+        return;
+    }
+    driver->DriverStartIo(device, queued.irp);
 }
-extern "C" void __stdcall K_IoStartNextPacketByKey(void* deviceObject, ULONG) {
-    if (deviceObject) UnsupportedIoVoidExport(82);
+extern "C" void __stdcall K_IoStartPacket(
+    void* rawDeviceObject, void* irp, ULONG* key) {
+    if (!rawDeviceObject || !irp) {
+        UnsupportedIoVoidExport(83);
+        return;
+    }
+    auto* device = static_cast<GuestDeviceObject*>(rawDeviceObject);
+    bool startNow = false;
+    QueuedDeviceIrp queued{irp, key ? *key : 0};
+    {
+        std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
+        auto it = g_devicePacketQueues.find(device);
+        if (it == g_devicePacketQueues.end()) {
+            UnsupportedIoVoidExport(83);
+            return;
+        }
+        if (!device->CurrentIrp) {
+            device->CurrentIrp = irp;
+            device->DeviceQueue.Busy = TRUE;
+            startNow = true;
+        } else {
+            it->second.push_back(queued);
+        }
+    }
+    if (startNow) StartQueuedDeviceIrp(device, queued);
 }
-extern "C" void __stdcall K_IoStartPacket(void* deviceObject, void*, ULONG*) {
-    if (deviceObject) UnsupportedIoVoidExport(83);
+extern "C" void __stdcall K_IoStartNextPacket(void* rawDeviceObject) {
+    if (!rawDeviceObject) return;
+    auto* device = static_cast<GuestDeviceObject*>(rawDeviceObject);
+    QueuedDeviceIrp next{};
+    bool haveNext = false;
+    {
+        std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
+        auto it = g_devicePacketQueues.find(device);
+        if (it == g_devicePacketQueues.end()) {
+            UnsupportedIoVoidExport(81);
+            return;
+        }
+        if (it->second.empty()) {
+            device->CurrentIrp = nullptr;
+            device->DeviceQueue.Busy = FALSE;
+            return;
+        }
+        next = it->second.front();
+        it->second.pop_front();
+        device->CurrentIrp = next.irp;
+        device->DeviceQueue.Busy = TRUE;
+        haveNext = true;
+    }
+    if (haveNext) StartQueuedDeviceIrp(device, next);
+}
+extern "C" void __stdcall K_IoStartNextPacketByKey(
+    void* rawDeviceObject, ULONG key) {
+    if (!rawDeviceObject) return;
+    auto* device = static_cast<GuestDeviceObject*>(rawDeviceObject);
+    QueuedDeviceIrp next{};
+    bool haveNext = false;
+    {
+        std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
+        auto it = g_devicePacketQueues.find(device);
+        if (it == g_devicePacketQueues.end()) {
+            UnsupportedIoVoidExport(82);
+            return;
+        }
+        auto packet = std::find_if(it->second.begin(), it->second.end(),
+            [key](const QueuedDeviceIrp& item) { return item.key == key; });
+        if (packet == it->second.end()) return;
+        next = *packet;
+        it->second.erase(packet);
+        device->CurrentIrp = next.irp;
+        device->DeviceQueue.Busy = TRUE;
+        haveNext = true;
+    }
+    if (haveNext) StartQueuedDeviceIrp(device, next);
 }
 extern "C" LONG __stdcall K_IoSynchronousDeviceIoControlRequest(
     ULONG, void*, void*, ULONG, void*, ULONG, ULONG* returnedLength, BOOLEAN) {
@@ -305,8 +385,17 @@ extern "C" LONG __fastcall K_IofCallDriver(void*, void*) {
 extern "C" void __fastcall K_IofCompleteRequest(void* irp, CHAR) {
     if (irp) UnsupportedIoVoidExport(87);
 }
-extern "C" LONG __stdcall K_IoDismountVolume(void*) {
-    return kStatusNotSupported;
+extern "C" LONG __stdcall K_IoDismountVolume(void* rawDeviceObject) {
+    if (!rawDeviceObject) return LONG(0xC000000Du);
+    auto* device = static_cast<GuestDeviceObject*>(rawDeviceObject);
+    {
+        std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
+        if (g_deviceObjects.find(device) == g_deviceObjects.end())
+            return kStatusNotSupported;
+    }
+    auto* driver = static_cast<GuestDriverObject*>(device->DriverObject);
+    if (!driver || !driver->DriverDismountVolume) return kStatusNotSupported;
+    return driver->DriverDismountVolume(device);
 }
 extern "C" LONG __stdcall K_IoDismountVolumeByName(void*) {
     return kStatusNotSupported;
