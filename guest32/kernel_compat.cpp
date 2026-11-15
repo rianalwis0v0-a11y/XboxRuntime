@@ -642,22 +642,16 @@ extern "C" LONG __stdcall K_IoCreateFile(
     const GuestAnsiStringIo* ansi = objectAttributes->ObjectName;
     if (!ansi->Buffer || !ansi->Length || ansi->Length > ansi->MaximumLength)
         return LONG(0xC000000Du);
-    const int wideLength = MultiByteToWideChar(CP_ACP, 0, ansi->Buffer,
-                                                ansi->Length, nullptr, 0);
-    if (wideLength <= 0 || wideLength > 0x7FFF / int(sizeof(wchar_t)))
-        return LONG(0xC0000033u);
-    std::wstring wide(static_cast<size_t>(wideLength), L'\0');
-    if (!MultiByteToWideChar(CP_ACP, 0, ansi->Buffer, ansi->Length,
-                             wide.data(), wideLength))
-        return LONG(0xC0000033u);
-    GuestUnicodeString unicodeName{};
-    unicodeName.Length = static_cast<USHORT>(wideLength * sizeof(wchar_t));
-    unicodeName.MaximumLength = unicodeName.Length;
-    unicodeName.Buffer = wide.data();
+    // Xbox OBJECT_ATTRIBUTES carries an ANSI_STRING here, matching the
+    // NtCreateFile provider above. Keep the original byte string and let
+    // TranslateXboxPath perform the single, validated code-page conversion.
+    GuestAnsiString convertedName{};
+    convertedName.Length = ansi->Length;
+    convertedName.MaximumLength = ansi->MaximumLength;
+    convertedName.Buffer = ansi->Buffer;
     GuestObjectAttributes converted{};
-    converted.Length = sizeof(converted);
-    converted.RootDirectory = nullptr;
-    converted.ObjectName = &unicodeName;
+    converted.RootDirectory = objectAttributes->RootDirectory;
+    converted.ObjectName = &convertedName;
     converted.Attributes = objectAttributes->Attributes;
     return NtCreateFileImpl(fileHandle, desiredAccess, &converted, ioStatus,
                             fileAttributes, shareAccess, disposition,
