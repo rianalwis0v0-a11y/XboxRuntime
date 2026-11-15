@@ -31,6 +31,26 @@ extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR);
 extern "C" void __fastcall K_KfLowerIrql(UCHAR);
 extern "C" DWORD __stdcall K_KeGetCurrentIrql();
 
+
+#pragma pack(push, 4)
+struct GuestFileObjectShareAccess {
+    SHORT Type; UCHAR AccessFlags; UCHAR Flags;
+    void* DeviceObject; void* FsContext; void* FsContext2;
+    LONG FinalStatus; LARGE_INTEGER CurrentByteOffset;
+    void* RelatedFileObject; void* CompletionContext; LONG LockCount;
+    UCHAR LockEvent[32];
+};
+struct GuestShareAccess {
+    UCHAR OpenCount, Readers, Writers, Deleters;
+    UCHAR SharedRead, SharedWrite, SharedDelete;
+};
+#pragma pack(pop)
+static_assert(sizeof(GuestFileObjectShareAccess) == 72, "FILE_OBJECT x86 size");
+static_assert(sizeof(GuestShareAccess) == 7, "SHARE_ACCESS x86 size");
+extern "C" LONG __stdcall K_IoCheckShareAccess(ACCESS_MASK, ULONG, void*, void*, BOOLEAN);
+extern "C" void __stdcall K_IoSetShareAccess(ACCESS_MASK, ULONG, void*, void*);
+extern "C" void __stdcall K_IoRemoveShareAccess(void*, void*);
+
 extern "C" LONG __stdcall K_IoCreateFile(
     HANDLE*, ACCESS_MASK, GuestObjectAttributes*, GuestIoStatusBlock*,
     const LARGE_INTEGER*, ULONG, ULONG, ULONG, ULONG, ULONG);
@@ -133,6 +153,45 @@ int main() {
     if (XboxKernelGetPendingSoftwareIrql() != 2) return 13;
     K_HalClearSoftwareInterrupt(2);
     if (XboxKernelGetPendingSoftwareIrql() != 0) return 14;
+
+
+    // Exact Xbox SHARE_ACCESS and FILE_OBJECT prefix layout: verify read/write
+    // sharing conflicts, updates, removals, and reset semantics.
+    GuestFileObjectShareAccess reader{}, writer{}, thirdReader{}, resetFile{};
+    GuestShareAccess shares{};
+    constexpr ACCESS_MASK readData = 0x1u;
+    constexpr ACCESS_MASK writeData = 0x2u;
+    constexpr ULONG shareReadWriteDelete = 0x7u;
+    if (K_IoCheckShareAccess(readData, shareReadWriteDelete,
+            &reader, &shares, TRUE) != 0 ||
+        shares.OpenCount != 1 || shares.Readers != 1 ||
+        shares.SharedRead != 1 || shares.SharedWrite != 1 ||
+        shares.SharedDelete != 1)
+        return 15;
+    if (K_IoCheckShareAccess(writeData, 0x1u, &writer, &shares, TRUE) != 0 ||
+        shares.OpenCount != 2 || shares.Writers != 1)
+        return 16;
+    if (K_IoCheckShareAccess(readData, 0, &thirdReader, &shares, TRUE) !=
+        static_cast<LONG>(0xC0000043u))
+        return 17;
+    K_IoRemoveShareAccess(&writer, &shares);
+    if (shares.OpenCount != 1 || shares.Writers != 0)
+        return 18;
+    if (K_IoCheckShareAccess(readData, 0x1u, &thirdReader, &shares, TRUE) != 0 ||
+        shares.OpenCount != 2 || shares.Readers != 2)
+        return 19;
+    K_IoRemoveShareAccess(&thirdReader, &shares);
+    K_IoRemoveShareAccess(&reader, &shares);
+    if (shares.OpenCount != 0 || shares.Readers != 0 ||
+        shares.SharedRead != 0 || shares.SharedWrite != 0 ||
+        shares.SharedDelete != 0)
+        return 20;
+    K_IoSetShareAccess(writeData, 0, &resetFile, &shares);
+    if (shares.OpenCount != 1 || shares.Writers != 1 ||
+        shares.SharedRead != 0 || shares.SharedWrite != 0)
+        return 21;
+    K_IoRemoveShareAccess(&resetFile, &shares);
+    if (shares.OpenCount != 0 || shares.Writers != 0) return 22;
 
     std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
     return 0;
