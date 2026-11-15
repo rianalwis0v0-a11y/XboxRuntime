@@ -49,3 +49,20 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
     RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
 endforeach()
 add_test(NAME kernel_memory_host_tests COMMAND kernel_memory_host_tests)
+
+# Host-side layout and checksum contract tests for the EEPROM-backed exports.
+add_executable(kernel_nvsettings_host_tests
+  ../../tests/kernel_nvsettings_host_tests.cpp
+  ../../guest32/kernel_nvsettings.cpp
+)
+target_compile_features(kernel_nvsettings_host_tests PRIVATE cxx_std_17)
+target_compile_definitions(kernel_nvsettings_host_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_nvsettings_host_tests PRIVATE /W4 /permissive-)
+target_include_directories(kernel_nvsettings_host_tests PRIVATE ../../guest32)
+set_target_properties(kernel_nvsettings_host_tests PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out")
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+  set_target_properties(kernel_nvsettings_host_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
+endforeach()
+add_test(NAME kernel_nvsettings_host_tests COMMAND kernel_nvsettings_host_tests)
