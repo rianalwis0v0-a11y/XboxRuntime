@@ -42,16 +42,23 @@ int main() {
     int interruptStorage = 0;
     K_KeInitializeInterrupt(&interruptStorage, ServiceRoutine, nullptr,
                             0x31, 5, 0, FALSE);
+    if (!K_KeConnectInterrupt(&interruptStorage) ||
+        K_KeConnectInterrupt(&interruptStorage)) {
+        std::fprintf(stderr, "virtual interrupt connect lifecycle failed\n");
+        return 4;
+    }
     if (!K_KeSynchronizeExecution(&interruptStorage, SyncRoutine,
                                   reinterpret_cast<void*>(0xCAFE)) ||
         g_syncCalled != 1) {
         std::fprintf(stderr, "KeSynchronizeExecution callback failed\n");
-        return 4;
-    }
-    if (K_KeConnectInterrupt(&interruptStorage) ||
-        K_KeDisconnectInterrupt(&interruptStorage)) {
-        std::fprintf(stderr, "hardware interrupt controller must not report connected\n");
         return 5;
+    }
+    if (!K_KeDisconnectInterrupt(&interruptStorage) ||
+        K_KeDisconnectInterrupt(&interruptStorage) ||
+        K_KeSynchronizeExecution(&interruptStorage, SyncRoutine,
+                                 reinterpret_cast<void*>(0xCAFE))) {
+        std::fprintf(stderr, "virtual interrupt disconnect lifecycle failed\n");
+        return 6;
     }
 
     K_HalRequestSoftwareInterrupt(2);
