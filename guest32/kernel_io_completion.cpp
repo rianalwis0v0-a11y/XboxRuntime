@@ -132,6 +132,7 @@ extern "C" LONG __stdcall K_NtCreateIoCompletion(
             g_completions.emplace(state.get(), state);
         }
     } catch (...) {
+        if (state) state->port = nullptr;
         CloseHandle(port);
         return LONG(0xC0000017u);
     }
