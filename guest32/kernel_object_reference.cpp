@@ -51,6 +51,16 @@ extern "C" LONG __stdcall K_ObReferenceObjectByHandle(HANDLE handle, void* objec
     *returnedObject=object;
     return 0;
 }
+extern "C" LONG __stdcall K_ObReferenceObjectByPointer(void* object, ULONG desiredAccess, void* objectType, ULONG accessMode) {
+    constexpr LONG kStatusInvalidParameter=static_cast<LONG>(0xC000000Du);
+    constexpr LONG kStatusObjectTypeMismatch=static_cast<LONG>(0xC0000024u);
+    (void)desiredAccess;
+    (void)accessMode;
+    if (!object) return kStatusInvalidParameter;
+    // The shared manager has no public OBJECT_TYPE descriptor table yet.
+    if (objectType) return kStatusObjectTypeMismatch;
+    return XboxKernelReferenceObject(object) ? 0 : kStatusInvalidParameter;
+}
 extern "C" void __fastcall K_ObfReferenceObject(void* object) {
     if (!XboxKernelReferenceObject(object))
         RaiseUnsupportedObjectReference(251);
