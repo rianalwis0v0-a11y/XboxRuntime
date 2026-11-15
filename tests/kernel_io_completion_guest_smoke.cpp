@@ -25,6 +25,9 @@ int main() {
         reinterpret_cast<void*>(0x2222), static_cast<LONG>(0xC0000001u), 0x3344);
     XboxKernelReleaseObjectReference(object);
     if (status != 0) return 3;
+    status = K_IoSetIoCompletion(completion, reinterpret_cast<void*>(0x3333),
+        reinterpret_cast<void*>(0x4444), static_cast<LONG>(0xC0000002u), 0x5566);
+    if (status != 0) return 13;
 
     HANDLE duplicate = nullptr;
     status = XboxKernelDuplicateObjectHandle(completion, &duplicate, 0x2);
@@ -34,7 +37,7 @@ int main() {
     if (status != 0) return 5;
 
     CompletionBasicInformation depth{};
-    if (K_NtQueryIoCompletion(completion, &depth) != 0 || depth.Depth != 2)
+    if (K_NtQueryIoCompletion(completion, &depth) != 0 || depth.Depth != 3)
         return 6;
 
     void* key = nullptr;
@@ -48,10 +51,16 @@ int main() {
         return 7;
 
     status = K_NtRemoveIoCompletion(completion, &key, &apc, &io, &noWait);
+    if (status != 0 || key != reinterpret_cast<void*>(0x3333) ||
+        apc != reinterpret_cast<void*>(0x4444) ||
+        io.Status != static_cast<LONG>(0xC0000002u) || io.Information != 0x5566)
+        return 8;
+
+    status = K_NtRemoveIoCompletion(completion, &key, &apc, &io, &noWait);
     if (status != 0 || key != reinterpret_cast<void*>(0xAAAA) ||
         apc != reinterpret_cast<void*>(0xBBBB) || io.Status != 0 ||
         io.Information != 0xCCCC)
-        return 8;
+        return 14;
 
     if (K_NtQueryIoCompletion(completion, &depth) != 0 || depth.Depth != 0)
         return 9;
