@@ -23,13 +23,14 @@
         "host": null,
         "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
-      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 2 route",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 2; one-line jump to K_AvSendTVEncoderOption.",
       "nxdk_export_definition": "AvSendTVEncoderOption@16                 @   2 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "AvSendTVEncoderOption@16",
       "decoration_stack_bytes": 16,
-      "unsupported_reason": "No verified TV-encoder backend; void return has no NTSTATUS channel, so production dispatcher raises the existing noncontinuable unsupported-import exception.",
-      "dispatcher_handler": "K_Unsupported(2)"
+      "unsupported_reason": "No verified TV-encoder backend; the void export fails fast through the noncontinuable unsupported-import exception.",
+      "dispatcher_handler": "K_AvSendTVEncoderOption",
+      "implementation_file": "guest32/kernel_compat.cpp"
     },
     {
       "ordinal": 3,
@@ -50,13 +51,14 @@
         "host": null,
         "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
-      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 3 route",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 3; one-line jump to K_AvSetDisplayMode.",
       "nxdk_export_definition": "AvSetDisplayMode@24                      @   3 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "AvSetDisplayMode@24",
       "decoration_stack_bytes": 24,
-      "unsupported_reason": "No verified mapping from Xbox register-base/display-mode programming to host display APIs; K_AvSetDisplayMode returns STATUS_NOT_SUPPORTED.",
-      "dispatcher_handler": "K_AvSetDisplayMode"
+      "unsupported_reason": "No verified Xbox display-register to host display backend; returns STATUS_NOT_SUPPORTED.",
+      "dispatcher_handler": "K_AvSetDisplayMode",
+      "implementation_file": "guest32/kernel_compat.cpp"
     },
     {
       "ordinal": 24,
@@ -74,17 +76,17 @@
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
-        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed in workflow 43697175322",
-        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; 1/1 passed in workflow 43697175322"
+        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed.",
+        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; import-thunk test passed."
       },
-      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 24 route",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 24; one-line jump to K_ExQueryNonVolatileSetting.",
       "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExQueryNonVolatileSetting@20",
       "decoration_stack_bytes": 20,
       "implementation_file": "guest32/kernel_nvsettings.cpp",
       "dispatcher_handler": "K_ExQueryNonVolatileSetting",
-      "limitations": "Supports XC_* indices 0x0000-0x0012; XC_MAX_OS 0x00FF (96-byte user section); XC_MAX_FACTORY 0x01FF (48-byte clear factory section); XC_ENCRYPTED_SECTION 0xFFFE (raw 48-byte encrypted section); and XC_MAX_ALL 0xFFFF (256-byte raw EEPROM). Individual factory indices 0x0100-0x0104 are explicitly STATUS_NOT_SUPPORTED; encrypted section is not decrypted.",
+      "limitations": "EEPROM-backed settings; supports documented OS indices and XC_MAX_* raw sections. Individual factory fields 0x0100-0x0104 remain STATUS_NOT_SUPPORTED; encrypted section is returned raw, not decrypted.",
       "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322"
     },
     {
@@ -101,18 +103,19 @@
       "dispatcher_entry_present": true,
       "implementation_status": "unsupported_explicit",
       "owner": "Developer A",
-      "structure_layout_status": "16-byte x86 XBOX_REFURB_INFO with static offset assertions (0,4,8) against pinned NXDK definition",
+      "structure_layout_status": "verified_16_byte_XBOX_REFURB_INFO_x86",
       "tests": {
         "host": null,
         "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
-      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 25 route",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 25; one-line jump to K_ExReadWriteRefurbInfo.",
       "nxdk_export_definition": "ExReadWriteRefurbInfo@12                 @  25 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExReadWriteRefurbInfo@12",
       "decoration_stack_bytes": 12,
-      "unsupported_reason": "No verified refurbishment metadata provider; K_ExReadWriteRefurbInfo validates the x86 structure pointer/length and returns STATUS_NOT_SUPPORTED.",
-      "dispatcher_handler": "K_ExReadWriteRefurbInfo"
+      "unsupported_reason": "The 16-byte XBOX_REFURB_INFO ABI is asserted, but refurb storage semantics and authenticated data handling are not implemented; returns STATUS_NOT_SUPPORTED.",
+      "dispatcher_handler": "K_ExReadWriteRefurbInfo",
+      "implementation_file": "guest32/kernel_compat.cpp"
     },
     {
       "ordinal": 29,
@@ -130,17 +133,17 @@
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
-        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed in workflow 43697175322",
-        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; 1/1 passed in workflow 43697175322"
+        "host": "PASS — kernel_nvsettings_host_tests, Windows x64; 1/1 passed.",
+        "guest_x86_thunk": "PASS — kernel_nvsettings_guest_smoke, Windows x86; import-thunk test passed."
       },
-      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 29 route",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 29; one-line jump to K_ExSaveNonVolatileSetting.",
       "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExSaveNonVolatileSetting@16",
       "decoration_stack_bytes": 16,
       "implementation_file": "guest32/kernel_nvsettings.cpp",
       "dispatcher_handler": "K_ExSaveNonVolatileSetting",
-      "limitations": "Writes only documented user-configurable EEPROM settings with exact type/length and recalculates the user-section XConfig checksum.",
+      "limitations": "Writes only documented user-writable settings, validates type/length, recomputes the user-section checksum, persists the shared EEPROM image, and rolls back on persistence failure.",
       "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322"
     },
     {
@@ -154,19 +157,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 38; one-line jump to K_HalClearSoftwareInterrupt.",
       "nxdk_export_definition": "@HalClearSoftwareInterrupt@4             @  38 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "@HalClearSoftwareInterrupt@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_HalClearSoftwareInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605"
     },
     {
       "ordinal": 39,
@@ -179,19 +185,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 39; one-line jump to K_HalDisableSystemInterrupt.",
       "nxdk_export_definition": "HalDisableSystemInterrupt@4              @  39 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "HalDisableSystemInterrupt@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_HalDisableSystemInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No physical interrupt controller or system-interrupt mask backend; void handler fails fast."
     },
     {
       "ordinal": 43,
@@ -204,19 +213,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 43; one-line jump to K_HalEnableSystemInterrupt.",
       "nxdk_export_definition": "HalEnableSystemInterrupt@8               @  43 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "HalEnableSystemInterrupt@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_HalEnableSystemInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No physical interrupt controller or system-interrupt enable backend; void handler fails fast."
     },
     {
       "ordinal": 44,
@@ -229,19 +241,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 44; one-line jump to K_HalGetInterruptVector.",
       "nxdk_export_definition": "HalGetInterruptVector@8                  @  44 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "HalGetInterruptVector@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_HalGetInterruptVector",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No bus interrupt routing table; returns vector 0 and IRQL 0 to report no mapping."
     },
     {
       "ordinal": 46,
@@ -254,19 +269,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 46; one-line jump to K_HalReadWritePCISpace.",
       "nxdk_export_definition": "HalReadWritePCISpace@24                  @  46 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "HalReadWritePCISpace@24",
-      "decoration_stack_bytes": 24
+      "decoration_stack_bytes": 24,
+      "dispatcher_handler": "K_HalReadWritePCISpace",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No PCI configuration-space backend; void handler fails fast."
     },
     {
       "ordinal": 48,
@@ -279,19 +297,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 48; one-line jump to K_HalRequestSoftwareInterrupt.",
       "nxdk_export_definition": "@HalRequestSoftwareInterrupt@4           @  48 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "@HalRequestSoftwareInterrupt@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_HalRequestSoftwareInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605"
     },
     {
       "ordinal": 59,
@@ -304,19 +325,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 59; one-line jump to K_IoAllocateIrp.",
       "nxdk_export_definition": "IoAllocateIrp@4                          @  59 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoAllocateIrp@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoAllocateIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP and IO_STACK_LOCATION ABI/size are not verified against the Xbox kernel; returns nullptr rather than allocating an incompatible packet."
     },
     {
       "ordinal": 60,
@@ -329,19 +353,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 60; one-line jump to K_IoBuildAsynchronousFsdRequest.",
       "nxdk_export_definition": "IoBuildAsynchronousFsdRequest@24         @  60 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoBuildAsynchronousFsdRequest@24",
-      "decoration_stack_bytes": 24
+      "decoration_stack_bytes": 24,
+      "dispatcher_handler": "K_IoBuildAsynchronousFsdRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP, IO_STACK_LOCATION and DEVICE_OBJECT layouts are not verified; returns nullptr."
     },
     {
       "ordinal": 61,
@@ -354,19 +381,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 61; one-line jump to K_IoBuildDeviceIoControlRequest.",
       "nxdk_export_definition": "IoBuildDeviceIoControlRequest@36         @  61 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoBuildDeviceIoControlRequest@36",
-      "decoration_stack_bytes": 36
+      "decoration_stack_bytes": 36,
+      "dispatcher_handler": "K_IoBuildDeviceIoControlRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP, IO_STACK_LOCATION, KEVENT and IO_STATUS_BLOCK layouts are not verified; returns nullptr."
     },
     {
       "ordinal": 62,
@@ -379,19 +409,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 62; one-line jump to K_IoBuildSynchronousFsdRequest.",
       "nxdk_export_definition": "IoBuildSynchronousFsdRequest@28          @  62 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoBuildSynchronousFsdRequest@28",
-      "decoration_stack_bytes": 28
+      "decoration_stack_bytes": 28,
+      "dispatcher_handler": "K_IoBuildSynchronousFsdRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP, IO_STACK_LOCATION, KEVENT and IO_STATUS_BLOCK layouts are not verified; returns nullptr."
     },
     {
       "ordinal": 63,
@@ -404,19 +437,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 63; one-line jump to K_IoCheckShareAccess.",
       "nxdk_export_definition": "IoCheckShareAccess@20                    @  63 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoCheckShareAccess@20",
-      "decoration_stack_bytes": 20
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoCheckShareAccess",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "FILE_OBJECT and SHARE_ACCESS field offsets/semantics are not verified; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 65,
@@ -429,19 +465,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 65; one-line jump to K_IoCreateDevice.",
       "nxdk_export_definition": "IoCreateDevice@24                        @  65 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoCreateDevice@24",
-      "decoration_stack_bytes": 24
+      "decoration_stack_bytes": 24,
+      "dispatcher_handler": "K_IoCreateDevice",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "DRIVER_OBJECT and DEVICE_OBJECT layouts/dispatch integration are not verified; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 66,
@@ -454,19 +493,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_12_byte_OBJECT_ATTRIBUTES_and_8_byte_ANSI_STRING_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 66; one-line jump to K_IoCreateFile.",
       "nxdk_export_definition": "IoCreateFile@40                          @  66 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoCreateFile@40",
-      "decoration_stack_bytes": 40
+      "decoration_stack_bytes": 40,
+      "dispatcher_handler": "K_IoCreateFile",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Supports ANSI_STRING + 12-byte x86 OBJECT_ATTRIBUTES, absolute paths, no RootDirectory, no AllocationSize and Options must be zero. Uses the existing Windows file backend."
     },
     {
       "ordinal": 68,
@@ -479,19 +522,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 68; one-line jump to K_IoDeleteDevice.",
       "nxdk_export_definition": "IoDeleteDevice@4                         @  68 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoDeleteDevice@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoDeleteDevice",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No compatible DEVICE_OBJECT allocation exists; non-null input fails fast."
     },
     {
       "ordinal": 72,
@@ -504,19 +550,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 72; one-line jump to K_IoFreeIrp.",
       "nxdk_export_definition": "IoFreeIrp@4                              @  72 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoFreeIrp@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoFreeIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP allocation/layout is not implemented; non-null input fails fast."
     },
     {
       "ordinal": 73,
@@ -529,19 +578,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 73; one-line jump to K_IoInitializeIrp.",
       "nxdk_export_definition": "IoInitializeIrp@12                       @  73 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoInitializeIrp@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_IoInitializeIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP and IO_STACK_LOCATION layout is not verified; non-null input fails fast."
     },
     {
       "ordinal": 75,
@@ -554,19 +606,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 75; one-line jump to K_IoQueryFileInformation.",
       "nxdk_export_definition": "IoQueryFileInformation@20                @  75 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoQueryFileInformation@20",
-      "decoration_stack_bytes": 20
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoQueryFileInformation",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "The query helper currently accepts a handle-backed FileObject representation (native file HANDLE); a true guest FILE_OBJECT adapter remains unimplemented."
     },
     {
       "ordinal": 76,
@@ -579,19 +635,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 76; one-line jump to K_IoQueryVolumeInformation.",
       "nxdk_export_definition": "IoQueryVolumeInformation@20              @  76 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoQueryVolumeInformation@20",
-      "decoration_stack_bytes": 20
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoQueryVolumeInformation",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "The query helper currently accepts a handle-backed FileObject representation (native file HANDLE); a true guest FILE_OBJECT adapter remains unimplemented."
     },
     {
       "ordinal": 77,
@@ -604,19 +664,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 77; one-line jump to K_IoQueueThreadIrp.",
       "nxdk_export_definition": "IoQueueThreadIrp@4                       @  77 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoQueueThreadIrp@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoQueueThreadIrp",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP thread-list layout and cancellation lifecycle are not verified; non-null input fails fast."
     },
     {
       "ordinal": 78,
@@ -629,19 +692,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 78; one-line jump to K_IoRemoveShareAccess.",
       "nxdk_export_definition": "IoRemoveShareAccess@8                    @  78 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoRemoveShareAccess@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IoRemoveShareAccess",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "FILE_OBJECT and SHARE_ACCESS field offsets are not verified; non-null input fails fast."
     },
     {
       "ordinal": 79,
@@ -654,20 +720,24 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (I/O completion object boundary; PR #19 explicitly reserves I/O completion objects)",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_8_byte_IO_STATUS_BLOCK_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 79; one-line jump to K_IoSetIoCompletion.",
       "nxdk_export_definition": "IoSetIoCompletion@20                     @  79 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoSetIoCompletion@20",
       "decoration_stack_bytes": 20,
-      "coordination_note": "PR #19 reserves Nt* I/O completion objects for Developer 3 (ordinals 191, 212, 223, 227). IoSetIoCompletion (79) is grouped with that ownership boundary pending direct confirmation; do not duplicate."
+      "coordination_note": "PR #19 reserves Nt* I/O completion objects for Developer 3 (ordinals 191, 212, 223, 227). IoSetIoCompletion (79) is grouped with that ownership boundary pending direct confirmation; do not duplicate.",
+      "dispatcher_handler": "K_IoSetIoCompletion",
+      "implementation_file": "guest32/kernel_io_completion.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Uses typed IoCompletion object handles and a Win32 I/O completion port; IoSetIoCompletion accepts either the object payload pointer or guest completion handle."
     },
     {
       "ordinal": 80,
@@ -680,19 +750,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 80; one-line jump to K_IoSetShareAccess.",
       "nxdk_export_definition": "IoSetShareAccess@16                      @  80 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoSetShareAccess@16",
-      "decoration_stack_bytes": 16
+      "decoration_stack_bytes": 16,
+      "dispatcher_handler": "K_IoSetShareAccess",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "FILE_OBJECT and SHARE_ACCESS field offsets are not verified; non-null input fails fast."
     },
     {
       "ordinal": 81,
@@ -705,19 +778,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 81; one-line jump to K_IoStartNextPacket.",
       "nxdk_export_definition": "IoStartNextPacket@4                      @  81 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoStartNextPacket@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoStartNextPacket",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "DEVICE_OBJECT packet queue and StartIo dispatch layout are not verified; non-null input fails fast."
     },
     {
       "ordinal": 82,
@@ -730,19 +806,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 82; one-line jump to K_IoStartNextPacketByKey.",
       "nxdk_export_definition": "IoStartNextPacketByKey@8                 @  82 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoStartNextPacketByKey@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IoStartNextPacketByKey",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "DEVICE_OBJECT packet queue/key ordering and StartIo dispatch are not verified; non-null input fails fast."
     },
     {
       "ordinal": 83,
@@ -755,19 +834,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 83; one-line jump to K_IoStartPacket.",
       "nxdk_export_definition": "IoStartPacket@12                         @  83 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoStartPacket@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_IoStartPacket",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "DEVICE_OBJECT, IRP and cancel routine layouts are not verified; non-null input fails fast."
     },
     {
       "ordinal": 84,
@@ -780,19 +862,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 84; one-line jump to K_IoSynchronousDeviceIoControlRequest.",
       "nxdk_export_definition": "IoSynchronousDeviceIoControlRequest@32   @  84 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoSynchronousDeviceIoControlRequest@32",
-      "decoration_stack_bytes": 32
+      "decoration_stack_bytes": 32,
+      "dispatcher_handler": "K_IoSynchronousDeviceIoControlRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No verified IRP/device-driver dispatch backend; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 85,
@@ -805,19 +890,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 85; one-line jump to K_IoSynchronousFsdRequest.",
       "nxdk_export_definition": "IoSynchronousFsdRequest@20               @  85 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoSynchronousFsdRequest@20",
-      "decoration_stack_bytes": 20
+      "decoration_stack_bytes": 20,
+      "dispatcher_handler": "K_IoSynchronousFsdRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No verified IRP/device-driver dispatch backend; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 86,
@@ -830,19 +918,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 86; one-line jump to K_IofCallDriver.",
       "nxdk_export_definition": "@IofCallDriver@8                         @  86 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "@IofCallDriver@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IofCallDriver",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No verified DEVICE_OBJECT dispatch-table and IRP stack ABI; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 87,
@@ -855,19 +946,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 87; one-line jump to K_IofCompleteRequest.",
       "nxdk_export_definition": "@IofCompleteRequest@8                    @  87 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "@IofCompleteRequest@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_IofCompleteRequest",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "IRP completion stack layout and completion-routine lifecycle are not verified; non-null input fails fast."
     },
     {
       "ordinal": 90,
@@ -880,19 +974,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 90; one-line jump to K_IoDismountVolume.",
       "nxdk_export_definition": "IoDismountVolume@4                       @  90 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoDismountVolume@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoDismountVolume",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No volume manager/device stack is available to dismount a guest volume; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 91,
@@ -905,19 +1002,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 91; one-line jump to K_IoDismountVolumeByName.",
       "nxdk_export_definition": "IoDismountVolumeByName@4                 @  91 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "IoDismountVolumeByName@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_IoDismountVolumeByName",
+      "implementation_file": "guest32/kernel_io_exports.cpp",
+      "unsupported_reason": "No volume namespace/dismount backend is available; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 93,
@@ -930,19 +1030,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 93; one-line jump to K_KeAlertThread.",
       "nxdk_export_definition": "KeAlertThread@8                          @  93 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeAlertThread@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_KeAlertThread",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Implements alerting with a queued APC; target thread must enter an alertable wait."
     },
     {
       "ordinal": 98,
@@ -955,19 +1059,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 98; one-line jump to K_KeConnectInterrupt.",
       "nxdk_export_definition": "KeConnectInterrupt@4                     @  98 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeConnectInterrupt@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeConnectInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No physical interrupt controller to connect a guest interrupt; returns FALSE."
     },
     {
       "ordinal": 100,
@@ -980,19 +1087,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 100; one-line jump to K_KeDisconnectInterrupt.",
       "nxdk_export_definition": "KeDisconnectInterrupt@4                  @ 100 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeDisconnectInterrupt@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeDisconnectInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "No physical interrupt controller to disconnect a guest interrupt; returns FALSE."
     },
     {
       "ordinal": 105,
@@ -1005,19 +1115,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 105; one-line jump to K_KeInitializeApc.",
       "nxdk_export_definition": "KeInitializeApc@28                       @ 105 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeInitializeApc@28",
-      "decoration_stack_bytes": 28
+      "decoration_stack_bytes": 28,
+      "dispatcher_handler": "K_KeInitializeApc",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Stores APC metadata by guest APC address; no raw Xbox APC structure writes are performed."
     },
     {
       "ordinal": 109,
@@ -1030,19 +1144,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 109; one-line jump to K_KeInitializeInterrupt.",
       "nxdk_export_definition": "KeInitializeInterrupt@28                 @ 109 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeInitializeInterrupt@28",
-      "decoration_stack_bytes": 28
+      "decoration_stack_bytes": 28,
+      "dispatcher_handler": "K_KeInitializeInterrupt",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Stores interrupt metadata by guest interrupt address; no physical interrupt vector is connected."
     },
     {
       "ordinal": 118,
@@ -1055,19 +1173,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 118; one-line jump to K_KeInsertQueueApc.",
       "nxdk_export_definition": "KeInsertQueueApc@16                      @ 118 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeInsertQueueApc@16",
-      "decoration_stack_bytes": 16
+      "decoration_stack_bytes": 16,
+      "dispatcher_handler": "K_KeInsertQueueApc",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Queues kernel/normal APC callbacks through QueueUserAPC; callback runs when the target thread enters an alertable wait."
     },
     {
       "ordinal": 139,
@@ -1080,19 +1202,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 139; one-line jump to K_KeRestoreFloatingPointState.",
       "nxdk_export_definition": "KeRestoreFloatingPointState@4            @ 139 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeRestoreFloatingPointState@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeRestoreFloatingPointState",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "Xbox KFLOATING_SAVE layout and exact x87/SSE preservation contract are not verified; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 141,
@@ -1105,19 +1230,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 141; one-line jump to K_KeRundownQueue.",
       "nxdk_export_definition": "KeRundownQueue@4                         @ 141 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeRundownQueue@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeRundownQueue",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Detaches queued LIST_ENTRY nodes into a null-terminated FIFO list and empties the queue; queue object layout is the emulator's verified internal dispatcher layout."
     },
     {
       "ordinal": 142,
@@ -1130,19 +1259,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 142; one-line jump to K_KeSaveFloatingPointState.",
       "nxdk_export_definition": "KeSaveFloatingPointState@4               @ 142 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeSaveFloatingPointState@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KeSaveFloatingPointState",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "unsupported_reason": "Xbox KFLOATING_SAVE layout and exact x87/SSE preservation contract are not verified; returns STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 153,
@@ -1155,19 +1287,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 153; one-line jump to K_KeSynchronizeExecution.",
       "nxdk_export_definition": "KeSynchronizeExecution@12                @ 153 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "KeSynchronizeExecution@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_KeSynchronizeExecution",
+      "implementation_file": "guest32/kernel_thread_exports.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Executes the synchronization callback under a per-interrupt mutex; physical ISR delivery is unavailable."
     },
     {
       "ordinal": 163,
@@ -1180,19 +1316,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 163; one-line jump to K_KfLowerIrql.",
       "nxdk_export_definition": "@KiUnlockDispatcherDatabase@4            @ 163 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "@KiUnlockDispatcherDatabase@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_KfLowerIrql",
+      "implementation_file": "guest32/kernel_compat.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Routes to the existing K_KfLowerIrql primitive to lower guest IRQL."
     },
     {
       "ordinal": 168,
@@ -1205,19 +1345,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 168; one-line jump to K_MmClaimGpuInstanceMemory.",
       "nxdk_export_definition": "MmClaimGpuInstanceMemory@8               @ 168 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmClaimGpuInstanceMemory@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmClaimGpuInstanceMemory",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No NV2A/GPU instance-memory allocator is connected; returns nullptr and zero padding."
     },
     {
       "ordinal": 169,
@@ -1230,19 +1373,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 169; one-line jump to K_MmCreateKernelStack.",
       "nxdk_export_definition": "MmCreateKernelStack@8                    @ 169 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmCreateKernelStack@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmCreateKernelStack",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Allocates page-rounded guest-addressable stack storage; returns the high address corresponding to the requested stack size."
     },
     {
       "ordinal": 170,
@@ -1255,19 +1402,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 170; one-line jump to K_MmDeleteKernelStack.",
       "nxdk_export_definition": "MmDeleteKernelStack@8                    @ 170 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmDeleteKernelStack@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmDeleteKernelStack",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Releases only the exact base/limit pair returned by MmCreateKernelStack."
     },
     {
       "ordinal": 175,
@@ -1280,19 +1431,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 175; one-line jump to K_MmLockUnlockBufferPages.",
       "nxdk_export_definition": "MmLockUnlockBufferPages@12               @ 175 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmLockUnlockBufferPages@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_MmLockUnlockBufferPages",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Uses VirtualLock/VirtualUnlock to model guest page residency; host pinning limits apply."
     },
     {
       "ordinal": 176,
@@ -1305,19 +1460,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 176; one-line jump to K_MmLockUnlockPhysicalPage.",
       "nxdk_export_definition": "MmLockUnlockPhysicalPage@8               @ 176 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmLockUnlockPhysicalPage@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmLockUnlockPhysicalPage",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No guest physical-page mapping/pinning backend exists; fails fast rather than pretending to pin a physical page."
     },
     {
       "ordinal": 177,
@@ -1330,19 +1488,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 177; one-line jump to K_MmMapIoSpace.",
       "nxdk_export_definition": "MmMapIoSpace@12                          @ 177 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmMapIoSpace@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_MmMapIoSpace",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No chipset MMIO mapping backend exists; returns nullptr."
     },
     {
       "ordinal": 178,
@@ -1355,19 +1516,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "partial_tested",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 178; one-line jump to K_MmPersistContiguousMemory.",
       "nxdk_export_definition": "MmPersistContiguousMemory@12             @ 178 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmPersistContiguousMemory@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "dispatcher_handler": "K_MmPersistContiguousMemory",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Uses VirtualLock/VirtualUnlock as the host-backed approximation of contiguous-memory persistence; it does not provide Xbox physical-contiguity guarantees."
     },
     {
       "ordinal": 181,
@@ -1380,19 +1545,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 181; one-line jump to K_MmQueryStatistics.",
       "nxdk_export_definition": "MmQueryStatistics@4                      @ 181 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmQueryStatistics@4",
-      "decoration_stack_bytes": 4
+      "decoration_stack_bytes": 4,
+      "dispatcher_handler": "K_MmQueryStatistics",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "MM_STATISTICS layout and guest accounting contract are not verified; returns STATUS_NOT_SUPPORTED rather than reporting host statistics."
     },
     {
       "ordinal": 183,
@@ -1405,19 +1573,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
+      "dispatcher_entry_present": true,
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
         "guest_x86_thunk": null
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 183; one-line jump to K_MmUnmapIoSpace.",
       "nxdk_export_definition": "MmUnmapIoSpace@8                         @ 183 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "MmUnmapIoSpace@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_MmUnmapIoSpace",
+      "implementation_file": "guest32/kernel_memory.cpp",
+      "unsupported_reason": "No MMIO mapping can be created without a chipset backend; returns nullptr."
     },
     {
       "ordinal": 188,
@@ -1430,19 +1601,23 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
-      "implementation_status": "assigned_to_parallel_owner_unimplemented",
-      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "dispatcher_entry_present": true,
+      "implementation_status": "implemented_tested",
+      "owner": "Developer A",
+      "structure_layout_status": "verified_12_byte_OBJECT_ATTRIBUTES_and_8_byte_ANSI_STRING_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler ABI smoke; direct handler calls (not a per-export import-thunk test)."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 188; one-line jump to K_NtCreateDirectoryObject.",
       "nxdk_export_definition": "NtCreateDirectoryObject@8                @ 188 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "NtCreateDirectoryObject@8",
-      "decoration_stack_bytes": 8
+      "decoration_stack_bytes": 8,
+      "dispatcher_handler": "K_NtCreateDirectoryObject",
+      "implementation_file": "guest32/kernel_directory_objects.cpp",
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43707173605",
+      "limitations": "Creates named or unnamed typed directory handles; duplicate names collide, and RootDirectory-relative creation is currently STATUS_NOT_SUPPORTED."
     }
   ]
 }
