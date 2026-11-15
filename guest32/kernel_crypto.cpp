@@ -215,6 +215,13 @@ extern "C" void __stdcall K_XcHMAC(std::uint8_t* key, std::uint32_t keyLength,
     SecureZeroMemory(keyBlock, sizeof(keyBlock)); SecureZeroMemory(innerPad, sizeof(innerPad));
     SecureZeroMemory(outerPad, sizeof(outerPad)); SecureZeroMemory(innerDigest, sizeof(innerDigest));
 }
+extern "C" std::uint32_t __stdcall K_XcCryptService(std::uint32_t operation, void* arguments) {
+    // The reverse-engineered Xbox compatibility implementation treats this
+    // service as a dummy: it returns zero and leaves the argument block alone.
+    (void)operation;
+    (void)arguments;
+    return 0;
+}
 extern "C" void __stdcall K_XcDESKeyParity(std::uint8_t* key, std::uint32_t keyLength) {
     if (!SpanHasProtection(key, keyLength, true)) {
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
