@@ -40,14 +40,16 @@ __declspec(dllexport) void __cdecl XboxNV2A_Flush(void);
 
 /* Borrow a host mapping of Xbox PCI physical memory for NV2A DMA target=PCI.
  * The caller owns the memory and must keep it alive until unbound or ModuleStop.
- * AGP target/page translation remains a separate GART implementation. */
+ * AGP target translation uses the separate host resolver callback below. */
 __declspec(dllexport) int __cdecl XboxNV2A_BindGuestPhysicalMemory(
     uint32_t guest_physical_base, void* memory, uint32_t length);
 
 /* Host adapter for Xbox AGP aperture translation. The callback must resolve
  * an aperture-relative byte offset through the guest's actual GART/page tables
  * and return a bounded contiguous host span. The bridge validates the returned
- * span length and never assumes a generic GART PTE format. */
+ * span length and never assumes a generic GART PTE format. The caller owns the
+ * callback context and backing memory and must keep them valid until unbound
+ * or ModuleStop. Pass NULL,NULL to unbind the resolver. */
 typedef int (__cdecl *XboxNV2A_AGP_TRANSLATE_FN)(
     uint32_t aperture_offset, uint32_t requested_length,
     const void** host_span_out, uint32_t* contiguous_length_out,
