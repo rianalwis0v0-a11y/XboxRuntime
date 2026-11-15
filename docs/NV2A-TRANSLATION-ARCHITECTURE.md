@@ -107,7 +107,7 @@ The existing code already contains important pieces of this translation path; do
 - The NV2A module currently links xboxrecomp's xbox_nv2a and xbox_d3d8 libraries.
 - The D3D8 compatibility layer is backed by D3D11 on Windows.
 - The bridge mirrors the uploaded NV2A vertex program and constants, marks shader state dirty on uploads, and documents first-draw compilation plus microcode-hash caching of the resulting host vertex shader.
-- The bridge already has a vertex-program validator and an idempotent CMake patch for the pinned xboxrecomp VSH parser. The patch corrects the real NV2A DWORD1-DWORD3 field layout and preserves paired MAC/ILU read-before-write behavior.
+- The bridge already has a vertex-program validator and an idempotent CMake patch for the pinned xboxrecomp VSH parser. The patch corrects the real NV2A DWORD1-DWORD3 field layout, relative-address flag, output routing, and paired MAC/ILU read-before-write behavior.
 - The bridge has both a custom FVF/DrawPrimitiveUP vertex-array route and a programmable vertex-shader route. These must be unified carefully rather than replaced blindly.
 - Existing tests cover NV2A validation, HLSL generation, PFIFO/DMA parsing, vertex/index expansion, texture decoding, and several state mappings.
 
@@ -139,7 +139,7 @@ The resolver is used by:
 
 This removes the earlier local-VRAM-only rejection for PCI resources while retaining strict bounds checks. The NV2A DMA target encodings are distinct: local VRAM is 0x00000000, tiled local memory is 0x00010000, PCI is 0x00020000, and AGP is 0x00030000. Tiled local memory is explicitly rejected until its tile swizzle mapping is implemented. AGP spans are routed through the host GART callback; the Xbox-specific GART page-table walker is still not implemented in this module. Rebinding the PCI physical window dirties texture caches; changing its base or length also invalidates cached PCI DMA contexts so stale mapping-relative offsets cannot resolve into unrelated memory.
 
-Regression coverage has been added for PCI-backed vertex-array reads and linear texture decoding, including restoring the original local-VRAM DMA object/context after the test. The test is awaiting the Windows GitHub Actions result in PR #25.
+Regression coverage now exercises PCI-backed vertex-array reads, linear textures, mip chains, palette-indexed textures, PCI-window remapping/invalidation, AGP pushbuffers/vertex/texture reads, truncated AGP spans, and rejection of NVM_TILED when its swizzle path is not implemented.
 
 ## Six-part translation sprint status (2026-11-15)
 
@@ -156,6 +156,10 @@ Regression coverage has been added for PCI-backed vertex-array reads and linear 
 6. **Guest XBE to D3D11 rendered-frame test — not yet complete.**
    The standalone NV2A tests exercise translation components, but the original guest D3D device lifecycle and complete guest-command-to-host-draw path still need to be connected and verified with a deterministic homebrew XBE.
 
-### Additional PCI regression coverage
+### Additional regression coverage and current validation
 
-The PCI-backed regression covers vertex-array reads, a linear texture, a two-level swizzled mip chain, and palette plus paletted-texture reads. The DMA pusher itself also obtains its command stream through the same checked span resolver. An AGP-backed regression uses the actual 0x00030000 DMA target and a host resolver callback to exercise pushbuffer parsing, vertex fetch, and texture fetch without assuming a GART PTE format. A short-span callback is rejected before pushbuffer dispatch. Companion tests verify that 0x00010000 (NVM_TILED) is rejected rather than misrouted to the AGP callback, and that changing the PCI physical window invalidates stale DMA contexts. The corrected DMA-target/cache-invalidation tests are awaiting a fresh CI result.
+- PCI-backed tests cover vertex-array reads, linear textures, a two-level swizzled mip chain, palette plus paletted-texture reads, and stale-context invalidation when the borrowed physical window moves.
+- AGP-backed tests use the actual 0x00030000 target and a host resolver callback for pushbuffer parsing, vertex fetch, and texture fetch. A deliberately undersized callback span is rejected before pushbuffer dispatch.
+- NVM_TILED (0x00010000) is verified to be rejected instead of being mistaken for AGP.
+- The HLSL smoke test exercises ARL followed by relative constant access through the actual DWORD3 bit-1 flag, alongside the MAC/ILU opcode matrix and paired-unit read-before-write assertion.
+- Run 916 passed the Windows x64 build and all five subsystem tests. The native x86 guest build and entry-point smoke test also passed. The comprehensive diagnostic XBE still exits with 0xC0000409 before returning its report; that is not yet a successful guest graphics/render test.
