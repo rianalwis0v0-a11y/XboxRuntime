@@ -18,6 +18,10 @@
 
 static uint8_t* g_vram;
 static uint8_t* g_ramin;
+/* Borrowed host mapping for PCI-target DMA objects. The host runtime owns it. */
+static uint8_t* g_guest_physical_memory;
+static uint32_t g_guest_physical_base;
+static uint32_t g_guest_physical_length;
 
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
@@ -706,6 +710,10 @@ void __cdecl ModuleStop(void)
     // Keep its backing allocation alive until the host process exits; freeing
     // it here would leave the singleton's VRAM/RAMIN pointers dangling.
     g_started = 0;
+    /* Never retain a borrowed guest-memory pointer across module shutdown. */
+    g_guest_physical_memory = NULL;
+    g_guest_physical_base = 0;
+    g_guest_physical_length = 0;
     OutputDebugStringW(L"[XboxRuntime:NV2A] Translator stopped. GPU memory retained until process exit.\n");
 }
 
@@ -782,6 +790,25 @@ int __cdecl XboxNV2A_SubmitMethod(
 static int memory_range_valid(uint32_t offset, uint32_t length, uint32_t capacity)
 {
     return offset <= capacity && length <= capacity - offset;
+}
+
+int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
+                                              void* memory, uint32_t length)
+{
+    if (!g_started) return 1;
+    if (!memory && !length && !guest_physical_base) {
+        g_guest_physical_memory = NULL;
+        g_guest_physical_base = 0;
+        g_guest_physical_length = 0;
+        return 0;
+    }
+    if (!memory || !length || guest_physical_base >= 0x08000000u ||
+        length > 0x08000000u - guest_physical_base)
+        return 2;
+    g_guest_physical_memory = (uint8_t*)memory;
+    g_guest_physical_base = guest_physical_base;
+    g_guest_physical_length = length;
+    return 0;
 }
 
 
@@ -1854,16 +1881,26 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
 
     if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
         return 5;
-    if (target != 0u) return 6;
-    if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
-        return 7;
+    if (target == 0u) {
+        if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
+            return 7;
+    } else if (target == 0x00020000u) {
+        /* PCI DMA addresses resolve against the host runtime's explicitly
+         * bound guest-physical RAM window. Do not silently alias AGP/GART. */
+        if (!g_guest_physical_memory || base < g_guest_physical_base ||
+            base - g_guest_physical_base > g_guest_physical_length ||
+            limit > g_guest_physical_length - (base - g_guest_physical_base))
+            return 7;
+    } else {
+        return 6; /* AGP requires GART page-table translation; never guess. */
+    }
 
     output->handle = handle;
     output->instance_offset = instance;
     output->dma_class = dma_class;
     output->dma_target = target;
     output->engine = engine;
-    output->base_address = base;
+    output->base_address = target == 0u ? base : base - g_guest_physical_base;
     output->limit = limit;
     output->mapped_length = limit;
     return 0;
@@ -2565,8 +2602,8 @@ static int validate_puller_method(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
-static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
-                               uint32_t mapped_length, uint32_t initial_get,
+static int walk_dma_pushbuffer(uint32_t channel, const uint8_t* memory,
+                               uint32_t base, uint32_t mapped_length, uint32_t initial_get,
                                uint32_t put, uint32_t* final_get,
                                uint32_t* methods_submitted, int dispatch)
 {
@@ -2583,14 +2620,14 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     uint32_t subroutine_returns[16];
     uint32_t call_depth = 0;
 
-    if ((get & 3u) || (put & 3u) || get > mapped_length || put > mapped_length)
+    if (!memory || (get & 3u) || (put & 3u) || get > mapped_length || put > mapped_length)
         return 1;
 
     while (get != put) {
         if (++steps > 1048576u || get > mapped_length || mapped_length - get < 4u)
             return 2;
 
-        const uint32_t word = read_le32(g_vram + base + get);
+        const uint32_t word = read_le32(memory + base + get);
         get += 4u;
 
         if (remaining) {
@@ -2706,8 +2743,11 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     if (get > dma->mapped_length || put > dma->mapped_length || (get & 3u) || (put & 3u))
         return 9;
 
+    const uint8_t* dma_memory = dma->dma_target == 0u ? g_vram :
+        (dma->dma_target == 0x00020000u ? g_guest_physical_memory : NULL);
+    if (!dma_memory) return 10;
     uint32_t checked_get = get, checked_methods = 0;
-    int result = walk_dma_pushbuffer(channel, dma->base_address,
+    int result = walk_dma_pushbuffer(channel, dma_memory, dma->base_address,
         dma->mapped_length, get, put, &checked_get, &checked_methods, 0);
     if (result != 0) {
         raise_dma_pusher_error(result);
@@ -2716,7 +2756,7 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
 
     /* Only dispatch after the complete packet/control-flow stream validates. */
     uint32_t executed_get = get, executed_methods = 0;
-    result = walk_dma_pushbuffer(channel, dma->base_address,
+    result = walk_dma_pushbuffer(channel, dma_memory, dma->base_address,
         dma->mapped_length, get, put, &executed_get, &executed_methods, 1);
     if (result != 0) {
         raise_dma_pusher_error(result);
