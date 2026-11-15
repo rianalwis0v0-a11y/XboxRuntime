@@ -56,6 +56,7 @@ extern "C" LONG __stdcall K_NtCreateDirectoryObject(
     const auto* attributes =
         static_cast<const GuestObjectAttributesDirectory*>(rawAttributes);
     if (attributes->RootDirectory) return LONG(0xC00000BBu);
+    GuestDirectoryObject* object = nullptr;
     try {
         std::string name;
         if (attributes->ObjectName) {
@@ -66,7 +67,7 @@ extern "C" LONG __stdcall K_NtCreateDirectoryObject(
             if (objectName->Length)
                 name.assign(objectName->Buffer, objectName->Length);
         }
-        auto* object = new (std::nothrow) GuestDirectoryObject{};
+        object = new (std::nothrow) GuestDirectoryObject{};
         if (!object) return LONG(0xC0000017u);
         object->name = std::move(name);
         object->lookupName = FoldDirectoryName(object->name);
@@ -85,8 +86,10 @@ extern "C" LONG __stdcall K_NtCreateDirectoryObject(
             return LONG(0xC0000017u);
         }
         *directoryHandle = handle;
+        object = nullptr; // ownership transferred to the object manager
         return 0;
     } catch (...) {
+        if (object) DestroyDirectoryObject(object);
         return LONG(0xC0000017u);
     }
 }
