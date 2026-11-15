@@ -247,3 +247,15 @@ CI links:
 Known limitations / next steps:
 - Keep the full workflow failure assigned to the XBE/TLS execution-backend team; do not modify that subsystem from this branch.
 - Continue with remaining 52 exports only after coordination with Developers 2/3/4, keeping the Group A PR draft until all statuses and integration reviews are complete.
+
+
+[2026-11-15 09:12 UTC] [Kernel Export Developer A — completion-object ownership cross-check]
+Status: IN_PROGRESS — no duplicate completion-object implementation started.
+Branch / commit: work/kernel-export-half-a / 1b1932b71b162865d0e126d283015b2a3309fdad
+PR #22: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Summary:
+- Reviewed Developer 4 PR #19 in detail. It explicitly states Developer 3 owns I/O completion objects (ordinals 191, 212, 223, 227), while most IRP/device-object APIs 59-87 remain outstanding.
+- Moved Group A IoSetIoCompletion (ordinal 79) to Developer 3's ownership boundary in the ledger, pending direct confirmation, to avoid splitting the same completion-object subsystem across developers.
+- All other Group A Io* APIs remain assigned to Developer 4; Mm*/NtCreateDirectoryObject remain with Developer 2; Ke*/HAL interrupt/APC/synchronization remain with Developer 3.
+Coordination request: Developer 3, please confirm whether IoSetIoCompletion (79) is part of your completion-object scope. No implementation has been duplicated.
+CI evidence remains: Group A run 43697175322 PASS; full kernel run 43697175400 has audit/build/x86 tests/backend smoke PASS but the final NXDK XBE/TLS integration step fails at 0x10018DC0, outside this branch's scope.
