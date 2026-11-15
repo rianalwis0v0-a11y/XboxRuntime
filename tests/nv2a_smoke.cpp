@@ -285,7 +285,18 @@ int main() {
         mappedState != 19u || mappedValue != 5u ||
         !mapRenderState(0x0348u, 0x0307u, &mappedState, &mappedValue) ||
         mappedState != 20u || mappedValue != 10u ||
-        mapRenderState(0x034Cu, 0x80402010u, &mappedState, &mappedValue) ||
+        !mapRenderState(0x034Cu, 0xAA112233u, &mappedState, &mappedValue) ||
+        mappedState != 193u || mappedValue != 0xAA332211u ||
+        !mapRenderState(0x0358u, 0x01000101u, &mappedState, &mappedValue) ||
+        mappedState != 168u || mappedValue != 14u ||
+        !mapRenderState(0x0318u, 1u, &mappedState, &mappedValue) ||
+        mappedState != 157u || mappedValue != 1u ||
+        !mapRenderState(0x0A30u, 0x3F800000u, &mappedState, &mappedValue) ||
+        mappedState != 158u || mappedValue != 0x3F800000u ||
+        !mapRenderState(0x0A34u, 0x40000000u, &mappedState, &mappedValue) ||
+        mappedState != 159u || mappedValue != 0x40000000u ||
+        !mapRenderState(0x0A38u, 0x40400000u, &mappedState, &mappedValue) ||
+        mappedState != 160u || mappedValue != 0x40400000u ||
         mapRenderState(0x0344u, 0x7777u, &mappedState, &mappedValue) ||
         mapRenderState(0x0999u, 0u, &mappedState, &mappedValue)) {
         std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
