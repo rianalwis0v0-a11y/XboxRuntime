@@ -16,7 +16,7 @@ The existing NV2A decoder, HLSL generation, paired MAC/ILU semantics, PFIFO/DMA 
    - Resolve Xbox GPU-visible addresses to bounded guest-memory or local-VRAM spans.
    - Keep PCI memory and AGP/GART address spaces distinct.
    - Validate the complete requested range before exposing a host pointer.
-   - Make GART/page-table translation an explicit service; never treat an AGP address as a host pointer.
+   - Resolve the Xbox 0xF0000000 linear AGP alias through the bounded guest-physical mapping; allow a host override for alternate/nonlinear mappings. Never treat an AGP address as a host pointer.
 
 2. **Command decoding**
    - Consume PFIFO DMA pushbuffer packets and decode relevant PGRAPH methods.
@@ -115,7 +115,7 @@ The existing code already contains important pieces of this translation path; do
 
 - The full Xbox D3D device-creation path is not yet connected to a running original XBE.
 - The guest address space is not yet generally connected to NV2A MMIO/VRAM fault hooks.
-- PCI-target DMA pushbuffers and resource fetches use the bounded borrowed guest-physical mapping; AGP now has a host-supplied GART resolver seam.
+- PCI-target DMA pushbuffers and resource fetches use the bounded borrowed guest-physical mapping; the common Xbox AGP aperture is also mapped as a bounded linear alias, with an optional host override.
 - The shared DMA span resolver is used by pushbuffer, vertex, linear texture, mip-chain, and paletted texture/palette reads.
 - An initial backend-neutral draw packet now separates translated topology/vertex/shader metadata from the existing D3D8/D3D11 submission adapter.
 
@@ -137,16 +137,16 @@ The resolver is used by:
 - Swizzled/compressed mip-chain decode (`XboxNV2A_DecodeTextureMipChainFromDMA`).
 - Paletted texture and palette fetch.
 
-This removes the earlier local-VRAM-only rejection for PCI resources while retaining strict bounds checks. The NV2A DMA target encodings are distinct: local VRAM is 0x00000000, tiled local memory is 0x00010000, PCI is 0x00020000, and AGP is 0x00030000. Tiled local memory is explicitly rejected until its tile swizzle mapping is implemented. AGP spans are routed through the host GART callback; the Xbox-specific GART page-table walker is still not implemented in this module. Rebinding the PCI physical window dirties texture caches; changing its base or length also invalidates cached PCI DMA contexts so stale mapping-relative offsets cannot resolve into unrelated memory.
+This removes the earlier local-VRAM-only rejection for PCI resources while retaining strict bounds checks. The NV2A DMA target encodings are distinct: local VRAM is 0x00000000, tiled local memory is 0x00010000, PCI is 0x00020000, and AGP is 0x00030000. Tiled local memory is explicitly rejected until its tile swizzle mapping is implemented. The Xbox AGP path resolves the 27-bit DMA aperture offset through the guest-physical mapping corresponding to the documented 0xF0000000 linear alias; a host callback can override this for a different/nonlinear mapping. Rebinding the guest-physical window dirties texture caches; changing its base or length also invalidates cached PCI DMA contexts so stale mapping-relative offsets cannot resolve into unrelated memory.
 
-Regression coverage now exercises PCI-backed vertex-array reads, linear textures, mip chains, palette-indexed textures, PCI-window remapping/invalidation, AGP pushbuffers/vertex/texture reads, truncated AGP spans, and rejection of NVM_TILED when its swizzle path is not implemented.
+Regression coverage now exercises PCI-backed vertex-array reads, linear textures, mip chains, palette-indexed textures, PCI-window remapping/invalidation, AGP callback and direct-alias pushbuffers/vertex/texture reads, truncated callback spans, and rejection of NVM_TILED when its swizzle path is not implemented.
 
 ## Six-part translation sprint status (2026-11-15)
 
 1. **Unify DMA reads through one address resolver — implemented on this branch.**
    Pushbuffer parsing, vertex fetch, linear textures, mip chains, and paletted texture/palette reads now share the checked span resolver. The resolver accepts local VRAM and an explicitly bound PCI physical-memory window; it never converts guest addresses directly into host pointers.
-2. **AGP/GART translation — adapter implemented; Xbox page-table walker outstanding.**
-   The bridge exposes a host-supplied AGP aperture resolver callback and checks the complete returned span. The target decode now uses the NV2A-defined AGP value 0x00030000; 0x00010000 is NVM_TILED and is rejected instead of being mistaken for AGP. The callback must resolve the aperture through the actual Xbox host-bridge GART state. The module deliberately does not invent a generic PTE format; the Xbox-specific GART table walker and its tests remain outstanding.
+2. **Xbox AGP linear aperture — implemented; alternate mapping hook available.**
+   The bridge resolves the AGP target 0x00030000 through the guest-physical mapping using the 27-bit aperture offset; this matches the Xbox 0xF0000000 linear AGP-memory alias. A host callback remains available for an alternate/nonlinear mapping and is tested for bounded spans. NVM_TILED (0x00010000) remains distinct and is rejected until its tiled-memory semantics are implemented. No generic PC GART PTE layout is assumed.
 3. **Vertex/pixel shader coverage — existing translators reused; coverage remains partial.**
    Keep the pinned NV2A microcode-to-HLSL translator and D3D8/D3D11 combiner path. Extend operations through focused shader tests; do not add a second interpreter/compiler.
 4. **PGRAPH-to-host operations — partial.**
@@ -159,10 +159,10 @@ Regression coverage now exercises PCI-backed vertex-array reads, linear textures
 ### Additional regression coverage and current validation
 
 - PCI-backed tests cover vertex-array reads, linear textures, a two-level swizzled mip chain, palette plus paletted-texture reads, and stale-context invalidation when the borrowed physical window moves.
-- AGP-backed tests use the actual 0x00030000 target and a host resolver callback for pushbuffer parsing, vertex fetch, and texture fetch. A deliberately undersized callback span is rejected before pushbuffer dispatch.
+- AGP-backed tests cover both the host callback path and the default 0xF0000000 linear alias path, including pushbuffer parsing, vertex fetch, and texture fetch. A deliberately undersized callback span is rejected before pushbuffer dispatch.
 - NVM_TILED (0x00010000) is verified to be rejected instead of being mistaken for AGP.
 - The HLSL smoke test exercises ARL followed by relative constant access through the actual DWORD3 bit-1 flag, alongside the MAC/ILU opcode matrix and paired-unit read-before-write assertion.
-- Run 943 passed the Windows x64 build and all five subsystem tests, including weight/fog/point-size array fetch, optional-array handling, exact vertex packing, and HLSL input decoding. The native x86 guest build and entry-point smoke test also passed. The comprehensive diagnostic XBE still exits with 0xC0000409 before returning its report; that is not yet a successful guest graphics/render test.
+- Run 951 passed the Windows x64 build and all five subsystem tests, including direct AGP linear-alias DMA, AGP callback bounds, weight/fog/point-size array fetch, optional-array handling, exact vertex packing, and HLSL input decoding. The native x86 guest build and entry-point smoke test also passed. The comprehensive diagnostic XBE still exits with 0xC0000409 before returning its report; that is not yet a successful guest graphics/render test.
 
 
 ### Programmable vertex input contract
