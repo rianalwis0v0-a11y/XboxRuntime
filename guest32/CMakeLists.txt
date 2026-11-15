@@ -106,3 +106,14 @@ target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_
 target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi)
 add_test(NAME kernel_io_group_a_guest_smoke COMMAND kernel_io_group_a_guest_smoke)
+
+
+add_executable(kernel_io_completion_guest_smoke
+  ../tests/kernel_io_completion_guest_smoke.cpp
+  kernel_io_completion.cpp kernel_object_manager.cpp
+)
+target_include_directories(kernel_io_completion_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_io_completion_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_io_completion_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_io_completion_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_io_completion_guest_smoke COMMAND kernel_io_completion_guest_smoke)
