@@ -342,6 +342,7 @@ extern "C" void __stdcall K_IoStartNextPacket(void* rawDeviceObject) {
         }
         if (it->second.empty()) {
             device->CurrentIrp = nullptr;
+            device->StartIoKey = 0;
             device->DeviceQueue.Busy = FALSE;
             return;
         }
