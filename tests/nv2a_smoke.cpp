@@ -640,7 +640,8 @@ int main() {
             sizeof(pciDecodedTexture), &pciTexturePitch);
         const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
         const uint32_t restoreContexts[] = {
-            0x019Cu, dmaHandle, 0x0180u, dmaHandle
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle
         };
         const int restoreStream = writeVram(0x1000u, restoreContexts,
             sizeof(restoreContexts)) == 0
