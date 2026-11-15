@@ -82,3 +82,13 @@ target_compile_features(kernel_nvsettings_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_nvsettings_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(kernel_nvsettings_guest_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_nvsettings_guest_smoke COMMAND kernel_nvsettings_guest_smoke)
+
+add_executable(kernel_thread_exports_guest_smoke
+  ../tests/kernel_thread_exports_guest_smoke.cpp
+  kernel_thread_exports.cpp
+)
+target_include_directories(kernel_thread_exports_guest_smoke PRIVATE "\${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_thread_exports_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_thread_exports_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_thread_exports_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_thread_exports_guest_smoke COMMAND kernel_thread_exports_guest_smoke)
