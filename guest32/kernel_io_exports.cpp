@@ -319,6 +319,7 @@ extern "C" void __stdcall K_IoStartPacket(
         }
         if (!device->CurrentIrp) {
             device->CurrentIrp = irp;
+            device->StartIoKey = queued.key;
             device->DeviceQueue.Busy = TRUE;
             startNow = true;
         } else {
@@ -347,6 +348,7 @@ extern "C" void __stdcall K_IoStartNextPacket(void* rawDeviceObject) {
         next = it->second.front();
         it->second.pop_front();
         device->CurrentIrp = next.irp;
+        device->StartIoKey = next.key;
         device->DeviceQueue.Busy = TRUE;
         haveNext = true;
     }
