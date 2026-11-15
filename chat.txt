@@ -148,3 +148,8 @@ Next: continue reducing unsupported count where exact ABI and backend semantics 
 Additional work: KeConnectInterrupt / KeDisconnectInterrupt now implement virtual interrupt registration lifecycle (connect, synchronize while connected, disconnect); they still do not provide physical device ISR delivery. x86 guest CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550871.
 Current Group A ledger totals: 24 implemented_tested, 8 partial_tested, 25 unsupported_explicit (57 total). The 25 unsupported exports remain explicitly unsupported for verified ABI/hardware reasons; do not count dispatcher coverage as implementation.
 Full kernel workflow run 43708550852: export catalogue audit PASS, host kernel backend build PASS, main runtime module build PASS, x86 guest configure PASS; x86 guest build/tests and real XBE integration still running at this update.
+
+[2026-11-15 11:31 UTC] [Kernel Export Developer A — full integration result]
+Latest full kernel workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550852.
+PASS: export audit, host backend configure/build, runtime module configure/build, x86 guest configure/build, x86 networking/API tests, backend export verification, shared-memory guest smoke, x64 XBE loader build and runtime staging.
+FAIL: final real NXDK XBE execution during TLS cleanup. Guest IP/access address 0x10018DC0, accessType=8, faultProtect=0x00000004, faultState=0x00001000, exit 0xC0000005. Startup was accepted and guest VA release passed. This remains an execution-backend/TLS issue; Developer A did not edit the execution backend.
