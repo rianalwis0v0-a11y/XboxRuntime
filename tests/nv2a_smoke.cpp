@@ -618,9 +618,15 @@ int main() {
             0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF, 0xDE,0xAD,0xBE,0xEF,
             0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
         };
+        const uint8_t pciMipData[20] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF,
+            0x0F,0x0E,0x0D,0xFF
+        };
         std::memcpy(guestPhysical.data(), pciContextStream, sizeof(pciContextStream));
         std::memcpy(guestPhysical.data() + 0x300u, pciVertexData, sizeof(pciVertexData));
         std::memcpy(guestPhysical.data() + 0x500u, pciTextureData, sizeof(pciTextureData));
+        std::memcpy(guestPhysical.data() + 0x800u, pciMipData, sizeof(pciMipData));
         const uint8_t pciPaletteEntries[16] = {
             0x30,0x20,0x10,0xFF, 0x60,0x50,0x40,0xFF,
             0x90,0x80,0x70,0xFF, 0xC0,0xB0,0xA0,0xFF
@@ -633,6 +639,8 @@ int main() {
         };
         float pciFetchedVertices[6]{};
         uint8_t pciDecodedTexture[16]{}, pciDecodedPaletteTexture[16]{};
+        uint8_t pciDecodedMipChain[20]{};
+        uint32_t pciMipOffsets[2]{}, pciMipSizes[2]{};
         uint32_t pciPaletteOffsets[1]{}, pciPaletteSizes[1]{};
         uint32_t pciTexturePitch = 0, pciGet = 0, pciMethods = 0;
         uint32_t restoreGet = 0, restoreMethods = 0;
@@ -648,6 +656,9 @@ int main() {
         const int textureResult = decodeTextureFromDma(channel, 0u, 0x0180u,
             0x500u, 0x1200u, 2u, 2u, 12u, pciDecodedTexture,
             sizeof(pciDecodedTexture), &pciTexturePitch);
+        const int pciMipResult = decodeMipChainFromDma(channel, 0u, 0x0184u,
+            0x800u, 0x0600u, 2u, 2u, 2u, pciDecodedMipChain,
+            sizeof(pciDecodedMipChain), pciMipOffsets, pciMipSizes);
         const uint32_t pciPalettedFormat = 1u | (2u << 4) | (0x0Bu << 8) |
             (1u << 16) | (1u << 20) | (1u << 24);
         const int paletteStateResult = submit(0u, 0x1B00u, 0x700u) == 0 &&
@@ -676,6 +687,10 @@ int main() {
             textureResult != 0 || pciTexturePitch != 8u ||
             pciDecodedTexture[0] != 1u || pciDecodedTexture[1] != 2u ||
             pciDecodedTexture[2] != 3u || pciDecodedTexture[8] != 7u ||
+            pciMipResult != 0 || pciMipOffsets[0] != 0u || pciMipSizes[0] != 16u ||
+            pciMipOffsets[1] != 16u || pciMipSizes[1] != 4u ||
+            pciDecodedMipChain[0] != 1u || pciDecodedMipChain[1] != 2u ||
+            pciDecodedMipChain[2] != 3u || pciDecodedMipChain[16] != 13u ||
             paletteStateResult != 0 || paletteDecodeResult != 0 ||
             pciPaletteSizes[0] != 16u || pciDecodedPaletteTexture[0] != 0x10u ||
             pciDecodedPaletteTexture[1] != 0x20u || pciDecodedPaletteTexture[2] != 0x30u ||
