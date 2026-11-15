@@ -75,6 +75,12 @@ static_assert(sizeof(GuestDriverObject) == 68, "DRIVER_OBJECT x86 size");
 extern "C" LONG __stdcall K_IoCreateDevice(void*, ULONG, void*, ULONG, BOOLEAN, void**);
 extern "C" void __stdcall K_IoDeleteDevice(void*);
 
+extern "C" void __stdcall K_IoStartPacket(void*, void*, ULONG*);
+extern "C" void __stdcall K_IoStartNextPacket(void*);
+extern "C" void __stdcall K_IoStartNextPacketByKey(void*, ULONG);
+extern "C" LONG __stdcall K_IoDismountVolume(void*);
+
+
 extern "C" LONG __stdcall K_IoCreateFile(
     HANDLE*, ACCESS_MASK, GuestObjectAttributes*, GuestIoStatusBlock*,
     const LARGE_INTEGER*, ULONG, ULONG, ULONG, ULONG, ULONG);
@@ -86,6 +92,17 @@ extern "C" LONG __stdcall K_IoQueryVolumeInformation(
 
 namespace {
 volatile LONG g_deviceDeleteCalls = 0;
+volatile LONG g_startIoCalls = 0;
+volatile LONG g_dismountCalls = 0;
+void* g_lastStartedIrp = nullptr;
+void __stdcall StartIoCallback(GuestDeviceObject*, void* irp) {
+    g_lastStartedIrp = irp;
+    InterlockedIncrement(&g_startIoCalls);
+}
+LONG __stdcall DismountCallback(GuestDeviceObject*) {
+    InterlockedIncrement(&g_dismountCalls);
+    return 0;
+}
 void __stdcall DeleteDeviceCallback(GuestDeviceObject* device) {
     if (device && device->DeletePending && device->DeviceExtension)
         InterlockedIncrement(&g_deviceDeleteCalls);
@@ -228,7 +245,9 @@ int main() {
 
 
     GuestDriverObject driver{};
+    driver.DriverStartIo = StartIoCallback;
     driver.DriverDeleteDevice = DeleteDeviceCallback;
+    driver.DriverDismountVolume = DismountCallback;
     void* deviceRaw = nullptr;
     if (K_IoCreateDevice(&driver, 64, nullptr, 7, TRUE, &deviceRaw) != 0 ||
         !deviceRaw)
@@ -245,6 +264,23 @@ int main() {
         return 24;
     for (ULONG i = 0; i < 64; ++i)
         if (static_cast<UCHAR*>(device->DeviceExtension)[i] != 0) return 25;
+    int irp1 = 1, irp2 = 2, irp3 = 3;
+    ULONG key2 = 20, key3 = 30;
+    K_IoStartPacket(device, &irp1, nullptr);
+    K_IoStartPacket(device, &irp2, &key2);
+    K_IoStartPacket(device, &irp3, &key3);
+    if (g_startIoCalls != 1 || device->CurrentIrp != &irp1) return 27;
+    K_IoStartNextPacketByKey(device, key3);
+    if (g_startIoCalls != 2 || g_lastStartedIrp != &irp3 ||
+        device->CurrentIrp != &irp3) return 28;
+    K_IoStartNextPacket(device);
+    if (g_startIoCalls != 3 || g_lastStartedIrp != &irp2 ||
+        device->CurrentIrp != &irp2) return 29;
+    K_IoStartNextPacket(device);
+    if (device->CurrentIrp != nullptr || device->DeviceQueue.Busy != FALSE)
+        return 30;
+    if (K_IoDismountVolume(device) != 0 || g_dismountCalls != 1)
+        return 31;
     K_IoDeleteDevice(device);
     if (g_deviceDeleteCalls != 1) return 26;
 
