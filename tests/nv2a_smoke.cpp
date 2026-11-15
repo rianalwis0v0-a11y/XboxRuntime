@@ -693,6 +693,19 @@ int main() {
             ? decodeTextureStage(channel, 0u, 0u, pciDecodedPaletteTexture,
                 sizeof(pciDecodedPaletteTexture), pciPaletteOffsets,
                 pciPaletteSizes) : -1;
+
+        /* Moving the borrowed physical window invalidates cached PCI DMA
+         * contexts so their old mapping-relative offsets cannot alias new RAM. */
+        std::vector<uint8_t> remappedPhysical(0x1000u, 0u);
+        const int remapResult = bindGuestPhysicalMemory(
+            pciPhysicalBase + 0x1000u, remappedPhysical.data(),
+            (uint32_t)remappedPhysical.size());
+        DmaInfo invalidatedContext{};
+        const int invalidatedContextResult = getDmaContext(
+            channel, 0u, 0x0184u, &invalidatedContext);
+        const int restoreMappingResult = bindGuestPhysicalMemory(
+            pciPhysicalBase, guestPhysical.data(), (uint32_t)guestPhysical.size());
+
         const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
         const uint32_t restoreContexts[] = {
             (1u << 18) | 0x019Cu, dmaHandle,
@@ -716,6 +729,8 @@ int main() {
             pciDecodedMipChain[0] != 1u || pciDecodedMipChain[1] != 2u ||
             pciDecodedMipChain[2] != 3u || pciDecodedMipChain[16] != 13u ||
             paletteStateResult != 0 || paletteDecodeResult != 0 ||
+            remapResult != 0 || invalidatedContextResult != 3 ||
+            restoreMappingResult != 0 ||
             pciPaletteSizes[0] != 16u || pciDecodedPaletteTexture[0] != 0x10u ||
             pciDecodedPaletteTexture[1] != 0x20u || pciDecodedPaletteTexture[2] != 0x30u ||
             pciDecodedPaletteTexture[4] != 0x40u || pciDecodedPaletteTexture[8] != 0x70u ||
@@ -728,7 +743,8 @@ int main() {
                       << " vertex=" << vertexResult << " texture=" << textureResult
                       << " pitch=" << pciTexturePitch << " palette="
                       << paletteStateResult << "/" << paletteDecodeResult
-                      << " restore="
+                      << " remap=" << remapResult << "/" << invalidatedContextResult
+                      << "/" << restoreMappingResult << " restore="
                       << restoreObject << "/" << restoreStream
                       << " restore_get=" << restoreGet
                       << " restore_methods=" << restoreMethods
