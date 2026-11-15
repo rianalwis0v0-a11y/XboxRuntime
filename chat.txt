@@ -194,3 +194,25 @@ Summary:
 Files changed: tools/kernel_export_group_a.json; chat.txt.
 Build and tests: Not run; documentation/ledger-only changes.
 Known issues / next steps: The audit PR remains draft. No code has been changed in shared guest runtime files; no CI run or implementation test result exists yet.
+
+
+[2026-11-15 09:05 UTC] [Kernel Export Developer A — first Group A behavior tranche]
+Status: IN_PROGRESS — implementation committed; Windows CI queued, no test PASS claimed.
+Branch / commit: work/kernel-export-half-a / db9383edf8e6d6e99fd241739ab8d1905128ce87
+Target / PR: work/kernel-execution-backend / draft PR #22 https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Summary:
+- Implemented ordinal 24 ExQueryNonVolatileSetting and ordinal 29 ExSaveNonVolatileSetting against the runtime's shared persistent 256-byte EEPROM backing store; SMBus raw EEPROM reads/writes now use the same store.
+- Supports XC_* indices 0x0000-0x0012, XC_MAX_OS 0x00FF (96-byte user-settings section), and raw EEPROM 0xFFFF (256 bytes). Queries report exact type/length, short buffers return STATUS_BUFFER_TOO_SMALL, unknown indices fail STATUS_INVALID_PARAMETER.
+- Save is restricted to documented user-writable settings, validates exact type/length, recomputes the user-section XConfig checksum, persists, and attempts to restore in-memory bytes if persistence fails.
+- Added explicit unsupported handling: ordinal 2 AvSendTVEncoderOption raises the existing fail-fast unsupported-import exception; ordinal 3 AvSetDisplayMode returns STATUS_NOT_SUPPORTED; ordinal 25 ExReadWriteRefurbInfo validates the 16-byte x86 structure then returns STATUS_NOT_SUPPORTED. Static assertions cover XBOX_REFURB_INFO offsets 0/4/8.
+- Reclassified the full 57-export ledger: 2 implemented-unverified, 3 explicit unsupported, 52 assigned to parallel owners (Developer 2 memory/object manager, Developer 3 threading/HAL/APC, Developer 4 I/O). No overlapping implementation files from those branches were modified.
+Files changed: .github/workflows/kernel-group-a-nvsettings.yml; docs/KERNEL_NONVOLATILE_SETTINGS.md; guest32/CMakeLists.txt; guest32/kernel_compat.cpp; guest32/kernel_nvsettings.cpp; guest32/kernel_nvsettings.h; modules/xbox_kernel/CMakeLists.txt; tests/kernel_nvsettings_guest_smoke.cpp; tests/kernel_nvsettings_host_tests.cpp; tools/kernel_export_group_a.json; chat.txt.
+Build and tests:
+- Added x64 host descriptor/checksum tests and an x86 smoke test generating the production 10-byte push-ordinal/relative-jump thunk encoding for ordinals 24/29. The x86 test checks query/save, XC_MAX_OS, full raw EEPROM, short buffers, type/index validation, persistence/reload, checksum, and explicit unsupported APIs.
+- Dedicated Group A workflow queued: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43696857151 (host64 + guest32 jobs queued at report time).
+- Existing kernel host/guest workflow also queued on the same PR head: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43696857122.
+- No build or test PASS claimed yet; no CI failure observed yet.
+Known limitations:
+- EEPROM crypto/HMAC verification, encrypted/factory index queries, factory provisioning, UEM/refurb metadata, and actual AV hardware remain unsupported.
+- x86 thunk test uses an isolated test dispatch shim with the same production thunk encoding; production KernelDispatch has explicit routes for 2/3/24/25/29. The full production dispatcher is not itself invoked by this smoke executable.
+- Need inspect both CI runs, correct any compile/test issues, then move on to the remaining 52 exports with owner coordination.
