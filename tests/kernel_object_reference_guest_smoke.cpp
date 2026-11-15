@@ -64,7 +64,7 @@ int main() {
     int mismatchDestroyed=0;
     auto* mismatch=new TestObject{&mismatchDestroyed};
     HANDLE mismatchHandle=XboxKernelCreateObjectHandle(
-        mismatch,XboxKernelObjectType.Directory,DestroyTestObject);
+        mismatch,XboxKernelObjectType::Directory,DestroyTestObject);
     void* mismatchOut=reinterpret_cast<void*>(0x1234);
     if (K_ObReferenceObjectByHandle(mismatchHandle,reinterpret_cast<void*>(1),&mismatchOut)!=
         static_cast<LONG>(0xC0000024u) || mismatchOut!=nullptr)
