@@ -7,6 +7,13 @@ using XboxKernelNormalRoutine = void (__stdcall*)(void*, void*, void*);
 extern "C" {
 void __fastcall K_HalClearSoftwareInterrupt(UCHAR requestIrql);
 void __fastcall K_HalRequestSoftwareInterrupt(UCHAR requestIrql);
+void __stdcall K_HalDisableSystemInterrupt(ULONG busInterruptLevel);
+void __stdcall K_HalEnableSystemInterrupt(ULONG busInterruptLevel, ULONG interruptMode);
+ULONG __stdcall K_HalGetInterruptVector(ULONG busInterruptLevel, UCHAR* irql);
+void __stdcall K_HalReadWritePCISpace(ULONG busNumber, ULONG slotNumber,
+    ULONG registerNumber, void* buffer, ULONG length, BOOLEAN writePciSpace);
+LONG __stdcall K_KeSaveFloatingPointState(void* floatSave);
+LONG __stdcall K_KeRestoreFloatingPointState(void* floatSave);
 BOOLEAN __stdcall K_KeAlertThread(HANDLE thread, UCHAR processorMode);
 void __stdcall K_KeInitializeApc(void* apc, void* thread,
     void (__stdcall* kernelRoutine)(void*, XboxKernelNormalRoutine*, void**, void**, void**),
