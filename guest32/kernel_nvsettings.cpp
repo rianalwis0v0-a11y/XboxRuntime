@@ -30,7 +30,7 @@ struct SettingRow {
 
 // Index order and type/length follow the pinned NXDK XC_* constants;
 // byte offsets follow the documented 256-byte retail EEPROM layout.
-// Factory identity and encrypted fields are deliberately read-only.
+// Unverified factory indices and encrypted fields are intentionally not mapped.
 constexpr SettingRow kSettings[] = {
     {0x0000, 0x64, 4, kRegDword, false}, // XC_TIMEZONE_BIAS
     {0x0001, 0x68, 4, kRegBinary, true }, // XC_TZ_STD_NAME
@@ -141,8 +141,13 @@ bool XboxNvWriteRaw(std::uint32_t offset, const void* buffer, std::uint32_t leng
     if (!buffer || offset > kEepromBytes || length > kEepromBytes - offset) return false;
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_ready) return false;
+    std::array<std::uint8_t, kEepromBytes> previous{};
+    std::memcpy(previous.data(), g_eeprom.data() + offset, length);
     std::memcpy(g_eeprom.data() + offset, buffer, length);
-    return PersistLocked();
+    if (PersistLocked()) return true;
+    std::memcpy(g_eeprom.data() + offset, previous.data(), length);
+    PersistLocked(); // Best-effort rollback if the first disk write was partial.
+    return false;
 }
 
 extern "C" XboxNvStatus __stdcall K_ExQueryNonVolatileSetting(
@@ -176,11 +181,18 @@ extern "C" XboxNvStatus __stdcall K_ExSaveNonVolatileSetting(
 
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_ready) return static_cast<XboxNvStatus>(kStatusDeviceNotConnected);
+    std::array<std::uint8_t, 4> previousValue{};
+    std::uint32_t previousChecksum = 0;
+    std::memcpy(previousValue.data(), g_eeprom.data() + info.offset, info.length);
+    std::memcpy(&previousChecksum, g_eeprom.data() + kUserChecksumOffset, sizeof(previousChecksum));
     std::memcpy(g_eeprom.data() + info.offset, value, info.length);
     const std::uint32_t checksum = XboxNvComputeChecksum(g_eeprom.data() + kUserDataOffset, kUserDataBytes);
     std::memcpy(g_eeprom.data() + kUserChecksumOffset, &checksum, sizeof(checksum));
-    return PersistLocked() ? static_cast<XboxNvStatus>(kStatusSuccess)
-                           : static_cast<XboxNvStatus>(kStatusDeviceNotConnected);
+    if (PersistLocked()) return static_cast<XboxNvStatus>(kStatusSuccess);
+    std::memcpy(g_eeprom.data() + info.offset, previousValue.data(), info.length);
+    std::memcpy(g_eeprom.data() + kUserChecksumOffset, &previousChecksum, sizeof(previousChecksum));
+    PersistLocked(); // Best-effort rollback if the first disk write was partial.
+    return static_cast<XboxNvStatus>(kStatusDeviceNotConnected);
 }
 
 extern "C" XboxNvStatus __stdcall K_ExReadWriteRefurbInfo(
