@@ -62,7 +62,9 @@ static int __cdecl TranslateShortAgp(uint32_t aperture_offset,
     if (!TranslateTestAgp(aperture_offset, requested_length, host_span,
             contiguous_length, context))
         return 0;
-    if (*contiguous_length) --*contiguous_length;
+    /* Deliberately return one byte less than requested to exercise the
+     * bridge's contiguous-span guard even when the backing vector is larger. */
+    *contiguous_length = requested_length ? requested_length - 1u : 0u;
     return 1;
 }
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
