@@ -2443,8 +2443,11 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     const uint8_t** output, uint32_t* stride_out)
 {
     const uint16_t supported_mask =
-        (uint16_t)((1u << 0) | (1u << 2) | (1u << 3) | (1u << 4) |
+        (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
+                   (1u << 4) | (1u << 5) | (1u << 6) |
                    (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12));
+    const uint16_t required_array_mask =
+        (uint16_t)((1u << 1) | (1u << 5) | (1u << 6));
     uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
     size_t required;
     if (output) *output = NULL;
@@ -2459,7 +2462,8 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
         offsets[reg] = stride;
         switch (reg) {
         case 0u: case 2u: sizes[reg] = 12u; break;
-        case 3u: case 4u: sizes[reg] = 4u; break;
+        case 1u: sizes[reg] = 16u; break;
+        case 3u: case 4u: case 5u: case 6u: sizes[reg] = 4u; break;
         /* NV097 array slots 7..10 supply TEX0..TEX3, which map to
          * programmable shader inputs v9..v12; v7/v8 are backface colors. */
         case 9u: case 10u: case 11u: case 12u: sizes[reg] = 8u; break;
@@ -2479,6 +2483,9 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     }
 
     for (uint32_t i = 0; i < vertex_count; ++i) {
+        if ((vertices[i].input_valid_mask & required_array_mask) !=
+            (input_mask & required_array_mask))
+            return 0;
         for (uint32_t reg = 0; reg < 16u; ++reg) {
             if (!(input_mask & (uint16_t)(1u << reg)))
                 continue;
@@ -2487,9 +2494,12 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
             const XboxNV2A_VERTEX* v = &vertices[i];
             switch (reg) {
             case 0u: memcpy(dst, &v->x, 12u); break;
+            case 1u: memcpy(dst, v->weights, 16u); break;
             case 2u: memcpy(dst, &v->nx, 12u); break;
             case 3u: memcpy(dst, &v->diffuse, 4u); break;
             case 4u: memcpy(dst, &v->specular, 4u); break;
+            case 5u: memcpy(dst, &v->fog, 4u); break;
+            case 6u: memcpy(dst, &v->point_size, 4u); break;
             case 9u: memcpy(dst, &v->u, 8u); break;
             case 10u: memcpy(dst, &v->u1, 8u); break;
             case 11u: memcpy(dst, &v->u2, 8u); break;
