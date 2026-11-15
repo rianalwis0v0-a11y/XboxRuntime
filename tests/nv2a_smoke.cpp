@@ -922,6 +922,79 @@ int main() {
         }
     }
 
+    /* The Xbox 0xF0000000 AGP aperture is a linear alias of guest RAM.
+     * Verify the built-in path without a host GART callback. */
+    {
+        std::vector<uint8_t> directMemory(0x4000u, 0u);
+        const uint32_t directContextStream[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        const float directVertexData[6] = {31.0f,32.0f,33.0f,34.0f,35.0f,36.0f};
+        const uint8_t directTextureData[16] = {
+            0x13,0x12,0x11,0xFF, 0x16,0x15,0x14,0xFF,
+            0x19,0x18,0x17,0xFF, 0x1C,0x1B,0x1A,0xFF
+        };
+        std::memcpy(directMemory.data() + 0x1000u,
+            directContextStream, sizeof(directContextStream));
+        std::memcpy(directMemory.data() + 0x1300u,
+            directVertexData, sizeof(directVertexData));
+        std::memcpy(directMemory.data() + 0x1500u,
+            directTextureData, sizeof(directTextureData));
+        const uint32_t directAgpDmaObject[3] = {
+            0x00030002u, 0x00000FFFu, 0xF0001000u
+        };
+        const int bindMemoryResult = bindGuestPhysicalMemory(
+            0u, directMemory.data(), (uint32_t)directMemory.size());
+        const int objectResult = writeRamin(
+            0x100u, directAgpDmaObject, sizeof(directAgpDmaObject));
+        DmaInfo directInfo{};
+        const int resolveResult = resolveDma(channel, dmaHandle, &directInfo);
+        uint32_t pushGet = 0, pushMethods = 0;
+        const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(directContextStream), &pushGet, &pushMethods);
+        float fetched[6]{};
+        uint32_t fetchStride = 0, fetchBytes = 0;
+        const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
+            submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) == 0
+            ? readVertexArray(channel, 0u, 0u, 0u, 2u, fetched,
+                sizeof(fetched), &fetchStride, &fetchBytes) : -1;
+        uint8_t decoded[16]{};
+        uint32_t pitch = 0;
+        const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
+            0x500u, 0x1200u, 2u, 2u, 8u, decoded, sizeof(decoded), &pitch);
+        const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const int restoreStream = writeVram(0x1000u, restoreContexts,
+            sizeof(restoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
+                &restoreGet, &restoreMethods) : -1;
+        const int unbindMemoryResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        if (bindMemoryResult != 0 || objectResult != 0 || resolveResult != 0 ||
+            directInfo.dma_target != 0x00030000u ||
+            directInfo.base_address != 0x1000u ||
+            pushResult != 0 || pushGet != sizeof(directContextStream) ||
+            pushMethods != 3u || vertexResult != 0 ||
+            std::memcmp(directVertexData, fetched, sizeof(directVertexData)) != 0 ||
+            textureResult != 0 || pitch != 8u ||
+            decoded[0] != 0x11u || decoded[1] != 0x12u || decoded[2] != 0x13u ||
+            restoreObject != 0 || restoreStream != 0 ||
+            restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
+            unbindMemoryResult != 0) {
+            std::cerr << "FAIL: direct Xbox AGP linear alias translation"
+                      << " bind=" << bindMemoryResult << " object=" << objectResult
+                      << " resolve=" << resolveResult
+                      << " target=0x" << std::hex << directInfo.dma_target
+                      << " base=0x" << directInfo.base_address << std::dec
+                      << " push=" << pushResult << " vertex=" << vertexResult
+                      << " texture=" << textureResult << " pitch=" << pitch
+                      << " restore=" << restoreObject << "/" << restoreStream
+                      << " unbind=" << unbindMemoryResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
     const uint32_t vertexIndices[3] = {1u, 0u, 1u};
     HostVertex indexedVertices[3]{};
     uint32_t indexedStride = 0, indexedFvf = 0;
