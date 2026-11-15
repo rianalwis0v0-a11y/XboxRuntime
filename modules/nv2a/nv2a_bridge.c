@@ -1378,7 +1378,14 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
 
     const XboxNV2A_DMA_INFO* dma =
         &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length)
+        return 5;
+    /* PCI-target textures are valid when their entire requested span is
+     * covered by the host runtime's explicitly bound guest-physical window.
+     * dma_get_span performs the same checked address translation used by
+     * the actual texture decoder; AGP/GART remains intentionally unsupported. */
+    const uint8_t* texture_span = NULL;
+    if (!dma_get_span(dma, offset, 0u, &texture_span))
         return 5;
 
     output->texture_offset = offset;
