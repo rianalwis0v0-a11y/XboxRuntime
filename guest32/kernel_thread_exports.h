@@ -34,3 +34,6 @@ BOOLEAN __stdcall K_KeSynchronizeExecution(void* interrupt,
 void XboxKernelResetThreadExports();
 
 UCHAR XboxKernelGetPendingSoftwareIrql();
+
+BOOLEAN XboxKernelIsSystemInterruptEnabled(ULONG busInterruptLevel);
+ULONG XboxKernelGetSystemInterruptMode(ULONG busInterruptLevel);
