@@ -186,12 +186,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "partial_tested",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 39; one-line jump to K_HalDisableSystemInterrupt.",
       "nxdk_export_definition": "HalDisableSystemInterrupt@4              @  39 NONAME",
@@ -200,7 +200,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_HalDisableSystemInterrupt",
       "implementation_file": "guest32/kernel_thread_exports.cpp",
-      "unsupported_reason": "No physical interrupt controller or system-interrupt mask backend; void handler fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43709075100",
+      "limitations": "Updates the adapter's bounded virtual bus-interrupt enabled mask; it does not mask a physical interrupt controller or stop hardware ISR delivery."
     },
     {
       "ordinal": 43,
@@ -214,12 +215,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "partial_tested",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 43; one-line jump to K_HalEnableSystemInterrupt.",
       "nxdk_export_definition": "HalEnableSystemInterrupt@8               @  43 NONAME",
@@ -228,7 +229,8 @@
       "decoration_stack_bytes": 8,
       "dispatcher_handler": "K_HalEnableSystemInterrupt",
       "implementation_file": "guest32/kernel_thread_exports.cpp",
-      "unsupported_reason": "No physical interrupt controller or system-interrupt enable backend; void handler fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43709075100",
+      "limitations": "Updates the adapter's bounded virtual bus-interrupt mask and stores the requested interrupt mode; it does not enable physical hardware interrupt delivery."
     },
     {
       "ordinal": 44,
