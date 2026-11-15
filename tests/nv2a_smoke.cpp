@@ -4,7 +4,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "nv2a_bridge.h"
 
 using StartFn = int (__cdecl*)();
 using StopFn = void (__cdecl*)();
@@ -75,7 +74,7 @@ using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
-using HostVertex = XboxNV2A_VERTEX;
+struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1, u2, v2, u3, v3; };
 using ExpandPrimitiveFn = int (__cdecl*)(uint32_t, const HostVertex*, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
