@@ -382,12 +382,12 @@ extern "C" LONGLONG __fastcall K_ExInterlockedCompareExchange64(
 // receives only an entry pointer and therefore cannot locate its queue lock).
 struct GuestDeviceQueue {
     SHORT Type;
-    SHORT Size;
-    GuestListEntry DeviceListHead;
-    volatile LONG Lock;
+    UCHAR Size;
     UCHAR Busy;
-    UCHAR Reserved[3];
+    GuestListEntry DeviceListHead;
 };
+static_assert(sizeof(GuestDeviceQueue) == 12,
+              "NXDK KDEVICE_QUEUE x86 layout");
 struct GuestDeviceQueueEntry {
     GuestListEntry DeviceListEntry;
     ULONG SortKey;
@@ -403,9 +403,7 @@ extern "C" void __stdcall K_KeInitializeDeviceQueue(GuestDeviceQueue* queue) {
     queue->Size = sizeof(*queue);
     queue->DeviceListHead.Flink = &queue->DeviceListHead;
     queue->DeviceListHead.Blink = &queue->DeviceListHead;
-    queue->Lock = 0;
     queue->Busy = FALSE;
-    std::memset(queue->Reserved, 0, sizeof(queue->Reserved));
 }
 extern "C" BOOL __stdcall K_KeInsertDeviceQueue(GuestDeviceQueue* queue, GuestDeviceQueueEntry* entry) {
     if (!queue || !entry) return FALSE;
