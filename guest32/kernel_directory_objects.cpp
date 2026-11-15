@@ -56,33 +56,37 @@ extern "C" LONG __stdcall K_NtCreateDirectoryObject(
     const auto* attributes =
         static_cast<const GuestObjectAttributesDirectory*>(rawAttributes);
     if (attributes->RootDirectory) return LONG(0xC00000BBu);
-    std::string name;
-    if (attributes->ObjectName) {
-        const auto* objectName = attributes->ObjectName;
-        if ((objectName->Length && !objectName->Buffer) ||
-            objectName->Length > objectName->MaximumLength)
-            return LONG(0xC000000Du);
-        if (objectName->Length)
-            name.assign(objectName->Buffer, objectName->Length);
-    }
-    auto* object = new (std::nothrow) GuestDirectoryObject{};
-    if (!object) return LONG(0xC0000017u);
-    object->name = std::move(name);
-    object->lookupName = FoldDirectoryName(object->name);
-    if (!object->lookupName.empty()) {
-        std::lock_guard<std::mutex> lock(g_directoryObjectMutex);
-        if (g_namedDirectories.find(object->lookupName) != g_namedDirectories.end()) {
-            delete object;
-            return LONG(0xC0000035u); // STATUS_OBJECT_NAME_COLLISION
+    try {
+        std::string name;
+        if (attributes->ObjectName) {
+            const auto* objectName = attributes->ObjectName;
+            if ((objectName->Length && !objectName->Buffer) ||
+                objectName->Length > objectName->MaximumLength)
+                return LONG(0xC000000Du);
+            if (objectName->Length)
+                name.assign(objectName->Buffer, objectName->Length);
         }
-        g_namedDirectories.emplace(object->lookupName, object);
-    }
-    HANDLE handle = XboxKernelCreateObjectHandle(
-        object, XboxKernelObjectType::Directory, DestroyDirectoryObject);
-    if (!handle) {
-        DestroyDirectoryObject(object);
+        auto* object = new (std::nothrow) GuestDirectoryObject{};
+        if (!object) return LONG(0xC0000017u);
+        object->name = std::move(name);
+        object->lookupName = FoldDirectoryName(object->name);
+        if (!object->lookupName.empty()) {
+            std::lock_guard<std::mutex> lock(g_directoryObjectMutex);
+            if (g_namedDirectories.find(object->lookupName) != g_namedDirectories.end()) {
+                delete object;
+                return LONG(0xC0000035u); // STATUS_OBJECT_NAME_COLLISION
+            }
+            g_namedDirectories.emplace(object->lookupName, object);
+        }
+        HANDLE handle = XboxKernelCreateObjectHandle(
+            object, XboxKernelObjectType::Directory, DestroyDirectoryObject);
+        if (!handle) {
+            DestroyDirectoryObject(object);
+            return LONG(0xC0000017u);
+        }
+        *directoryHandle = handle;
+        return 0;
+    } catch (...) {
         return LONG(0xC0000017u);
     }
-    *directoryHandle = handle;
-    return 0;
 }
