@@ -256,7 +256,7 @@ int main() {
     auto* device = static_cast<GuestDeviceObject*>(deviceRaw);
     if (device->Type != 3 || device->Size != sizeof(GuestDeviceObject) + 64 ||
         device->ReferenceCount != 1 || device->DriverObject != &driver ||
-        device->MountedOrSelfDevice != device || (device->Flags & 0x8u) == 0 ||
+        device->MountedOrSelfDevice != device || (device->Flags & 0x8u) == 0 || (device->Flags & 0x80u) == 0 ||
         device->DeviceExtension != reinterpret_cast<UCHAR*>(device) + sizeof(*device) ||
         device->DeviceType != 7 || device->StackSize != 1 ||
         device->DeviceQueue.Type != 4 || device->DeviceQueue.Size != 12 ||
