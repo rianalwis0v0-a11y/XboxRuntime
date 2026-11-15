@@ -269,15 +269,15 @@ int main() {
     K_IoStartPacket(device, &irp1, nullptr);
     K_IoStartPacket(device, &irp2, &key2);
     K_IoStartPacket(device, &irp3, &key3);
-    if (g_startIoCalls != 1 || device->CurrentIrp != &irp1) return 27;
+    if (g_startIoCalls != 1 || device->CurrentIrp != &irp1 || device->StartIoKey != 0) return 27;
     K_IoStartNextPacketByKey(device, key3);
     if (g_startIoCalls != 2 || g_lastStartedIrp != &irp3 ||
-        device->CurrentIrp != &irp3) return 28;
+        device->CurrentIrp != &irp3 || device->StartIoKey != key3) return 28;
     K_IoStartNextPacket(device);
     if (g_startIoCalls != 3 || g_lastStartedIrp != &irp2 ||
-        device->CurrentIrp != &irp2) return 29;
+        device->CurrentIrp != &irp2 || device->StartIoKey != key2) return 29;
     K_IoStartNextPacket(device);
-    if (device->CurrentIrp != nullptr || device->DeviceQueue.Busy != FALSE)
+    if (device->CurrentIrp != nullptr || device->DeviceQueue.Busy != FALSE || device->StartIoKey != 0)
         return 30;
     if (K_IoDismountVolume(device) != 0 || g_dismountCalls != 1)
         return 31;
