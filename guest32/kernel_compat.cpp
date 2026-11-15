@@ -27,6 +27,7 @@
 #include "kernel_memory.h"
 #include "kernel_thread_exports.h"
 #include "kernel_io_completion.h"
+#include "kernel_io_exports.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 
@@ -1944,6 +1945,48 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_remove_io_completion
         cmp eax, 227
         je nt_set_io_completion
+        cmp eax, 59
+        je io_allocate_irp
+        cmp eax, 60
+        je io_build_async_fsd
+        cmp eax, 61
+        je io_build_device_control
+        cmp eax, 62
+        je io_build_sync_fsd
+        cmp eax, 63
+        je io_check_share_access
+        cmp eax, 65
+        je io_create_device
+        cmp eax, 68
+        je io_delete_device
+        cmp eax, 72
+        je io_free_irp
+        cmp eax, 73
+        je io_initialize_irp
+        cmp eax, 77
+        je io_queue_thread_irp
+        cmp eax, 78
+        je io_remove_share_access
+        cmp eax, 80
+        je io_set_share_access
+        cmp eax, 81
+        je io_start_next_packet
+        cmp eax, 82
+        je io_start_next_packet_key
+        cmp eax, 83
+        je io_start_packet
+        cmp eax, 84
+        je io_sync_device_control
+        cmp eax, 85
+        je io_sync_fsd
+        cmp eax, 86
+        je iof_call_driver
+        cmp eax, 87
+        je iof_complete_request
+        cmp eax, 90
+        je io_dismount_volume
+        cmp eax, 91
+        je io_dismount_volume_name
         cmp eax, 74
         je io_invalid_device_request
         cmp eax, 361
@@ -2471,6 +2514,27 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_io_completion: jmp K_NtQueryIoCompletion
     nt_remove_io_completion: jmp K_NtRemoveIoCompletion
     nt_set_io_completion: jmp K_NtSetIoCompletion
+    io_allocate_irp: jmp K_IoAllocateIrp
+    io_build_async_fsd: jmp K_IoBuildAsynchronousFsdRequest
+    io_build_device_control: jmp K_IoBuildDeviceIoControlRequest
+    io_build_sync_fsd: jmp K_IoBuildSynchronousFsdRequest
+    io_check_share_access: jmp K_IoCheckShareAccess
+    io_create_device: jmp K_IoCreateDevice
+    io_delete_device: jmp K_IoDeleteDevice
+    io_free_irp: jmp K_IoFreeIrp
+    io_initialize_irp: jmp K_IoInitializeIrp
+    io_queue_thread_irp: jmp K_IoQueueThreadIrp
+    io_remove_share_access: jmp K_IoRemoveShareAccess
+    io_set_share_access: jmp K_IoSetShareAccess
+    io_start_next_packet: jmp K_IoStartNextPacket
+    io_start_next_packet_key: jmp K_IoStartNextPacketByKey
+    io_start_packet: jmp K_IoStartPacket
+    io_sync_device_control: jmp K_IoSynchronousDeviceIoControlRequest
+    io_sync_fsd: jmp K_IoSynchronousFsdRequest
+    iof_call_driver: jmp K_IofCallDriver
+    iof_complete_request: jmp K_IofCompleteRequest
+    io_dismount_volume: jmp K_IoDismountVolume
+    io_dismount_volume_name: jmp K_IoDismountVolumeByName
     io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
