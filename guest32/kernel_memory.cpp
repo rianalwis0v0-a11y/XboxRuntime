@@ -227,7 +227,7 @@ extern "C" void* __stdcall K_MmCreateKernelStack(SIZE_T numberOfBytes,
         if (low) VirtualFree(low, 0, MEM_RELEASE);
         return nullptr;
     }
-    void* stackBase = static_cast<std::uint8_t*>(low) + rounded;
+    void* stackBase = static_cast<std::uint8_t*>(low) + numberOfBytes;
     {
         std::lock_guard<std::mutex> lock(g_kernelStackMutex);
         if (!g_kernelStacks.emplace(stackBase,
