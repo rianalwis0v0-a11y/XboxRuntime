@@ -120,7 +120,7 @@ int main(void)
 
     /* Weight/fog/point-size inputs and TEX0..TEX3 use their real v-registers. */
     {
-        const DWORD input_registers[] = {1u, 5u, 6u, 9u, 10u, 11u, 12u};
+        const DWORD input_registers[] = {1u, 5u, 6u, 9u, 10u, 11u, 12u, 13u, 14u, 15u};
         for (size_t i = 0; i < sizeof(input_registers) / sizeof(input_registers[0]); ++i) {
             const DWORD reg = input_registers[i];
             DWORD instruction[4];
