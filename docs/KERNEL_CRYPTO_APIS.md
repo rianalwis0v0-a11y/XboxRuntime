@@ -15,8 +15,9 @@ NXDK ABI reference: `fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e`
 | 339 | `XcRC4Crypt` | In-place RC4 stream XOR and state advancement | RC4 known-answer test |
 | 340 | `XcHMAC` | HMAC-SHA1 over the two input spans; matches the Xbox/Cxbx compatibility behavior of truncating key material to 64 bytes | RFC 2202 known-answer test |
 | 346 | `XcDESKeyParity` | Sets the low bit of each key byte to make odd parity | per-byte odd parity assertions |
+| 350 | `XcCryptService` | Returns zero and leaves the argument block untouched, matching the reverse-engineered compatibility behavior | zero return and no-mutation assertion |
 
-All seven handlers use the NXDK-declared `NTAPI` signatures (32-bit x86 stdcall). Guest spans are checked with `VirtualQuery` before access. The handlers are wired into `KernelDispatch` and built into `xbe_guest32`.
+All eight handlers use the NXDK-declared `NTAPI` signatures (32-bit x86 stdcall). Guest spans are checked with `VirtualQuery` before access. The handlers are wired into `KernelDispatch` and built into `xbe_guest32`.
 
 ## ABI layout/provenance notes
 
@@ -40,7 +41,6 @@ The implementation in this branch is written independently; these references are
 | 347 | `XcKeyTable` |
 | 348 | `XcBlockCrypt` |
 | 349 | `XcBlockCryptCBC` |
-| 350 | `XcCryptService` |
 | 351 | `XcUpdateCrypto` |
 
 These remain explicitly unsupported until their key/structure layouts, semantics, and tests are established. No fake-success stubs are added.
