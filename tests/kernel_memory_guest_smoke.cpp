@@ -67,8 +67,8 @@ int main() {
                       &stackAllocation, sizeof(stackAllocation)))
         return Fail("query kernel stack allocation", 0xC0000001L);
     void* stackLimit = stackAllocation.AllocationBase;
-    if (static_cast<std::uintptr_t>(stackBase) > 0xFFFFFFFFu ||
-        static_cast<std::uintptr_t>(stackLimit) > 0xFFFFFFFFu)
+    if (reinterpret_cast<std::uintptr_t>(stackBase) > 0xFFFFFFFFu ||
+        reinterpret_cast<std::uintptr_t>(stackLimit) > 0xFFFFFFFFu)
         return Fail("kernel stack must be guest-addressable", 0xC000000DL);
     K_MmDeleteKernelStack(stackBase, reinterpret_cast<void*>(
         static_cast<std::uintptr_t>(stackLimit) + 0x1000));
