@@ -22,6 +22,10 @@ static uint8_t* g_ramin;
 static uint8_t* g_guest_physical_memory;
 static uint32_t g_guest_physical_base;
 static uint32_t g_guest_physical_length;
+/* Host-owned AGP/GART adapter. It translates aperture offsets into a
+ * bounded contiguous guest-memory span; the bridge never assumes a PTE layout. */
+static XboxNV2A_AGP_TRANSLATE_FN g_agp_translate;
+static void* g_agp_translate_context;
 
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
@@ -97,7 +101,18 @@ static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
         *output = g_guest_physical_memory + (size_t)address;
         return 1;
     }
-    return 0; /* AGP/GART and reserved targets are never host pointers. */
+    if (dma->dma_target == 0x00010000u) {
+        const void* translated = NULL;
+        uint32_t contiguous_length = 0;
+        if (!g_agp_translate ||
+            !g_agp_translate((uint32_t)address, length, &translated,
+                             &contiguous_length, g_agp_translate_context) ||
+            !translated || contiguous_length < length)
+            return 0;
+        *output = (const uint8_t*)translated;
+        return 1;
+    }
+    return 0; /* Reserved targets are never interpreted as host pointers. */
 }
 
 
@@ -745,6 +760,8 @@ void __cdecl ModuleStop(void)
     g_guest_physical_memory = NULL;
     g_guest_physical_base = 0;
     g_guest_physical_length = 0;
+    g_agp_translate = NULL;
+    g_agp_translate_context = NULL;
     OutputDebugStringW(L"[XboxRuntime:NV2A] Translator stopped. GPU memory retained until process exit.\n");
 }
 
@@ -842,6 +859,17 @@ int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
     return 0;
 }
 
+
+int __cdecl XboxNV2A_BindAGPAddressTranslator(
+    XboxNV2A_AGP_TRANSLATE_FN translate, void* context)
+{
+    if (!g_started) return 1;
+    if (!translate && context) return 2;
+    g_agp_translate = translate;
+    g_agp_translate_context = context;
+    mark_all_textures_dirty();
+    return 0;
+}
 
 static uint8_t expand5(uint32_t value) { return (uint8_t)((value << 3) | (value >> 2)); }
 static uint8_t expand6(uint32_t value) { return (uint8_t)((value << 2) | (value >> 4)); }
@@ -1913,13 +1941,18 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
             return 7;
     } else if (target == 0x00020000u) {
         /* PCI DMA addresses resolve against the host runtime's explicitly
-         * bound guest-physical RAM window. Do not silently alias AGP/GART. */
+         * bound guest-physical RAM window. */
         if (!g_guest_physical_memory || base < g_guest_physical_base ||
             base - g_guest_physical_base > g_guest_physical_length ||
             limit > g_guest_physical_length - (base - g_guest_physical_base))
             return 7;
+    } else if (target == 0x00010000u) {
+        /* AGP base is an aperture-relative address. The host's GART adapter
+         * validates/translates each requested span; do not assume a PTE layout. */
+        if ((uint64_t)base + limit > 0x08000000ull)
+            return 7;
     } else {
-        return 6; /* AGP requires GART page-table translation; never guess. */
+        return 6; /* Reserved DMA target. */
     }
 
     output->handle = handle;
@@ -1927,7 +1960,8 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
     output->dma_class = dma_class;
     output->dma_target = target;
     output->engine = engine;
-    output->base_address = target == 0u ? base : base - g_guest_physical_base;
+    output->base_address = target == 0x00020000u
+        ? base - g_guest_physical_base : base;
     output->limit = limit;
     output->mapped_length = limit;
     return 0;
