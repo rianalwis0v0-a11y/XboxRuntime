@@ -86,6 +86,7 @@ extern "C" LONG __stdcall K_NtSetSystemTime(LARGE_INTEGER* systemTime, LARGE_INT
     g_guestTimeOffset100ns.store(requested.QuadPart-hostNow, std::memory_order_release);
     return kStatusSuccess;
 }
+#if !defined(XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME)
 extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER* currentTime) {
     if (!GuestSpanAccessible(currentTime, sizeof(LARGE_INTEGER), true)) {
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
@@ -95,3 +96,5 @@ extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER* currentTime) {
     value.QuadPart=XboxKernelCurrentSystemTime100ns();
     std::memcpy(currentTime, &value, sizeof(value));
 }
+
+#endif // XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME
