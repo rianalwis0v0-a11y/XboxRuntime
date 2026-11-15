@@ -104,14 +104,25 @@ static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
         return 1;
     }
     if (dma->dma_target == XBOX_NV2A_DMA_TARGET_AGP) {
-        const void* translated = NULL;
-        uint32_t contiguous_length = 0;
-        if (!g_agp_translate ||
-            !g_agp_translate((uint32_t)address, length, &translated,
-                             &contiguous_length, g_agp_translate_context) ||
-            !translated || contiguous_length < length)
+        if (g_agp_translate) {
+            const void* translated = NULL;
+            uint32_t contiguous_length = 0;
+            if (!g_agp_translate((uint32_t)address, length, &translated,
+                                 &contiguous_length, g_agp_translate_context) ||
+                !translated || contiguous_length < length)
+                return 0;
+            *output = (const uint8_t*)translated;
+            return 1;
+        }
+        /* Xbox AGP memory is exposed through the linear 0xF0000000 alias;
+         * the DMA object's 27-bit base is the guest-physical page offset. */
+        if (!g_guest_physical_memory || address < g_guest_physical_base ||
+            address - g_guest_physical_base > g_guest_physical_length ||
+            length > (uint64_t)g_guest_physical_length -
+                (address - g_guest_physical_base))
             return 0;
-        *output = (const uint8_t*)translated;
+        *output = g_guest_physical_memory +
+            (size_t)(address - g_guest_physical_base);
         return 1;
     }
     return 0; /* Reserved targets are never interpreted as host pointers. */
@@ -1986,9 +1997,15 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
             limit > g_guest_physical_length - (base - g_guest_physical_base))
             return 7;
     } else if (target == XBOX_NV2A_DMA_TARGET_AGP) {
-        /* AGP aperture offsets are 27-bit; the host GART adapter resolves
-         * each span because the page-table format belongs to the platform. */
+        /* Xbox AGP memory is a linear alias of guest physical RAM at
+         * 0xF0000000; the DMA object's address field already masks to its
+         * 27-bit aperture offset. A host callback may override this mapping. */
         if ((uint64_t)base + limit > 0x08000000ull)
+            return 7;
+        if (!g_agp_translate &&
+            (!g_guest_physical_memory || base < g_guest_physical_base ||
+             base - g_guest_physical_base > g_guest_physical_length ||
+             limit > g_guest_physical_length - (base - g_guest_physical_base)))
             return 7;
     } else if (target == XBOX_NV2A_DMA_TARGET_LOCAL_TILED) {
         return 6; /* Valid target encoding, tiled address swizzle not implemented. */
