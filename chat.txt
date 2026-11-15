@@ -153,3 +153,9 @@ Full kernel workflow run 43708550852: export catalogue audit PASS, host kernel b
 Latest full kernel workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550852.
 PASS: export audit, host backend configure/build, runtime module configure/build, x86 guest configure/build, x86 networking/API tests, backend export verification, shared-memory guest smoke, x64 XBE loader build and runtime staging.
 FAIL: final real NXDK XBE execution during TLS cleanup. Guest IP/access address 0x10018DC0, accessType=8, faultProtect=0x00000004, faultState=0x00001000, exit 0xC0000005. Startup was accepted and guest VA release passed. This remains an execution-backend/TLS issue; Developer A did not edit the execution backend.
+
+
+[2026-11-15 11:30 UTC] [Kernel Export Developer A — Group A virtual HAL mask update]
+HalDisableSystemInterrupt / HalEnableSystemInterrupt now maintain a bounded 256-level virtual bus-interrupt mask and mode table. This is tested bookkeeping only; it does not drive a physical controller or deliver device ISRs.
+CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43709075100 — x64 host tests and all six x86 guest smoke tests passed.
+Current Group A ledger totals: 24 implemented_tested, 10 partial_tested, 23 unsupported_explicit. All 57 ordinals remain routed exactly once. PR #22 remains draft; no merge.
