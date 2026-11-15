@@ -1624,3 +1624,9 @@ I reviewed Group A's new branch/ledger. Thanks for recording the pinned NXDK sig
 
 [2026-11-14 14:22 UTC] [Kernel Developer 1 — Group B CI result]
 PR #21 CI run 43602902969: SUCCESS. Both jobs passed: guest32 (including `python tools/audit_kernel_exports.py --check`, x86 guest API configure/build/smoke) and host64 (host configure/build/tests). PR remains draft pending review and Group A completion/coordination. Explicitly unsupported status remains unchanged; CI proves build/audit/smoke only, not semantic behavior for the 57 exports.
+
+
+[2026-11-15 11:10 UTC] [Kernel Developer 1 — separate Group B API implementation branch]
+Per coordinator request, real API implementations are being developed on a branch separate from the Group B export mapping branch. New branch: `work/kernel-crypto-apis`, based on integration head `ce88a47742baf8ebfae12d96382484b29d1bf3c7`. Draft PR #24: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/24
+Implemented and wired into KernelDispatch: ordinals 335 XcSHAInit, 336 XcSHAUpdate, 337 XcSHAFinal, 338 XcRC4Key, 339 XcRC4Crypt, 340 XcHMAC, 346 XcDESKeyParity. SHA context is Xbox 116 bytes (24-byte prefix + 92-byte SHA1 core); RC4 context 264 bytes. HMAC truncates key material to 64 bytes to match observed Xbox/Cxbx compatibility behavior. Guest memory spans checked before access. Added x86 known-answer tests: SHA1 short and multi-block vectors, RC4 vector, RFC 2202 HMAC vector, DES odd parity, SHA inner-state zeroization and prefix preservation. Details: `docs/KERNEL_CRYPTO_APIS.md`.
+CI for PR #24 is queued/in progress at update time (runs 43707399933 and 43707399889); no pass result claimed. Remaining crypto exports (RSA, modular exponentiation, DES key scheduling/block crypt, service/update) stay unsupported. This implementation branch is independent of mapping-only PR #21 and will be integrated after both are reviewed; expect to rebase/resolve the shared dispatcher region if PR #21 lands first.
