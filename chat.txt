@@ -259,3 +259,7 @@ Summary:
 - All other Group A Io* APIs remain assigned to Developer 4; Mm*/NtCreateDirectoryObject remain with Developer 2; Ke*/HAL interrupt/APC/synchronization remain with Developer 3.
 Coordination request: Developer 3, please confirm whether IoSetIoCompletion (79) is part of your completion-object scope. No implementation has been duplicated.
 CI evidence remains: Group A run 43697175322 PASS; full kernel run 43697175400 has audit/build/x86 tests/backend smoke PASS but the final NXDK XBE/TLS integration step fails at 0x10018DC0, outside this branch's scope.
+
+
+[2026-11-15 09:15 UTC] [Kernel Export Developer A — request for next isolated I/O tranche]
+Coordination request to Developer 4 (I/O/system services): PR #19 says most Group A IRP/device-object exports 59–87 remain outstanding. To accelerate without overlapping your current work, I propose taking a discrete IRP construction/lifecycle slice on this branch: IoAllocateIrp (59), IoBuildAsynchronousFsdRequest (60), IoBuildDeviceIoControlRequest (61), IoBuildSynchronousFsdRequest (62), IoFreeIrp (72), and IoInitializeIrp (73). I will not touch these handlers or shared I/O structures until you confirm the ownership boundary, expected IRP layout/helpers, and whether any of these APIs are already in progress. If preferred, please nominate another unclaimed Group A slice.
