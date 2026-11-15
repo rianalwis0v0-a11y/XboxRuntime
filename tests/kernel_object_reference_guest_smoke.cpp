@@ -31,6 +31,25 @@ int main() {
     if (XboxKernelReferenceObject(nullptr) || XboxKernelDereferenceObject(nullptr))
         return Fail("null object references rejected");
 
+    // Pointer reference increments the shared object-body refcount.
+    int pointerDestroyed=0;
+    auto* pointerObject=new TestObject{&pointerDestroyed};
+    HANDLE pointerHandle=XboxKernelCreateObjectHandle(
+        pointerObject,XboxKernelObjectType::Directory,DestroyTestObject);
+    if (!pointerHandle) return Fail("create object for ObReferenceObjectByPointer");
+    if (K_ObReferenceObjectByPointer(pointerObject,0,nullptr,0)!=0)
+        return Fail("generic ObReferenceObjectByPointer");
+    if (K_ObReferenceObjectByPointer(pointerObject,0,reinterpret_cast<void*>(1),0)!=
+        static_cast<LONG>(0xC0000024u))
+        return Fail("typed pointer reference rejects unknown OBJECT_TYPE");
+    if (!XboxKernelCloseObjectHandle(pointerHandle) || pointerDestroyed!=0)
+        return Fail("pointer reference survives handle close");
+    K_ObfDereferenceObject(pointerObject);
+    if (pointerDestroyed!=1) return Fail("pointer reference final dereference");
+    if (K_ObReferenceObjectByPointer(nullptr,0,nullptr,0)!=
+        static_cast<LONG>(0xC000000Du))
+        return Fail("null pointer reference rejected");
+
     // Generic (ObjectType == NULL) handle reference increments the shared object refcount.
     int referencedDestroyed=0;
     auto* referenced=new TestObject{&referencedDestroyed};
