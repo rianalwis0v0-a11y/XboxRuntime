@@ -2630,6 +2630,7 @@ void XboxKernelSetStartupEvent(HANDLE eventHandle) {
 }
 
 void XboxKernelShutdownTitle() {
+    XboxKernelResetThreadExports();
     g_startupEvent = nullptr;
     XboxKernelCloseAllObjectHandles();
     if (g_stubPage) {
