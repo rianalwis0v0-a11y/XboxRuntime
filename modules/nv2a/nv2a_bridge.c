@@ -2543,11 +2543,12 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
 {
     const uint16_t supported_mask =
         (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
-                   (1u << 4) | (1u << 5) | (1u << 6) |
+                   (1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 8) |
                    (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12) |
                    (1u << 13) | (1u << 14) | (1u << 15));
     const uint16_t required_array_mask =
         (uint16_t)((1u << 1) | (1u << 5) | (1u << 6) |
+                   (1u << 7) | (1u << 8) |
                    (1u << 13) | (1u << 14) | (1u << 15));
     uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
     size_t required;
@@ -2602,6 +2603,8 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
             case 4u: memcpy(dst, &v->specular, 4u); break;
             case 5u: memcpy(dst, &v->fog, 4u); break;
             case 6u: memcpy(dst, &v->point_size, 4u); break;
+            case 7u: memcpy(dst, &v->backface_diffuse, 4u); break;
+            case 8u: memcpy(dst, &v->backface_specular, 4u); break;
             case 9u: memcpy(dst, &v->u, 8u); break;
             case 10u: memcpy(dst, &v->u1, 8u); break;
             case 11u: memcpy(dst, &v->u2, 8u); break;
