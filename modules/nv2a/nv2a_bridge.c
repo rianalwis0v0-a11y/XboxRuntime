@@ -874,7 +874,8 @@ int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
      * rebound through their RAMHT handles. A same-base remap only dirties
      * cached textures because the context-relative offsets remain valid. */
     if (g_guest_physical_memory &&
-        g_guest_physical_base != guest_physical_base)
+        (g_guest_physical_base != guest_physical_base ||
+         g_guest_physical_length != length))
         invalidate_dma_contexts_for_target(XBOX_NV2A_DMA_TARGET_PCI);
     else
         mark_all_textures_dirty();
