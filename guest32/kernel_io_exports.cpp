@@ -265,16 +265,23 @@ extern "C" void __stdcall K_IoDeleteDevice(void* rawDeviceObject) {
     if (!rawDeviceObject) return;
     auto* device = static_cast<GuestDeviceObject*>(rawDeviceObject);
     SIZE_T allocationSize = 0;
+    bool invalidOrBusy = false;
     {
         std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
         auto it = g_deviceObjects.find(device);
-        if (it == g_deviceObjects.end()) {
-            UnsupportedIoVoidExport(68);
-            return;
+        auto queue = g_devicePacketQueues.find(device);
+        if (it == g_deviceObjects.end() || queue == g_devicePacketQueues.end() ||
+            device->CurrentIrp || !queue->second.empty()) {
+            invalidOrBusy = true;
+        } else {
+            allocationSize = it->second;
+            g_deviceObjects.erase(it);
+            g_devicePacketQueues.erase(queue);
         }
-        allocationSize = it->second;
-        g_deviceObjects.erase(it);
-        g_devicePacketQueues.erase(device);
+    }
+    if (invalidOrBusy) {
+        UnsupportedIoVoidExport(68);
+        return;
     }
     device->DeletePending = TRUE;
     auto* driver = static_cast<GuestDriverObject*>(device->DriverObject);
