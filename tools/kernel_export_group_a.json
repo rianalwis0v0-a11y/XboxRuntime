@@ -482,7 +482,7 @@
       "dispatcher_handler": "K_IoCreateDevice",
       "implementation_file": "guest32/kernel_io_exports.cpp",
       "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
-      "limitations": "Allocates an unnamed Xbox DEVICE_OBJECT plus zeroed device extension, initializes dispatcher event/device queue fields and DO_DEVICE_INITIALIZING/DO_EXCLUSIVE flags. Named devices remain STATUS_NOT_SUPPORTED."
+      "limitations": "Allocates and initializes a verified Xbox DEVICE_OBJECT plus zeroed device extension; supports named and unnamed devices in the adapter's case-insensitive namespace. The namespace is adapter-local rather than a full Object Manager directory hierarchy."
     },
     {
       "ordinal": 66,
@@ -1012,12 +1012,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_8_byte_OBJECT_STRING_and_72_byte_DEVICE_OBJECT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 91; one-line jump to K_IoDismountVolumeByName.",
       "nxdk_export_definition": "IoDismountVolumeByName@4                 @  91 NONAME",
@@ -1026,7 +1026,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_IoDismountVolumeByName",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "No volume namespace/dismount backend is available; returns STATUS_NOT_SUPPORTED."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708313884",
+      "limitations": "Resolves names in the adapter's case-insensitive DEVICE_OBJECT namespace and calls DRIVER_OBJECT.DriverDismountVolume. It does not implement the full Xbox Object Manager namespace or RootDirectory-relative lookup."
     },
     {
       "ordinal": 93,
