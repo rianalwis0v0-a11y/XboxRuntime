@@ -2239,6 +2239,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je xc_sha_update
         cmp eax, 337
         je xc_sha_final
+        cmp eax, 338
+        je xc_rc4_key
+        cmp eax, 339
+        je xc_rc4_crypt
         cmp eax, 340
         je xc_hmac
         cmp eax, 346
@@ -2463,6 +2467,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     xc_sha_init: jmp K_XcSHAInit
     xc_sha_update: jmp K_XcSHAUpdate
     xc_sha_final: jmp K_XcSHAFinal
+    xc_rc4_key: jmp K_XcRC4Key
+    xc_rc4_crypt: jmp K_XcRC4Crypt
     xc_hmac: jmp K_XcHMAC
     xc_des_key_parity: jmp K_XcDESKeyParity
     }
