@@ -401,6 +401,10 @@ static DXGI_FORMAT default_input_format(int vreg, DWORD fvf)
 }
 
 ]=])
+    string(REPLACE
+        "Texcoord registers 8-11 use the FVF-declared size (float1/2/3/4)."
+        "Texcoord registers 9-12 use the FVF-declared size (float1/2/3/4)."
+        _vsh_src "${_vsh_src}")
     _replace_range(_vsh_src "static DXGI_FORMAT default_input_format(" "static UINT input_format_size(" _input_layout_block _vsh_src)
     file(WRITE "${_vsh_c}" "${_vsh_src}")
 endif()
