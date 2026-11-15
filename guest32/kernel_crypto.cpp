@@ -195,7 +195,8 @@ extern "C" void __stdcall K_XcHMAC(std::uint8_t* key, std::uint32_t keyLength,
                                     std::uint8_t* input1, std::uint32_t input1Length,
                                     std::uint8_t* input2, std::uint32_t input2Length,
                                     std::uint8_t* digest) {
-    if (!SpanHasProtection(key, keyLength, false) ||
+    const std::uint32_t effectiveKeyLength=(std::min)(keyLength, 64u);
+    if (!SpanHasProtection(key, effectiveKeyLength, false) ||
         !SpanHasProtection(input1, input1Length, false) ||
         !SpanHasProtection(input2, input2Length, false) ||
         !SpanHasProtection(digest, 20, true)) {
@@ -203,7 +204,6 @@ extern "C" void __stdcall K_XcHMAC(std::uint8_t* key, std::uint32_t keyLength,
         return;
     }
     std::uint8_t keyBlock[64]{}, innerPad[64], outerPad[64], innerDigest[20];
-    const std::uint32_t effectiveKeyLength=(std::min)(keyLength, static_cast<std::uint32_t>(sizeof(keyBlock)));
     if (effectiveKeyLength) std::memcpy(keyBlock, key, effectiveKeyLength);
     for (unsigned i=0;i<64;++i) { innerPad[i]=keyBlock[i]^0x36; outerPad[i]=keyBlock[i]^0x5c; }
     Sha1Context inner{}; Init(inner); Update(inner, innerPad, 64);
