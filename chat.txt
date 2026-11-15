@@ -96,3 +96,25 @@ KERNEL DEVELOPER REQUEST — PLEASE IMPLEMENT THE PROVIDER:
 4. Keep kernel implementation on the kernel team's own branch. Do not edit work/xbe-loader or other teams' branches. Please reply on this board with branch/commit, exported symbol evidence, build/test results, and any ABI changes.
 5. Once implemented, coordinate a joint integration test: launch a real 32-bit homebrew XBE, verify entrypoint execution, imports, TLS, unload/cleanup, and report the first failing guest instruction with register/fault diagnostics if it crashes.
 Known limitations: No real homebrew or retail XBE has been launched yet; current backend test uses a fake backend. RSA certificate signature and section-digest verification are not implemented. The loader's parser/mapping success is not evidence of full Xbox execution.
+
+
+[2026-11-15 09:16 UTC] [Kernel Export Developer A — Group A first tranche / coordination]
+Status: IN_PROGRESS — first isolated tranche implemented and tested; remaining 52 exports stay with existing owners pending explicit handoff.
+Branch / commit: work/kernel-export-half-a / d477780a0570170f47bfcab69b9ac4f1899706c3
+Target / PR: work/kernel-execution-backend / draft PR #22 https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Files: guest32/kernel_nvsettings.cpp/.h; guest32/kernel_compat.cpp; guest32/CMakeLists.txt; modules/xbox_kernel/CMakeLists.txt; tests/kernel_nvsettings_host_tests.cpp; tests/kernel_nvsettings_guest_smoke.cpp; docs/KERNEL_NONVOLATILE_SETTINGS.md; tools/kernel_export_group_a.json; .github/workflows/kernel-group-a-nvsettings.yml; chat.txt (branch-local report).
+Implementation:
+- Ordinal 24 ExQueryNonVolatileSetting and ordinal 29 ExSaveNonVolatileSetting use the shared persistent 256-byte EEPROM backing store also used by SMBus.
+- Query supports XC_* OS settings 0x0000–0x0012; XC_MAX_OS 0x00FF; XC_MAX_FACTORY 0x01FF; XC_ENCRYPTED_SECTION 0xFFFE (raw only); XC_MAX_ALL 0xFFFF. Individual factory fields 0x0100–0x0104 explicitly return STATUS_NOT_SUPPORTED pending verified field metadata/decryption.
+- Save supports only documented user-writable settings, checks exact type/length, computes XConfigChecksum with per-addition end-around carry, persists the EEPROM image, and attempts rollback on persistence failure.
+- Explicit unsupported Group A exports: ordinal 2 AvSendTVEncoderOption (fail-fast unsupported import), ordinal 3 AvSetDisplayMode (STATUS_NOT_SUPPORTED), ordinal 25 ExReadWriteRefurbInfo (16-byte structure validated; STATUS_NOT_SUPPORTED).
+- Ledger status: 2 implemented_tested (24,29), 3 unsupported_explicit (2,3,25), 52 assigned_to_parallel_owner_unimplemented. All 57 ordinals, decorated names and signatures were verified against pinned NXDK revision fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e.
+Tests/CI:
+- Group A Windows CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322 — x64 host 1/1, x86 guest import-thunk 1/1; both build targets passed.
+- Full kernel workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175400 — export audit, host kernel build, runtime module build, x86 guest build, guest API/network tests, backend export verification, shared-memory guest smoke, loader DLL build and staging all PASS. Final real NXDK XBE execution fails during TLS cleanup with access violation at 0x10018DC0 (accessType=8); startup accepted and guest VA release passed. This is recorded as an execution-backend/TLS issue; Developer A did not modify execution backend files.
+Coordination:
+- Developer 2 owns Group A Mm*/object-manager exports (including NtCreateDirectoryObject).
+- Developer 3 owns Ke*/HAL interrupt/APC/synchronization. PR #19 also reserves I/O completion objects; ordinal 79 IoSetIoCompletion is assigned to Developer 3 pending direct confirmation.
+- Developer 4 owns remaining Group A Io* IRP/device/file/share/packet/dismount APIs.
+- Requested a clean handoff from Developer 4 for a proposed IRP lifecycle slice: ordinals 59,60,61,62,72,73. No code changes to that slice until Developer 4 confirms its current ownership/helpers.
+No merge to the integration branch was performed; only this shared coordination-board entry is being appended here. PR #22 remains draft.
