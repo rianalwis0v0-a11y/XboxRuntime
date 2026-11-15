@@ -115,13 +115,13 @@ The existing code already contains important pieces of this translation path; do
 
 - The full Xbox D3D device-creation path is not yet connected to a running original XBE.
 - The guest address space is not yet generally connected to NV2A MMIO/VRAM fault hooks.
-- PCI-target DMA pushbuffers can use a bounded borrowed guest-physical mapping, but AGP/GART translation is still rejected.
-- Vertex and texture fetches still need to be routed through a shared address-space abstraction instead of assuming local VRAM.
-- Existing D3D11 rendering support is present, but there is not yet a clean backend-neutral draw packet boundary separating guest PGRAPH state from host API submission.
+- PCI-target DMA pushbuffers and resource fetches use the bounded borrowed guest-physical mapping; AGP now has a host-supplied GART resolver seam.
+- The shared DMA span resolver is used by pushbuffer, vertex, linear texture, mip-chain, and paletted texture/palette reads.
+- An initial backend-neutral draw packet now separates translated topology/vertex/shader metadata from the existing D3D8/D3D11 submission adapter.
 
 ### First code change after this audit
 
-Introduce a small internal translation seam around the existing implementation: a validated backend-neutral draw description and explicit guest-resource views. Keep the existing D3D8/D3D11 submission path as the first backend. The seam must not own or reinterpret raw guest pointers, and it must not duplicate the current shader parser/compiler.
+The initial seam is now present: checked DMA resource views plus an internal backend-neutral draw packet. Continue by adding deterministic packet-level tests and a real guest-render integration test. Keep the existing D3D8/D3D11 submission path as the first backend; do not duplicate the shader parser/compiler.
 
 ## Implemented translation milestone — PCI resource views
 
@@ -137,7 +137,7 @@ The resolver is used by:
 - Swizzled/compressed mip-chain decode (`XboxNV2A_DecodeTextureMipChainFromDMA`).
 - Paletted texture and palette fetch.
 
-This removes the earlier local-VRAM-only rejection for those resource paths while retaining strict bounds checks. AGP/GART is still rejected; it needs actual guest page-table translation and is not mapped by this helper.
+This removes the earlier local-VRAM-only rejection for PCI resources while retaining strict bounds checks. The NV2A DMA target encodings are distinct: local VRAM is 0x00000000, tiled local memory is 0x00010000, PCI is 0x00020000, and AGP is 0x00030000. Tiled local memory is explicitly rejected until its tile swizzle mapping is implemented. AGP spans are routed through the host GART callback; the Xbox-specific GART page-table walker is still not implemented in this module.
 
 Regression coverage has been added for PCI-backed vertex-array reads and linear texture decoding, including restoring the original local-VRAM DMA object/context after the test. The test is awaiting the Windows GitHub Actions result in PR #25.
 
@@ -146,7 +146,7 @@ Regression coverage has been added for PCI-backed vertex-array reads and linear 
 1. **Unify DMA reads through one address resolver — implemented on this branch.**
    Pushbuffer parsing, vertex fetch, linear textures, mip chains, and paletted texture/palette reads now share the checked span resolver. The resolver accepts local VRAM and an explicitly bound PCI physical-memory window; it never converts guest addresses directly into host pointers.
 2. **AGP/GART translation — adapter implemented; Xbox page-table walker outstanding.**
-   The bridge exposes a host-supplied AGP aperture resolver callback and checks the complete returned span. The AGP specification deliberately leaves the concrete GART table format and control interface to the platform, so a generic 4-KiB PTE assumption would be unsafe. The Xbox-specific aperture registers, GART base, valid bits, and page-size behavior still need to be implemented by the host memory manager and tested.
+   The bridge exposes a host-supplied AGP aperture resolver callback and checks the complete returned span. The target decode now uses the NV2A-defined AGP value 0x00030000; 0x00010000 is NVM_TILED and is rejected instead of being mistaken for AGP. The callback must resolve the aperture through the actual Xbox host-bridge GART state. The module deliberately does not invent a generic PTE format; the Xbox-specific GART table walker and its tests remain outstanding.
 3. **Vertex/pixel shader coverage — existing translators reused; coverage remains partial.**
    Keep the pinned NV2A microcode-to-HLSL translator and D3D8/D3D11 combiner path. Extend operations through focused shader tests; do not add a second interpreter/compiler.
 4. **PGRAPH-to-host operations — partial.**
@@ -158,4 +158,4 @@ Regression coverage has been added for PCI-backed vertex-array reads and linear 
 
 ### Additional PCI regression coverage
 
-The PCI-backed regression covers vertex-array reads, a linear texture, a two-level swizzled mip chain, and palette plus paletted-texture reads. The DMA pusher itself also obtains its command stream through the same checked span resolver. An AGP-backed regression uses a host resolver callback to exercise pushbuffer parsing, vertex fetch, and texture fetch without assuming a GART PTE format. The backend-neutral draw-packet refactor compiles and the five subsystem tests pass; the full diagnostic XBE still fails separately with exit code 0xC0000409.
+The PCI-backed regression covers vertex-array reads, a linear texture, a two-level swizzled mip chain, and palette plus paletted-texture reads. The DMA pusher itself also obtains its command stream through the same checked span resolver. An AGP-backed regression uses the actual 0x00030000 DMA target and a host resolver callback to exercise pushbuffer parsing, vertex fetch, and texture fetch without assuming a GART PTE format. A companion test verifies that 0x00010000 (NVM_TILED) is rejected rather than misrouted to the AGP callback. The backend-neutral draw-packet refactor has passed the five subsystem tests on its preceding CI run; the corrected DMA-target tests are awaiting a fresh CI result.
