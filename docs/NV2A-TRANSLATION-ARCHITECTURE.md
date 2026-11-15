@@ -162,7 +162,7 @@ Regression coverage now exercises PCI-backed vertex-array reads, linear textures
 - AGP-backed tests use the actual 0x00030000 target and a host resolver callback for pushbuffer parsing, vertex fetch, and texture fetch. A deliberately undersized callback span is rejected before pushbuffer dispatch.
 - NVM_TILED (0x00010000) is verified to be rejected instead of being mistaken for AGP.
 - The HLSL smoke test exercises ARL followed by relative constant access through the actual DWORD3 bit-1 flag, alongside the MAC/ILU opcode matrix and paired-unit read-before-write assertion.
-- Run 916 passed the Windows x64 build and all five subsystem tests. The native x86 guest build and entry-point smoke test also passed. The comprehensive diagnostic XBE still exits with 0xC0000409 before returning its report; that is not yet a successful guest graphics/render test.
+- Run 943 passed the Windows x64 build and all five subsystem tests, including weight/fog/point-size array fetch, optional-array handling, exact vertex packing, and HLSL input decoding. The native x86 guest build and entry-point smoke test also passed. The comprehensive diagnostic XBE still exits with 0xC0000409 before returning its report; that is not yet a successful guest graphics/render test.
 
 
 ### Programmable vertex input contract
