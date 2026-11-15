@@ -2565,7 +2565,8 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
         switch (reg) {
         case 0u: case 2u: sizes[reg] = 12u; break;
         case 1u: sizes[reg] = 16u; break;
-        case 3u: case 4u: case 5u: case 6u: sizes[reg] = 4u; break;
+        case 3u: case 4u: case 5u: case 6u: case 7u: case 8u:
+            sizes[reg] = 4u; break;
         /* NV097 array slots 7..10 supply TEX0..TEX3, which map to
          * programmable shader inputs v9..v12; v7/v8 are backface colors. */
         case 9u: case 10u: case 11u: case 12u: sizes[reg] = 8u; break;
