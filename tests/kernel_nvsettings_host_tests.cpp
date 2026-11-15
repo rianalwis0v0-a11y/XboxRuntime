@@ -10,23 +10,18 @@ int main() {
         std::fprintf(stderr, "FAIL: XC_LANGUAGE descriptor\n");
         return 1;
     }
+    if (!XboxNvGetSettingInfo(0x00FF, &info) || info.offset != 0x60 ||
+        info.length != 0x60 || info.type != 3 || info.writable) {
+        std::fprintf(stderr, "FAIL: XC_MAX_OS descriptor\n");
+        return 1;
+    }
     if (!XboxNvGetSettingInfo(0xFFFF, &info) || info.offset != 0 ||
         info.length != 256 || info.type != 3 || info.writable) {
         std::fprintf(stderr, "FAIL: full EEPROM descriptor\n");
         return 1;
     }
-    if (!XboxNvGetSettingInfo(0x00FF, &info) || info.offset != 0x60 ||
-        info.length != 0x60 || info.type != 3 || info.writable) {
-        std::fprintf(stderr, "FAIL: XC_MAX_OS descriptor\\n");
-        return 1;
-    }
     if (XboxNvGetSettingInfo(0x7777, &info)) {
         std::fprintf(stderr, "FAIL: unknown index accepted\n");
-        return 1;
-    }
-    if (!XboxNvGetSettingInfo(0x00FF, &info) || info.offset != 0x60 ||
-        info.length != 0x60 || info.type != 3 || info.writable) {
-        std::fprintf(stderr, "FAIL: XC_MAX_OS descriptor\\n");
         return 1;
     }
     const std::uint8_t zeroWord[4]{};
