@@ -51,6 +51,30 @@ extern "C" LONG __stdcall K_IoCheckShareAccess(ACCESS_MASK, ULONG, void*, void*,
 extern "C" void __stdcall K_IoSetShareAccess(ACCESS_MASK, ULONG, void*, void*);
 extern "C" void __stdcall K_IoRemoveShareAccess(void*, void*);
 
+
+#pragma pack(push, 4)
+struct GuestDeviceQueue { SHORT Type; UCHAR Size; UCHAR Busy; GuestListEntry DeviceListHead; };
+struct GuestEvent { UCHAR Type, Absolute, Size, Inserted; LONG SignalState; GuestListEntry WaitListHead; };
+struct GuestDeviceObject {
+    SHORT Type; USHORT Size; LONG ReferenceCount;
+    void* DriverObject; GuestDeviceObject* MountedOrSelfDevice; void* CurrentIrp;
+    ULONG Flags; void* DeviceExtension; UCHAR DeviceType, StartIoFlags;
+    CHAR StackSize; BOOLEAN DeletePending; ULONG SectorSize;
+    ULONG AlignmentRequirement; GuestDeviceQueue DeviceQueue;
+    GuestEvent DeviceLock; ULONG StartIoKey;
+};
+struct GuestDriverObject {
+    void* DriverStartIo;
+    void (__stdcall* DriverDeleteDevice)(GuestDeviceObject*);
+    LONG (__stdcall* DriverDismountVolume)(GuestDeviceObject*);
+    void* MajorFunction[14];
+};
+#pragma pack(pop)
+static_assert(sizeof(GuestDeviceObject) == 72, "DEVICE_OBJECT x86 size");
+static_assert(sizeof(GuestDriverObject) == 68, "DRIVER_OBJECT x86 size");
+extern "C" LONG __stdcall K_IoCreateDevice(void*, ULONG, void*, ULONG, BOOLEAN, void**);
+extern "C" void __stdcall K_IoDeleteDevice(void*);
+
 extern "C" LONG __stdcall K_IoCreateFile(
     HANDLE*, ACCESS_MASK, GuestObjectAttributes*, GuestIoStatusBlock*,
     const LARGE_INTEGER*, ULONG, ULONG, ULONG, ULONG, ULONG);
@@ -58,6 +82,15 @@ extern "C" LONG __stdcall K_IoQueryFileInformation(
     void*, ULONG, ULONG, void*, ULONG*);
 extern "C" LONG __stdcall K_IoQueryVolumeInformation(
     void*, ULONG, ULONG, void*, ULONG*);
+
+
+namespace {
+volatile LONG g_deviceDeleteCalls = 0;
+void __stdcall DeleteDeviceCallback(GuestDeviceObject* device) {
+    if (device && device->DeletePending && device->DeviceExtension)
+        InterlockedIncrement(&g_deviceDeleteCalls);
+}
+}
 
 int main() {
     static_assert(sizeof(void*) == 4, "Xbox I/O smoke test requires x86");
@@ -192,6 +225,28 @@ int main() {
         return 21;
     K_IoRemoveShareAccess(&resetFile, &shares);
     if (shares.OpenCount != 0 || shares.Writers != 0) return 22;
+
+
+    GuestDriverObject driver{};
+    driver.DriverDeleteDevice = DeleteDeviceCallback;
+    void* deviceRaw = nullptr;
+    if (K_IoCreateDevice(&driver, 64, nullptr, 7, TRUE, &deviceRaw) != 0 ||
+        !deviceRaw)
+        return 23;
+    auto* device = static_cast<GuestDeviceObject*>(deviceRaw);
+    if (device->Type != 3 || device->Size != sizeof(GuestDeviceObject) + 64 ||
+        device->ReferenceCount != 1 || device->DriverObject != &driver ||
+        device->MountedOrSelfDevice != device || (device->Flags & 0x8u) == 0 ||
+        device->DeviceExtension != reinterpret_cast<UCHAR*>(device) + sizeof(*device) ||
+        device->DeviceType != 7 || device->StackSize != 1 ||
+        device->DeviceQueue.Type != 4 || device->DeviceQueue.Size != 12 ||
+        device->DeviceQueue.Busy != FALSE ||
+        device->DeviceLock.WaitListHead.Flink != &device->DeviceLock.WaitListHead)
+        return 24;
+    for (ULONG i = 0; i < 64; ++i)
+        if (static_cast<UCHAR*>(device->DeviceExtension)[i] != 0) return 25;
+    K_IoDeleteDevice(device);
+    if (g_deviceDeleteCalls != 1) return 26;
 
     std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
     return 0;
