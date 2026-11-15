@@ -35,7 +35,7 @@ def main() -> int:
     data = {int(n) for n in re.findall(r"case (\d+)", data_body)}
     data.update(int(n) for n in re.findall(r"case (\d+): case", data_body))
     labels = set(re.findall(r"je ([a-zA-Z_][a-zA-Z_0-9]*)", dispatch))
-    defined_labels = set(re.findall(r"^\s*([a-zA-Z_][a-zA-Z_0-9]*):\s*jmp ", dispatch, re.M))
+    defined_labels = set(re.findall(r"^\s*([a-zA-Z_][a-zA-Z_0-9]*):\s*(?:jmp|push)\b", dispatch, re.M))
     missing_labels = sorted(labels - defined_labels)
     overlap = sorted(routed & data)
     unknown = sorted((routed | data) - set(by_ordinal))
