@@ -164,13 +164,6 @@ extern "C" void __stdcall K_IoInitializeIrp(void* irp, USHORT, CHAR) {
 extern "C" void __stdcall K_IoQueueThreadIrp(void* irp) {
     if (irp) UnsupportedIoVoidExport(77);
 }
-extern "C" void __stdcall K_IoRemoveShareAccess(void* fileObject, void*) {
-    if (fileObject) UnsupportedIoVoidExport(78);
-}
-extern "C" void __stdcall K_IoSetShareAccess(ACCESS_MASK, ULONG,
-                                               void* fileObject, void*) {
-    if (fileObject) UnsupportedIoVoidExport(80);
-}
 extern "C" void __stdcall K_IoStartNextPacket(void* deviceObject) {
     if (deviceObject) UnsupportedIoVoidExport(81);
 }
