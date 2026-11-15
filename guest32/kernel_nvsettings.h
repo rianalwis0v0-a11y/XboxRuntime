@@ -33,6 +33,9 @@ struct XboxRefurbInfo32 {
     std::int64_t firstSetTime;
 };
 static_assert(sizeof(XboxRefurbInfo32) == 16, "XBOX_REFURB_INFO must match pinned NXDK x86 layout");
+static_assert(offsetof(XboxRefurbInfo32, signature) == 0, "XBOX_REFURB_INFO.Signature offset");
+static_assert(offsetof(XboxRefurbInfo32, powerCycleCount) == 4, "XBOX_REFURB_INFO.PowerCycleCount offset");
+static_assert(offsetof(XboxRefurbInfo32, firstSetTime) == 8, "XBOX_REFURB_INFO.FirstSetTime offset");
 
 extern "C" XboxNvStatus __stdcall K_ExReadWriteRefurbInfo(
     XboxRefurbInfo32* refurbInfo, std::uint32_t valueLength, std::uint8_t doWrite);
