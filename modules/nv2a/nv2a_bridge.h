@@ -212,6 +212,12 @@ typedef struct XboxNV2A_VERTEX {
     float u1, v1;
     float u2, v2;
     float u3, v3;
+    /* Shader-only inputs fetched from NV097 arrays 1, 5, and 6. */
+    float weights[4];
+    float fog;
+    float point_size;
+    uint16_t input_valid_mask;
+    uint16_t reserved;
 } XboxNV2A_VERTEX;
 
 /* Expand NV097 primitive streams into D3D8-compatible topology. primitive_type
