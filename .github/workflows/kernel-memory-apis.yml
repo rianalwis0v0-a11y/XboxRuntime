@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/kernel-memory-apis
+      - work/kernel-export-half-a
   pull_request:
     branches:
       - work/kernel-execution-backend
