@@ -15,9 +15,19 @@ int main() {
         std::fprintf(stderr, "FAIL: XC_MAX_OS descriptor\n");
         return 1;
     }
+    if (!XboxNvGetSettingInfo(0x01FF, &info) || info.offset != 0x30 ||
+        info.length != 0x30 || info.type != 3 || info.writable) {
+        std::fprintf(stderr, "FAIL: XC_MAX_FACTORY descriptor\n");
+        return 1;
+    }
+    if (!XboxNvGetSettingInfo(0xFFFE, &info) || info.offset != 0 ||
+        info.length != 0x30 || info.type != 3 || info.writable) {
+        std::fprintf(stderr, "FAIL: XC_ENCRYPTED_SECTION descriptor\n");
+        return 1;
+    }
     if (!XboxNvGetSettingInfo(0xFFFF, &info) || info.offset != 0 ||
         info.length != 256 || info.type != 3 || info.writable) {
-        std::fprintf(stderr, "FAIL: full EEPROM descriptor\n");
+        std::fprintf(stderr, "FAIL: XC_MAX_ALL descriptor\n");
         return 1;
     }
     if (XboxNvGetSettingInfo(0x7777, &info)) {
