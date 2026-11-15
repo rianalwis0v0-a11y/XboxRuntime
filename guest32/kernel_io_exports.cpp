@@ -208,7 +208,7 @@ void InitializeDeviceObject(GuestDeviceObject* device, SIZE_T totalSize,
     device->DriverObject = driver;
     device->MountedOrSelfDevice = device;
     device->CurrentIrp = nullptr;
-    device->Flags = exclusive ? 0x8u : 0u; // DO_EXCLUSIVE
+    device->Flags = 0x80u | (exclusive ? 0x8u : 0u); // DO_DEVICE_INITIALIZING | DO_EXCLUSIVE
     device->DeviceExtension = extensionSize
         ? reinterpret_cast<UCHAR*>(device) + sizeof(GuestDeviceObject) : nullptr;
     device->DeviceType = static_cast<UCHAR>(deviceType);
