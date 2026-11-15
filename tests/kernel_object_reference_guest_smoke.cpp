@@ -50,6 +50,17 @@ int main() {
         static_cast<LONG>(0xC0000008u) || invalidOut!=nullptr)
         return Fail("invalid object handle status and null output");
 
+    int badOutputDestroyed=0;
+    auto* badOutput=new TestObject{&badOutputDestroyed};
+    HANDLE badOutputHandle=XboxKernelCreateObjectHandle(
+        badOutput,XboxKernelObjectType::Directory,DestroyTestObject);
+    if (!badOutputHandle) return Fail("create object for invalid output test");
+    if (K_ObReferenceObjectByHandle(badOutputHandle,nullptr,reinterpret_cast<void**>(1))!=
+        static_cast<LONG>(0xC0000005u))
+        return Fail("invalid returned-object pointer status");
+    if (!XboxKernelCloseObjectHandle(badOutputHandle) || badOutputDestroyed!=1)
+        return Fail("invalid output pointer does not leak a reference");
+
     int mismatchDestroyed=0;
     auto* mismatch=new TestObject{&mismatchDestroyed};
     HANDLE mismatchHandle=XboxKernelCreateObjectHandle(
