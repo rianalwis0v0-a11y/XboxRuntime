@@ -2,7 +2,7 @@
   "schema_version": 1,
   "group": "A",
   "generated_for_branch": "work/kernel-export-half-a",
-  "source_policy": "Signatures from pinned NXDK lib/xboxkrnl/xboxkrnl.h; ordinals and x86 decorated export names/stack-byte decorations from pinned NXDK lib/xboxkrnl/xboxkrnl.exe.def.",
+  "source_policy": "NXDK signatures, calling conventions and ordinals from XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e (xboxkrnl.h and xboxkrnl.exe.def). EEPROM byte layout/writable fields additionally cross-checked against feudalnate/Original-Xbox-Data-Structures EEPROM README. Ownership/status reflect shared coordination board and parallel PR scope.",
   "exports": [
     {
       "ordinal": 2,
@@ -16,18 +16,20 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "signature_verified_not_implemented",
-      "owner": "Developer A / coordinator confirmation",
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
       "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
       "nxdk_export_definition": "AvSendTVEncoderOption@16                 @   2 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "AvSendTVEncoderOption@16",
-      "decoration_stack_bytes": 16
+      "decoration_stack_bytes": 16,
+      "unsupported_reason": "No verified TV-encoder backend; void return has no NTSTATUS channel, so production dispatcher raises the existing noncontinuable unsupported-import exception.",
+      "dispatcher_handler": "K_Unsupported(2)"
     },
     {
       "ordinal": 3,
@@ -41,18 +43,20 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "signature_verified_not_implemented",
-      "owner": "Developer A / coordinator confirmation",
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
       "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
       "nxdk_export_definition": "AvSetDisplayMode@24                      @   3 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "AvSetDisplayMode@24",
-      "decoration_stack_bytes": 24
+      "decoration_stack_bytes": 24,
+      "unsupported_reason": "No verified mapping from Xbox register-base/display-mode programming to host display APIs; K_AvSetDisplayMode returns STATUS_NOT_SUPPORTED.",
+      "dispatcher_handler": "K_AvSetDisplayMode"
     },
     {
       "ordinal": 24,
@@ -66,18 +70,21 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "signature_verified_not_implemented",
-      "owner": "Developer A / coordinator confirmation",
+      "implementation_status": "implemented_unverified",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
-        "host": null,
-        "guest_x86_thunk": null
+        "host": "tests/kernel_nvsettings_host_tests.cpp (added; CI pending)",
+        "guest_x86_thunk": "tests/kernel_nvsettings_guest_smoke.cpp (added; test dispatcher uses production 10-byte thunk encoding; CI pending)"
       },
       "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
       "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExQueryNonVolatileSetting@20",
-      "decoration_stack_bytes": 20
+      "decoration_stack_bytes": 20,
+      "implementation_file": "guest32/kernel_nvsettings.cpp",
+      "dispatcher_handler": "K_ExQueryNonVolatileSetting",
+      "limitations": "Supported XC_* setting indices 0x0000-0x0012, factory read-only indices 0x0100-0x0103, and raw EEPROM index 0xFFFF. Encrypted/factory writes unsupported."
     },
     {
       "ordinal": 25,
@@ -91,18 +98,20 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "signature_verified_not_implemented",
-      "owner": "Developer A / coordinator confirmation",
+      "implementation_status": "unsupported_explicit",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
       "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
       "nxdk_export_definition": "ExReadWriteRefurbInfo@12                 @  25 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExReadWriteRefurbInfo@12",
-      "decoration_stack_bytes": 12
+      "decoration_stack_bytes": 12,
+      "unsupported_reason": "No verified refurbishment metadata provider; K_ExReadWriteRefurbInfo validates the x86 structure pointer/length and returns STATUS_NOT_SUPPORTED.",
+      "dispatcher_handler": "K_ExReadWriteRefurbInfo"
     },
     {
       "ordinal": 29,
@@ -116,18 +125,21 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "signature_verified_not_implemented",
-      "owner": "Developer A / coordinator confirmation",
+      "implementation_status": "implemented_unverified",
+      "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
-        "host": null,
-        "guest_x86_thunk": null
+        "host": "tests/kernel_nvsettings_host_tests.cpp (added; CI pending)",
+        "guest_x86_thunk": "tests/kernel_nvsettings_guest_smoke.cpp (added; test dispatcher uses production 10-byte thunk encoding; CI pending)"
       },
       "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
       "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExSaveNonVolatileSetting@16",
-      "decoration_stack_bytes": 16
+      "decoration_stack_bytes": 16,
+      "implementation_file": "guest32/kernel_nvsettings.cpp",
+      "dispatcher_handler": "K_ExSaveNonVolatileSetting",
+      "limitations": "Writes only documented user-configurable EEPROM settings with exact type/length and recalculates the user-section XConfig checksum."
     },
     {
       "ordinal": 38,
@@ -141,8 +153,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -166,8 +178,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -191,8 +203,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -216,8 +228,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -241,8 +253,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -266,8 +278,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (HAL interrupt/software interrupt boundary; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -291,8 +303,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -316,8 +328,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -341,8 +353,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -366,8 +378,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -391,8 +403,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -416,8 +428,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -441,8 +453,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -466,8 +478,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -491,8 +503,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -516,8 +528,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -541,8 +553,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -566,8 +578,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -591,8 +603,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -616,8 +628,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -641,8 +653,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -666,8 +678,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -691,8 +703,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -716,8 +728,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -741,8 +753,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -766,8 +778,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -791,8 +803,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -816,8 +828,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -841,8 +853,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -866,8 +878,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -891,8 +903,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 4 (I/O)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 4 (I/O/system services; PR #19 confirms current scope)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -916,8 +928,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -941,8 +953,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -966,8 +978,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -991,8 +1003,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1016,8 +1028,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1041,8 +1053,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1066,8 +1078,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1091,8 +1103,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1116,8 +1128,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1141,8 +1153,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1166,8 +1178,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 3 (threading/synchronization/APC)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 3 (threading/synchronization/APC/HAL; work/kernel-thread-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1191,8 +1203,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1216,8 +1228,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1241,8 +1253,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1266,8 +1278,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1291,8 +1303,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1316,8 +1328,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1341,8 +1353,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1366,8 +1378,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1391,8 +1403,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (memory)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
@@ -1416,8 +1428,8 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": false,
-      "implementation_status": "pending_owner_coordination",
-      "owner": "Developer 2 (object manager/handle APIs; confirmation requested)",
+      "implementation_status": "assigned_to_parallel_owner_unimplemented",
+      "owner": "Developer 2 (memory/object manager; work/kernel-memory-apis)",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
