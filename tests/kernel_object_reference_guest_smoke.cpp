@@ -45,6 +45,11 @@ int main() {
     K_ObfDereferenceObject(referenced);
     if (referencedDestroyed!=1) return Fail("reference-by-handle final dereference");
 
+    void* invalidOut=reinterpret_cast<void*>(0x1234);
+    if (K_ObReferenceObjectByHandle(reinterpret_cast<HANDLE>(0xE0000000u),nullptr,&invalidOut)!=
+        static_cast<LONG>(0xC0000008u) || invalidOut!=nullptr)
+        return Fail("invalid object handle status and null output");
+
     int mismatchDestroyed=0;
     auto* mismatch=new TestObject{&mismatchDestroyed};
     HANDLE mismatchHandle=XboxKernelCreateObjectHandle(
