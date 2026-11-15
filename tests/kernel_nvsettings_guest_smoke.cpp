@@ -64,6 +64,12 @@ int main() {
     ok &= Check(query(0xFFFFu, &type, raw, sizeof(raw), &length) == 0, "ordinal 24 queries full EEPROM");
     ok &= Check(type == 3 && length == sizeof(raw), "full EEPROM type and length");
     ok &= Check(raw[0] == 0xFF && raw[255] == 0xFF, "blank EEPROM remains unprovisioned");
+    std::uint8_t userBlock[0x60]{};
+    type = length = 0;
+    ok &= Check(query(0x00FFu, &type, userBlock, sizeof(userBlock), &length) == 0,
+                "XC_MAX_OS queries the 0x60-byte user settings section");
+    ok &= Check(type == 3 && length == sizeof(userBlock) && userBlock[0] == 0xFF,
+                "XC_MAX_OS type, length and checksum bytes");
 
     std::uint32_t language = 3;
     ok &= Check(save(7, 4, &language, sizeof(language)) == 0, "ordinal 29 saves writable language setting");
@@ -95,6 +101,8 @@ int main() {
     XboxNvSettingInfo info{};
     ok &= Check(XboxNvGetSettingInfo(7, &info) && info.offset == 0x90 && info.length == 4 && info.writable,
                 "language layout descriptor matches EEPROM ABI");
+    ok &= Check(XboxNvGetSettingInfo(0x00FFu, &info) && info.offset == 0x60 && info.length == 0x60 && !info.writable,
+                "XC_MAX_OS descriptor matches user-section layout");
     XboxRefurbInfo32 refurb{};
     ok &= Check(K_ExReadWriteRefurbInfo(&refurb, sizeof(refurb), 0) == static_cast<XboxNvStatus>(0xC00000BBu),
                 "refurb metadata returns explicit STATUS_NOT_SUPPORTED");
