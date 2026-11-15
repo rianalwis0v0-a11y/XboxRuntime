@@ -19,3 +19,24 @@ LONG __stdcall K_NtProtectVirtualMemory(void** base, SIZE_T* regionSize,
 LONG __stdcall K_NtQueryVirtualMemory(void* base, void* memoryInformation);
 LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target, ULONG options);
 }
+
+
+extern "C" {
+void* __stdcall K_MmClaimGpuInstanceMemory(SIZE_T numberOfBytes,
+                                            SIZE_T* numberOfPaddingBytes);
+void* __stdcall K_MmCreateKernelStack(SIZE_T numberOfBytes,
+                                      BOOLEAN debuggerThread);
+void __stdcall K_MmDeleteKernelStack(void* stackBase, void* stackLimit);
+void __stdcall K_MmLockUnlockBufferPages(void* baseAddress,
+                                         SIZE_T numberOfBytes,
+                                         BOOLEAN unlockPages);
+void __stdcall K_MmLockUnlockPhysicalPage(ULONG_PTR physicalAddress,
+                                          BOOLEAN unlockPage);
+void* __stdcall K_MmMapIoSpace(ULONG_PTR physicalAddress,
+                               SIZE_T numberOfBytes, ULONG protect);
+void __stdcall K_MmPersistContiguousMemory(void* baseAddress,
+                                           SIZE_T numberOfBytes,
+                                           BOOLEAN persist);
+LONG __stdcall K_MmQueryStatistics(void* memoryStatistics);
+void* __stdcall K_MmUnmapIoSpace(void* baseAddress, SIZE_T numberOfBytes);
+}
