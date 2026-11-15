@@ -13,8 +13,8 @@ All 57 assigned Group A ordinals have exactly one `KernelDispatch` comparison an
 | Status | Count |
 |---|---:|
 | Implemented and tested | 24 |
-| Partial implementation, tested | 8 |
-| Explicitly unsupported | 25 |
+| Partial implementation, tested | 10 |
+| Explicitly unsupported | 23 |
 | **Total** | **57** |
 
 The machine-readable per-export status, handler, evidence and limitations are in `tools/kernel_export_group_a.json`.
@@ -34,6 +34,7 @@ The machine-readable per-export status, handler, evidence and limitations are in
 
 - `HalClearSoftwareInterrupt` and `HalRequestSoftwareInterrupt` (38, 48): pending software-IRQL bookkeeping is implemented and tested; there is not yet a complete software interrupt dispatcher.
 - `KeConnectInterrupt` and `KeDisconnectInterrupt` (98, 100): virtual interrupt registration/connect lifecycle is implemented and tested; physical interrupt delivery is not available without a controller/bus backend.
+- `HalDisableSystemInterrupt` and `HalEnableSystemInterrupt` (39, 43): bounded virtual bus-interrupt mask/mode bookkeeping is implemented and tested; no physical interrupt controller is driven.
 - `KeRundownQueue` and `KiUnlockDispatcherDatabase` (141, 163): queue rundown and the lower-IRQL primitive are tested, but this is not a complete dispatcher/scheduler.
 - `MmLockUnlockBufferPages` and `MmPersistContiguousMemory` (175, 178): use VirtualLock/VirtualUnlock as a host-backed residency approximation, not Xbox physical-page pinning or physical-contiguity guarantees.
 
