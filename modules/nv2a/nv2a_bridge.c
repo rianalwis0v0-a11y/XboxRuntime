@@ -69,6 +69,37 @@ static void mark_all_textures_dirty(void);
 static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
 static void release_texture_cache(void);
 
+/* Resolve a checked byte span from either NV2A local VRAM or the explicitly
+ * bound guest-physical PCI window. DMA base_address is normalized by
+ * resolve_dma_instance(): VRAM offset for target=VRAM, mapping-relative
+ * offset for target=PCI. AGP remains unsupported until GART translation exists. */
+static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
+                        uint32_t length, const uint8_t** output)
+{
+    if (output) *output = NULL;
+    if (!dma || !output || !dma->mapped_length ||
+        offset > dma->mapped_length ||
+        length > dma->mapped_length - offset)
+        return 0;
+
+    const uint64_t address = (uint64_t)dma->base_address + offset;
+    if (dma->dma_target == 0u) {
+        if (!g_vram || address > XBOX_VRAM_SIZE ||
+            length > (uint64_t)XBOX_VRAM_SIZE - address)
+            return 0;
+        *output = g_vram + (size_t)address;
+        return 1;
+    }
+    if (dma->dma_target == 0x00020000u) {
+        if (!g_guest_physical_memory || address > g_guest_physical_length ||
+            length > (uint64_t)g_guest_physical_length - address)
+            return 0;
+        *output = g_guest_physical_memory + (size_t)address;
+        return 1;
+    }
+    return 0; /* AGP/GART and reserved targets are never host pointers. */
+}
+
 
 int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
     uint32_t subchannel, const uint32_t* indices, uint32_t index_count,
@@ -1121,21 +1152,17 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
      * NV097 context slots: DMA_A, DMA_B, DMA_C and DMA_D. */
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
 
-    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
-    if (source_address > XBOX_VRAM_SIZE)
-        return 4;
-
     const uint32_t available = dma->mapped_length - texture_offset;
-    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
-        return 5;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, texture_offset, available, &source))
+        return 4;
     return XboxNV2A_DecodeTextureMipChainRGBA8(
-        format, width, height, level_count,
-        g_vram + (size_t)source_address, available,
+        format, width, height, level_count, source, available,
         destination, destination_capacity, level_offsets, level_sizes);
 }
 
@@ -1152,19 +1179,17 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
         return 1;
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
-    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
-    if (source_address > XBOX_VRAM_SIZE)
-        return 4;
     const uint32_t available = dma->mapped_length - texture_offset;
-    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
-        return 5;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, texture_offset, available, &source))
+        return 4;
     return XboxNV2A_DecodeTextureRGBA8(format, width, height, source_pitch,
-        g_vram + (size_t)source_address, available, destination,
-        destination_capacity, destination_pitch);
+        source, available, destination, destination_capacity,
+        destination_pitch);
 }
 
 
@@ -1953,7 +1978,7 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     const uint32_t context_method = array_index < 8u ? 0x019Cu : 0x01A0u;
     const uint32_t context_slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length)
         return 2;
 
     const uint32_t offset_method = 0x1720u + array_index * 4u;
@@ -2001,16 +2026,17 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
         source_span > (uint64_t)dma->mapped_length - first_offset)
         return 7;
 
-    const uint64_t gpu_offset = (uint64_t)dma->base_address + first_offset;
-    if (gpu_offset > XBOX_VRAM_SIZE ||
-        source_span > (uint64_t)XBOX_VRAM_SIZE - gpu_offset)
+    const uint8_t* source = NULL;
+    if (first_offset > UINT32_MAX || source_span > UINT32_MAX ||
+        !dma_get_span(dma, (uint32_t)first_offset,
+                      (uint32_t)source_span, &source))
         return 8;
 
     uint8_t* output = (uint8_t*)destination;
     for (uint32_t vertex = 0; vertex < vertex_count; ++vertex) {
-        const uint64_t source_offset = gpu_offset + (uint64_t)vertex * stride;
+        const uint64_t source_offset = (uint64_t)vertex * stride;
         memcpy(output + (size_t)vertex * element_bytes,
-               g_vram + (size_t)source_offset, element_bytes);
+               source + (size_t)source_offset, element_bytes);
     }
     return 0;
 }
