@@ -79,6 +79,7 @@ struct HostVertex {
     uint32_t diffuse, specular;
     float u, v, u1, v1, u2, v2, u3, v3;
     float weights[4], fog, point_size;
+    float generic[3][4];
     uint16_t input_valid_mask, reserved;
 };
 using ExpandPrimitiveFn = int (__cdecl*)(uint32_t, const HostVertex*, uint32_t,
@@ -461,19 +462,29 @@ int main() {
         vertex.weights[0] = 0.1f; vertex.weights[1] = 0.2f;
         vertex.weights[2] = 0.3f; vertex.weights[3] = 0.4f;
         vertex.fog = 0.6f; vertex.point_size = 7.0f;
-        vertex.input_valid_mask = (uint16_t)((1u << 1) | (1u << 5) | (1u << 6));
+        for (uint32_t g = 0; g < 3u; ++g)
+            for (uint32_t component = 0; component < 4u; ++component)
+                vertex.generic[g][component] =
+                    (float)(13u + g) + 0.1f * (float)(component + 1u);
+        vertex.input_valid_mask = (uint16_t)(
+            (1u << 1) | (1u << 5) | (1u << 6) |
+            (1u << 13) | (1u << 14) | (1u << 15));
         vertex.u = 0.25f; vertex.v = 0.5f;
         vertex.u1 = 1.25f; vertex.v1 = 1.5f;
         vertex.u2 = 2.25f; vertex.v2 = 2.5f;
         vertex.u3 = 3.25f; vertex.v3 = 3.5f;
-        const float expected[14] = {
+        const float expected[26] = {
             0.1f,0.2f,0.3f,0.4f, 0.6f,7.0f,
-            0.25f,0.5f, 1.25f,1.5f, 2.25f,2.5f, 3.25f,3.5f
+            0.25f,0.5f, 1.25f,1.5f, 2.25f,2.5f, 3.25f,3.5f,
+            13.1f,13.2f,13.3f,13.4f,
+            14.1f,14.2f,14.3f,14.4f,
+            15.1f,15.2f,15.3f,15.4f
         };
-        uint8_t packed[56]{};
+        uint8_t packed[104]{};
         uint32_t stride = 0;
         const int packResult = packVertexProgramInputs(
-            &vertex, 1u, (uint16_t)(0x1E00u | (1u << 1) | (1u << 5) | (1u << 6)),
+            &vertex, 1u, (uint16_t)(0x1E00u | (1u << 1) | (1u << 5) | (1u << 6) |
+                (1u << 13) | (1u << 14) | (1u << 15)),
             packed, sizeof(packed), &stride);
         if (packResult != 0 || stride != sizeof(packed) ||
             std::memcmp(packed, expected, sizeof(expected)) != 0) {
