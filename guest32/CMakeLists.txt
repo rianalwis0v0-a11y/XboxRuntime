@@ -6,7 +6,7 @@ endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "xbe_guest32 must be configured with the Win32/x86 toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
+add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
@@ -104,3 +104,69 @@ target_compile_features(kernel_object_reference_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_object_reference_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(kernel_object_reference_guest_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_object_reference_guest_smoke COMMAND kernel_object_reference_guest_smoke)
+
+
+# Guest ABI tests for system statistics, symbolic links, and shutdown notifications.
+add_executable(kernel_system_guest_smoke ../tests/kernel_system_guest_smoke.cpp kernel_system.cpp)
+target_include_directories(kernel_system_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_system_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_system_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_system_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_system_guest_smoke COMMAND kernel_system_guest_smoke)
+
+add_executable(kernel_io_guest_smoke ../tests/kernel_io_guest_smoke.cpp kernel_system.cpp)
+target_include_directories(kernel_io_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_io_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_io_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_io_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_io_guest_smoke COMMAND kernel_io_guest_smoke)
+
+add_executable(kernel_notification_guest_smoke ../tests/kernel_notification_guest_smoke.cpp kernel_system.cpp)
+target_include_directories(kernel_notification_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_notification_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_notification_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_notification_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_notification_guest_smoke COMMAND kernel_notification_guest_smoke)
+
+# Guest ABI coverage for nonvolatile settings, thread exports, I/O completion,
+# directory objects, and the combined Group A export dispatcher.
+add_executable(kernel_nvsettings_guest_smoke ../tests/kernel_nvsettings_guest_smoke.cpp kernel_nvsettings.cpp)
+target_include_directories(kernel_nvsettings_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_nvsettings_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_nvsettings_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_nvsettings_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_nvsettings_guest_smoke COMMAND kernel_nvsettings_guest_smoke)
+
+add_executable(kernel_thread_exports_guest_smoke ../tests/kernel_thread_exports_guest_smoke.cpp kernel_thread_exports.cpp)
+target_include_directories(kernel_thread_exports_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_thread_exports_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_thread_exports_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_thread_exports_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_thread_exports_guest_smoke COMMAND kernel_thread_exports_guest_smoke)
+
+add_executable(kernel_io_completion_guest_smoke ../tests/kernel_io_completion_guest_smoke.cpp kernel_io_completion.cpp kernel_object_manager.cpp)
+target_include_directories(kernel_io_completion_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_io_completion_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_io_completion_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_io_completion_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_io_completion_guest_smoke COMMAND kernel_io_completion_guest_smoke)
+
+add_executable(kernel_directory_object_guest_smoke ../tests/kernel_directory_object_guest_smoke.cpp kernel_directory_objects.cpp kernel_object_manager.cpp)
+target_include_directories(kernel_directory_object_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_directory_object_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_directory_object_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_directory_object_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_directory_object_guest_smoke COMMAND kernel_directory_object_guest_smoke)
+
+add_executable(kernel_io_group_a_guest_smoke
+  ../tests/kernel_io_group_a_guest_smoke.cpp
+  kernel_compat.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_memory.cpp
+  kernel_object_manager.cpp kernel_thread_exports.cpp kernel_io_completion.cpp
+  kernel_io_exports.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
+)
+target_include_directories(kernel_io_group_a_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
+target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi)
+add_test(NAME kernel_io_group_a_guest_smoke COMMAND kernel_io_group_a_guest_smoke)
