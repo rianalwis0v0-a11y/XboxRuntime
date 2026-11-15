@@ -438,12 +438,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_FILE_OBJECT_and_7_byte_SHARE_ACCESS_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 63; one-line jump to K_IoCheckShareAccess.",
       "nxdk_export_definition": "IoCheckShareAccess@20                    @  63 NONAME",
@@ -452,7 +452,8 @@
       "decoration_stack_bytes": 20,
       "dispatcher_handler": "K_IoCheckShareAccess",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "FILE_OBJECT and SHARE_ACCESS field offsets/semantics are not verified; returns STATUS_NOT_SUPPORTED."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Implements symmetric read/write/delete and share-flag conflict checks against the verified Xbox FILE_OBJECT and SHARE_ACCESS x86 layouts; update=true updates both structures."
     },
     {
       "ordinal": 65,
@@ -466,12 +467,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 65; one-line jump to K_IoCreateDevice.",
       "nxdk_export_definition": "IoCreateDevice@24                        @  65 NONAME",
@@ -480,7 +481,8 @@
       "decoration_stack_bytes": 24,
       "dispatcher_handler": "K_IoCreateDevice",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "DRIVER_OBJECT and DEVICE_OBJECT layouts/dispatch integration are not verified; returns STATUS_NOT_SUPPORTED."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Allocates an unnamed Xbox DEVICE_OBJECT plus zeroed device extension, initializes dispatcher event/device queue fields and DO_DEVICE_INITIALIZING/DO_EXCLUSIVE flags. Named devices remain STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 66,
@@ -523,12 +525,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 68; one-line jump to K_IoDeleteDevice.",
       "nxdk_export_definition": "IoDeleteDevice@4                         @  68 NONAME",
@@ -537,7 +539,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_IoDeleteDevice",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "No compatible DEVICE_OBJECT allocation exists; non-null input fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Deletes only DEVICE_OBJECT instances created by this adapter, calls DriverDeleteDevice, and rejects deletion while a current or queued IRP remains."
     },
     {
       "ordinal": 72,
@@ -693,12 +696,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_FILE_OBJECT_and_7_byte_SHARE_ACCESS_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 78; one-line jump to K_IoRemoveShareAccess.",
       "nxdk_export_definition": "IoRemoveShareAccess@8                    @  78 NONAME",
@@ -707,7 +710,8 @@
       "decoration_stack_bytes": 8,
       "dispatcher_handler": "K_IoRemoveShareAccess",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "FILE_OBJECT and SHARE_ACCESS field offsets are not verified; non-null input fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Decrements SHARE_ACCESS counters using the access/share flags stored in the verified FILE_OBJECT prefix."
     },
     {
       "ordinal": 79,
@@ -751,12 +755,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_FILE_OBJECT_and_7_byte_SHARE_ACCESS_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 80; one-line jump to K_IoSetShareAccess.",
       "nxdk_export_definition": "IoSetShareAccess@16                      @  80 NONAME",
@@ -765,7 +769,8 @@
       "decoration_stack_bytes": 16,
       "dispatcher_handler": "K_IoSetShareAccess",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "FILE_OBJECT and SHARE_ACCESS field offsets are not verified; non-null input fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Initializes SHARE_ACCESS counters and FILE_OBJECT access/share bits for a new open."
     },
     {
       "ordinal": 81,
@@ -779,12 +784,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 81; one-line jump to K_IoStartNextPacket.",
       "nxdk_export_definition": "IoStartNextPacket@4                      @  81 NONAME",
@@ -793,7 +798,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_IoStartNextPacket",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "DEVICE_OBJECT packet queue and StartIo dispatch layout are not verified; non-null input fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Starts the next sidecar-queued IRP in FIFO order through DRIVER_OBJECT.DriverStartIo; supports devices created by this adapter."
     },
     {
       "ordinal": 82,
@@ -807,12 +813,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 82; one-line jump to K_IoStartNextPacketByKey.",
       "nxdk_export_definition": "IoStartNextPacketByKey@8                 @  82 NONAME",
@@ -821,7 +827,8 @@
       "decoration_stack_bytes": 8,
       "dispatcher_handler": "K_IoStartNextPacketByKey",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "DEVICE_OBJECT packet queue/key ordering and StartIo dispatch are not verified; non-null input fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Selects the queued IRP matching the requested key and invokes DRIVER_OBJECT.DriverStartIo; queue metadata is sidecar-backed."
     },
     {
       "ordinal": 83,
@@ -835,12 +842,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 83; one-line jump to K_IoStartPacket.",
       "nxdk_export_definition": "IoStartPacket@12                         @  83 NONAME",
@@ -849,7 +856,8 @@
       "decoration_stack_bytes": 12,
       "dispatcher_handler": "K_IoStartPacket",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "DEVICE_OBJECT, IRP and cancel routine layouts are not verified; non-null input fails fast."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Sets CurrentIrp/StartIoKey and either invokes DriverStartIo immediately or queues the IRP in the adapter's per-device FIFO sidecar."
     },
     {
       "ordinal": 84,
@@ -975,12 +983,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "implemented_tested",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "verified_72_byte_DEVICE_OBJECT_68_byte_DRIVER_OBJECT_12_byte_KDEVICE_QUEUE_16_byte_KEVENT_x86",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 90; one-line jump to K_IoDismountVolume.",
       "nxdk_export_definition": "IoDismountVolume@4                       @  90 NONAME",
@@ -989,7 +997,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_IoDismountVolume",
       "implementation_file": "guest32/kernel_io_exports.cpp",
-      "unsupported_reason": "No volume manager/device stack is available to dismount a guest volume; returns STATUS_NOT_SUPPORTED."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859",
+      "limitations": "Calls DRIVER_OBJECT.DriverDismountVolume for a device created by this adapter; missing callbacks return STATUS_NOT_SUPPORTED."
     },
     {
       "ordinal": 91,
