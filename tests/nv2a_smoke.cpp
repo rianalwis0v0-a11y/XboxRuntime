@@ -635,6 +635,7 @@ int main() {
         uint8_t pciDecodedTexture[16]{}, pciDecodedPaletteTexture[16]{};
         uint32_t pciPaletteOffsets[1]{}, pciPaletteSizes[1]{};
         uint32_t pciTexturePitch = 0, pciGet = 0, pciMethods = 0;
+        uint32_t restoreGet = 0, restoreMethods = 0;
         const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
             guestPhysical.data(), (uint32_t)guestPhysical.size());
         const int objectResult = writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject));
@@ -666,7 +667,7 @@ int main() {
         const int restoreStream = writeVram(0x1000u, restoreContexts,
             sizeof(restoreContexts)) == 0
             ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
-                &pciGet, &pciMethods) : -1;
+                &restoreGet, &restoreMethods) : -1;
         const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
         if (bindResult != 0 || objectResult != 0 || pushResult != 0 ||
             pciGet != sizeof(pciContextStream) || pciMethods != 3u ||
@@ -679,7 +680,9 @@ int main() {
             pciPaletteSizes[0] != 16u || pciDecodedPaletteTexture[0] != 0x10u ||
             pciDecodedPaletteTexture[1] != 0x20u || pciDecodedPaletteTexture[2] != 0x30u ||
             pciDecodedPaletteTexture[4] != 0x40u || pciDecodedPaletteTexture[8] != 0x70u ||
-            restoreObject != 0 || restoreStream != 0 || unbindResult != 0) {
+            restoreObject != 0 || restoreStream != 0 ||
+            restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
+            unbindResult != 0) {
             std::cerr << "FAIL: PCI-target guest vertex/texture translation"
                       << " bind=" << bindResult << " object=" << objectResult
                       << " push=" << pushResult << " methods=" << pciMethods
@@ -688,6 +691,8 @@ int main() {
                       << paletteStateResult << "/" << paletteDecodeResult
                       << " restore="
                       << restoreObject << "/" << restoreStream
+                      << " restore_get=" << restoreGet
+                      << " restore_methods=" << restoreMethods
                       << " unbind=" << unbindResult << "\\n";
             stop();
             return 1;
