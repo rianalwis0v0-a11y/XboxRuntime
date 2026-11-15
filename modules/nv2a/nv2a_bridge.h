@@ -233,6 +233,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_BuildIndexedVertexStream(
     uint32_t index_count, XboxNV2A_VERTEX* destination,
     uint32_t destination_capacity, uint32_t* stride_out,
     uint32_t* fvf_out);
+/* Pack supported NV2A shader inputs into the same ordered stream used by
+ * the D3D11 input layout. Unsupported input registers are rejected. */
+__declspec(dllexport) int __cdecl XboxNV2A_PackVertexProgramInputs(
+    const XboxNV2A_VERTEX* vertices, uint32_t vertex_count,
+    uint16_t input_mask, void* destination, uint32_t destination_capacity,
+    uint32_t* stride_out);
 
 /* Fetch packed vertex elements from the bound NV097 VERTEX_A/B DMA context. */
 __declspec(dllexport) int __cdecl XboxNV2A_ReadVertexArray(
