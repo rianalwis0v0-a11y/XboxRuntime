@@ -163,3 +163,10 @@ Regression coverage now exercises PCI-backed vertex-array reads, linear textures
 - NVM_TILED (0x00010000) is verified to be rejected instead of being mistaken for AGP.
 - The HLSL smoke test exercises ARL followed by relative constant access through the actual DWORD3 bit-1 flag, alongside the MAC/ILU opcode matrix and paired-unit read-before-write assertion.
 - Run 916 passed the Windows x64 build and all five subsystem tests. The native x86 guest build and entry-point smoke test also passed. The comprehensive diagnostic XBE still exits with 0xC0000409 before returning its report; that is not yet a successful guest graphics/render test.
+
+
+### Programmable vertex input contract
+
+The runtime's current programmable vertex-stream path supports shader inputs v0, v2, v3, v4, and v9-v12. PGRAPH vertex-array slots 7-10 provide TEX0-TEX3 and are packed into shader inputs v9-v12; these are separate index spaces. The pinned D3D11 input-layout generator is patched to use the same v7/v8 backface-color and v9-v12 texture-coordinate register mapping. The packer rejects v1, v5-v8, and v13-v15 for now rather than silently substituting placeholder values. Blend weights, fog/point-size arrays, backface inputs, generic attributes, and non-2D texture coordinates still need explicit fetch/format handling.
+
+The packer is exposed through a deterministic staging helper and regression-tested byte-for-byte for TEX0-TEX3. HLSL smoke tests independently verify v9-v12 decode and ARL/relative-constant addressing. Shader handles are reused only after both hash and exact microcode-byte comparison; draw packets snapshot shader identity/input mask and active texture-stage mask before the D3D11-backed adapter submits them.
