@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <mutex>
 #include <deque>
+#include <cctype>
+#include <string>
 #include <unordered_map>
 
 #pragma pack(push, 4)
@@ -193,8 +195,14 @@ static_assert(sizeof(GuestObjectStringDevice) == 8, "OBJECT_STRING x86 size");
 namespace {
 std::mutex g_deviceObjectMutex;
 std::unordered_map<GuestDeviceObject*, SIZE_T> g_deviceObjects;
+std::unordered_map<std::string, GuestDeviceObject*> g_namedDeviceObjects;
 struct QueuedDeviceIrp { void* irp; ULONG key; };
 std::unordered_map<GuestDeviceObject*, std::deque<QueuedDeviceIrp>> g_devicePacketQueues;
+std::string FoldDeviceName(const std::string& value) {
+    std::string folded = value;
+    for (char& ch : folded) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return folded;
+}
 void InitializeDeviceList(GuestListEntryDevice* head) {
     head->Flink = head;
     head->Blink = head;
@@ -238,7 +246,17 @@ extern "C" LONG __stdcall K_IoCreateDevice(
     *deviceObject = nullptr;
     if (!driverObject || deviceType > 0xFFu || extensionSize > (0xFFFFu - sizeof(GuestDeviceObject)))
         return LONG(0xC000000Du);
-    if (deviceName) return kStatusNotSupported; // named-device namespace is not wired yet
+    std::string nameKey;
+    if (deviceName) {
+        const auto* name = static_cast<const GuestObjectStringDevice*>(deviceName);
+        if (!name->Buffer || !name->Length || name->Length > name->MaximumLength)
+            return LONG(0xC000000Du);
+        try {
+            nameKey = FoldDeviceName(std::string(name->Buffer, name->Length));
+        } catch (...) {
+            return LONG(0xC0000017u);
+        }
+    }
     if (extensionSize > SIZE_MAX - sizeof(GuestDeviceObject))
         return LONG(0xC0000017u);
     const SIZE_T totalSize = sizeof(GuestDeviceObject) + extensionSize;
@@ -247,18 +265,33 @@ extern "C" LONG __stdcall K_IoCreateDevice(
     if (!device) return LONG(0xC0000017u);
     InitializeDeviceObject(device, totalSize, driverObject, deviceType,
                            extensionSize, exclusive);
+    bool nameCollision = false;
     try {
         std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
-        g_deviceObjects.emplace(device, totalSize);
-        g_devicePacketQueues.emplace(device, std::deque<QueuedDeviceIrp>{});
+        if (!nameKey.empty() && g_namedDeviceObjects.find(nameKey) != g_namedDeviceObjects.end()) {
+            nameCollision = true;
+        } else {
+            g_deviceObjects.emplace(device, totalSize);
+            g_devicePacketQueues.emplace(device, std::deque<QueuedDeviceIrp>{});
+            if (!nameKey.empty()) g_namedDeviceObjects.emplace(nameKey, device);
+        }
     } catch (...) {
         {
             std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
             g_deviceObjects.erase(device);
             g_devicePacketQueues.erase(device);
+            if (!nameKey.empty()) {
+                auto it = g_namedDeviceObjects.find(nameKey);
+                if (it != g_namedDeviceObjects.end() && it->second == device)
+                    g_namedDeviceObjects.erase(it);
+            }
         }
         HeapFree(GetProcessHeap(), 0, device);
         return LONG(0xC0000017u);
+    }
+    if (nameCollision) {
+        HeapFree(GetProcessHeap(), 0, device);
+        return LONG(0xC0000035u); // STATUS_OBJECT_NAME_COLLISION
     }
     *deviceObject = device;
     return 0;
@@ -279,6 +312,11 @@ extern "C" void __stdcall K_IoDeleteDevice(void* rawDeviceObject) {
             allocationSize = it->second;
             g_deviceObjects.erase(it);
             g_devicePacketQueues.erase(queue);
+            for (auto named = g_namedDeviceObjects.begin();
+                 named != g_namedDeviceObjects.end();) {
+                if (named->second == device) named = g_namedDeviceObjects.erase(named);
+                else ++named;
+            }
         }
     }
     if (invalidOrBusy) {
@@ -416,6 +454,24 @@ extern "C" LONG __stdcall K_IoDismountVolume(void* rawDeviceObject) {
     if (!driver || !driver->DriverDismountVolume) return kStatusNotSupported;
     return driver->DriverDismountVolume(device);
 }
-extern "C" LONG __stdcall K_IoDismountVolumeByName(void*) {
-    return kStatusNotSupported;
+extern "C" LONG __stdcall K_IoDismountVolumeByName(void* rawDeviceName) {
+    if (!rawDeviceName) return LONG(0xC000000Du);
+    const auto* name = static_cast<const GuestObjectStringDevice*>(rawDeviceName);
+    if (!name->Buffer || !name->Length || name->Length > name->MaximumLength)
+        return LONG(0xC000000Du);
+    std::string key;
+    try {
+        key = FoldDeviceName(std::string(name->Buffer, name->Length));
+    } catch (...) {
+        return LONG(0xC0000017u);
+    }
+    GuestDeviceObject* device = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_deviceObjectMutex);
+        auto it = g_namedDeviceObjects.find(key);
+        if (it == g_namedDeviceObjects.end())
+            return LONG(0xC0000034u); // STATUS_OBJECT_NAME_NOT_FOUND
+        device = it->second;
+    }
+    return K_IoDismountVolume(device);
 }
