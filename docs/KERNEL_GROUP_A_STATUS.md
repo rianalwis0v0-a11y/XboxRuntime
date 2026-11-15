@@ -45,6 +45,6 @@ The remaining 28 exports fail explicitly rather than pretending success. The lar
 
 - Group A EEPROM CI: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322 — x64 host and x86 guest tests passed.
 - Expanded x86/host CI: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859 — host tests passed; all six x86 guest smoke tests passed, including memory, APC/thread, share access, device packet scheduling, I/O completion and directory object tests.
-- The full kernel workflow also runs the export catalogue audit; the latest run has passed that audit and is continuing through backend builds/integration.
+- Full kernel workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550852. Export audit, host backend build, runtime module build, x86 guest build/tests, backend export verification, shared-memory guest smoke, loader build and runtime staging all passed. The final real NXDK XBE launch fails during TLS cleanup at guest IP/access address 0x10018DC0 (access violation); the guest image VA is still released cleanly.
 
 No merge to the integration branch has been performed. PR #22 remains draft pending review and the remaining 28 exports.
