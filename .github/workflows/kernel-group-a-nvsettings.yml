@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/kernel-export-half-a
+      - work/kernel-combined-clean-import
   pull_request:
     branches:
       - work/kernel-execution-backend
