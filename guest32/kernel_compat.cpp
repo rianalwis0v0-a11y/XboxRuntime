@@ -26,6 +26,7 @@
 #include "kernel_nvsettings.h"
 #include "kernel_memory.h"
 #include "kernel_thread_exports.h"
+#include "kernel_io_completion.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 
@@ -1933,6 +1934,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je io_query_file_information
         cmp eax, 76
         je io_query_volume_information
+        cmp eax, 79
+        je io_set_completion
+        cmp eax, 191
+        je nt_create_io_completion
+        cmp eax, 212
+        je nt_query_io_completion
+        cmp eax, 223
+        je nt_remove_io_completion
+        cmp eax, 227
+        je nt_set_io_completion
         cmp eax, 74
         je io_invalid_device_request
         cmp eax, 361
@@ -2455,6 +2466,11 @@ extern "C" __declspec(naked) void KernelDispatch(){
     io_create_file: jmp K_IoCreateFile
     io_query_file_information: jmp K_IoQueryFileInformation
     io_query_volume_information: jmp K_IoQueryVolumeInformation
+    io_set_completion: jmp K_IoSetIoCompletion
+    nt_create_io_completion: jmp K_NtCreateIoCompletion
+    nt_query_io_completion: jmp K_NtQueryIoCompletion
+    nt_remove_io_completion: jmp K_NtRemoveIoCompletion
+    nt_set_io_completion: jmp K_NtSetIoCompletion
     io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
