@@ -232,9 +232,9 @@ __declspec(dllexport) int __cdecl XboxNV2A_ExpandPrimitive(
     uint32_t* vertex_count_out);
 
 /* Build a host FVF stream from position/normal/colors/TEX0..TEX3. Also
- * captures 4-float weights (v1), scalar fog (v5), and scalar point size (v6)
- * when those optional arrays have supported formats; input_valid_mask marks
- * which optional values are safe for programmable-shader packing. */
+ * captures 4-float weights (v1), scalar fog (v5), scalar point size (v6),
+ * and generic float4 inputs (v13-v15) when their arrays have supported
+ * formats; input_valid_mask marks which optional values are safe to pack. */
 __declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
     uint32_t channel, uint32_t subchannel, uint32_t first_vertex,
     uint32_t vertex_count, XboxNV2A_VERTEX* destination,
