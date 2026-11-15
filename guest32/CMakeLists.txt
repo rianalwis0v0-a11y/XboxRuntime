@@ -6,7 +6,7 @@ endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "xbe_guest32 must be configured with the Win32/x86 toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_crypto.cpp kernel_memory.cpp kernel_object_manager.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
+add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_memory.cpp kernel_object_manager.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
@@ -81,3 +81,14 @@ target_compile_features(kernel_crypto_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_crypto_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(kernel_crypto_guest_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_crypto_guest_smoke COMMAND kernel_crypto_guest_smoke)
+
+# x86 guest ABI tests for virtualized NtSetSystemTime/KeQuerySystemTime.
+add_executable(kernel_time_guest_smoke
+  ../tests/kernel_time_guest_smoke.cpp
+  kernel_time.cpp
+)
+target_include_directories(kernel_time_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_time_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_time_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_time_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_time_guest_smoke COMMAND kernel_time_guest_smoke)
