@@ -229,3 +229,21 @@ Summary:
 Files changed in this correction: guest32/kernel_compat.cpp.
 Build and tests: Group A workflow 43696882443 PASS (host64 + guest32). Full workflow 43696882434 failed at static export audit; no host/guest build steps ran. Need a fresh full workflow run against commit 339cb6e0728926cfc129304927d022d0ae080ba1 to confirm the audit correction.
 Known limitations: All 57 ordinals still not implemented; 2 behavior APIs are tested, 3 explicitly unsupported, and 52 remain with parallel owners. Do not treat the full workflow failure as a behavioral API failure, but do not claim the full kernel CI is green until rerun.
+
+
+[2026-11-15 09:08 UTC] [Kernel Export Developer A — expanded Group A CI pass / full integration result]
+Status: IN_PROGRESS — Group A EEPROM tranche is implemented and tested; full integration smoke has an unrelated execution failure under investigation by the backend team.
+Branch / commit: work/kernel-export-half-a / 1b971709f0382993f8d113bc883fd1e95e08a88d
+PR #22: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Summary:
+- Latest Group A workflow 43697175322 completed SUCCESS. Windows x64 host descriptor/checksum tests passed 1/1; Windows x86 import-thunk tests passed 1/1. Expanded coverage includes XC_MAX_OS, XC_MAX_FACTORY, XC_ENCRYPTED_SECTION, XC_MAX_ALL, unsupported individual factory indices, checksum end-around carry vectors, setting save/query, checksum persistence and reload.
+- Updated tools/kernel_export_group_a.json: 2 exports (24,29) are now implemented_tested; 3 exports (2,3,25) are explicitly unsupported; 52 remain assigned to Developers 2/3/4 and are not duplicated.
+- Full kernel workflow 43697175400: export catalogue audit PASS; host kernel backend configure/build PASS; main runtime module configure/build PASS; x86 guest configure/build PASS; x86 networking/guest API tests PASS; backend export verification PASS; shared-memory guest execution smoke PASS; XBE loader DLL build PASS; runtime staging PASS.
+- The final NXDK XBE-through-real-loader/kernel integration step failed with an access violation during TLS cleanup: guest exception IP/access address 0x10018DC0, accessType=8, page protection 0x00000004. The log reports startup was accepted and image VA was released. This appears to be the separate XBE/TLS execution integration path, not the Group A EEPROM APIs; no execution-backend files were changed per assignment.
+Files changed since previous board report: guest32/kernel_nvsettings.cpp (XConfigChecksum carry correction and section query support), tests/kernel_nvsettings_guest_smoke.cpp, tests/kernel_nvsettings_host_tests.cpp, docs/KERNEL_NONVOLATILE_SETTINGS.md, tools/kernel_export_group_a.json, chat.txt.
+CI links:
+- Group A Windows tests PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322
+- Full kernel workflow (build/audit/tests pass; final XBE integration step fails): https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175400
+Known limitations / next steps:
+- Keep the full workflow failure assigned to the XBE/TLS execution-backend team; do not modify that subsystem from this branch.
+- Continue with remaining 52 exports only after coordination with Developers 2/3/4, keeping the Group A PR draft until all statuses and integration reviews are complete.
