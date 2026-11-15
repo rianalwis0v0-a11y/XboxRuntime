@@ -28,6 +28,14 @@ int main() {
     if (!EqualHex(digest, "a9993e364706816aba3e25717850c26c9cd0d89d", 20)) return Fail("SHA1 abc vector");
     if (std::any_of(context.begin(), context.end(), [](std::uint8_t b){return b!=0;})) return Fail("SHA1 context zeroization");
 
+    const char longMessage[]="abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    K_XcSHAInit(context.data());
+    K_XcSHAUpdate(context.data(), reinterpret_cast<std::uint8_t*>(const_cast<char*>(longMessage)), 17);
+    K_XcSHAUpdate(context.data(), reinterpret_cast<std::uint8_t*>(const_cast<char*>(longMessage+17)), 39);
+    K_XcSHAFinal(context.data(), digest);
+    if (!EqualHex(digest, "84983e441c3bd26ebaae4aa1f95129e5e54670f1", 20))
+        return Fail("SHA1 multi-update/multi-block vector");
+
     std::uint8_t mutableKey[20]; std::memset(mutableKey, 0x0b, sizeof(mutableKey));
     const char message[]="Hi There";
     K_XcHMAC(mutableKey, 20, reinterpret_cast<std::uint8_t*>(const_cast<char*>(message)), 8,
