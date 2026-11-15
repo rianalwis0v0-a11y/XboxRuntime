@@ -31,6 +31,31 @@ int main() {
     if (XboxKernelReferenceObject(nullptr) || XboxKernelDereferenceObject(nullptr))
         return Fail("null object references rejected");
 
+    // Generic (ObjectType == NULL) handle reference increments the shared object refcount.
+    int referencedDestroyed=0;
+    auto* referenced=new TestObject{&referencedDestroyed};
+    HANDLE referencedHandle=XboxKernelCreateObjectHandle(
+        referenced,XboxKernelObjectType::Directory,DestroyTestObject);
+    if (!referencedHandle) return Fail("create object for ObReferenceObjectByHandle");
+    void* returned=nullptr;
+    if (K_ObReferenceObjectByHandle(referencedHandle,nullptr,&returned)!=0 || returned!=referenced)
+        return Fail("generic ObReferenceObjectByHandle");
+    if (!XboxKernelCloseObjectHandle(referencedHandle) || referencedDestroyed!=0)
+        return Fail("reference-by-handle survives handle close");
+    K_ObfDereferenceObject(referenced);
+    if (referencedDestroyed!=1) return Fail("reference-by-handle final dereference");
+
+    int mismatchDestroyed=0;
+    auto* mismatch=new TestObject{&mismatchDestroyed};
+    HANDLE mismatchHandle=XboxKernelCreateObjectHandle(
+        mismatch,XboxKernelObjectType.Directory,DestroyTestObject);
+    void* mismatchOut=reinterpret_cast<void*>(0x1234);
+    if (K_ObReferenceObjectByHandle(mismatchHandle,reinterpret_cast<void*>(1),&mismatchOut)!=
+        static_cast<LONG>(0xC0000024u) || mismatchOut!=nullptr)
+        return Fail("typed reference rejects unknown OBJECT_TYPE");
+    if (mismatchDestroyed!=0 || !XboxKernelCloseObjectHandle(mismatchHandle) || mismatchDestroyed!=1)
+        return Fail("type mismatch releases temporary reference");
+
     HANDLE native=CreateEventW(nullptr,TRUE,FALSE,nullptr);
     if (!native) return Fail("create native event handle");
     K_ObfDereferenceObject(reinterpret_cast<void*>(native));
