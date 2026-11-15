@@ -26,8 +26,10 @@ int main() {
     }
     const std::uint8_t zeroWord[4]{};
     const std::uint8_t oneWord[4]{1, 0, 0, 0};
+    const std::uint8_t carryVector[12] = {0xFF,0xFF,0xFF,0xFF, 1,0,0,0, 0xFF,0xFF,0xFF,0xFF};
     if (XboxNvComputeChecksum(zeroWord, sizeof(zeroWord)) != 0xFFFFFFFFu ||
-        XboxNvComputeChecksum(oneWord, sizeof(oneWord)) != 0xFFFFFFFEu) {
+        XboxNvComputeChecksum(oneWord, sizeof(oneWord)) != 0xFFFFFFFEu ||
+        XboxNvComputeChecksum(carryVector, sizeof(carryVector)) != 0xFFFFFFFEu) {
         std::fprintf(stderr, "FAIL: XConfigChecksum vectors\n");
         return 1;
     }
