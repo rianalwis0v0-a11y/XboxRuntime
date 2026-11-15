@@ -15,7 +15,7 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
+      "dispatcher_entry_present": true,
       "implementation_status": "unsupported_explicit",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
@@ -23,7 +23,7 @@
         "host": null,
         "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 2 route",
       "nxdk_export_definition": "AvSendTVEncoderOption@16                 @   2 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "AvSendTVEncoderOption@16",
@@ -42,7 +42,7 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
+      "dispatcher_entry_present": true,
       "implementation_status": "unsupported_explicit",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
@@ -50,7 +50,7 @@
         "host": null,
         "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 3 route",
       "nxdk_export_definition": "AvSetDisplayMode@24                      @   3 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "AvSetDisplayMode@24",
@@ -69,22 +69,22 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
+      "dispatcher_entry_present": true,
       "implementation_status": "implemented_unverified",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": "tests/kernel_nvsettings_host_tests.cpp (added; CI pending)",
-        "guest_x86_thunk": "tests/kernel_nvsettings_guest_smoke.cpp (added; test dispatcher uses production 10-byte thunk encoding; CI pending)"
+        "guest_x86_thunk": "tests/kernel_nvsettings_guest_smoke.cpp (added; CI pending; 10-byte push-ordinal/jmp-rel32 thunk)"
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 24 route",
       "nxdk_export_definition": "ExQueryNonVolatileSetting@20             @  24 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExQueryNonVolatileSetting@20",
       "decoration_stack_bytes": 20,
       "implementation_file": "guest32/kernel_nvsettings.cpp",
       "dispatcher_handler": "K_ExQueryNonVolatileSetting",
-      "limitations": "Supported XC_* setting indices 0x0000-0x0012, factory read-only indices 0x0100-0x0103, and raw EEPROM index 0xFFFF. Encrypted/factory writes unsupported."
+      "limitations": "Supports XC_* indices 0x0000-0x0012, XC_MAX_OS (0x00FF, 0x60-byte user-settings block), and raw EEPROM index 0xFFFF. Factory indices and encrypted sections are not yet mapped."
     },
     {
       "ordinal": 25,
@@ -97,15 +97,15 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
+      "dispatcher_entry_present": true,
       "implementation_status": "unsupported_explicit",
       "owner": "Developer A",
-      "structure_layout_status": "not_yet_size_asserted_against_guest32",
+      "structure_layout_status": "16-byte x86 XBOX_REFURB_INFO with static offset assertions (0,4,8) against pinned NXDK definition",
       "tests": {
         "host": null,
         "guest_x86_thunk": "Guest smoke asserts explicit STATUS_NOT_SUPPORTED for ordinals 3 and 25; ordinal 2 intentionally raises noncontinuable unsupported-import exception; CI pending."
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 25 route",
       "nxdk_export_definition": "ExReadWriteRefurbInfo@12                 @  25 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExReadWriteRefurbInfo@12",
@@ -124,15 +124,15 @@
         "header": "lib/xboxkrnl/xboxkrnl.h"
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
-      "dispatcher_entry_present": false,
+      "dispatcher_entry_present": true,
       "implementation_status": "implemented_unverified",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": "tests/kernel_nvsettings_host_tests.cpp (added; CI pending)",
-        "guest_x86_thunk": "tests/kernel_nvsettings_guest_smoke.cpp (added; test dispatcher uses production 10-byte thunk encoding; CI pending)"
+        "guest_x86_thunk": "tests/kernel_nvsettings_guest_smoke.cpp (added; CI pending; 10-byte push-ordinal/jmp-rel32 thunk)"
       },
-      "dispatcher_evidence": "No KernelDispatch ordinal compare; current import thunk falls through to K_Unsupported",
+      "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch naked x86 cmp eax, 29 route",
       "nxdk_export_definition": "ExSaveNonVolatileSetting@16              @  29 NONAME",
       "ordinal_verified_by_pinned_nxdk": true,
       "decorated_symbol": "ExSaveNonVolatileSetting@16",
