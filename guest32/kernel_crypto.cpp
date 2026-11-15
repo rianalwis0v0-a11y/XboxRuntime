@@ -143,7 +143,7 @@ extern "C" void __stdcall K_XcSHAUpdate(std::uint8_t* context, std::uint8_t* inp
     SecureZeroMemory(&c, sizeof(c));
 }
 extern "C" void __stdcall K_XcSHAFinal(std::uint8_t* context, std::uint8_t* digest) {
-    if (!SpanHasProtection(context, sizeof(Sha1Context), true) ||
+    if (!SpanHasProtection(context, kXboxShaContextSize, true) ||
         !SpanHasProtection(digest, 20, true)) {
         RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
         return;
