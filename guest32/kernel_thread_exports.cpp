@@ -40,6 +40,9 @@ std::mutex g_apcMutex;
 std::unordered_map<void*, ApcRecord> g_apcs;
 std::mutex g_interruptMutex;
 std::unordered_map<void*, std::shared_ptr<InterruptRecord>> g_interrupts;
+struct SystemInterruptRecord { bool enabled = false; ULONG mode = 0; };
+std::mutex g_systemInterruptMutex;
+std::unordered_map<ULONG, SystemInterruptRecord> g_systemInterrupts;
 thread_local UCHAR g_pendingSoftwareIrql = 0;
 
 void CALLBACK DispatchApc(ULONG_PTR parameter) {
@@ -167,11 +170,16 @@ namespace {
     RaiseException(0xC000001Du, EXCEPTION_NONCONTINUABLE, 1, &parameter);
 }
 }
-extern "C" void __stdcall K_HalDisableSystemInterrupt(ULONG) {
-    RaiseUnsupportedHardwareImport(39);
+extern "C" void __stdcall K_HalDisableSystemInterrupt(ULONG busInterruptLevel) {
+    std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
+    g_systemInterrupts[busInterruptLevel].enabled = false;
 }
-extern "C" void __stdcall K_HalEnableSystemInterrupt(ULONG, ULONG) {
-    RaiseUnsupportedHardwareImport(43);
+extern "C" void __stdcall K_HalEnableSystemInterrupt(
+    ULONG busInterruptLevel, ULONG interruptMode) {
+    std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
+    auto& record = g_systemInterrupts[busInterruptLevel];
+    record.mode = interruptMode;
+    record.enabled = true;
 }
 extern "C" ULONG __stdcall K_HalGetInterruptVector(ULONG, UCHAR* irql) {
     if (irql) *irql = 0;
@@ -189,3 +197,14 @@ extern "C" LONG __stdcall K_KeRestoreFloatingPointState(void*) {
 }
 
 UCHAR XboxKernelGetPendingSoftwareIrql() { return g_pendingSoftwareIrql; }
+
+BOOLEAN XboxKernelIsSystemInterruptEnabled(ULONG level) {
+    std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
+    auto it = g_systemInterrupts.find(level);
+    return it != g_systemInterrupts.end() && it->second.enabled ? TRUE : FALSE;
+}
+ULONG XboxKernelGetSystemInterruptMode(ULONG level) {
+    std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
+    auto it = g_systemInterrupts.find(level);
+    return it == g_systemInterrupts.end() ? 0 : it->second.mode;
+}
