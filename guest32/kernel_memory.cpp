@@ -7,6 +7,8 @@
 
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 namespace {
 constexpr LONG kSuccess = 0;
@@ -196,8 +198,6 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
 // Original Xbox kernel-stack and page-residency exports.
 // StackBase is the high address returned to the caller; StackLimit is the
 // low allocation address supplied back to MmDeleteKernelStack.
-#include <mutex>
-#include <unordered_map>
 
 namespace {
 struct GuestKernelStackAllocation {
@@ -299,4 +299,6 @@ extern "C" LONG __stdcall K_MmQueryStatistics(void* memoryStatistics) {
 extern "C" void __stdcall K_MmLockUnlockPhysicalPage(
     ULONG_PTR physicalAddress, BOOLEAN unlockPage) {
     (void)physicalAddress; (void)unlockPage;
+    const ULONG_PTR ordinal = 176;
+    RaiseException(0xC000001Du, EXCEPTION_NONCONTINUABLE, 1, &ordinal);
 }
