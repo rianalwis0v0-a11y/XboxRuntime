@@ -27,6 +27,7 @@ void XboxKernelReleaseObjectReference(void* object);
 // Object-body references used by ObfReferenceObject/ObfDereferenceObject.
 bool XboxKernelReferenceObject(void* object);
 bool XboxKernelDereferenceObject(void* object);
+bool XboxKernelAcquireAnyObjectReference(HANDLE handle, void** object);
 XboxKernelObjectLookupStatus XboxKernelGetLastObjectLookupStatus();
 
 // Same object identity/state; only DUPLICATE_SAME_ACCESS (0x2) is accepted.
