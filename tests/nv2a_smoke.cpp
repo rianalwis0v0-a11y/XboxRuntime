@@ -488,7 +488,7 @@ int main() {
             packed, sizeof(packed), &stride);
         if (packResult != 0 || stride != sizeof(packed) ||
             std::memcmp(packed, expected, sizeof(expected)) != 0) {
-            std::cerr << "FAIL: NV2A shader TEX0..TEX3 input register packing\\n";
+            std::cerr << "FAIL: NV2A programmable vertex input packing\\n";
             stop(); FreeLibrary(module); return 1;
         }
         stride = 99u;
@@ -507,6 +507,18 @@ int main() {
             packed, sizeof(packed), &stride);
         if (missingArrayResult == 0 || stride != 0u) {
             std::cerr << "FAIL: shader input without a valid guest array was accepted\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
+        HostVertex missingGeneric = vertex;
+        missingGeneric.input_valid_mask &= (uint16_t)~(1u << 14);
+        stride = 99u;
+        const int missingGenericResult = packVertexProgramInputs(
+            &missingGeneric, 1u,
+            (uint16_t)(0x1E00u | (1u << 1) | (1u << 5) | (1u << 6) |
+                (1u << 13) | (1u << 14) | (1u << 15)),
+            packed, sizeof(packed), &stride);
+        if (missingGenericResult == 0 || stride != 0u) {
+            std::cerr << "FAIL: missing generic shader input was accepted\\n";
             stop(); FreeLibrary(module); return 1;
         }
     }
