@@ -1878,7 +1878,25 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je exf_insert_tail
         cmp eax, 34
         je exf_remove_head
-                cmp eax, 167
+                cmp eax, 168
+        je mm_claim_gpu_memory
+        cmp eax, 169
+        je mm_create_kernel_stack
+        cmp eax, 170
+        je mm_delete_kernel_stack
+        cmp eax, 175
+        je mm_lock_buffer_pages
+        cmp eax, 176
+        je mm_lock_physical_page
+        cmp eax, 177
+        je mm_map_io_space
+        cmp eax, 178
+        je mm_persist_memory
+        cmp eax, 181
+        je mm_query_statistics
+        cmp eax, 183
+        je mm_unmap_io_space
+        cmp eax, 167
         je mm_alloc_system
         cmp eax, 172
         je mm_free_system
@@ -2366,6 +2384,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
     mm_query_protect: jmp K_MmQueryAddressProtect
     mm_query_size: jmp K_MmQueryAllocationSize
     mm_set_protect: jmp K_MmSetAddressProtect
+
+    mm_claim_gpu_memory: jmp K_MmClaimGpuInstanceMemory
+    mm_create_kernel_stack: jmp K_MmCreateKernelStack
+    mm_delete_kernel_stack: jmp K_MmDeleteKernelStack
+    mm_lock_buffer_pages: jmp K_MmLockUnlockBufferPages
+    mm_lock_physical_page: jmp K_MmLockUnlockPhysicalPage
+    mm_map_io_space: jmp K_MmMapIoSpace
+    mm_persist_memory: jmp K_MmPersistContiguousMemory
+    mm_query_statistics: jmp K_MmQueryStatistics
+    mm_unmap_io_space: jmp K_MmUnmapIoSpace
     nt_alloc_vm: jmp K_NtAllocateVirtualMemory
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
