@@ -18,12 +18,12 @@
 
 static uint8_t* g_vram;
 static uint8_t* g_ramin;
-/* Borrowed host mapping for PCI-target DMA objects. The host runtime owns it. */
+/* Borrowed guest-physical RAM mapping for PCI and the linear AGP alias. */
 static uint8_t* g_guest_physical_memory;
 static uint32_t g_guest_physical_base;
 static uint32_t g_guest_physical_length;
-/* Host-owned AGP/GART adapter. It translates aperture offsets into a
- * bounded contiguous guest-memory span; the bridge never assumes a PTE layout. */
+/* Optional host override for non-linear AGP mappings. The default Xbox path
+ * resolves the linear aperture alias through g_guest_physical_memory. */
 static XboxNV2A_AGP_TRANSLATE_FN g_agp_translate;
 static void* g_agp_translate_context;
 
