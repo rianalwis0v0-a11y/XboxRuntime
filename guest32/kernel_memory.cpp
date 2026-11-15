@@ -190,3 +190,113 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
     return kSuccess;
 }
 
+
+
+
+// Original Xbox kernel-stack and page-residency exports.
+// StackBase is the high address returned to the caller; StackLimit is the
+// low allocation address supplied back to MmDeleteKernelStack.
+#include <mutex>
+#include <unordered_map>
+
+namespace {
+struct GuestKernelStackAllocation {
+    void* low = nullptr;
+    SIZE_T bytes = 0;
+};
+std::mutex g_kernelStackMutex;
+std::unordered_map<void*, GuestKernelStackAllocation> g_kernelStacks;
+
+bool GuestRangeFits32(const void* base, SIZE_T bytes) noexcept {
+    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(base);
+    return base && bytes && start <= 0xFFFFFFFFu &&
+        bytes <= 0x100000000ull - start;
+}
+}
+
+extern "C" void* __stdcall K_MmCreateKernelStack(SIZE_T numberOfBytes,
+                                                   BOOLEAN debuggerThread) {
+    (void)debuggerThread; // Debugger-specific stack policy is not exposed by Win32.
+    if (!numberOfBytes || numberOfBytes > 0x10000000u) return nullptr;
+    constexpr SIZE_T page = 0x1000u;
+    if (numberOfBytes > SIZE_MAX - (page - 1u)) return nullptr;
+    const SIZE_T rounded = (numberOfBytes + page - 1u) & ~(page - 1u);
+    void* low = VirtualAlloc(nullptr, rounded, MEM_RESERVE | MEM_COMMIT,
+                             PAGE_READWRITE);
+    if (!low || !GuestRangeFits32(low, rounded)) {
+        if (low) VirtualFree(low, 0, MEM_RELEASE);
+        return nullptr;
+    }
+    void* stackBase = static_cast<std::uint8_t*>(low) + rounded;
+    {
+        std::lock_guard<std::mutex> lock(g_kernelStackMutex);
+        if (!g_kernelStacks.emplace(stackBase,
+                GuestKernelStackAllocation{low, rounded}).second) {
+            VirtualFree(low, 0, MEM_RELEASE);
+            return nullptr;
+        }
+    }
+    return stackBase;
+}
+
+extern "C" void __stdcall K_MmDeleteKernelStack(void* stackBase,
+                                                   void* stackLimit) {
+    if (!stackBase || !stackLimit) return;
+    void* allocation = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_kernelStackMutex);
+        auto it = g_kernelStacks.find(stackBase);
+        if (it == g_kernelStacks.end() || it->second.low != stackLimit) return;
+        allocation = it->second.low;
+        g_kernelStacks.erase(it);
+    }
+    VirtualFree(allocation, 0, MEM_RELEASE);
+}
+
+extern "C" void __stdcall K_MmLockUnlockBufferPages(
+    void* baseAddress, SIZE_T numberOfBytes, BOOLEAN unlockPages) {
+    if (!GuestRangeFits32(baseAddress, numberOfBytes)) return;
+    if (unlockPages) {
+        (void)VirtualUnlock(baseAddress, numberOfBytes);
+    } else {
+        (void)VirtualLock(baseAddress, numberOfBytes);
+    }
+}
+
+extern "C" void __stdcall K_MmPersistContiguousMemory(
+    void* baseAddress, SIZE_T numberOfBytes, BOOLEAN persist) {
+    if (!GuestRangeFits32(baseAddress, numberOfBytes)) return;
+    if (persist) {
+        (void)VirtualLock(baseAddress, numberOfBytes);
+    } else {
+        (void)VirtualUnlock(baseAddress, numberOfBytes);
+    }
+}
+
+// These operations require physical RAM / chipset mappings which the current
+// Windows-backed guest does not own. Returning failure (or raising the normal
+// unsupported-import exception for void APIs) is safer than inventing MMIO.
+extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
+    SIZE_T numberOfBytes, SIZE_T* numberOfPaddingBytes) {
+    (void)numberOfBytes;
+    if (numberOfPaddingBytes) *numberOfPaddingBytes = 0;
+    return nullptr;
+}
+extern "C" void* __stdcall K_MmMapIoSpace(
+    ULONG_PTR physicalAddress, SIZE_T numberOfBytes, ULONG protect) {
+    (void)physicalAddress; (void)numberOfBytes; (void)protect;
+    return nullptr;
+}
+extern "C" void* __stdcall K_MmUnmapIoSpace(
+    void* baseAddress, SIZE_T numberOfBytes) {
+    (void)baseAddress; (void)numberOfBytes;
+    return nullptr;
+}
+extern "C" LONG __stdcall K_MmQueryStatistics(void* memoryStatistics) {
+    (void)memoryStatistics;
+    return static_cast<LONG>(0xC00000BBu); // STATUS_NOT_SUPPORTED
+}
+extern "C" void __stdcall K_MmLockUnlockPhysicalPage(
+    ULONG_PTR physicalAddress, BOOLEAN unlockPage) {
+    (void)physicalAddress; (void)unlockPage;
+}
