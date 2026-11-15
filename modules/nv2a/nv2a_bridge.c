@@ -2890,34 +2890,53 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
         mode == NV097_SET_BEGIN_END_OP_END)
         return 1;
 
-    XboxNV2A_VERTEX vertices[NV2A_MAX_BATCH_VERTICES];
-    /* QUAD_STRIP expands 1,024 source vertices into 3,066 triangle-list
-     * vertices. Keep the staging capacity tied to that true worst case. */
-    XboxNV2A_VERTEX expanded[NV2A_MAX_BATCH_VERTICES * 3u];
+    /* Keep the large expanded-vertex staging buffers off the emulation
+     * thread's stack. QUAD_STRIP needs at most three output vertices per
+     * source vertex; count is already capped above. */
+    const uint32_t expanded_capacity = count * 3u;
+    const size_t vertices_bytes = sizeof(XboxNV2A_VERTEX) * (size_t)count;
+    const size_t expanded_bytes =
+        sizeof(XboxNV2A_VERTEX) * (size_t)expanded_capacity;
+    XboxNV2A_VERTEX* vertices = (XboxNV2A_VERTEX*)malloc(vertices_bytes);
+    XboxNV2A_VERTEX* expanded = (XboxNV2A_VERTEX*)malloc(expanded_bytes);
+    if (!vertices || !expanded) {
+        free(expanded);
+        free(vertices);
+        return 11;
+    }
+
+    int result = 0;
     uint32_t stride = 0, fvf = 0;
     if (XboxNV2A_BuildIndexedVertexStream(channel, subchannel, indices,
-            count, vertices, (uint32_t)sizeof(vertices), &stride, &fvf) != 0)
-        return 2;
+            count, vertices, (uint32_t)vertices_bytes, &stride, &fvf) != 0) {
+        result = 2;
+        goto cleanup;
+    }
 
     uint32_t primitive_type = 0, primitive_count = 0, draw_count = 0;
     if (XboxNV2A_ExpandPrimitive(mode, vertices, count, expanded,
-            (uint32_t)(sizeof(expanded) / sizeof(expanded[0])),
-            &primitive_type, &primitive_count, &draw_count) != 0)
-        return 3;
+            expanded_capacity, &primitive_type, &primitive_count, &draw_count) != 0) {
+        result = 3;
+        goto cleanup;
+    }
 
     NV2A_TRANSLATED_DRAW_PACKET packet;
     if (!nv2a_build_translated_draw_packet(primitive_type, primitive_count,
-            draw_count, count, stride, fvf, expanded, &packet))
-        return 4;
-    const int submit_result = nv2a_submit_d3d8_draw_packet(
-        &packet, fvf, channel, subchannel);
-    if (submit_result != 0)
-        return submit_result;
+            draw_count, count, stride, fvf, expanded, &packet)) {
+        result = 4;
+        goto cleanup;
+    }
+    result = nv2a_submit_d3d8_draw_packet(&packet, fvf, channel, subchannel);
+    if (result == 0) {
+        ++g_pgraph_custom_methods;
+        ++g_pgraph_custom_draws;
+        g_pgraph_custom_vertices += count;
+    }
 
-    ++g_pgraph_custom_methods;
-    ++g_pgraph_custom_draws;
-    g_pgraph_custom_vertices += count;
-    return 0;
+cleanup:
+    free(expanded);
+    free(vertices);
+    return result;
 }
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)
 {
