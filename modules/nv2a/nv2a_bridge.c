@@ -2709,9 +2709,6 @@ static int nv2a_submit_d3d8_draw_packet(
         !d->lpVtbl->DrawPrimitiveUP)
         return 5;
 
-    if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
-        return 6;
-
     const void* draw_data = packet->vertex_data;
     uint32_t draw_stride = packet->vertex_stride;
     if (packet->vertex_shader_mode == 2u) {
@@ -2730,6 +2727,8 @@ static int nv2a_submit_d3d8_draw_packet(
                 &packed, &draw_stride))
             return 10;
         draw_data = packed;
+    } else if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) {
+        return 6;
     }
     if (bind_nv2a_textures(channel, subchannel, d,
             packet->texture_stage_mask) != 0)
