@@ -25,6 +25,7 @@
 #include "kernel_compat.h"
 #include "kernel_nvsettings.h"
 #include "kernel_memory.h"
+#include "kernel_thread_exports.h"
 #include "kernel_object_manager.h"
 #include "guest_api_registry.h"
 
@@ -1878,7 +1879,27 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je exf_insert_tail
         cmp eax, 34
         je exf_remove_head
-                cmp eax, 168
+                cmp eax, 38
+        je hal_clear_softint
+        cmp eax, 48
+        je hal_request_softint
+        cmp eax, 93
+        je ke_alert_thread
+        cmp eax, 98
+        je ke_connect_interrupt
+        cmp eax, 100
+        je ke_disconnect_interrupt
+        cmp eax, 105
+        je ke_initialize_apc
+        cmp eax, 109
+        je ke_initialize_interrupt
+        cmp eax, 118
+        je ke_insert_queue_apc
+        cmp eax, 153
+        je ke_synchronize_execution
+        cmp eax, 163
+        je ki_unlock_dispatcher
+        cmp eax, 168
         je mm_claim_gpu_memory
         cmp eax, 169
         je mm_create_kernel_stack
@@ -2385,6 +2406,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
     mm_query_size: jmp K_MmQueryAllocationSize
     mm_set_protect: jmp K_MmSetAddressProtect
 
+    hal_clear_softint: jmp K_HalClearSoftwareInterrupt
+    hal_request_softint: jmp K_HalRequestSoftwareInterrupt
+    ke_alert_thread: jmp K_KeAlertThread
+    ke_connect_interrupt: jmp K_KeConnectInterrupt
+    ke_disconnect_interrupt: jmp K_KeDisconnectInterrupt
+    ke_initialize_apc: jmp K_KeInitializeApc
+    ke_initialize_interrupt: jmp K_KeInitializeInterrupt
+    ke_insert_queue_apc: jmp K_KeInsertQueueApc
+    ke_synchronize_execution: jmp K_KeSynchronizeExecution
+    ki_unlock_dispatcher: jmp K_KfLowerIrql
     mm_claim_gpu_memory: jmp K_MmClaimGpuInstanceMemory
     mm_create_kernel_stack: jmp K_MmCreateKernelStack
     mm_delete_kernel_stack: jmp K_MmDeleteKernelStack
