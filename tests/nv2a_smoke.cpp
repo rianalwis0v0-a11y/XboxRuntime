@@ -965,9 +965,15 @@ int main() {
         const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
             0x500u, 0x1200u, 2u, 2u, 8u, decoded, sizeof(decoded), &pitch);
         const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
-        const int restoreStream = writeVram(0x1000u, restoreContexts,
-            sizeof(restoreContexts)) == 0
-            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
+        const uint32_t directRestoreContexts[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        uint32_t restoreGet = 0, restoreMethods = 0;
+        const int restoreStream = writeVram(0x1000u, directRestoreContexts,
+            sizeof(directRestoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(directRestoreContexts),
                 &restoreGet, &restoreMethods) : -1;
         const int unbindMemoryResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
         if (bindMemoryResult != 0 || objectResult != 0 || resolveResult != 0 ||
