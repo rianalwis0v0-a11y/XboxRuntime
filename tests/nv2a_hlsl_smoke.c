@@ -118,6 +118,35 @@ int main(void)
     }
 
 
+    /* ARL updates a0.x, then a later slot uses it for relative c[] access. */
+    {
+        DWORD instructions[8] = {0};
+        make_input_shader(&instructions[0], NV2A_VSH_MAC_ARL,
+                          NV2A_VSH_ILU_NOP, 0);
+        instructions[3] &= ~1u; /* ARL is not the final slot. */
+        instructions[4] = 0u;
+        instructions[5] = (1u << 21) | (7u << 13) | 0x1Bu; /* MAC MOV c[7] */
+        instructions[6] = (3u << 26); /* Source A selects constant bank. */
+        instructions[7] = (0xFu << 12) | (1u << 11) |
+                          (1u << 13) | 1u; /* Relative a0 + final. */
+        const int result = compile_program(
+            "nv2a_arl_relative_constant", instructions, 2,
+            "c[a0 + 7]", (uint16_t)(1u << 0));
+        if (result) return 35 + result;
+
+        NV2AVshProgram program;
+        char hlsl[16384];
+        memset(&program, 0, sizeof(program));
+        d3d8_vsh_parse(instructions, 2, &program);
+        const int length = d3d8_vsh_generate_hlsl(
+            &program, hlsl, (int)sizeof(hlsl));
+        if (length <= 0 || !strstr(hlsl, "a0 = (int)floor(v0.x)")) {
+            fputs("FAIL: ARL did not generate the address-register update\\n", stderr);
+            fputs(hlsl, stderr);
+            return 36;
+        }
+    }
+
     /* Paired MAC+ILU reads source C before either destination is written.
      * MAC overwrites R1 while ILU RCP reads old R1.x; HLSL must snapshot it. */
     {
