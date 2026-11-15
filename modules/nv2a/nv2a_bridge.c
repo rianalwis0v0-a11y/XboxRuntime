@@ -2201,35 +2201,32 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         first_vertex,vertex_count,3u,positions,sizeof(positions));
     if(result!=0)return 4;
 
+    /* Optional shader arrays are decoded when their format is supported.
+     * If a shader actually consumes an unavailable/unsupported array, the
+     * draw-packet validation rejects it rather than failing unrelated draws. */
     int has_weights = 0;
     const uint32_t weight_format = g_gpu->pgraph.regs[0x1764u / 4u];
-    if (weight_format != 0u) {
-        if (((weight_format >> 4) & 0xFu) != 4u) return 17;
-        result = read_vertex_float_array(channel, subchannel, 1u,
-            first_vertex, vertex_count, 4u, weights, sizeof(weights));
-        if (result != 0) return 18;
+    if (weight_format != 0u &&
+        ((weight_format >> 4) & 0xFu) == 4u &&
+        read_vertex_float_array(channel, subchannel, 1u,
+            first_vertex, vertex_count, 4u, weights, sizeof(weights)) == 0)
         has_weights = 1;
-    }
 
     int has_fog = 0;
     const uint32_t fog_format = g_gpu->pgraph.regs[0x1774u / 4u];
-    if (fog_format != 0u) {
-        if (((fog_format >> 4) & 0xFu) != 1u) return 19;
-        result = read_vertex_float_array(channel, subchannel, 5u,
-            first_vertex, vertex_count, 1u, fog_coords, sizeof(fog_coords));
-        if (result != 0) return 20;
+    if (fog_format != 0u &&
+        ((fog_format >> 4) & 0xFu) == 1u &&
+        read_vertex_float_array(channel, subchannel, 5u,
+            first_vertex, vertex_count, 1u, fog_coords, sizeof(fog_coords)) == 0)
         has_fog = 1;
-    }
 
     int has_point_size = 0;
     const uint32_t point_size_format = g_gpu->pgraph.regs[0x1778u / 4u];
-    if (point_size_format != 0u) {
-        if (((point_size_format >> 4) & 0xFu) != 1u) return 21;
-        result = read_vertex_float_array(channel, subchannel, 6u,
-            first_vertex, vertex_count, 1u, point_sizes, sizeof(point_sizes));
-        if (result != 0) return 22;
+    if (point_size_format != 0u &&
+        ((point_size_format >> 4) & 0xFu) == 1u &&
+        read_vertex_float_array(channel, subchannel, 6u,
+            first_vertex, vertex_count, 1u, point_sizes, sizeof(point_sizes)) == 0)
         has_point_size = 1;
-    }
 
     int has_normal = 0;
     const uint32_t normal_format = g_gpu->pgraph.regs[0x1768u / 4u];
