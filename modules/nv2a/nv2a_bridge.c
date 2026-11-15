@@ -2221,6 +2221,8 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     float generic[3][255u * 4u];
     uint32_t colors[255u];
     uint32_t specular[255u];
+    uint32_t backface_diffuse[255u];
+    uint32_t backface_specular[255u];
     float texcoords[255u * 2u];
     float texcoords1[255u * 2u];
     float texcoords2[255u * 2u];
@@ -2320,6 +2322,49 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         }
         has_specular = 1;
     }
+
+    int has_backface_diffuse = 0;
+    const uint32_t backface_diffuse_format = g_gpu->pgraph.regs[0x178Cu / 4u];
+    if (backface_diffuse_format != 0u) {
+        const uint32_t type = backface_diffuse_format & 0xFu;
+        if ((type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+             type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) &&
+            ((backface_diffuse_format >> 4) & 0xFu) == 4u &&
+            XboxNV2A_ReadVertexArray(channel, subchannel, 11u,
+                first_vertex, vertex_count, backface_diffuse,
+                sizeof(backface_diffuse), &stride, &element_bytes) == 0 &&
+            element_bytes == 4u) {
+            if (type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) {
+                for (uint32_t i = 0; i < vertex_count; ++i)
+                    backface_diffuse[i] = (backface_diffuse[i] & 0xFF00FF00u) |
+                        ((backface_diffuse[i] & 0x000000FFu) << 16) |
+                        ((backface_diffuse[i] & 0x00FF0000u) >> 16);
+            }
+            has_backface_diffuse = 1;
+        }
+    }
+
+    int has_backface_specular = 0;
+    const uint32_t backface_specular_format = g_gpu->pgraph.regs[0x1790u / 4u];
+    if (backface_specular_format != 0u) {
+        const uint32_t type = backface_specular_format & 0xFu;
+        if ((type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+             type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) &&
+            ((backface_specular_format >> 4) & 0xFu) == 4u &&
+            XboxNV2A_ReadVertexArray(channel, subchannel, 12u,
+                first_vertex, vertex_count, backface_specular,
+                sizeof(backface_specular), &stride, &element_bytes) == 0 &&
+            element_bytes == 4u) {
+            if (type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) {
+                for (uint32_t i = 0; i < vertex_count; ++i)
+                    backface_specular[i] = (backface_specular[i] & 0xFF00FF00u) |
+                        ((backface_specular[i] & 0x000000FFu) << 16) |
+                        ((backface_specular[i] & 0x00FF0000u) >> 16);
+            }
+            has_backface_specular = 1;
+        }
+    }
+
     int has_texcoord = 0;
     const uint32_t tex_format = g_gpu->pgraph.regs[0x177Cu / 4u];
     if (tex_format != 0u) {
@@ -2378,6 +2423,8 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         vertex->v2 = has_texcoord2 ? texcoords2[i * 2u + 1u] : 0.0f;
         vertex->u3 = has_texcoord3 ? texcoords3[i * 2u + 0u] : 0.0f;
         vertex->v3 = has_texcoord3 ? texcoords3[i * 2u + 1u] : 0.0f;
+        vertex->backface_diffuse = has_backface_diffuse ? backface_diffuse[i] : 0u;
+        vertex->backface_specular = has_backface_specular ? backface_specular[i] : 0u;
         if (has_weights)
             memcpy(vertex->weights, &weights[i * 4u], sizeof(vertex->weights));
         else
@@ -2397,6 +2444,8 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
             (has_weights ? (1u << 1) : 0u) |
             (has_fog ? (1u << 5) : 0u) |
             (has_point_size ? (1u << 6) : 0u) |
+            (has_backface_diffuse ? (1u << 7) : 0u) |
+            (has_backface_specular ? (1u << 8) : 0u) |
             (has_generic[0] ? (1u << 13) : 0u) |
             (has_generic[1] ? (1u << 14) : 0u) |
             (has_generic[2] ? (1u << 15) : 0u));
