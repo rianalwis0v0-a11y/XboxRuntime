@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "nv2a_bridge.h"
 
 using StartFn = int (__cdecl*)();
 using StopFn = void (__cdecl*)();
@@ -74,12 +75,14 @@ using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
-struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1, u2, v2, u3, v3; };
+using HostVertex = XboxNV2A_VERTEX;
 using ExpandPrimitiveFn = int (__cdecl*)(uint32_t, const HostVertex*, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
+using PackVertexProgramInputsFn = int (__cdecl*)(const HostVertex*, uint32_t,
+    uint16_t, void*, uint32_t, uint32_t*);
 struct SurfaceInfo {
     uint32_t width, height, color_format, zeta_format;
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
@@ -157,6 +160,8 @@ int main() {
     auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
     auto buildVertexStream = reinterpret_cast<BuildVertexStreamFn>(Need(module, "XboxNV2A_BuildVertexStream"));
     auto buildIndexedVertexStream = reinterpret_cast<BuildIndexedVertexStreamFn>(Need(module, "XboxNV2A_BuildIndexedVertexStream"));
+    auto packVertexProgramInputs = reinterpret_cast<PackVertexProgramInputsFn>(
+        Need(module, "XboxNV2A_PackVertexProgramInputs"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
@@ -438,6 +443,36 @@ int main() {
     if (start() != 0) {
         std::cerr << "FAIL: NV2A module initialization\\n";
         return 1;
+    }
+
+    /* NV097 texture-array slots 7..10 must feed programmable inputs v9..v12.
+     * Backface inputs v7/v8 are not aliases for TEX0/TEX1. */
+    {
+        HostVertex vertex{};
+        vertex.u = 0.25f; vertex.v = 0.5f;
+        vertex.u1 = 1.25f; vertex.v1 = 1.5f;
+        vertex.u2 = 2.25f; vertex.v2 = 2.5f;
+        vertex.u3 = 3.25f; vertex.v3 = 3.5f;
+        const float expected[8] = {
+            0.25f,0.5f, 1.25f,1.5f, 2.25f,2.5f, 3.25f,3.5f
+        };
+        uint8_t packed[32]{};
+        uint32_t stride = 0;
+        const int packResult = packVertexProgramInputs(
+            &vertex, 1u, (uint16_t)0x1E00u,
+            packed, sizeof(packed), &stride);
+        if (packResult != 0 || stride != sizeof(packed) ||
+            std::memcmp(packed, expected, sizeof(expected)) != 0) {
+            std::cerr << "FAIL: NV2A shader TEX0..TEX3 input register packing\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
+        stride = 99u;
+        const int unsupportedResult = packVertexProgramInputs(
+            &vertex, 1u, (uint16_t)(1u << 8), packed, sizeof(packed), &stride);
+        if (unsupportedResult == 0 || stride != 0u) {
+            std::cerr << "FAIL: unsupported backface shader input was silently packed\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
     }
 
     /* NV097 combiner method families map to the Xbox D3D8 combiner states. */
