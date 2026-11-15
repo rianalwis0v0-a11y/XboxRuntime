@@ -1,4 +1,5 @@
 #pragma once
+#include <windows.h>
 
 extern "C" {
 LONG __stdcall K_ObReferenceObjectByHandle(HANDLE handle, void* objectType, void** returnedObject);
