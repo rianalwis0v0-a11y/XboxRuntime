@@ -78,6 +78,7 @@ struct HostVertex {
     float x, y, z, nx, ny, nz;
     uint32_t diffuse, specular;
     float u, v, u1, v1, u2, v2, u3, v3;
+    uint32_t backface_diffuse, backface_specular;
     float weights[4], fog, point_size;
     float generic[3][4];
     uint16_t input_valid_mask, reserved;
@@ -1053,6 +1054,8 @@ int main() {
     };
     const float vertexFog[2] = { 0.25f,0.75f };
     const float vertexPointSize[2] = { 1.0f,2.0f };
+    const uint32_t vertexBackfaceDiffuse[2] = { 0xFFABCDEFu, 0xFF102030u };
+    const uint32_t vertexBackfaceSpecular[2] = { 0xFF123456u, 0xFF654321u };
     const float vertexGeneric0[8] = { 13.1f,13.2f,13.3f,13.4f, 13.5f,13.6f,13.7f,13.8f };
     const float vertexGeneric1[8] = { 14.1f,14.2f,14.3f,14.4f, 14.5f,14.6f,14.7f,14.8f };
     const float vertexGeneric2[8] = { 15.1f,15.2f,15.3f,15.4f, 15.5f,15.6f,15.7f,15.8f };
@@ -1070,6 +1073,8 @@ int main() {
         writeVram(0x1E00u, vertexGeneric0, sizeof(vertexGeneric0)) != 0 ||
         writeVram(0x1E40u, vertexGeneric1, sizeof(vertexGeneric1)) != 0 ||
         writeVram(0x1E80u, vertexGeneric2, sizeof(vertexGeneric2)) != 0 ||
+        writeVram(0x1EC0u, vertexBackfaceDiffuse, sizeof(vertexBackfaceDiffuse)) != 0 ||
+        writeVram(0x1ED0u, vertexBackfaceSpecular, sizeof(vertexBackfaceSpecular)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
@@ -1105,6 +1110,10 @@ int main() {
         submit(0u, 0x1798u, (16u << 8) | (4u << 4) | 2u) != 0 ||
         submit(0u, 0x175Cu, 0xE80u) != 0 ||
         submit(0u, 0x179Cu, (16u << 8) | (4u << 4) | 2u) != 0 ||
+        submit(0u, 0x174Cu, 0xEC0u) != 0 ||
+        submit(0u, 0x178Cu, (4u << 8) | (4u << 4)) != 0 ||
+        submit(0u, 0x1750u, 0xED0u) != 0 ||
+        submit(0u, 0x1790u, (4u << 8) | (4u << 4)) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
         hostVertexStride != sizeof(HostVertex) || hostFvf != 0x4D2u ||
@@ -1120,9 +1129,15 @@ int main() {
         hostVertices[1].weights[3] != 0.8f ||
         hostVertices[0].fog != 0.25f || hostVertices[1].fog != 0.75f ||
         hostVertices[0].point_size != 1.0f || hostVertices[1].point_size != 2.0f ||
+        hostVertices[0].backface_diffuse != vertexBackfaceDiffuse[0] ||
+        hostVertices[1].backface_diffuse != vertexBackfaceDiffuse[1] ||
+        hostVertices[0].backface_specular != vertexBackfaceSpecular[0] ||
+        hostVertices[1].backface_specular != vertexBackfaceSpecular[1] ||
         (hostVertices[0].input_valid_mask & ((1u << 1) | (1u << 5) | (1u << 6) |
+            (1u << 7) | (1u << 8) |
             (1u << 13) | (1u << 14) | (1u << 15))) !=
             ((1u << 1) | (1u << 5) | (1u << 6) |
+             (1u << 7) | (1u << 8) |
              (1u << 13) | (1u << 14) | (1u << 15)) ||
         hostVertices[0].generic[0][0] != 13.1f ||
         hostVertices[1].generic[0][3] != 13.8f ||
