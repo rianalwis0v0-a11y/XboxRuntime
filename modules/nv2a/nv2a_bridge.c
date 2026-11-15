@@ -2536,6 +2536,140 @@ int __cdecl XboxNV2A_ExpandPrimitive(uint32_t mode,
     return 0;
 }
 
+/* Guest PGRAPH state is converted into this API-neutral packet before
+ * the first host backend sees it. Vertex bytes are already translated host
+ * staging data; no raw guest pointer or D3D object crosses this boundary. */
+typedef enum NV2A_TRANSLATED_TOPOLOGY {
+    NV2A_TOPOLOGY_POINT_LIST = 1,
+    NV2A_TOPOLOGY_LINE_LIST = 2,
+    NV2A_TOPOLOGY_LINE_STRIP = 3,
+    NV2A_TOPOLOGY_TRIANGLE_LIST = 4,
+    NV2A_TOPOLOGY_TRIANGLE_STRIP = 5,
+    NV2A_TOPOLOGY_TRIANGLE_FAN = 6
+} NV2A_TRANSLATED_TOPOLOGY;
+
+enum {
+    NV2A_VERTEX_ATTR_POSITION = 1u << 0,
+    NV2A_VERTEX_ATTR_NORMAL = 1u << 1,
+    NV2A_VERTEX_ATTR_DIFFUSE = 1u << 2,
+    NV2A_VERTEX_ATTR_SPECULAR = 1u << 3
+};
+
+typedef struct NV2A_TRANSLATED_DRAW_PACKET {
+    uint32_t topology;
+    uint32_t primitive_count;
+    uint32_t vertex_count;
+    uint32_t source_vertex_count;
+    uint32_t vertex_stride;
+    uint32_t vertex_attribute_mask;
+    uint32_t texture_stage_mask;
+    uint32_t texture_coordinate_count;
+    uint32_t vertex_shader_mode;
+    uint32_t vertex_shader_input_mask;
+    uint32_t vertex_shader_hash;
+    const void* vertex_data;
+} NV2A_TRANSLATED_DRAW_PACKET;
+
+static int nv2a_topology_from_d3d(uint32_t primitive_type, uint32_t* topology)
+{
+    if (!topology) return 0;
+    switch (primitive_type) {
+    case D3DPT_POINTLIST: *topology = NV2A_TOPOLOGY_POINT_LIST; return 1;
+    case D3DPT_LINELIST: *topology = NV2A_TOPOLOGY_LINE_LIST; return 1;
+    case D3DPT_LINESTRIP: *topology = NV2A_TOPOLOGY_LINE_STRIP; return 1;
+    case D3DPT_TRIANGLELIST: *topology = NV2A_TOPOLOGY_TRIANGLE_LIST; return 1;
+    case D3DPT_TRIANGLESTRIP: *topology = NV2A_TOPOLOGY_TRIANGLE_STRIP; return 1;
+    case D3DPT_TRIANGLEFAN: *topology = NV2A_TOPOLOGY_TRIANGLE_FAN; return 1;
+    default: return 0;
+    }
+}
+
+static int nv2a_topology_to_d3d(uint32_t topology, D3DPRIMITIVETYPE* primitive_type)
+{
+    if (!primitive_type) return 0;
+    switch (topology) {
+    case NV2A_TOPOLOGY_POINT_LIST: *primitive_type = D3DPT_POINTLIST; return 1;
+    case NV2A_TOPOLOGY_LINE_LIST: *primitive_type = D3DPT_LINELIST; return 1;
+    case NV2A_TOPOLOGY_LINE_STRIP: *primitive_type = D3DPT_LINESTRIP; return 1;
+    case NV2A_TOPOLOGY_TRIANGLE_LIST: *primitive_type = D3DPT_TRIANGLELIST; return 1;
+    case NV2A_TOPOLOGY_TRIANGLE_STRIP: *primitive_type = D3DPT_TRIANGLESTRIP; return 1;
+    case NV2A_TOPOLOGY_TRIANGLE_FAN: *primitive_type = D3DPT_TRIANGLEFAN; return 1;
+    default: return 0;
+    }
+}
+
+static int nv2a_build_translated_draw_packet(
+    uint32_t primitive_type, uint32_t primitive_count, uint32_t draw_count,
+    uint32_t source_vertex_count, uint32_t stride, uint32_t fvf,
+    const void* vertex_data, NV2A_TRANSLATED_DRAW_PACKET* packet)
+{
+    if (!packet) return 0;
+    memset(packet, 0, sizeof(*packet));
+    if (!vertex_data || !primitive_count || !draw_count || !stride ||
+        !nv2a_topology_from_d3d(primitive_type, &packet->topology))
+        return 0;
+
+    packet->primitive_count = primitive_count;
+    packet->vertex_count = draw_count;
+    packet->source_vertex_count = source_vertex_count;
+    packet->vertex_stride = stride;
+    packet->vertex_data = vertex_data;
+    if (fvf & D3DFVF_XYZ) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_POSITION;
+    if (fvf & D3DFVF_NORMAL) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_NORMAL;
+    if (fvf & D3DFVF_DIFFUSE) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_DIFFUSE;
+    if (fvf & D3DFVF_SPECULAR) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_SPECULAR;
+    packet->texture_coordinate_count = (fvf & 0x0F00u) >> 8;
+    packet->vertex_shader_mode = g_transform_execution_mode & 3u;
+    packet->vertex_shader_input_mask = g_nv2a_vsh_input_mask;
+    packet->vertex_shader_hash = g_nv2a_vsh_program_hash;
+    for (uint32_t stage = 0; stage < 4u; ++stage) {
+        const uint32_t base = 0x1B00u + stage * 0x40u;
+        if (g_gpu->pgraph.regs[(base + 0x0Cu) / 4u] & (1u << 30))
+            packet->texture_stage_mask |= 1u << stage;
+    }
+    return 1;
+}
+
+/* First backend adapter: consume the neutral packet through the existing
+ * Xbox D3D8 ABI, whose implementation compiles/binds shaders and draws on D3D11. */
+static int nv2a_submit_d3d8_draw_packet(
+    const NV2A_TRANSLATED_DRAW_PACKET* packet, uint32_t fvf,
+    uint32_t channel, uint32_t subchannel)
+{
+    if (!packet || !packet->vertex_data) return 4;
+    D3DPRIMITIVETYPE primitive_type;
+    if (!nv2a_topology_to_d3d(packet->topology, &primitive_type)) return 4;
+
+    IDirect3DDevice8* d = xbox_GetD3DDevice();
+    if (!d || !d->lpVtbl || !d->lpVtbl->SetVertexShader ||
+        !d->lpVtbl->DrawPrimitiveUP)
+        return 5;
+
+    if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
+        return 6;
+
+    const void* draw_data = packet->vertex_data;
+    uint32_t draw_stride = packet->vertex_stride;
+    if (packet->vertex_shader_mode == 2u) {
+        nv2a_flush_vertex_constants();
+        if (!nv2a_prepare_gpu_vertex_shader(d))
+            return 9;
+        const uint8_t* packed = NULL;
+        if (!nv2a_pack_gpu_vertex_stream(
+                (const XboxNV2A_VERTEX*)packet->vertex_data,
+                packet->vertex_count, g_nv2a_vsh_input_mask,
+                &packed, &draw_stride))
+            return 10;
+        draw_data = packed;
+    }
+    if (bind_nv2a_textures(channel, subchannel, d) != 0)
+        return 8;
+    if (FAILED(d->lpVtbl->DrawPrimitiveUP(d, primitive_type,
+            packet->primitive_count, draw_data, draw_stride)))
+        return 7;
+    return 0;
+}
+
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
 {
     const uint32_t mode = g_primitive_mode[channel][subchannel];
@@ -2558,32 +2692,14 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
             &primitive_type, &primitive_count, &draw_count) != 0)
         return 3;
 
-    IDirect3DDevice8* d = xbox_GetD3DDevice();
-    if (!d || !d->lpVtbl || !d->lpVtbl->SetVertexShader ||
-        !d->lpVtbl->DrawPrimitiveUP)
-        return 5;
-
-    const void *draw_data = expanded;
-    uint32_t draw_stride = stride;
-    if ((g_transform_execution_mode & 3u) == 2u) {
-        if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
-            return 6;
-        nv2a_flush_vertex_constants();
-        if (!nv2a_prepare_gpu_vertex_shader(d))
-            return 9;
-        const uint8_t* packed = NULL;
-        if (!nv2a_pack_gpu_vertex_stream(expanded, draw_count,
-                g_nv2a_vsh_input_mask, &packed, &draw_stride))
-            return 10;
-        draw_data = packed;
-    } else if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) {
-        return 6;
-    }
-    if (bind_nv2a_textures(channel, subchannel, d) != 0)
-        return 8;
-    if (FAILED(d->lpVtbl->DrawPrimitiveUP(d, (D3DPRIMITIVETYPE)primitive_type,
-            primitive_count, draw_data, draw_stride)))
-        return 7;
+    NV2A_TRANSLATED_DRAW_PACKET packet;
+    if (!nv2a_build_translated_draw_packet(primitive_type, primitive_count,
+            draw_count, count, stride, fvf, expanded, &packet))
+        return 4;
+    const int submit_result = nv2a_submit_d3d8_draw_packet(
+        &packet, fvf, channel, subchannel);
+    if (submit_result != 0)
+        return submit_result;
 
     ++g_pgraph_custom_methods;
     ++g_pgraph_custom_draws;
