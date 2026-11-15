@@ -11,5 +11,6 @@ void __stdcall K_XcHMAC(std::uint8_t* key, std::uint32_t keyLength,
                         std::uint8_t* input1, std::uint32_t input1Length,
                         std::uint8_t* input2, std::uint32_t input2Length,
                         std::uint8_t* digest);
+std::uint32_t __stdcall K_XcCryptService(std::uint32_t operation, void* arguments);
 void __stdcall K_XcDESKeyParity(std::uint8_t* key, std::uint32_t keyLength);
 }
