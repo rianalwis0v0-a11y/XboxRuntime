@@ -1070,12 +1070,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "partial_tested",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 98; one-line jump to K_KeConnectInterrupt.",
       "nxdk_export_definition": "KeConnectInterrupt@4                     @  98 NONAME",
@@ -1084,7 +1084,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_KeConnectInterrupt",
       "implementation_file": "guest32/kernel_thread_exports.cpp",
-      "unsupported_reason": "No physical interrupt controller to connect a guest interrupt; returns FALSE."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550871",
+      "limitations": "Registers an initialized virtual interrupt object and reports successful connection; no physical interrupt controller or device ISR delivery is attached."
     },
     {
       "ordinal": 100,
@@ -1098,12 +1099,12 @@
       },
       "ordinal_provenance": "Verified against XboxDev/nxdk@fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e lib/xboxkrnl/xboxkrnl.exe.def",
       "dispatcher_entry_present": true,
-      "implementation_status": "unsupported_explicit",
+      "implementation_status": "partial_tested",
       "owner": "Developer A",
       "structure_layout_status": "not_yet_size_asserted_against_guest32",
       "tests": {
         "host": null,
-        "guest_x86_thunk": null
+        "guest_x86_thunk": "PASS — Windows x86 guest handler smoke; direct handler calls (not a per-export import-thunk test)."
       },
       "dispatcher_evidence": "guest32/kernel_compat.cpp KernelDispatch: cmp eax, 100; one-line jump to K_KeDisconnectInterrupt.",
       "nxdk_export_definition": "KeDisconnectInterrupt@4                  @ 100 NONAME",
@@ -1112,7 +1113,8 @@
       "decoration_stack_bytes": 4,
       "dispatcher_handler": "K_KeDisconnectInterrupt",
       "implementation_file": "guest32/kernel_thread_exports.cpp",
-      "unsupported_reason": "No physical interrupt controller to disconnect a guest interrupt; returns FALSE."
+      "ci_run": "https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550871",
+      "limitations": "Disconnects a previously connected virtual interrupt registration; no physical interrupt controller or device ISR delivery is attached."
     },
     {
       "ordinal": 105,
