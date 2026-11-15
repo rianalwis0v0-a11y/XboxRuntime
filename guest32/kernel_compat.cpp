@@ -279,6 +279,24 @@ extern "C" LONG __stdcall K_KeInsertQueue(GuestKQueue* queue, GuestListEntry* en
 extern "C" LONG __stdcall K_KeInsertHeadQueue(GuestKQueue* queue, GuestListEntry* entry) {
     return InsertGuestQueueEntry(queue, entry, true);
 }
+
+extern "C" GuestListEntry* __stdcall K_KeRundownQueue(GuestKQueue* queue) {
+    if (!queue) return nullptr;
+    auto state = GetGuestQueueState(queue, true);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    GuestListEntry* head = &queue->EntryListHead;
+    if (head->Flink == head) return nullptr;
+    GuestListEntry* first = head->Flink;
+    GuestListEntry* last = head->Blink;
+    first->Blink = nullptr;
+    last->Flink = nullptr;
+    InitializeGuestList(head);
+    queue->Header.SignalState = 0;
+    queue->CurrentCount = 0;
+    g_activeGuestQueues.erase(queue);
+    state->changed.notify_all();
+    return first;
+}
 extern "C" GuestListEntry* __stdcall K_KeRemoveQueue(
     GuestKQueue* queue, ULONG, const LARGE_INTEGER* timeout) {
     if (!queue) return reinterpret_cast<GuestListEntry*>(uintptr_t(0xC000000Du));
@@ -1895,6 +1913,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_initialize_interrupt
         cmp eax, 118
         je ke_insert_queue_apc
+        cmp eax, 141
+        je ke_rundown_queue
         cmp eax, 153
         je ke_synchronize_execution
         cmp eax, 163
@@ -2414,6 +2434,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_initialize_apc: jmp K_KeInitializeApc
     ke_initialize_interrupt: jmp K_KeInitializeInterrupt
     ke_insert_queue_apc: jmp K_KeInsertQueueApc
+    ke_rundown_queue: jmp K_KeRundownQueue
     ke_synchronize_execution: jmp K_KeSynchronizeExecution
     ki_unlock_dispatcher: jmp K_KfLowerIrql
     mm_claim_gpu_memory: jmp K_MmClaimGpuInstanceMemory
