@@ -170,7 +170,7 @@ struct GuestDeviceObject {
     GuestDeviceQueue DeviceQueue; GuestEvent DeviceLock; ULONG StartIoKey;
 };
 struct GuestDriverObject {
-    void* DriverStartIo;
+    void (__stdcall* DriverStartIo)(GuestDeviceObject*, void*);
     void (__stdcall* DriverDeleteDevice)(GuestDeviceObject*);
     LONG (__stdcall* DriverDismountVolume)(GuestDeviceObject*);
     void* MajorFunction[14];
