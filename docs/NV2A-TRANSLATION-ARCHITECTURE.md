@@ -122,3 +122,21 @@ The existing code already contains important pieces of this translation path; do
 ### First code change after this audit
 
 Introduce a small internal translation seam around the existing implementation: a validated backend-neutral draw description and explicit guest-resource views. Keep the existing D3D8/D3D11 submission path as the first backend. The seam must not own or reinterpret raw guest pointers, and it must not duplicate the current shader parser/compiler.
+
+## Implemented translation milestone — PCI resource views
+
+The translation branch now has a shared `dma_get_span` resolver. It accepts a DMA object plus an object-relative byte offset and length, validates the full range, and returns a read-only host view from either:
+
+- NV2A local VRAM, using the resolved VRAM base.
+- The explicitly bound guest-physical PCI window, using the mapping-relative base produced by DMA-object resolution.
+
+The resolver is used by:
+
+- Vertex-array element fetch (`XboxNV2A_ReadVertexArray`).
+- Linear texture decode (`XboxNV2A_DecodeTextureFromDMA`).
+- Swizzled/compressed mip-chain decode (`XboxNV2A_DecodeTextureMipChainFromDMA`).
+- Paletted texture and palette fetch.
+
+This removes the earlier local-VRAM-only rejection for those resource paths while retaining strict bounds checks. AGP/GART is still rejected; it needs actual guest page-table translation and is not mapped by this helper.
+
+Regression coverage has been added for PCI-backed vertex-array reads and linear texture decoding, including restoring the original local-VRAM DMA object/context after the test. The test is awaiting the Windows GitHub Actions result in PR #25.
