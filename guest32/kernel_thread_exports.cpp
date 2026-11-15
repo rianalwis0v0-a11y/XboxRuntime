@@ -150,3 +150,31 @@ void XboxKernelResetThreadExports() {
         g_interrupts.clear();
     }
 }
+
+
+namespace {
+[[noreturn]] void RaiseUnsupportedHardwareImport(ULONG ordinal) {
+    ULONG_PTR parameter = ordinal;
+    RaiseException(0xC000001Du, EXCEPTION_NONCONTINUABLE, 1, &parameter);
+}
+}
+extern "C" void __stdcall K_HalDisableSystemInterrupt(ULONG) {
+    RaiseUnsupportedHardwareImport(39);
+}
+extern "C" void __stdcall K_HalEnableSystemInterrupt(ULONG, ULONG) {
+    RaiseUnsupportedHardwareImport(43);
+}
+extern "C" ULONG __stdcall K_HalGetInterruptVector(ULONG, UCHAR* irql) {
+    if (irql) *irql = 0;
+    return 0; // no physical interrupt routing table is available
+}
+extern "C" void __stdcall K_HalReadWritePCISpace(
+    ULONG, ULONG, ULONG, void*, ULONG, BOOLEAN) {
+    RaiseUnsupportedHardwareImport(46);
+}
+extern "C" LONG __stdcall K_KeSaveFloatingPointState(void*) {
+    return static_cast<LONG>(0xC00000BBu); // STATUS_NOT_SUPPORTED
+}
+extern "C" LONG __stdcall K_KeRestoreFloatingPointState(void*) {
+    return static_cast<LONG>(0xC00000BBu); // STATUS_NOT_SUPPORTED
+}
