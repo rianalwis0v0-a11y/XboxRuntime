@@ -178,3 +178,5 @@ extern "C" LONG __stdcall K_KeSaveFloatingPointState(void*) {
 extern "C" LONG __stdcall K_KeRestoreFloatingPointState(void*) {
     return static_cast<LONG>(0xC00000BBu); // STATUS_NOT_SUPPORTED
 }
+
+UCHAR XboxKernelGetPendingSoftwareIrql() { return g_pendingSoftwareIrql; }
