@@ -11,10 +11,10 @@ The export signatures and calling convention are taken from `XboxDev/nxdk@fafbe4
 
 ## Query behavior
 
-- Supports the documented OS setting indices 0x0000–0x0012 and factory read-only indices 0x0100–0x0103.
+- Supports the documented OS setting indices 0x0000–0x0012 and XC_MAX_OS (0x00FF), the complete 0x60-byte user-settings section.
 - Index 0xFFFF returns the complete raw 256-byte EEPROM image as REG_BINARY.
 - Returns the exact value type and required byte count; a short caller buffer returns `STATUS_BUFFER_TOO_SMALL` without modifying the caller's buffer.
-- Unknown indices return `STATUS_INVALID_PARAMETER`.
+- Unknown and not-yet-verified factory indices return `STATUS_INVALID_PARAMETER`.
 - EEPROM access before successful initialization returns `STATUS_DEVICE_NOT_CONNECTED`.
 
 ## Save behavior
@@ -41,4 +41,4 @@ The setting-index mapping comes from the pinned NXDK `XC_*` definitions. EEPROM 
 
 ## Limitations
 
-This does not implement EEPROM cryptographic verification/decryption, factory provisioning, encrypted-section writes, full UEM/refurb handling, or actual Xbox AV hardware. A newly created EEPROM remains an all-0xFF unprovisioned image; this implementation does not fabricate console identity keys or a MAC address.
+This does not implement EEPROM cryptographic verification/decryption, factory-index queries/provisioning, encrypted-section writes, full UEM/refurb handling, or actual Xbox AV hardware. A newly created EEPROM remains an all-0xFF unprovisioned image; this implementation does not fabricate console identity keys or a MAC address.
