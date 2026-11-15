@@ -248,13 +248,6 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         state = D3DRS_DESTBLEND;
         if (!map_blend_factor(parameter, &value)) return 0;
         break;
-    case 0x034Cu:
-        state = D3DRS_BLENDFACTOR;
-        value = ((parameter & 0x000000FFu) << 16) |
-                (parameter & 0x0000FF00u) |
-                ((parameter & 0x00FF0000u) >> 16) |
-                (parameter & 0xFF000000u);
-        break;
     case 0x0358u:
         state = D3DRS_COLORWRITEENABLE;
         value = ((parameter >> 16) & 1u) |
@@ -347,9 +340,6 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         state = D3DRS_POINTSIZE; break;
     case 0x0318u:
         state = D3DRS_POINTSCALEENABLE; value = parameter ? 1u : 0u; break;
-    case 0x0A30u: state = D3DRS_POINTSCALE_A; break;
-    case 0x0A34u: state = D3DRS_POINTSCALE_B; break;
-    case 0x0A38u: state = D3DRS_POINTSCALE_C; break;
     default:
         return 0;
     }
@@ -684,11 +674,7 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         method == NV097_SET_LIGHTING_ENABLE ||
         method == NV097_SET_POINT_SIZE ||
         method == 0x0318u ||
-        method == 0x034Cu ||
-        method == 0x0358u ||
-        method == 0x0A30u ||
-        method == 0x0A34u ||
-        method == 0x0A38u) {
+        method == 0x0358u) {
         if (apply_nv2a_render_state(method, parameter))
             ++g_pgraph_custom_methods;
         g_gpu->pgraph.regs[method / 4u] = parameter;
