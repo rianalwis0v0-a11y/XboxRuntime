@@ -25,6 +25,7 @@
 #include "kernel_compat.h"
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
+#include "kernel_object_reference.h"
 #include "kernel_crypto.h"
 #include "kernel_time.h"
 #include "guest_api_registry.h"
@@ -2247,6 +2248,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je xc_des_key_parity
         cmp eax, 350
         je xc_crypt_service
+        cmp eax, 250
+        je obf_dereference_object
+        cmp eax, 251
+        je obf_reference_object
         push eax
         call K_Unsupported
         add esp, 4
@@ -2473,6 +2478,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     xc_hmac: jmp K_XcHMAC
     xc_des_key_parity: jmp K_XcDESKeyParity
     xc_crypt_service: jmp K_XcCryptService
+    obf_dereference_object: jmp K_ObfDereferenceObject
+    obf_reference_object: jmp K_ObfReferenceObject
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
