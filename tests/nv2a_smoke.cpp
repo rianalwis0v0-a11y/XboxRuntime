@@ -520,17 +520,25 @@ int main() {
         };
         DmaInfo pciInfo{};
         uint32_t pciGet = 0, pciMethods = 0;
-        if (bindGuestPhysicalMemory(pciPhysicalBase, guestPhysical.data(),
-                                   (uint32_t)guestPhysical.size()) != 0 ||
-            writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject)) != 0 ||
-            resolveDma(channel, dmaHandle, &pciInfo) != 0 ||
+        const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
+            guestPhysical.data(), (uint32_t)guestPhysical.size());
+        const int objectWrite = writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject));
+        const int resolveResult = resolveDma(channel, dmaHandle, &pciInfo);
+        const int submitResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(pciStream), &pciGet, &pciMethods);
+        const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        const int restoreResult = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        if (bindResult != 0 || objectWrite != 0 || resolveResult != 0 ||
             pciInfo.dma_target != 0x00020000u || pciInfo.base_address != 0u ||
-            submitDmaPush(channel, dmaHandle, 0u, sizeof(pciStream),
-                          &pciGet, &pciMethods) != 0 ||
-            pciGet != sizeof(pciStream) || pciMethods != 1u ||
-            bindGuestPhysicalMemory(0u, nullptr, 0u) != 0 ||
-            writeRamin(0x100u, dmaObject, sizeof(dmaObject)) != 0) {
-            std::cerr << "FAIL: PCI-target guest-physical DMA pushbuffer mapping\\n";
+            submitResult != 0 || pciGet != sizeof(pciStream) || pciMethods != 1u ||
+            unbindResult != 0 || restoreResult != 0) {
+            std::cerr << "FAIL: PCI-target guest-physical DMA pushbuffer mapping"
+                      << " bind=" << bindResult << " object=" << objectWrite
+                      << " resolve=" << resolveResult << " target=0x" << std::hex
+                      << pciInfo.dma_target << " base=0x" << pciInfo.base_address
+                      << " submit=" << std::dec << submitResult
+                      << " get=" << pciGet << " methods=" << pciMethods
+                      << " unbind=" << unbindResult << " restore=" << restoreResult << "\\n";
             stop();
             return 1;
         }
