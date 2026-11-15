@@ -216,7 +216,8 @@ typedef struct XboxNV2A_VERTEX {
     float weights[4];
     float fog;
     float point_size;
-    /* Bits 1, 5, and 6 mark which optional shader inputs were fetched. */
+    float generic[3][4]; /* Shader inputs v13-v15. */
+    /* Bits 1, 5, 6, and 13-15 mark which optional inputs were fetched. */
     uint16_t input_valid_mask;
     uint16_t reserved;
 } XboxNV2A_VERTEX;
