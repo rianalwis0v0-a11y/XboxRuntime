@@ -20,7 +20,7 @@ bool SpanHasProtection(const void* pointer, std::size_t length, bool write) {
     if (length == 0) return true;
     if (!pointer) return false;
     const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(pointer);
-    if (length - 1 > UINTPTR_MAX - start) return false;
+    if (length > UINTPTR_MAX - start) return false;
     const std::uintptr_t end = start + length;
     std::uintptr_t cursor = start;
     while (cursor < end) {
