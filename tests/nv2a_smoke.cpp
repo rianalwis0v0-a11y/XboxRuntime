@@ -32,6 +32,7 @@ struct DmaInfo {
 };
 using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
+using BindGuestPhysicalMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
@@ -112,6 +113,8 @@ int main() {
     auto submitPushBuffer = reinterpret_cast<PushBufferFn>(Need(module, "XboxNV2A_SubmitPushBuffer"));
     auto lookupRamht = reinterpret_cast<LookupRamhtFn>(Need(module, "XboxNV2A_LookupRAMHT"));
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
+    auto bindGuestPhysicalMemory = reinterpret_cast<BindGuestPhysicalMemoryFn>(
+        Need(module, "XboxNV2A_BindGuestPhysicalMemory"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
     auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
     auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
@@ -503,6 +506,45 @@ int main() {
         std::cerr << "FAIL: RAMHT lookup / DMA object resolution\\n";
         stop();
         return 1;
+    }
+
+    /* PCI-target DMA must read its pushbuffer from the host runtime's explicitly
+     * bound guest-physical RAM window, without aliasing GPU-local VRAM. */
+    {
+        const uint32_t pciPhysicalBase = 0x00200000u;
+        std::vector<uint8_t> guestPhysical(0x1000u, 0u);
+        const uint32_t pciStream[] = {
+            (1u << 18) | 0x0000u, dmaHandle, /* Bind the PGRAPH engine first. */
+            (1u << 18) | 0x1D90u, 0xFF123456u
+        };
+        std::memcpy(guestPhysical.data(), pciStream, sizeof(pciStream));
+        const uint32_t pciDmaObject[3] = {
+            0x00020002u, 0x00000FFFu, pciPhysicalBase
+        };
+        DmaInfo pciInfo{};
+        uint32_t pciGet = 0, pciMethods = 0;
+        const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
+            guestPhysical.data(), (uint32_t)guestPhysical.size());
+        const int objectWrite = writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject));
+        const int resolveResult = resolveDma(channel, dmaHandle, &pciInfo);
+        const int submitResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(pciStream), &pciGet, &pciMethods);
+        const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        const int restoreResult = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        if (bindResult != 0 || objectWrite != 0 || resolveResult != 0 ||
+            pciInfo.dma_target != 0x00020000u || pciInfo.base_address != 0u ||
+            submitResult != 0 || pciGet != sizeof(pciStream) || pciMethods != 2u ||
+            unbindResult != 0 || restoreResult != 0) {
+            std::cerr << "FAIL: PCI-target guest-physical DMA pushbuffer mapping"
+                      << " bind=" << bindResult << " object=" << objectWrite
+                      << " resolve=" << resolveResult << " target=0x" << std::hex
+                      << pciInfo.dma_target << " base=0x" << pciInfo.base_address
+                      << " submit=" << std::dec << submitResult
+                      << " get=" << pciGet << " methods=" << pciMethods
+                      << " unbind=" << unbindResult << " restore=" << restoreResult << "\\n";
+            stop();
+            return 1;
+        }
     }
 
     /* Exercise NV4-style DMA GET/PUT with a real RAMHT-bound PGRAPH object.

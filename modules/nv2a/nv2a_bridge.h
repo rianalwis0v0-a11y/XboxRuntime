@@ -38,6 +38,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_SubmitMethod(
 
 __declspec(dllexport) void __cdecl XboxNV2A_Flush(void);
 
+/* Borrow a host mapping of Xbox PCI physical memory for NV2A DMA target=PCI.
+ * The caller owns the memory and must keep it alive until unbound or ModuleStop.
+ * AGP target/page translation remains a separate GART implementation. */
+__declspec(dllexport) int __cdecl XboxNV2A_BindGuestPhysicalMemory(
+    uint32_t guest_physical_base, void* memory, uint32_t length);
+
 /* Bounded access to Xbox GPU-local memory. Offsets are byte offsets. */
 __declspec(dllexport) int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t length);
 __declspec(dllexport) int __cdecl XboxNV2A_WriteVRAM(uint32_t offset, const void* source, uint32_t length);

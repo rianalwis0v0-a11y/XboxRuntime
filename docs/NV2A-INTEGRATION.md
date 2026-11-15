@@ -537,3 +537,23 @@ explicit NV4 JUMP back into the DMA object; reaching the object limit without
 a valid control-flow command remains a protection fault. The regression test
 places a JUMP near the end of the DMA object, resumes at offset zero, dispatches
 a context-DMA bind, and verifies the final GET/PUT relationship and binding.
+
+
+## Guest-physical PCI DMA window
+
+The bridge can now borrow one host mapping of the runtime's guest-physical RAM
+through `XboxNV2A_BindGuestPhysicalMemory(base, pointer, length)`. The host owns
+the backing allocation and must keep it valid until it explicitly unbinds the
+window or calls `ModuleStop`. PCI-target DMA objects (target field `0x00020000`)
+are range-checked against that window and their pushbuffers are fetched from the
+mapped guest RAM. This path does not copy guest data into VRAM or reinterpret a
+host pointer as a guest address. The DMA object's reported base is the offset
+within the bound window for PCI target objects; local-VRAM objects retain their
+VRAM-relative base.
+
+AGP-target DMA remains deliberately rejected: it requires NV2A GART/page-table
+translation and must not be treated as a flat PCI physical address. Vertex and
+texture fetches also remain local-VRAM-only until their readers are routed
+through the same DMA memory abstraction. The current change therefore adds a
+validated PCI pushbuffer path, not general-purpose PCI/AGP DMA or complete
+Xbox guest-memory integration.
