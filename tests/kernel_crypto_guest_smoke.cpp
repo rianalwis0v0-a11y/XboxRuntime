@@ -19,7 +19,7 @@ bool EqualHex(const std::uint8_t* bytes, const char* hex, std::size_t count) {
 }
 int main() {
     static_assert(sizeof(void*) == 4, "guest crypto ABI test must be x86");
-    std::array<std::uint8_t,92> context{};
+    alignas(4) std::array<std::uint8_t,92> context{};
     std::uint8_t digest[20]{};
     const char abc[]="abc";
     K_XcSHAInit(context.data());
