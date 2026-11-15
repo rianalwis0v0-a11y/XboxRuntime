@@ -33,6 +33,28 @@ struct DmaInfo {
 using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
 using BindGuestPhysicalMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
+using AgpTranslateFn = int (__cdecl*)(uint32_t, uint32_t, const void**,
+    uint32_t*, void*);
+using BindAgpTranslatorFn = int (__cdecl*)(AgpTranslateFn, void*);
+struct AgpTestView { std::vector<uint8_t>* bytes; uint32_t aperture_base; };
+static int __cdecl TranslateTestAgp(uint32_t aperture_offset,
+    uint32_t requested_length, const void** host_span,
+    uint32_t* contiguous_length, void* context)
+{
+    if (host_span) *host_span = nullptr;
+    if (contiguous_length) *contiguous_length = 0;
+    auto* view = static_cast<AgpTestView*>(context);
+    if (!view || !view->bytes || !host_span || !contiguous_length ||
+        aperture_offset < view->aperture_base)
+        return 0;
+    const uint32_t offset = aperture_offset - view->aperture_base;
+    if (offset > view->bytes->size() ||
+        requested_length > view->bytes->size() - offset)
+        return 0;
+    *host_span = view->bytes->data() + offset;
+    *contiguous_length = static_cast<uint32_t>(view->bytes->size() - offset);
+    return 1;
+}
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
@@ -115,6 +137,8 @@ int main() {
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
     auto bindGuestPhysicalMemory = reinterpret_cast<BindGuestPhysicalMemoryFn>(
         Need(module, "XboxNV2A_BindGuestPhysicalMemory"));
+    auto bindAgpTranslator = reinterpret_cast<BindAgpTranslatorFn>(
+        Need(module, "XboxNV2A_BindAGPAddressTranslator"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
     auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
     auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
@@ -708,6 +732,72 @@ int main() {
                       << restoreObject << "/" << restoreStream
                       << " restore_get=" << restoreGet
                       << " restore_methods=" << restoreMethods
+                      << " unbind=" << unbindResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
+    /* AGP DMA uses a host-supplied GART resolver. The bridge passes an
+     * aperture-relative span request; this test adapter models the host
+     * page-table service without baking a chipset-specific PTE format in. */
+    {
+        const uint32_t agpBase = 0x00100000u;
+        std::vector<uint8_t> agpMemory(0x1000u, 0u);
+        AgpTestView agpView{ &agpMemory, agpBase };
+        const uint32_t agpContextStream[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        const float agpVertexData[6] = {21.0f,22.0f,23.0f,24.0f,25.0f,26.0f};
+        const uint8_t agpTextureData[16] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
+        };
+        std::memcpy(agpMemory.data(), agpContextStream, sizeof(agpContextStream));
+        std::memcpy(agpMemory.data() + 0x300u, agpVertexData, sizeof(agpVertexData));
+        std::memcpy(agpMemory.data() + 0x500u, agpTextureData, sizeof(agpTextureData));
+        const uint32_t agpDmaObject[3] = {
+            0x00010002u, 0x00000FFFu, agpBase
+        };
+        float agpFetchedVertices[6]{};
+        uint8_t agpDecodedTexture[16]{};
+        uint32_t agpTexturePitch = 0, agpGet = 0, agpMethods = 0;
+        uint32_t restoreGet = 0, restoreMethods = 0;
+        const int bindResult = bindAgpTranslator(TranslateTestAgp, &agpView);
+        const int objectResult = writeRamin(0x100u, agpDmaObject, sizeof(agpDmaObject));
+        const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(agpContextStream), &agpGet, &agpMethods);
+        const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
+            submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) == 0
+            ? readVertexArray(channel, 0u, 0u, 0u, 2u, agpFetchedVertices,
+                sizeof(agpFetchedVertices), &vertexStride, &vertexElementBytes) : -1;
+        const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
+            0x500u, 0x1200u, 2u, 2u, 8u, agpDecodedTexture,
+            sizeof(agpDecodedTexture), &agpTexturePitch);
+        const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const int restoreStream = writeVram(0x1000u, restoreContexts,
+            sizeof(restoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
+                &restoreGet, &restoreMethods) : -1;
+        const int unbindResult = bindAgpTranslator(nullptr, nullptr);
+        if (bindResult != 0 || objectResult != 0 || pushResult != 0 ||
+            agpGet != sizeof(agpContextStream) || agpMethods != 3u ||
+            vertexResult != 0 ||
+            std::memcmp(agpVertexData, agpFetchedVertices, sizeof(agpVertexData)) != 0 ||
+            textureResult != 0 || agpTexturePitch != 8u ||
+            agpDecodedTexture[0] != 1u || agpDecodedTexture[1] != 2u ||
+            agpDecodedTexture[2] != 3u ||
+            restoreObject != 0 || restoreStream != 0 ||
+            restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
+            unbindResult != 0) {
+            std::cerr << "FAIL: AGP aperture resolver vertex/texture translation"
+                      << " bind=" << bindResult << " object=" << objectResult
+                      << " push=" << pushResult << " methods=" << agpMethods
+                      << " vertex=" << vertexResult << " texture=" << textureResult
+                      << " pitch=" << agpTexturePitch << " restore="
+                      << restoreObject << "/" << restoreStream
                       << " unbind=" << unbindResult << "\\n";
             stop();
             return 1;
