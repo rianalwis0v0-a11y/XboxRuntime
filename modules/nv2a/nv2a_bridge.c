@@ -73,10 +73,10 @@ static void mark_all_textures_dirty(void);
 static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
 static void release_texture_cache(void);
 
-/* Resolve a checked byte span from either NV2A local VRAM or the explicitly
- * bound guest-physical PCI window. DMA base_address is normalized by
- * resolve_dma_instance(): VRAM offset for target=VRAM, mapping-relative
- * offset for target=PCI. AGP remains unsupported until GART translation exists. */
+/* Resolve a checked byte span from NV2A local VRAM, explicitly bound PCI
+ * memory, or the host-supplied AGP/GART adapter. DMA target encodings are
+ * defined by the NV2A object format; NVM_TILED is rejected until tile
+ * address swizzling is implemented. */
 static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
                         uint32_t length, const uint8_t** output)
 {
@@ -87,21 +87,21 @@ static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
         return 0;
 
     const uint64_t address = (uint64_t)dma->base_address + offset;
-    if (dma->dma_target == 0u) {
+    if (dma->dma_target == XBOX_NV2A_DMA_TARGET_LOCAL) {
         if (!g_vram || address > XBOX_VRAM_SIZE ||
             length > (uint64_t)XBOX_VRAM_SIZE - address)
             return 0;
         *output = g_vram + (size_t)address;
         return 1;
     }
-    if (dma->dma_target == 0x00020000u) {
+    if (dma->dma_target == XBOX_NV2A_DMA_TARGET_PCI) {
         if (!g_guest_physical_memory || address > g_guest_physical_length ||
             length > (uint64_t)g_guest_physical_length - address)
             return 0;
         *output = g_guest_physical_memory + (size_t)address;
         return 1;
     }
-    if (dma->dma_target == 0x00010000u) {
+    if (dma->dma_target == XBOX_NV2A_DMA_TARGET_AGP) {
         const void* translated = NULL;
         uint32_t contiguous_length = 0;
         if (!g_agp_translate ||
@@ -1936,23 +1936,25 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
 
     if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
         return 5;
-    if (target == 0u) {
+    if (target == XBOX_NV2A_DMA_TARGET_LOCAL) {
         if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
             return 7;
-    } else if (target == 0x00020000u) {
+    } else if (target == XBOX_NV2A_DMA_TARGET_PCI) {
         /* PCI DMA addresses resolve against the host runtime's explicitly
          * bound guest-physical RAM window. */
         if (!g_guest_physical_memory || base < g_guest_physical_base ||
             base - g_guest_physical_base > g_guest_physical_length ||
             limit > g_guest_physical_length - (base - g_guest_physical_base))
             return 7;
-    } else if (target == 0x00010000u) {
-        /* AGP base is an aperture-relative address. The host's GART adapter
-         * validates/translates each requested span; do not assume a PTE layout. */
+    } else if (target == XBOX_NV2A_DMA_TARGET_AGP) {
+        /* AGP aperture offsets are 27-bit; the host GART adapter resolves
+         * each span because the page-table format belongs to the platform. */
         if ((uint64_t)base + limit > 0x08000000ull)
             return 7;
+    } else if (target == XBOX_NV2A_DMA_TARGET_LOCAL_TILED) {
+        return 6; /* Valid target encoding, tiled address swizzle not implemented. */
     } else {
-        return 6; /* Reserved DMA target. */
+        return 6; /* Unknown DMA target encoding. */
     }
 
     output->handle = handle;
@@ -1960,7 +1962,7 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
     output->dma_class = dma_class;
     output->dma_target = target;
     output->engine = engine;
-    output->base_address = target == 0x00020000u
+    output->base_address = target == XBOX_NV2A_DMA_TARGET_PCI
         ? base - g_guest_physical_base : base;
     output->limit = limit;
     output->mapped_length = limit;
