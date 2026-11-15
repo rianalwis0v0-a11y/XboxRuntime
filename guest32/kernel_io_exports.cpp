@@ -197,7 +197,7 @@ void InitializeDeviceObject(GuestDeviceObject* device, SIZE_T totalSize,
                             void* driver, ULONG deviceType,
                             ULONG extensionSize, BOOLEAN exclusive) {
     device->Type = 3; // IO_TYPE_DEVICE
-    device->Size = static_cast<USHORT>(totalSize > 0xFFFFu ? 0xFFFFu : totalSize);
+    device->Size = static_cast<USHORT>(totalSize);
     device->ReferenceCount = 1;
     device->DriverObject = driver;
     device->MountedOrSelfDevice = device;
@@ -211,8 +211,8 @@ void InitializeDeviceObject(GuestDeviceObject* device, SIZE_T totalSize,
     device->DeletePending = FALSE;
     device->SectorSize = 512;
     device->AlignmentRequirement = 0;
-    device->DeviceQueue.Type = 0;
-    device->DeviceQueue.Size = static_cast<UCHAR>(sizeof(GuestDeviceQueue) / sizeof(ULONG));
+    device->DeviceQueue.Type = 4;
+    device->DeviceQueue.Size = static_cast<UCHAR>(sizeof(GuestDeviceQueue));
     device->DeviceQueue.Busy = 0;
     InitializeDeviceList(&device->DeviceQueue.DeviceListHead);
     device->DeviceLock.Type = 0; // NotificationEvent
@@ -230,7 +230,7 @@ extern "C" LONG __stdcall K_IoCreateDevice(
     ULONG deviceType, BOOLEAN exclusive, void** deviceObject) {
     if (!deviceObject) return LONG(0xC000000Du);
     *deviceObject = nullptr;
-    if (!driverObject || deviceType > 0xFFu || extensionSize > 0x1000000u)
+    if (!driverObject || deviceType > 0xFFu || extensionSize > (0xFFFFu - sizeof(GuestDeviceObject)))
         return LONG(0xC000000Du);
     if (deviceName) return kStatusNotSupported; // named-device namespace is not wired yet
     if (extensionSize > SIZE_MAX - sizeof(GuestDeviceObject))
