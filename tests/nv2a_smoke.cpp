@@ -55,6 +55,16 @@ static int __cdecl TranslateTestAgp(uint32_t aperture_offset,
     *contiguous_length = static_cast<uint32_t>(view->bytes->size() - offset);
     return 1;
 }
+static int __cdecl TranslateShortAgp(uint32_t aperture_offset,
+    uint32_t requested_length, const void** host_span,
+    uint32_t* contiguous_length, void* context)
+{
+    if (!TranslateTestAgp(aperture_offset, requested_length, host_span,
+            contiguous_length, context))
+        return 0;
+    if (*contiguous_length) --*contiguous_length;
+    return 1;
+}
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
@@ -795,6 +805,12 @@ int main() {
         const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
             0x500u, 0x1200u, 2u, 2u, 8u, agpDecodedTexture,
             sizeof(agpDecodedTexture), &agpTexturePitch);
+        const int shortBindResult = bindAgpTranslator(TranslateShortAgp, &agpView);
+        uint32_t shortGet = 0, shortMethods = 0;
+        const int shortSpanPushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(agpContextStream), &shortGet, &shortMethods);
+        const int restoreAgpResolverResult = bindAgpTranslator(
+            TranslateTestAgp, &agpView);
 
         /* NVM_TILED (0x00010000) is not AGP and must never reach the GART
          * callback. Until tile swizzling is implemented, reject it cleanly. */
@@ -820,6 +836,8 @@ int main() {
         if (bindResult != 0 || objectResult != 0 ||
             resolveAgpResult != 0 || agpResolvedInfo.dma_target != 0x00030000u ||
             pushResult != 0 || agpGet != sizeof(agpContextStream) || agpMethods != 3u ||
+            shortBindResult != 0 || shortSpanPushResult != 10 ||
+            shortGet != 0u || shortMethods != 0u || restoreAgpResolverResult != 0 ||
             vertexResult != 0 ||
             std::memcmp(agpVertexData, agpFetchedVertices, sizeof(agpVertexData)) != 0 ||
             textureResult != 0 || agpTexturePitch != 8u ||
@@ -834,6 +852,8 @@ int main() {
                       << " resolveAGP=" << resolveAgpResult
                       << " target=0x" << std::hex << agpResolvedInfo.dma_target << std::dec
                       << " push=" << pushResult << " methods=" << agpMethods
+                      << " short=" << shortBindResult << "/" << shortSpanPushResult
+                      << "/" << restoreAgpResolverResult
                       << " vertex=" << vertexResult << " texture=" << textureResult
                       << " pitch=" << agpTexturePitch
                       << " tiled=" << tiledObjectResult << "/" << tiledResolveResult
