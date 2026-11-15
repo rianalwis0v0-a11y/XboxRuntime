@@ -19,14 +19,17 @@ bool EqualHex(const std::uint8_t* bytes, const char* hex, std::size_t count) {
 }
 int main() {
     static_assert(sizeof(void*) == 4, "guest crypto ABI test must be x86");
-    alignas(4) std::array<std::uint8_t,92> context{};
+    alignas(4) std::array<std::uint8_t,116> context{};
     std::uint8_t digest[20]{};
     const char abc[]="abc";
+    context.fill(0xA5);
     K_XcSHAInit(context.data());
+    if (!std::all_of(context.begin(), context.begin()+24, [](std::uint8_t b){return b==0xA5;})) return Fail("SHA1 reserved prefix preserved");
     K_XcSHAUpdate(context.data(), reinterpret_cast<std::uint8_t*>(const_cast<char*>(abc)), 3);
     K_XcSHAFinal(context.data(), digest);
     if (!EqualHex(digest, "a9993e364706816aba3e25717850c26c9cd0d89d", 20)) return Fail("SHA1 abc vector");
-    if (std::any_of(context.begin(), context.end(), [](std::uint8_t b){return b!=0;})) return Fail("SHA1 context zeroization");
+    if (std::any_of(context.begin()+24, context.end(), [](std::uint8_t b){return b!=0;})) return Fail("SHA1 inner context zeroization");
+    if (!std::all_of(context.begin(), context.begin()+24, [](std::uint8_t b){return b==0xA5;})) return Fail("SHA1 final preserves reserved prefix");
 
     const char longMessage[]="abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
     K_XcSHAInit(context.data());
@@ -35,6 +38,13 @@ int main() {
     K_XcSHAFinal(context.data(), digest);
     if (!EqualHex(digest, "84983e441c3bd26ebaae4aa1f95129e5e54670f1", 20))
         return Fail("SHA1 multi-update/multi-block vector");
+
+    std::uint8_t rc4KeyStruct[264]{};
+    std::uint8_t rc4Key[3]={'K','e','y'};
+    std::uint8_t rc4Data[9]={'P','l','a','i','n','t','e','x','t'};
+    K_XcRC4Key(rc4KeyStruct, sizeof(rc4Key), rc4Key);
+    K_XcRC4Crypt(rc4KeyStruct, sizeof(rc4Data), rc4Data);
+    if (!EqualHex(rc4Data, "bbf316e8d940af0ad3", sizeof(rc4Data))) return Fail("RC4 known-answer vector");
 
     std::uint8_t mutableKey[20]; std::memset(mutableKey, 0x0b, sizeof(mutableKey));
     const char message[]="Hi There";
@@ -48,6 +58,6 @@ int main() {
         unsigned ones=0; for (unsigned bit=0;bit<8;++bit) ones+=(byte>>bit)&1u;
         if ((ones & 1u)!=1u) return Fail("DES odd parity");
     }
-    std::puts("kernel_crypto_guest_smoke: PASS (x86 stdcall, SHA1 streaming, HMAC-SHA1, DES odd parity)");
+    std::puts("kernel_crypto_guest_smoke: PASS (x86 stdcall, SHA1 streaming, RC4, HMAC-SHA1, DES odd parity)");
     return 0;
 }
