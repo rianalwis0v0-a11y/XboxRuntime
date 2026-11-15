@@ -758,8 +758,9 @@ int main() {
         std::memcpy(agpMemory.data(), agpContextStream, sizeof(agpContextStream));
         std::memcpy(agpMemory.data() + 0x300u, agpVertexData, sizeof(agpVertexData));
         std::memcpy(agpMemory.data() + 0x500u, agpTextureData, sizeof(agpTextureData));
+        /* NV_DMA_TARGET_AGP is 0x00030000; 0x00010000 is NVM_TILED. */
         const uint32_t agpDmaObject[3] = {
-            0x00010002u, 0x00000FFFu, agpBase
+            0x00030002u, 0x00000FFFu, agpBase
         };
         float agpFetchedVertices[6]{};
         uint8_t agpDecodedTexture[16]{};
@@ -767,6 +768,8 @@ int main() {
         uint32_t restoreGet = 0, restoreMethods = 0;
         const int bindResult = bindAgpTranslator(TranslateTestAgp, &agpView);
         const int objectResult = writeRamin(0x100u, agpDmaObject, sizeof(agpDmaObject));
+        DmaInfo agpResolvedInfo{};
+        const int resolveAgpResult = resolveDma(channel, dmaHandle, &agpResolvedInfo);
         const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
             sizeof(agpContextStream), &agpGet, &agpMethods);
         const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
@@ -776,6 +779,17 @@ int main() {
         const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
             0x500u, 0x1200u, 2u, 2u, 8u, agpDecodedTexture,
             sizeof(agpDecodedTexture), &agpTexturePitch);
+
+        /* NVM_TILED (0x00010000) is not AGP and must never reach the GART
+         * callback. Until tile swizzling is implemented, reject it cleanly. */
+        const uint32_t tiledDmaObject[3] = {
+            0x00010002u, 0x00000FFFu, agpBase
+        };
+        const int tiledObjectResult = writeRamin(
+            0x100u, tiledDmaObject, sizeof(tiledDmaObject));
+        DmaInfo tiledResolvedInfo{};
+        const int tiledResolveResult = resolveDma(
+            channel, dmaHandle, &tiledResolvedInfo);
         const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
         const uint32_t restoreContexts[] = {
             (1u << 18) | 0x019Cu, dmaHandle,
@@ -787,22 +801,27 @@ int main() {
             ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
                 &restoreGet, &restoreMethods) : -1;
         const int unbindResult = bindAgpTranslator(nullptr, nullptr);
-        if (bindResult != 0 || objectResult != 0 || pushResult != 0 ||
-            agpGet != sizeof(agpContextStream) || agpMethods != 3u ||
+        if (bindResult != 0 || objectResult != 0 ||
+            resolveAgpResult != 0 || agpResolvedInfo.dma_target != 0x00030000u ||
+            pushResult != 0 || agpGet != sizeof(agpContextStream) || agpMethods != 3u ||
             vertexResult != 0 ||
             std::memcmp(agpVertexData, agpFetchedVertices, sizeof(agpVertexData)) != 0 ||
             textureResult != 0 || agpTexturePitch != 8u ||
             agpDecodedTexture[0] != 1u || agpDecodedTexture[1] != 2u ||
             agpDecodedTexture[2] != 3u ||
+            tiledObjectResult != 0 || tiledResolveResult != 6 ||
             restoreObject != 0 || restoreStream != 0 ||
             restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
             unbindResult != 0) {
             std::cerr << "FAIL: AGP aperture resolver vertex/texture translation"
                       << " bind=" << bindResult << " object=" << objectResult
+                      << " resolveAGP=" << resolveAgpResult
+                      << " target=0x" << std::hex << agpResolvedInfo.dma_target << std::dec
                       << " push=" << pushResult << " methods=" << agpMethods
                       << " vertex=" << vertexResult << " texture=" << textureResult
-                      << " pitch=" << agpTexturePitch << " restore="
-                      << restoreObject << "/" << restoreStream
+                      << " pitch=" << agpTexturePitch
+                      << " tiled=" << tiledObjectResult << "/" << tiledResolveResult
+                      << " restore=" << restoreObject << "/" << restoreStream
                       << " unbind=" << unbindResult << "\\n";
             stop();
             return 1;
