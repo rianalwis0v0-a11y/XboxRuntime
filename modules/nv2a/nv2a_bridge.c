@@ -2771,11 +2771,14 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     if (get > dma->mapped_length || put > dma->mapped_length || (get & 3u) || (put & 3u))
         return 9;
 
-    const uint8_t* dma_memory = dma->dma_target == 0u ? g_vram :
-        (dma->dma_target == 0x00020000u ? g_guest_physical_memory : NULL);
-    if (!dma_memory) return 10;
+    /* Use the same checked address-space resolver for pushbuffer reads as
+     * vertex and texture fetches. Pass a resolved span with base=0 so the
+     * packet walker never needs to know whether memory is VRAM or PCI RAM. */
+    const uint8_t* dma_memory = NULL;
+    if (!dma_get_span(dma, 0u, dma->mapped_length, &dma_memory))
+        return 10;
     uint32_t checked_get = get, checked_methods = 0;
-    int result = walk_dma_pushbuffer(channel, dma_memory, dma->base_address,
+    int result = walk_dma_pushbuffer(channel, dma_memory, 0u,
         dma->mapped_length, get, put, &checked_get, &checked_methods, 0);
     if (result != 0) {
         raise_dma_pusher_error(result);
@@ -2784,7 +2787,7 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
 
     /* Only dispatch after the complete packet/control-flow stream validates. */
     uint32_t executed_get = get, executed_methods = 0;
-    result = walk_dma_pushbuffer(channel, dma_memory, dma->base_address,
+    result = walk_dma_pushbuffer(channel, dma_memory, 0u,
         dma->mapped_length, get, put, &executed_get, &executed_methods, 1);
     if (result != 0) {
         raise_dma_pusher_error(result);
