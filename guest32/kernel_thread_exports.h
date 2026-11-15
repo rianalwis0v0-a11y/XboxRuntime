@@ -9,7 +9,7 @@ void __fastcall K_HalClearSoftwareInterrupt(UCHAR requestIrql);
 void __fastcall K_HalRequestSoftwareInterrupt(UCHAR requestIrql);
 BOOLEAN __stdcall K_KeAlertThread(HANDLE thread, UCHAR processorMode);
 void __stdcall K_KeInitializeApc(void* apc, void* thread,
-    void (__stdcall* kernelRoutine)(void*, void**, void**, void**, void**),
+    void (__stdcall* kernelRoutine)(void*, XboxKernelNormalRoutine*, void**, void**, void**),
     void (__stdcall* rundownRoutine)(void*),
     XboxKernelNormalRoutine normalRoutine,
     UCHAR processorMode, void* normalContext);
