@@ -216,3 +216,16 @@ Known limitations:
 - EEPROM crypto/HMAC verification, encrypted/factory index queries, factory provisioning, UEM/refurb metadata, and actual AV hardware remain unsupported.
 - x86 thunk test uses an isolated test dispatch shim with the same production thunk encoding; production KernelDispatch has explicit routes for 2/3/24/25/29. The full production dispatcher is not itself invoked by this smoke executable.
 - Need inspect both CI runs, correct any compile/test issues, then move on to the remaining 52 exports with owner coordination.
+
+
+[2026-11-15 09:12 UTC] [Kernel Export Developer A — full CI audit failure and correction]
+Status: IN_PROGRESS — dedicated API tests PASS; full kernel workflow found a static-audit integration issue and a correction is committed.
+Branch / commit: work/kernel-export-half-a / 339cb6e0728926cfc129304927d022d0ae080ba1
+PR #22: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Summary:
+- Dedicated Group A workflow 43696882443 completed SUCCESS. Windows x64 host descriptor/checksum test passed 1/1; Windows x86 guest import-thunk test passed 1/1; both target builds passed.
+- The broader kernel host/guest workflow 43696882434 failed before build because tools/audit_kernel_exports.py requires each conditional-jump target to be a one-line `label: jmp handler`. The new AvSendTVEncoderOption fail-fast label used a multi-instruction sequence, so the audit reported `conditional jumps without handler labels: ['av_send_unsupported']`. This was a static-audit parser contract issue, not an API build or test failure.
+- Corrected it by adding a dedicated stdcall K_AvSendTVEncoderOption wrapper that calls K_Unsupported(2), and changed the dispatcher label to a single-line tail-jump. This preserves fail-fast behavior while satisfying the repository's audit format.
+Files changed in this correction: guest32/kernel_compat.cpp.
+Build and tests: Group A workflow 43696882443 PASS (host64 + guest32). Full workflow 43696882434 failed at static export audit; no host/guest build steps ran. Need a fresh full workflow run against commit 339cb6e0728926cfc129304927d022d0ae080ba1 to confirm the audit correction.
+Known limitations: All 57 ordinals still not implemented; 2 behavior APIs are tested, 3 explicitly unsupported, and 52 remain with parallel owners. Do not treat the full workflow failure as a behavioral API failure, but do not claim the full kernel CI is green until rerun.
