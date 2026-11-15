@@ -118,6 +118,20 @@ int main(void)
     }
 
 
+    /* TEX0..TEX3 are shader inputs v9..v12, not v8..v11. */
+    for (DWORD reg = 9u; reg <= 12u; ++reg) {
+        DWORD instruction[4];
+        char name[40], required[48];
+        make_input_shader(instruction, NV2A_VSH_MAC_MOV,
+                          NV2A_VSH_ILU_NOP, 0);
+        instruction[1] |= reg << 9;
+        snprintf(name, sizeof(name), "nv2a_tex_input_v%u", (unsigned)reg);
+        snprintf(required, sizeof(required), "oPos = (v%u)", (unsigned)reg);
+        const int result = compile_program(name, instruction, 1, required,
+            (uint16_t)(1u << reg));
+        if (result) return 37 + result;
+    }
+
     /* ARL updates a0.x, then a later slot uses it for relative c[] access. */
     {
         DWORD instructions[8] = {0};
