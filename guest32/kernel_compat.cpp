@@ -604,6 +604,78 @@ LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestI
 }
 extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
 extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+
+#pragma pack(push, 4)
+struct GuestAnsiStringIo { USHORT Length; USHORT MaximumLength; char* Buffer; };
+struct GuestObjectAttributesIo { HANDLE RootDirectory; GuestAnsiStringIo* ObjectName; ULONG Attributes; };
+#pragma pack(pop)
+static_assert(sizeof(GuestAnsiStringIo) == 8, "Xbox ANSI_STRING x86 layout");
+static_assert(sizeof(GuestObjectAttributesIo) == 12, "Xbox OBJECT_ATTRIBUTES x86 layout");
+extern "C" LONG __stdcall K_NtQueryInformationFile(
+    HANDLE, GuestIoStatusBlock*, void*, ULONG, ULONG);
+extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
+    HANDLE, GuestIoStatusBlock*, void*, ULONG, ULONG);
+
+extern "C" LONG __stdcall K_IoCreateFile(
+    HANDLE* fileHandle, ACCESS_MASK desiredAccess,
+    GuestObjectAttributesIo* objectAttributes, GuestIoStatusBlock* ioStatus,
+    const LARGE_INTEGER* allocationSize, ULONG fileAttributes,
+    ULONG shareAccess, ULONG disposition, ULONG createOptions, ULONG options) {
+    if (!fileHandle || !objectAttributes || !objectAttributes->ObjectName ||
+        !ioStatus)
+        return LONG(0xC000000Du);
+    *fileHandle = nullptr;
+    if (objectAttributes->RootDirectory || allocationSize || options != 0)
+        return LONG(0xC00000BBu);
+    const GuestAnsiStringIo* ansi = objectAttributes->ObjectName;
+    if (!ansi->Buffer || !ansi->Length || ansi->Length > ansi->MaximumLength)
+        return LONG(0xC000000Du);
+    const int wideLength = MultiByteToWideChar(CP_ACP, 0, ansi->Buffer,
+                                                ansi->Length, nullptr, 0);
+    if (wideLength <= 0 || wideLength > 0x7FFF / int(sizeof(wchar_t)))
+        return LONG(0xC0000033u);
+    std::wstring wide(static_cast<size_t>(wideLength), L'\0');
+    if (!MultiByteToWideChar(CP_ACP, 0, ansi->Buffer, ansi->Length,
+                             wide.data(), wideLength))
+        return LONG(0xC0000033u);
+    GuestUnicodeString unicodeName{};
+    unicodeName.Length = static_cast<USHORT>(wideLength * sizeof(wchar_t));
+    unicodeName.MaximumLength = unicodeName.Length;
+    unicodeName.Buffer = wide.data();
+    GuestObjectAttributes converted{};
+    converted.Length = sizeof(converted);
+    converted.RootDirectory = nullptr;
+    converted.ObjectName = &unicodeName;
+    converted.Attributes = objectAttributes->Attributes;
+    return NtCreateFileImpl(fileHandle, desiredAccess, &converted, ioStatus,
+                            fileAttributes, shareAccess, disposition,
+                            createOptions);
+}
+
+extern "C" LONG __stdcall K_IoQueryFileInformation(
+    void* fileObject, ULONG informationClass, ULONG length,
+    void* information, ULONG* returnedLength) {
+    if (returnedLength) *returnedLength = 0;
+    if (!fileObject || !information) return LONG(0xC000000Du);
+    GuestIoStatusBlock io{};
+    const LONG status = K_NtQueryInformationFile(
+        reinterpret_cast<HANDLE>(fileObject), &io, information, length,
+        informationClass);
+    if (returnedLength && status == 0) *returnedLength = io.Information;
+    return status;
+}
+extern "C" LONG __stdcall K_IoQueryVolumeInformation(
+    void* fileObject, ULONG informationClass, ULONG length,
+    void* information, ULONG* returnedLength) {
+    if (returnedLength) *returnedLength = 0;
+    if (!fileObject || !information) return LONG(0xC000000Du);
+    GuestIoStatusBlock io{};
+    const LONG status = K_NtQueryVolumeInformationFile(
+        reinterpret_cast<HANDLE>(fileObject), &io, information, length,
+        informationClass);
+    if (returnedLength && status == 0) *returnedLength = io.Information;
+    return status;
+}
 struct GuestFileNetworkOpenInformation {
     LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
     LARGE_INTEGER AllocationSize, EndOfFile;
@@ -1855,6 +1927,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
+        cmp eax, 66
+        je io_create_file
+        cmp eax, 75
+        je io_query_file_information
+        cmp eax, 76
+        je io_query_volume_information
         cmp eax, 74
         je io_invalid_device_request
         cmp eax, 361
@@ -2374,6 +2452,9 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    io_create_file: jmp K_IoCreateFile
+    io_query_file_information: jmp K_IoQueryFileInformation
+    io_query_volume_information: jmp K_IoQueryVolumeInformation
     io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
