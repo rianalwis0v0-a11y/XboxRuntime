@@ -25,6 +25,9 @@
 #include "kernel_compat.h"
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
+#include "kernel_object_reference.h"
+#include "kernel_crypto.h"
+#include "kernel_time.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -124,14 +127,10 @@ DWORD KernelTimeout(const LARGE_INTEGER* timeout) {
         remaining100ns = ULONGLONG(-(ticks + 1)) + 1;
     } else if (ticks > 0) {
         // Absolute NT time is measured from 1601-01-01, like FILETIME.
-        FILETIME ft{};
-        GetSystemTimeAsFileTime(&ft);
-        ULARGE_INTEGER now{};
-        now.LowPart = ft.dwLowDateTime;
-        now.HighPart = ft.dwHighDateTime;
+        const ULONGLONG now = static_cast<ULONGLONG>(XboxKernelCurrentSystemTime100ns());
         const ULONGLONG deadline = static_cast<ULONGLONG>(ticks);
-        if (deadline <= now.QuadPart) return 0;
-        remaining100ns = deadline - now.QuadPart;
+        if (deadline <= now) return 0;
+        remaining100ns = deadline - now;
     }
     if (!remaining100ns) return 0;
     // Round up: a positive sub-millisecond interval must not become a poll.
@@ -556,7 +555,6 @@ extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
     LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){LARGE_INTEGER f{};QueryPerformanceFrequency(&f);return f.QuadPart;}
-extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){if(out){FILETIME ft{};GetSystemTimeAsFileTime(&ft);out->LowPart=ft.dwLowDateTime;out->HighPart=LONG(ft.dwHighDateTime);}}
 extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
 extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
 
@@ -2232,6 +2230,32 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_semaphore
         cmp eax, 216
         je nt_query_timer
+        cmp eax, 228
+        je nt_set_system_time
+        cmp eax, 335
+        je xc_sha_init
+        cmp eax, 336
+        je xc_sha_update
+        cmp eax, 337
+        je xc_sha_final
+        cmp eax, 338
+        je xc_rc4_key
+        cmp eax, 339
+        je xc_rc4_crypt
+        cmp eax, 340
+        je xc_hmac
+        cmp eax, 346
+        je xc_des_key_parity
+        cmp eax, 350
+        je xc_crypt_service
+        cmp eax, 244
+        je ob_reference_object_by_pointer
+        cmp eax, 246
+        je ob_reference_object_by_handle
+        cmp eax, 250
+        je obf_dereference_object
+        cmp eax, 251
+        je obf_reference_object
         push eax
         call K_Unsupported
         add esp, 4
@@ -2449,6 +2473,19 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    nt_set_system_time: jmp K_NtSetSystemTime
+    xc_sha_init: jmp K_XcSHAInit
+    xc_sha_update: jmp K_XcSHAUpdate
+    xc_sha_final: jmp K_XcSHAFinal
+    xc_rc4_key: jmp K_XcRC4Key
+    xc_rc4_crypt: jmp K_XcRC4Crypt
+    xc_hmac: jmp K_XcHMAC
+    xc_des_key_parity: jmp K_XcDESKeyParity
+    xc_crypt_service: jmp K_XcCryptService
+    ob_reference_object_by_pointer: jmp K_ObReferenceObjectByPointer
+    ob_reference_object_by_handle: jmp K_ObReferenceObjectByHandle
+    obf_dereference_object: jmp K_ObfDereferenceObject
+    obf_reference_object: jmp K_ObfReferenceObject
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
@@ -2600,6 +2637,7 @@ void XboxKernelSetStartupEvent(HANDLE eventHandle) {
 }
 
 void XboxKernelShutdownTitle() {
+    XboxKernelResetSystemTime();
     g_startupEvent = nullptr;
     XboxKernelCloseAllObjectHandles();
     if (g_stubPage) {
