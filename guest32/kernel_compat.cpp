@@ -2247,6 +2247,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je xc_hmac
         cmp eax, 346
         je xc_des_key_parity
+        cmp eax, 350
+        je xc_crypt_service
         push eax
         call K_Unsupported
         add esp, 4
@@ -2471,6 +2473,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     xc_rc4_crypt: jmp K_XcRC4Crypt
     xc_hmac: jmp K_XcHMAC
     xc_des_key_parity: jmp K_XcDESKeyParity
+    xc_crypt_service: jmp K_XcCryptService
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
