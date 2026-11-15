@@ -944,9 +944,9 @@ int main() {
     HostVertex hostVertices[2]{};
     uint32_t hostVertexStride = 0, hostFvf = 0;
     if (writeVram(0x1400u, vertexColors, sizeof(vertexColors)) != 0 ||
-        writeVram(0x1E00u, vertexWeights, sizeof(vertexWeights)) != 0 ||
-        writeVram(0x1F00u, vertexFog, sizeof(vertexFog)) != 0 ||
-        writeVram(0x2000u, vertexPointSize, sizeof(vertexPointSize)) != 0 ||
+        writeVram(0x1B00u, vertexWeights, sizeof(vertexWeights)) != 0 ||
+        writeVram(0x1C00u, vertexFog, sizeof(vertexFog)) != 0 ||
+        writeVram(0x1D00u, vertexPointSize, sizeof(vertexPointSize)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
@@ -956,13 +956,13 @@ int main() {
         writeVram(0x1000u, vertexContextBStream, sizeof(vertexContextBStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, sizeof(vertexContextBStream),
                       &dmaGet, &dmaMethods) != 0 ||
-        submit(0u, 0x1724u, 0x1E00u) != 0 ||
+        submit(0u, 0x1724u, 0xB00u) != 0 ||
         submit(0u, 0x1764u, (16u << 8) | (4u << 4) | 2u) != 0 ||
         submit(0u, 0x1728u, 0x600u) != 0 ||
         submit(0u, 0x1768u, (12u << 8) | (3u << 4) | 2u) != 0 ||
-        submit(0u, 0x1734u, 0x1F00u) != 0 ||
+        submit(0u, 0x1734u, 0xC00u) != 0 ||
         submit(0u, 0x1774u, (4u << 8) | (1u << 4) | 2u) != 0 ||
-        submit(0u, 0x1738u, 0x2000u) != 0 ||
+        submit(0u, 0x1738u, 0xD00u) != 0 ||
         submit(0u, 0x1778u, (4u << 8) | (1u << 4) | 2u) != 0 ||
         submit(0u, 0x1730u, 0x700u) != 0 ||
         submit(0u, 0x1770u, (4u << 8) | (4u << 4)) != 0 ||
