@@ -1897,7 +1897,19 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je exf_insert_tail
         cmp eax, 34
         je exf_remove_head
-                cmp eax, 38
+                cmp eax, 39
+        je hal_disable_system_interrupt
+        cmp eax, 43
+        je hal_enable_system_interrupt
+        cmp eax, 44
+        je hal_get_interrupt_vector
+        cmp eax, 46
+        je hal_read_write_pci_space
+        cmp eax, 139
+        je ke_restore_fp_state
+        cmp eax, 142
+        je ke_save_fp_state
+        cmp eax, 38
         je hal_clear_softint
         cmp eax, 48
         je hal_request_softint
@@ -2426,6 +2438,12 @@ extern "C" __declspec(naked) void KernelDispatch(){
     mm_query_size: jmp K_MmQueryAllocationSize
     mm_set_protect: jmp K_MmSetAddressProtect
 
+    hal_disable_system_interrupt: jmp K_HalDisableSystemInterrupt
+    hal_enable_system_interrupt: jmp K_HalEnableSystemInterrupt
+    hal_get_interrupt_vector: jmp K_HalGetInterruptVector
+    hal_read_write_pci_space: jmp K_HalReadWritePCISpace
+    ke_restore_fp_state: jmp K_KeRestoreFloatingPointState
+    ke_save_fp_state: jmp K_KeSaveFloatingPointState
     hal_clear_softint: jmp K_HalClearSoftwareInterrupt
     hal_request_softint: jmp K_HalRequestSoftwareInterrupt
     ke_alert_thread: jmp K_KeAlertThread
