@@ -2702,6 +2702,11 @@ static int nv2a_build_translated_draw_packet(
             !nv2a_get_active_vertex_program_info(
                 &instruction_count, &metadata, &packet->vertex_shader_hash))
             return 0;
+        const uint16_t supported_input_mask =
+            (uint16_t)((1u << 0) | (1u << 2) | (1u << 3) | (1u << 4) |
+                       (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12));
+        if (metadata.input_mask & (uint16_t)~supported_input_mask)
+            return 0;
         packet->vertex_shader_input_mask = metadata.input_mask;
     }
     for (uint32_t stage = 0; stage < 4u; ++stage) {
