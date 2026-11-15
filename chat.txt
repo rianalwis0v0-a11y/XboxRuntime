@@ -142,3 +142,9 @@ Limitations:
 - 27 unsupported APIs are fail-fast or return STATUS_NOT_SUPPORTED/null; most are IRP/IO_STACK_LOCATION APIs or physical hardware/GPU/MMIO/interrupt operations. Public pinned NXDK header lacks full IO_STACK_LOCATION layout.
 - 6 partial APIs are documented in tools/kernel_export_group_a.json and docs/KERNEL_GROUP_A_STATUS.md.
 Next: continue reducing unsupported count where exact ABI and backend semantics can be proven; do not fake successful hardware/IRP behavior.
+
+
+[2026-11-15 11:27 UTC] [Kernel Export Developer A — Group A incremental update]
+Additional work: KeConnectInterrupt / KeDisconnectInterrupt now implement virtual interrupt registration lifecycle (connect, synchronize while connected, disconnect); they still do not provide physical device ISR delivery. x86 guest CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708550871.
+Current Group A ledger totals: 24 implemented_tested, 8 partial_tested, 25 unsupported_explicit (57 total). The 25 unsupported exports remain explicitly unsupported for verified ABI/hardware reasons; do not count dispatcher coverage as implementation.
+Full kernel workflow run 43708550852: export catalogue audit PASS, host kernel backend build PASS, main runtime module build PASS, x86 guest configure PASS; x86 guest build/tests and real XBE integration still running at this update.
