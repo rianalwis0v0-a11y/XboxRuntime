@@ -2398,11 +2398,15 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     uint32_t vertex_count, uint16_t input_mask,
     const uint8_t** output, uint32_t* stride_out)
 {
+    const uint16_t supported_mask =
+        (uint16_t)((1u << 0) | (1u << 2) | (1u << 3) | (1u << 4) |
+                   (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12));
     uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
     size_t required;
     if (output) *output = NULL;
     if (stride_out) *stride_out = 0;
-    if (!vertices || !vertex_count || !output || !stride_out)
+    if (!vertices || !vertex_count || !output || !stride_out ||
+        (input_mask & (uint16_t)~supported_mask))
         return 0;
 
     for (uint32_t reg = 0; reg < 16u; ++reg) {
@@ -2411,12 +2415,11 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
         offsets[reg] = stride;
         switch (reg) {
         case 0u: case 2u: sizes[reg] = 12u; break;
-        case 3u: case 4u: case 5u: case 6u: case 7u: case 8u:
-            sizes[reg] = 4u; break;
+        case 3u: case 4u: sizes[reg] = 4u; break;
         /* NV097 array slots 7..10 supply TEX0..TEX3, which map to
          * programmable shader inputs v9..v12; v7/v8 are backface colors. */
         case 9u: case 10u: case 11u: case 12u: sizes[reg] = 8u; break;
-        default: sizes[reg] = 16u; break;
+        default: return 0;
         }
         if (stride > UINT32_MAX - sizes[reg]) return 0;
         stride += sizes[reg];
@@ -2440,41 +2443,42 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
             const XboxNV2A_VERTEX* v = &vertices[i];
             switch (reg) {
             case 0u: memcpy(dst, &v->x, 12u); break;
-            case 1u: {
-                const float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-                memcpy(dst, weights, sizeof(weights)); break;
-            }
             case 2u: memcpy(dst, &v->nx, 12u); break;
             case 3u: memcpy(dst, &v->diffuse, 4u); break;
             case 4u: memcpy(dst, &v->specular, 4u); break;
-            case 5u: case 6u: {
-                const float zero = 0.0f;
-                memcpy(dst, &zero, sizeof(zero)); break;
-            }
-            case 7u: {
-                const uint32_t opaque_black = 0xFF000000u;
-                memcpy(dst, &opaque_black, sizeof(opaque_black)); break;
-            }
-            case 8u: {
-                const uint32_t transparent_black = 0u;
-                memcpy(dst, &transparent_black, sizeof(transparent_black)); break;
-            }
-            /* The four PGRAPH texture arrays (7..10) feed shader inputs
-             * v9..v12; do not shift them into the backface-color registers. */
             case 9u: memcpy(dst, &v->u, 8u); break;
             case 10u: memcpy(dst, &v->u1, 8u); break;
             case 11u: memcpy(dst, &v->u2, 8u); break;
             case 12u: memcpy(dst, &v->u3, 8u); break;
-            default: {
-                const float generic[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-                memcpy(dst, generic, sizeof(generic)); break;
-            }
+            default: return 0;
             }
         }
     }
     *output = g_nv2a_gpu_vertex_stream;
     *stride_out = stride;
     return 1;
+}
+
+/* Public deterministic staging helper so the exact shader-input layout can
+ * be regression-tested without requiring a live D3D device. */
+int __cdecl XboxNV2A_PackVertexProgramInputs(
+    const XboxNV2A_VERTEX* vertices, uint32_t vertex_count,
+    uint16_t input_mask, void* destination, uint32_t destination_capacity,
+    uint32_t* stride_out)
+{
+    const uint8_t* packed = NULL;
+    uint32_t stride = 0;
+    if (stride_out) *stride_out = 0;
+    if (!destination || !stride_out ||
+        !nv2a_pack_gpu_vertex_stream(vertices, vertex_count, input_mask,
+                                     &packed, &stride))
+        return 1;
+    const uint64_t required = (uint64_t)vertex_count * stride;
+    if (required > destination_capacity)
+        return 2;
+    memcpy(destination, packed, (size_t)required);
+    *stride_out = stride;
+    return 0;
 }
 
 static void nv2a_flush_vertex_constants(void)
