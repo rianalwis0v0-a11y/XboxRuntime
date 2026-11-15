@@ -985,7 +985,7 @@ int main() {
             textureResult != 0 || pitch != 8u ||
             decoded[0] != 0x11u || decoded[1] != 0x12u || decoded[2] != 0x13u ||
             restoreObject != 0 || restoreStream != 0 ||
-            restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
+            restoreGet != sizeof(directRestoreContexts) || restoreMethods != 3u ||
             unbindMemoryResult != 0) {
             std::cerr << "FAIL: direct Xbox AGP linear alias translation"
                       << " bind=" << bindMemoryResult << " object=" << objectResult
