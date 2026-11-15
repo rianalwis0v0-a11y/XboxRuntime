@@ -931,6 +931,11 @@ int main() {
     const uint32_t vertexColors[2] = { 0xFF112233u, 0xFF445566u };
     const uint32_t vertexSpecular[2] = { 0x00112233u, 0x00445566u };
     const float vertexNormals[6] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
+    const float vertexWeights[8] = {
+        0.1f,0.2f,0.3f,0.4f, 0.5f,0.6f,0.7f,0.8f
+    };
+    const float vertexFog[2] = { 0.25f,0.75f };
+    const float vertexPointSize[2] = { 1.0f,2.0f };
     const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
     const float vertexTexcoords1[4] = { 0.125f, 0.25f, 0.625f, 0.875f };
     const float vertexTexcoords2[4] = { 0.2f, 0.3f, 0.4f, 0.5f };
@@ -939,6 +944,9 @@ int main() {
     HostVertex hostVertices[2]{};
     uint32_t hostVertexStride = 0, hostFvf = 0;
     if (writeVram(0x1400u, vertexColors, sizeof(vertexColors)) != 0 ||
+        writeVram(0x1E00u, vertexWeights, sizeof(vertexWeights)) != 0 ||
+        writeVram(0x1F00u, vertexFog, sizeof(vertexFog)) != 0 ||
+        writeVram(0x2000u, vertexPointSize, sizeof(vertexPointSize)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
@@ -948,8 +956,14 @@ int main() {
         writeVram(0x1000u, vertexContextBStream, sizeof(vertexContextBStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, sizeof(vertexContextBStream),
                       &dmaGet, &dmaMethods) != 0 ||
+        submit(0u, 0x1724u, 0x1E00u) != 0 ||
+        submit(0u, 0x1764u, (16u << 8) | (4u << 4) | 2u) != 0 ||
         submit(0u, 0x1728u, 0x600u) != 0 ||
         submit(0u, 0x1768u, (12u << 8) | (3u << 4) | 2u) != 0 ||
+        submit(0u, 0x1734u, 0x1F00u) != 0 ||
+        submit(0u, 0x1774u, (4u << 8) | (1u << 4) | 2u) != 0 ||
+        submit(0u, 0x1738u, 0x2000u) != 0 ||
+        submit(0u, 0x1778u, (4u << 8) | (1u << 4) | 2u) != 0 ||
         submit(0u, 0x1730u, 0x700u) != 0 ||
         submit(0u, 0x1770u, (4u << 8) | (4u << 4)) != 0 ||
         submit(0u, 0x172Cu, 0x400u) != 0 ||
@@ -964,13 +978,21 @@ int main() {
         submit(0u, 0x1788u, (8u << 8) | (2u << 4) | 2u) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
-        hostVertexStride != 64u || hostFvf != 0x4D2u ||
+        hostVertexStride != sizeof(HostVertex) || hostFvf != 0x4D2u ||
         hostVertices[0].nx != 0.0f || hostVertices[0].ny != 0.0f || hostVertices[0].nz != 1.0f ||
         hostVertices[1].nx != 0.0f || hostVertices[1].ny != 1.0f || hostVertices[1].nz != 0.0f ||
         hostVertices[0].diffuse != vertexColors[0] ||
         hostVertices[1].diffuse != vertexColors[1] ||
         hostVertices[0].specular != vertexSpecular[0] ||
         hostVertices[1].specular != vertexSpecular[1] ||
+        hostVertices[0].weights[0] != 0.1f ||
+        hostVertices[0].weights[3] != 0.4f ||
+        hostVertices[1].weights[0] != 0.5f ||
+        hostVertices[1].weights[3] != 0.8f ||
+        hostVertices[0].fog != 0.25f || hostVertices[1].fog != 0.75f ||
+        hostVertices[0].point_size != 1.0f || hostVertices[1].point_size != 2.0f ||
+        (hostVertices[0].input_valid_mask & ((1u << 1) | (1u << 5) | (1u << 6))) !=
+            ((1u << 1) | (1u << 5) | (1u << 6)) ||
         hostVertices[0].u != 0.25f || hostVertices[0].v != 0.5f ||
         hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
         hostVertices[0].u1 != 0.125f || hostVertices[0].v1 != 0.25f ||
