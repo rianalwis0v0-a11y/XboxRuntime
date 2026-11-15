@@ -483,6 +483,17 @@ int main() {
             std::cerr << "FAIL: unsupported backface shader input was silently packed\\n";
             stop(); FreeLibrary(module); return 1;
         }
+        HostVertex missingWeight = vertex;
+        missingWeight.input_valid_mask &= (uint16_t)~(1u << 1);
+        stride = 99u;
+        const int missingArrayResult = packVertexProgramInputs(
+            &missingWeight, 1u,
+            (uint16_t)(0x1E00u | (1u << 1) | (1u << 5) | (1u << 6)),
+            packed, sizeof(packed), &stride);
+        if (missingArrayResult == 0 || stride != 0u) {
+            std::cerr << "FAIL: shader input without a valid guest array was accepted\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
     }
 
     /* NV097 combiner method families map to the Xbox D3D8 combiner states. */
@@ -1006,6 +1017,27 @@ int main() {
         std::cerr << "FAIL: NV2A position/color/TEX0-TEX3 host vertex stream build\\n";
         stop();
         return 1;
+    }
+
+    /* An unsupported optional weight array is ignored if the shader does
+     * not consume v1; if a shader does consume it, packet validation rejects it. */
+    {
+        const int setUnsupportedWeight = submit(
+            0u, 0x1764u, (12u << 8) | (3u << 4) | 2u);
+        const int optionalBuild = buildVertexStream(channel, 0u, 0u, 2u,
+            hostVertices, sizeof(hostVertices), &hostVertexStride, &hostFvf);
+        const int missingWeight = (hostVertices[0].input_valid_mask & (1u << 1)) == 0u;
+        const int restoreWeight = submit(
+            0u, 0x1764u, (16u << 8) | (4u << 4) | 2u);
+        const int restoredBuild = buildVertexStream(channel, 0u, 0u, 2u,
+            hostVertices, sizeof(hostVertices), &hostVertexStride, &hostFvf);
+        if (setUnsupportedWeight != 0 || optionalBuild != 0 || !missingWeight ||
+            restoreWeight != 0 || restoredBuild != 0 ||
+            (hostVertices[0].input_valid_mask & (1u << 1)) == 0u) {
+            std::cerr << "FAIL: optional unsupported weight-array handling\\n";
+            stop();
+            return 1;
+        }
     }
 
     /* Indexed expansion must handle batches larger than the old 255-vertex cap. */
