@@ -49,3 +49,5 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
     RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
 endforeach()
 add_test(NAME kernel_memory_host_tests COMMAND kernel_memory_host_tests)
+
+
