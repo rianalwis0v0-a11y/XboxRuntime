@@ -118,3 +118,27 @@ Coordination:
 - Developer 4 owns remaining Group A Io* IRP/device/file/share/packet/dismount APIs.
 - Requested a clean handoff from Developer 4 for a proposed IRP lifecycle slice: ordinals 59,60,61,62,72,73. No code changes to that slice until Developer 4 confirms its current ownership/helpers.
 No merge to the integration branch was performed; only this shared coordination-board entry is being appended here. PR #22 remains draft.
+
+
+[2026-11-15 11:22 UTC] [Kernel Export Developer A — Group A implementation expansion]
+Status: IN_PROGRESS — all 57 Group A ordinals have exactly one dispatcher route; 24 implemented/tested, 6 partial/tested, 27 explicitly unsupported. No integration merge.
+Branch / PR: work/kernel-export-half-a / draft PR #22 https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/22
+Pinned ABI: XboxDev/nxdk fafbe41b48fa00a31b79dd49ad1f86a30adcdd9e.
+New work since EEPROM tranche:
+- IoCreateFile ANSI_STRING/12-byte x86 OBJECT_ATTRIBUTES path; IoQueryFileInformation and IoQueryVolumeInformation handle-backed helpers.
+- IoCheckShareAccess / IoSetShareAccess / IoRemoveShareAccess implemented with static-asserted 72-byte FILE_OBJECT prefix and 7-byte SHARE_ACCESS.
+- IoCreateDevice / IoDeleteDevice support named and unnamed adapter-local devices; static-asserted 72-byte DEVICE_OBJECT, 68-byte DRIVER_OBJECT, 12-byte KDEVICE_QUEUE and 16-byte KEVENT.
+- IoStartPacket / IoStartNextPacket / IoStartNextPacketByKey use per-device sidecar queues and DriverStartIo; IoDismountVolume and IoDismountVolumeByName call DriverDismountVolume.
+- IoSetIoCompletion uses typed IoCompletion object handles and host IOCP packet queue; related Nt* completion helpers are routed for tests.
+- NtCreateDirectoryObject uses typed directory handles and duplicate-name checks.
+- KDEVICE_QUEUE internal x86 layout corrected to pinned NXDK 12-byte layout.
+- Test coverage includes file/volume I/O, share conflicts and counter updates, device creation/deletion and callbacks, StartIo key selection/order, named-device dismount, APC/thread/interrupt/queue/IRQL behavior, memory stacks/page residency, I/O completion, directory objects, and EEPROM.
+Verification:
+- EEPROM CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43697175322
+- Expanded x86/host CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708119859
+- Named device/share/StartIo/dismount x86 CI PASS: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/43708313884
+- Full kernel export-catalogue audit PASS in latest workflow; subsequent backend build steps were cancelled by a newer push before completion. Earlier full integration reached real XBE execution but failed during TLS cleanup at guest access violation 0x10018DC0.
+Limitations:
+- 27 unsupported APIs are fail-fast or return STATUS_NOT_SUPPORTED/null; most are IRP/IO_STACK_LOCATION APIs or physical hardware/GPU/MMIO/interrupt operations. Public pinned NXDK header lacks full IO_STACK_LOCATION layout.
+- 6 partial APIs are documented in tools/kernel_export_group_a.json and docs/KERNEL_GROUP_A_STATUS.md.
+Next: continue reducing unsupported count where exact ABI and backend semantics can be proven; do not fake successful hardware/IRP behavior.
