@@ -59,6 +59,7 @@ constexpr UCHAR kFileObjectSharedDelete = 1u << 6;
 constexpr ACCESS_MASK kDeleteAccess = 0x00010000u;
 constexpr ACCESS_MASK kGenericRead = 0x80000000u;
 constexpr ACCESS_MASK kGenericWrite = 0x40000000u;
+constexpr ACCESS_MASK kGenericExecute = 0x20000000u;
 constexpr ACCESS_MASK kGenericAll = 0x10000000u;
 struct ShareRequest {
     bool read;
@@ -70,7 +71,7 @@ struct ShareRequest {
 };
 ShareRequest MakeShareRequest(ACCESS_MASK access, ULONG share) {
     return {
-        (access & (0x00000001u | 0x00000020u | kGenericRead | kGenericAll)) != 0,
+        (access & (0x00000001u | 0x00000020u | kGenericRead | kGenericExecute | kGenericAll)) != 0,
         (access & (0x00000002u | 0x00000004u | kGenericWrite | kGenericAll)) != 0,
         (access & (kDeleteAccess | kGenericAll)) != 0,
         (share & 1u) != 0, (share & 2u) != 0, (share & 4u) != 0
