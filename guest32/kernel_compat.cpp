@@ -25,6 +25,7 @@
 #include "kernel_compat.h"
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
+#include "kernel_crypto.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -2232,6 +2233,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_semaphore
         cmp eax, 216
         je nt_query_timer
+        cmp eax, 335
+        je xc_sha_init
+        cmp eax, 336
+        je xc_sha_update
+        cmp eax, 337
+        je xc_sha_final
+        cmp eax, 340
+        je xc_hmac
+        cmp eax, 346
+        je xc_des_key_parity
         push eax
         call K_Unsupported
         add esp, 4
@@ -2449,6 +2460,11 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    xc_sha_init: jmp K_XcSHAInit
+    xc_sha_update: jmp K_XcSHAUpdate
+    xc_sha_final: jmp K_XcSHAFinal
+    xc_hmac: jmp K_XcHMAC
+    xc_des_key_parity: jmp K_XcDESKeyParity
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
