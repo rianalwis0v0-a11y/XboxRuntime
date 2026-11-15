@@ -310,6 +310,17 @@ int main() {
         K_IoDismountVolumeByName(&namedDeviceName) != static_cast<LONG>(0xC0000034u))
         return Fail(35, "named device cleanup");
 
+
+    K_HalDisableSystemInterrupt(5);
+    if (XboxKernelIsSystemInterruptEnabled(5) != FALSE) return Fail(36, "disable system interrupt");
+    K_HalEnableSystemInterrupt(5, 1);
+    if (XboxKernelIsSystemInterruptEnabled(5) != TRUE ||
+        XboxKernelGetSystemInterruptMode(5) != 1)
+        return Fail(37, "enable system interrupt");
+    K_HalDisableSystemInterrupt(5);
+    if (XboxKernelIsSystemInterruptEnabled(5) != FALSE)
+        return Fail(38, "mask system interrupt");
+
     std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
     return 0;
 }
