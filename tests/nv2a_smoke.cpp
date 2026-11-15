@@ -610,7 +610,8 @@ int main() {
         std::vector<uint8_t> guestPhysical(0x1000u, 0u);
         const uint32_t pciContextStream[] = {
             (1u << 18) | 0x019Cu, dmaHandle, /* VERTEX_A */
-            (1u << 18) | 0x0180u, dmaHandle  /* texture DMA_A */
+            (1u << 18) | 0x0180u, dmaHandle, /* palette DMA_A */
+            (1u << 18) | 0x0184u, dmaHandle  /* texture DMA_B */
         };
         const float pciVertexData[6] = { 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f };
         const uint8_t pciTextureData[20] = {
@@ -620,11 +621,19 @@ int main() {
         std::memcpy(guestPhysical.data(), pciContextStream, sizeof(pciContextStream));
         std::memcpy(guestPhysical.data() + 0x300u, pciVertexData, sizeof(pciVertexData));
         std::memcpy(guestPhysical.data() + 0x500u, pciTextureData, sizeof(pciTextureData));
+        const uint8_t pciPaletteEntries[16] = {
+            0x30,0x20,0x10,0xFF, 0x60,0x50,0x40,0xFF,
+            0x90,0x80,0x70,0xFF, 0xC0,0xB0,0xA0,0xFF
+        };
+        const uint8_t pciPaletteIndices[4] = {0u,1u,2u,3u};
+        std::memcpy(guestPhysical.data() + 0x600u, pciPaletteEntries, sizeof(pciPaletteEntries));
+        std::memcpy(guestPhysical.data() + 0x700u, pciPaletteIndices, sizeof(pciPaletteIndices));
         const uint32_t pciDmaObject[3] = {
             0x00020002u, 0x00000FFFu, pciPhysicalBase
         };
         float pciFetchedVertices[6]{};
-        uint8_t pciDecodedTexture[16]{};
+        uint8_t pciDecodedTexture[16]{}, pciDecodedPaletteTexture[16]{};
+        uint32_t pciPaletteOffsets[1]{}, pciPaletteSizes[1]{};
         uint32_t pciTexturePitch = 0, pciGet = 0, pciMethods = 0;
         const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
             guestPhysical.data(), (uint32_t)guestPhysical.size());
@@ -638,10 +647,21 @@ int main() {
         const int textureResult = decodeTextureFromDma(channel, 0u, 0x0180u,
             0x500u, 0x1200u, 2u, 2u, 12u, pciDecodedTexture,
             sizeof(pciDecodedTexture), &pciTexturePitch);
+        const uint32_t pciPalettedFormat = 1u | (2u << 4) | (0x0Bu << 8) |
+            (1u << 16) | (1u << 20) | (1u << 24);
+        const int paletteStateResult = submit(0u, 0x1B00u, 0x700u) == 0 &&
+            submit(0u, 0x1B04u, pciPalettedFormat) == 0 &&
+            submit(0u, 0x1B0Cu, (1u << 30)) == 0 &&
+            submit(0u, 0x1B20u, 0x600u) == 0 ? 0 : -1;
+        const int paletteDecodeResult = paletteStateResult == 0
+            ? decodeTextureStage(channel, 0u, 0u, pciDecodedPaletteTexture,
+                sizeof(pciDecodedPaletteTexture), pciPaletteOffsets,
+                pciPaletteSizes) : -1;
         const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
         const uint32_t restoreContexts[] = {
             (1u << 18) | 0x019Cu, dmaHandle,
-            (1u << 18) | 0x0180u, dmaHandle
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
         };
         const int restoreStream = writeVram(0x1000u, restoreContexts,
             sizeof(restoreContexts)) == 0
@@ -649,18 +669,24 @@ int main() {
                 &pciGet, &pciMethods) : -1;
         const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
         if (bindResult != 0 || objectResult != 0 || pushResult != 0 ||
-            pciGet != sizeof(pciContextStream) || pciMethods != 2u ||
+            pciGet != sizeof(pciContextStream) || pciMethods != 3u ||
             vertexResult != 0 ||
             std::memcmp(pciVertexData, pciFetchedVertices, sizeof(pciVertexData)) != 0 ||
             textureResult != 0 || pciTexturePitch != 8u ||
             pciDecodedTexture[0] != 1u || pciDecodedTexture[1] != 2u ||
             pciDecodedTexture[2] != 3u || pciDecodedTexture[8] != 7u ||
+            paletteStateResult != 0 || paletteDecodeResult != 0 ||
+            pciPaletteSizes[0] != 16u || pciDecodedPaletteTexture[0] != 0x10u ||
+            pciDecodedPaletteTexture[1] != 0x20u || pciDecodedPaletteTexture[2] != 0x30u ||
+            pciDecodedPaletteTexture[4] != 0x40u || pciDecodedPaletteTexture[8] != 0x70u ||
             restoreObject != 0 || restoreStream != 0 || unbindResult != 0) {
             std::cerr << "FAIL: PCI-target guest vertex/texture translation"
                       << " bind=" << bindResult << " object=" << objectResult
                       << " push=" << pushResult << " methods=" << pciMethods
                       << " vertex=" << vertexResult << " texture=" << textureResult
-                      << " pitch=" << pciTexturePitch << " restore="
+                      << " pitch=" << pciTexturePitch << " palette="
+                      << paletteStateResult << "/" << paletteDecodeResult
+                      << " restore="
                       << restoreObject << "/" << restoreStream
                       << " unbind=" << unbindResult << "\\n";
             stop();
