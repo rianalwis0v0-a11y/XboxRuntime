@@ -2248,6 +2248,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je xc_des_key_parity
         cmp eax, 350
         je xc_crypt_service
+        cmp eax, 246
+        je ob_reference_object_by_handle
         cmp eax, 250
         je obf_dereference_object
         cmp eax, 251
@@ -2478,6 +2480,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     xc_hmac: jmp K_XcHMAC
     xc_des_key_parity: jmp K_XcDESKeyParity
     xc_crypt_service: jmp K_XcCryptService
+    ob_reference_object_by_handle: jmp K_ObReferenceObjectByHandle
     obf_dereference_object: jmp K_ObfDereferenceObject
     obf_reference_object: jmp K_ObfReferenceObject
     }
