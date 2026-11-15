@@ -70,6 +70,19 @@ int main() {
                 "XC_MAX_OS queries the 0x60-byte user settings section");
     ok &= Check(type == 3 && length == sizeof(userBlock) && userBlock[0] == 0xFF,
                 "XC_MAX_OS type, length and checksum bytes");
+    std::uint8_t factoryBlock[0x30]{};
+    type = length = 0;
+    ok &= Check(query(0x01FFu, &type, factoryBlock, sizeof(factoryBlock), &length) == 0 &&
+                type == 3 && length == sizeof(factoryBlock),
+                "XC_MAX_FACTORY queries the clear factory section");
+    std::uint8_t encryptedBlock[0x30]{};
+    type = length = 0;
+    ok &= Check(query(0xFFFEu, &type, encryptedBlock, sizeof(encryptedBlock), &length) == 0 &&
+                type == 3 && length == sizeof(encryptedBlock),
+                "XC_ENCRYPTED_SECTION returns the raw encrypted section");
+    ok &= Check(query(0x0100u, &type, encryptedBlock, sizeof(encryptedBlock), &length) ==
+                static_cast<XboxNvStatus>(0xC00000BBu),
+                "individual factory fields remain explicitly unsupported without verified type metadata");
 
     std::uint32_t language = 3;
     ok &= Check(save(7, 4, &language, sizeof(language)) == 0, "ordinal 29 saves writable language setting");
@@ -116,8 +129,11 @@ int main() {
     ok &= Check(K_AvSetDisplayMode(nullptr, 0, 0, 0, 0, 0) == 0xC00000BBu,
                 "AV display-mode request returns explicit STATUS_NOT_SUPPORTED");
     std::uint8_t zeroWord[4]{};
+    std::uint8_t carryVector[12] = {0xFF,0xFF,0xFF,0xFF, 1,0,0,0, 0xFF,0xFF,0xFF,0xFF};
     ok &= Check(XboxNvComputeChecksum(zeroWord, sizeof(zeroWord)) == 0xFFFFFFFFu,
                 "XConfigChecksum zero-word reference vector");
+    ok &= Check(XboxNvComputeChecksum(carryVector, sizeof(carryVector)) == 0xFFFFFFFEu,
+                "XConfigChecksum repeated end-around carry reference vector");
 
     VirtualFree(queryCode, 0, MEM_RELEASE);
     VirtualFree(saveCode, 0, MEM_RELEASE);
