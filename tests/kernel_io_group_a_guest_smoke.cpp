@@ -63,6 +63,7 @@ struct GuestDeviceObject {
     ULONG AlignmentRequirement; GuestDeviceQueue DeviceQueue;
     GuestEvent DeviceLock; ULONG StartIoKey;
 };
+struct GuestObjectStringDevice { USHORT Length, MaximumLength; char* Buffer; };
 struct GuestDriverObject {
     void (__stdcall* DriverStartIo)(GuestDeviceObject*, void*);
     void (__stdcall* DriverDeleteDevice)(GuestDeviceObject*);
@@ -79,6 +80,7 @@ extern "C" void __stdcall K_IoStartPacket(void*, void*, ULONG*);
 extern "C" void __stdcall K_IoStartNextPacket(void*);
 extern "C" void __stdcall K_IoStartNextPacketByKey(void*, ULONG);
 extern "C" LONG __stdcall K_IoDismountVolume(void*);
+extern "C" LONG __stdcall K_IoDismountVolumeByName(void*);
 
 
 extern "C" LONG __stdcall K_IoCreateFile(
@@ -284,6 +286,29 @@ int main() {
         return Fail(31, "IoDismountVolume callback");
     K_IoDeleteDevice(device);
     if (g_deviceDeleteCalls != 1) return Fail(26, "IoDeleteDevice callback");
+
+
+    char namedDeviceText[] = "\\Device\\XboxRuntimeNamed";
+    GuestObjectStringDevice namedDeviceName{};
+    namedDeviceName.Length = static_cast<USHORT>(std::strlen(namedDeviceText));
+    namedDeviceName.MaximumLength = namedDeviceName.Length;
+    namedDeviceName.Buffer = namedDeviceText;
+    void* namedDevice = nullptr;
+    if (K_IoCreateDevice(&driver, 16, &namedDeviceName, 7, FALSE,
+                         &namedDevice) != 0 || !namedDevice)
+        return Fail(32, "named IoCreateDevice");
+    void* duplicateNamedDevice = nullptr;
+    if (K_IoCreateDevice(&driver, 16, &namedDeviceName, 7, FALSE,
+                         &duplicateNamedDevice) != static_cast<LONG>(0xC0000035u) ||
+        duplicateNamedDevice != nullptr)
+        return Fail(33, "named device collision");
+    if (K_IoDismountVolumeByName(&namedDeviceName) != 0 ||
+        g_dismountCalls != 2)
+        return Fail(34, "IoDismountVolumeByName callback");
+    K_IoDeleteDevice(namedDevice);
+    if (g_deviceDeleteCalls != 2 ||
+        K_IoDismountVolumeByName(&namedDeviceName) != static_cast<LONG>(0xC0000034u))
+        return Fail(35, "named device cleanup");
 
     std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
     return 0;
