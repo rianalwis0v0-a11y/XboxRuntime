@@ -98,3 +98,27 @@ Avoid duplicating existing classes: map these responsibilities onto the reposito
 - A second software vertex-shader execution core.
 - Full Vulkan support before the D3D11 path is proven.
 - Claiming a percentage of total Xbox GPU compatibility from unit-test counts alone.
+
+## Verified repository audit (2026-11-15)
+
+The existing code already contains important pieces of this translation path; do not build parallel replacements:
+
+- The top-level build pins the xboxrecomp submodule and builds the NV2A module.
+- The NV2A module currently links xboxrecomp's xbox_nv2a and xbox_d3d8 libraries.
+- The D3D8 compatibility layer is backed by D3D11 on Windows.
+- The bridge mirrors the uploaded NV2A vertex program and constants, marks shader state dirty on uploads, and documents first-draw compilation plus microcode-hash caching of the resulting host vertex shader.
+- The bridge already has a vertex-program validator and an idempotent CMake patch for the pinned xboxrecomp VSH parser. The patch corrects the real NV2A DWORD1-DWORD3 field layout and preserves paired MAC/ILU read-before-write behavior.
+- The bridge has both a custom FVF/DrawPrimitiveUP vertex-array route and a programmable vertex-shader route. These must be unified carefully rather than replaced blindly.
+- Existing tests cover NV2A validation, HLSL generation, PFIFO/DMA parsing, vertex/index expansion, texture decoding, and several state mappings.
+
+### Immediate gaps confirmed by the current integration notes
+
+- The full Xbox D3D device-creation path is not yet connected to a running original XBE.
+- The guest address space is not yet generally connected to NV2A MMIO/VRAM fault hooks.
+- PCI-target DMA pushbuffers can use a bounded borrowed guest-physical mapping, but AGP/GART translation is still rejected.
+- Vertex and texture fetches still need to be routed through a shared address-space abstraction instead of assuming local VRAM.
+- Existing D3D11 rendering support is present, but there is not yet a clean backend-neutral draw packet boundary separating guest PGRAPH state from host API submission.
+
+### First code change after this audit
+
+Introduce a small internal translation seam around the existing implementation: a validated backend-neutral draw description and explicit guest-resource views. Keep the existing D3D8/D3D11 submission path as the first backend. The seam must not own or reinterpret raw guest pointers, and it must not duplicate the current shader parser/compiler.
