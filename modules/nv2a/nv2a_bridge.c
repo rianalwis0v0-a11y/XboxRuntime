@@ -64,8 +64,8 @@ typedef struct NV2A_TEXTURE_CACHE {
     IDirect3DTexture8* texture;
     IDirect3DDevice8* owner_device;
     uint32_t format, offset, control0, control1, image_rect;
-    uint32_t dma_handle, dma_base, dma_length;
-    uint32_t palette, palette_dma_handle, palette_dma_base, palette_dma_length;
+    uint32_t dma_handle, dma_target, dma_base, dma_length;
+    uint32_t palette, palette_dma_handle, palette_dma_target, palette_dma_base, palette_dma_length;
     int dirty;
 } NV2A_TEXTURE_CACHE;
 static NV2A_TEXTURE_CACHE g_texture_cache[32][8][4];
@@ -840,11 +840,26 @@ static int memory_range_valid(uint32_t offset, uint32_t length, uint32_t capacit
     return offset <= capacity && length <= capacity - offset;
 }
 
+static void invalidate_dma_contexts_for_target(uint32_t target)
+{
+    for (uint32_t channel = 0; channel < 32u; ++channel)
+        for (uint32_t subchannel = 0; subchannel < 8u; ++subchannel)
+            for (uint32_t slot = 0; slot < 32u; ++slot) {
+                XboxNV2A_DMA_INFO* dma =
+                    &g_dma_contexts[channel][subchannel][slot];
+                if (dma->mapped_length && dma->dma_target == target)
+                    memset(dma, 0, sizeof(*dma));
+            }
+    mark_all_textures_dirty();
+}
+
 int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
                                               void* memory, uint32_t length)
 {
     if (!g_started) return 1;
     if (!memory && !length && !guest_physical_base) {
+        if (g_guest_physical_memory)
+            invalidate_dma_contexts_for_target(XBOX_NV2A_DMA_TARGET_PCI);
         g_guest_physical_memory = NULL;
         g_guest_physical_base = 0;
         g_guest_physical_length = 0;
@@ -853,6 +868,17 @@ int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
     if (!memory || !length || guest_physical_base >= 0x08000000u ||
         length > 0x08000000u - guest_physical_base)
         return 2;
+
+    /* DMA_INFO stores a mapping-relative PCI base. If the physical window
+     * moves, old contexts would point at the wrong bytes; force them to be
+     * rebound through their RAMHT handles. A same-base remap only dirties
+     * cached textures because the context-relative offsets remain valid. */
+    if (g_guest_physical_memory &&
+        g_guest_physical_base != guest_physical_base)
+        invalidate_dma_contexts_for_target(XBOX_NV2A_DMA_TARGET_PCI);
+    else
+        mark_all_textures_dirty();
+
     g_guest_physical_memory = (uint8_t*)memory;
     g_guest_physical_base = guest_physical_base;
     g_guest_physical_length = length;
@@ -1265,9 +1291,10 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
         const int changed=e->dirty||!e->texture||e->owner_device!=device||e->format!=info.format||
             e->offset!=info.texture_offset||e->control0!=control0||
             e->control1!=control1||e->image_rect!=image_rect||
-            e->dma_handle!=dma->handle||e->dma_base!=dma->base_address||
-            e->dma_length!=dma->mapped_length||e->palette!=palette||
-            e->palette_dma_handle!=palette_dma->handle||
+            e->dma_handle!=dma->handle||e->dma_target!=dma->dma_target||
+            e->dma_base!=dma->base_address||e->dma_length!=dma->mapped_length||
+            e->palette!=palette||e->palette_dma_handle!=palette_dma->handle||
+            e->palette_dma_target!=palette_dma->dma_target||
             e->palette_dma_base!=palette_dma->base_address||
             e->palette_dma_length!=palette_dma->mapped_length;
         if(changed){
@@ -1318,9 +1345,10 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
             if(e->texture&&e->texture->lpVtbl&&e->texture->lpVtbl->Release)e->texture->lpVtbl->Release(e->texture);
             e->texture=texture;e->owner_device=device;e->format=info.format;e->offset=info.texture_offset;
             e->control0=control0;e->control1=control1;e->image_rect=image_rect;
-            e->dma_handle=dma->handle;e->dma_base=dma->base_address;
-            e->dma_length=dma->mapped_length;e->palette=palette;
-            e->palette_dma_handle=palette_dma->handle;
+            e->dma_handle=dma->handle;e->dma_target=dma->dma_target;
+            e->dma_base=dma->base_address;e->dma_length=dma->mapped_length;
+            e->palette=palette;e->palette_dma_handle=palette_dma->handle;
+            e->palette_dma_target=palette_dma->dma_target;
             e->palette_dma_base=palette_dma->base_address;
             e->palette_dma_length=palette_dma->mapped_length;e->dirty=0;
         }
