@@ -52,8 +52,10 @@ int main() {
     DeleteFileW(tempFile);
 
     bool ok = Check(XboxNvInitialize(tempFile), "initialize blank EEPROM");
-    auto query = reinterpret_cast<QueryFn>(MakeOrdinalThunk(24));
-    auto save = reinterpret_cast<SaveFn>(MakeOrdinalThunk(29));
+    void* queryCode = MakeOrdinalThunk(24);
+    void* saveCode = MakeOrdinalThunk(29);
+    auto query = reinterpret_cast<QueryFn>(queryCode);
+    auto save = reinterpret_cast<SaveFn>(saveCode);
     ok &= Check(query != nullptr && save != nullptr, "allocate x86 ordinal import thunks");
     if (!ok) return 3;
 
@@ -93,12 +95,17 @@ int main() {
     XboxNvSettingInfo info{};
     ok &= Check(XboxNvGetSettingInfo(7, &info) && info.offset == 0x90 && info.length == 4 && info.writable,
                 "language layout descriptor matches EEPROM ABI");
+    XboxRefurbInfo32 refurb{};
+    ok &= Check(K_ExReadWriteRefurbInfo(&refurb, sizeof(refurb), 0) == static_cast<XboxNvStatus>(0xC00000BBu),
+                "refurb metadata returns explicit STATUS_NOT_SUPPORTED");
+    ok &= Check(K_AvSetDisplayMode(nullptr, 0, 0, 0, 0, 0) == 0xC00000BBu,
+                "AV display-mode request returns explicit STATUS_NOT_SUPPORTED");
     std::uint8_t zeroWord[4]{};
     ok &= Check(XboxNvComputeChecksum(zeroWord, sizeof(zeroWord)) == 0xFFFFFFFFu,
                 "XConfigChecksum zero-word reference vector");
 
-    VirtualFree(reinterpret_cast<void*>(query), 0, MEM_RELEASE);
-    VirtualFree(reinterpret_cast<void*>(save), 0, MEM_RELEASE);
+    VirtualFree(queryCode, 0, MEM_RELEASE);
+    VirtualFree(saveCode, 0, MEM_RELEASE);
     DeleteFileW(tempFile);
     if (!ok) return 1;
     std::puts("PASS: Group A EEPROM import thunks, ABI, validation, checksum and persistence");
