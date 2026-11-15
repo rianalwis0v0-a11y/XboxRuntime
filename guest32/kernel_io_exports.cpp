@@ -1,8 +1,10 @@
 #include "kernel_io_exports.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <mutex>
 #include <deque>
+#include <unordered_map>
 
 #pragma pack(push, 4)
 struct GuestFileObjectShareAccess {
