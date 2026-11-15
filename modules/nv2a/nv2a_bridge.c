@@ -1267,17 +1267,21 @@ static void release_texture_cache(void)
         memset(e,0,sizeof(*e));
     }
 }
-static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevice8* device)
+static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,
+                              IDirect3DDevice8* device,uint32_t stage_mask)
 {
     if(!device||!device->lpVtbl||!device->lpVtbl->SetTexture||!device->lpVtbl->CreateTexture)return 1;
     for(uint32_t stage=0;stage<4u;++stage){
         const uint32_t base=0x1B00u+stage*0x40u;
         const uint32_t control0=g_gpu->pgraph.regs[(base+0x0Cu)/4u];
         NV2A_TEXTURE_CACHE* e=&g_texture_cache[channel][subchannel][stage];
-        if(!(control0&(1u<<30))){
+        if(!(stage_mask&(1u<<stage))){
             if(FAILED(device->lpVtbl->SetTexture(device,stage,NULL)))return 2;
             continue;
         }
+        /* The draw packet owns the active-stage decision. A mismatch means
+         * guest state changed after packet construction and must not be drawn. */
+        if(!(control0&(1u<<30)))return 11;
         XboxNV2A_TEXTURE_INFO info;
         if(XboxNV2A_GetTextureInfo(channel,subchannel,stage,&info)!=0)return 3;
         if(!info.level_count||info.level_count>16u)return 4;
@@ -2691,7 +2695,8 @@ static int nv2a_submit_d3d8_draw_packet(
             return 10;
         draw_data = packed;
     }
-    if (bind_nv2a_textures(channel, subchannel, d) != 0)
+    if (bind_nv2a_textures(channel, subchannel, d,
+            packet->texture_stage_mask) != 0)
         return 8;
     if (FAILED(d->lpVtbl->DrawPrimitiveUP(d, primitive_type,
             packet->primitive_count, draw_data, draw_stride)))
