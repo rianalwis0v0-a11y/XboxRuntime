@@ -116,6 +116,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,
     uint32_t* mag_filter_out, uint32_t* mip_filter_out);
 
+/* Map NV097 register-combiner methods to Xbox D3D8 render states.
+ * Returns 1 for a render-state method, 2 for SET_SHADER_STAGE_PROGRAM,
+ * and 0 for unsupported/invalid methods. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapCombinerMethod(
+    uint32_t method, uint32_t* render_state_out, uint32_t* stage_out);
+
 /* Decode a linear-pitch NV097 surface and validate its VRAM spans. */
 __declspec(dllexport) int __cdecl XboxNV2A_DecodeSurface(
     uint32_t surface_format, uint32_t surface_pitch,
@@ -163,7 +169,8 @@ __declspec(dllexport) int __cdecl XboxNV2A_LookupRAMHT(
 __declspec(dllexport) int __cdecl XboxNV2A_ResolveDMAHandle(
     uint32_t channel, uint32_t handle, XboxNV2A_DMA_INFO* output);
 /* Execute an NV4-style DMA pushbuffer through a validated RAMHT DMA handle.
- * GET/PUT are byte offsets within the DMA object; nested calls are limited to one. */
+ * GET/PUT are byte offsets within the DMA object; CALL/RETURN nesting is
+ * supported to a bounded maximum depth of 16. */
 __declspec(dllexport) int __cdecl XboxNV2A_SubmitDMAPushBuffer(
     uint32_t channel, uint32_t handle, uint32_t get, uint32_t put,
     uint32_t* new_get, uint32_t* methods_submitted);
@@ -177,6 +184,15 @@ typedef struct XboxNV2A_VERTEX {
     float u2, v2;
     float u3, v3;
 } XboxNV2A_VERTEX;
+
+/* Expand NV097 primitive streams into D3D8-compatible topology. primitive_type
+ * uses D3DPT_* numeric values; destination_capacity is measured in vertices.
+ * Output parameters are zeroed on failure. */
+__declspec(dllexport) int __cdecl XboxNV2A_ExpandPrimitive(
+    uint32_t mode, const XboxNV2A_VERTEX* source, uint32_t source_count,
+    XboxNV2A_VERTEX* destination, uint32_t destination_capacity,
+    uint32_t* primitive_type_out, uint32_t* primitive_count_out,
+    uint32_t* vertex_count_out);
 
 /* Build a host FVF stream from position/normal/color and TEX0..TEX3 guest arrays. */
 __declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
