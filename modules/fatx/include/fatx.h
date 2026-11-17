@@ -19,8 +19,8 @@ extern "C" {
 #define FATX_CORRUPT           -9
 
 #define FATX_ATTRIBUTE_READONLY 0x01
-#define FATX_ATTRIBUTE_HIDDEN   0x02
-#define FATX_ATTRIBUTE_SYSTEM   0x04
+#define FATX_ATTRIBUTE_SYSTEM   0x02
+#define FATX_ATTRIBUTE_HIDDEN   0x04
 #define FATX_ATTRIBUTE_VOLUME   0x08
 #define FATX_ATTRIBUTE_DIRECTORY 0x10
 #define FATX_ATTRIBUTE_ARCHIVE  0x20
@@ -54,6 +54,48 @@ int __cdecl FATX_OpenVolumeW(
     ULONGLONG partitionOffset,
     ULONGLONG partitionLength,
     FATX_VOLUME* volume
+);
+
+__declspec(dllexport)
+int __cdecl FATX_OpenImageReadWriteW(
+    LPCWSTR imagePath,
+    ULONGLONG partitionOffset,
+    ULONGLONG partitionLength,
+    FATX_VOLUME* volume
+);
+
+__declspec(dllexport)
+int __cdecl FATX_CreateDirectoryW(
+    FATX_VOLUME volume,
+    LPCWSTR path
+);
+
+__declspec(dllexport)
+int __cdecl FATX_CreateFileW(
+    FATX_VOLUME volume,
+    LPCWSTR path
+);
+
+__declspec(dllexport)
+int __cdecl FATX_DeleteFileW(FATX_VOLUME volume, LPCWSTR path);
+
+__declspec(dllexport)
+int __cdecl FATX_RemoveDirectoryW(FATX_VOLUME volume, LPCWSTR path);
+
+__declspec(dllexport)
+int __cdecl FATX_RenameW(FATX_VOLUME volume, LPCWSTR source, LPCWSTR destination);
+
+__declspec(dllexport)
+int __cdecl FATX_TruncateFileW(FATX_VOLUME volume, LPCWSTR path, ULONGLONG newSize);
+
+__declspec(dllexport)
+int __cdecl FATX_WriteFileW(
+    FATX_VOLUME volume,
+    LPCWSTR path,
+    ULONGLONG offset,
+    const void* buffer,
+    DWORD bytesToWrite,
+    DWORD* bytesWritten
 );
 
 __declspec(dllexport)
