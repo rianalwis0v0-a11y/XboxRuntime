@@ -31,6 +31,7 @@
 #include "kernel_io_exports.h"
 #include "kernel_directory_objects.h"
 #include "kernel_object_manager.h"
+#include "kernel_filesystem_bridge.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -44,6 +45,9 @@ static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
+struct GuestFilesystemHandle { XBOX_FS_FILE file=nullptr; ULONGLONG currentOffset=0; std::mutex mutex; bool closed=false; };
+std::mutex g_filesystemHandlesMutex;
+std::unordered_map<HANDLE,std::shared_ptr<GuestFilesystemHandle>> g_filesystemHandles;
 ULONG g_fileCacheSize = 1024 * 1024;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
@@ -602,20 +606,70 @@ std::wstring TranslateXboxPath(const GuestAnsiString* name){
     }else if(p[0]==L'\\')p=g_titleDirectory+p;
     return p;
 }
+std::wstring TranslateXboxDevicePath(const GuestAnsiString* name) {
+    if (!name || !name->Buffer || !name->Length || name->Length > name->MaximumLength) return {};
+    const int n = MultiByteToWideChar(CP_ACP, 0, name->Buffer, int(name->Length), nullptr, 0);
+    if (n <= 0) return {};
+    std::wstring path(size_t(n), L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, name->Buffer, int(name->Length), path.data(), n) != n) return {};
+    if (!XboxKernelResolveSymbolicLinks(&path) || path.rfind(L"\\Device\\", 0) != 0) return {};
+    return path;
+}
+std::shared_ptr<GuestFilesystemHandle> FindFilesystemHandle(HANDLE h) {
+    std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex);
+    auto it=g_filesystemHandles.find(h);
+    return it==g_filesystemHandles.end()?nullptr:it->second;
+}
+HANDLE PublishFilesystemHandle(XBOX_FS_FILE file) {
+    if (!file) return nullptr;
+    try {
+        auto value=std::make_shared<GuestFilesystemHandle>(); value->file=file;
+        HANDLE token=reinterpret_cast<HANDLE>(value.get());
+        std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex);
+        if (!g_filesystemHandles.emplace(token,value).second) return nullptr;
+        return token;
+    } catch (...) { return nullptr; }
+}
+bool CloseFilesystemHandle(HANDLE h) {
+    std::shared_ptr<GuestFilesystemHandle> value;
+    { std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex);
+      auto it=g_filesystemHandles.find(h); if(it==g_filesystemHandles.end()) return false;
+      value=it->second; g_filesystemHandles.erase(it); }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if(!value->closed){value->closed=true;XboxFsClose(value->file);value->file=nullptr;}
+    return true;
+}
+void CloseAllFilesystemHandles() {
+    std::unordered_map<HANDLE,std::shared_ptr<GuestFilesystemHandle>> values;
+    { std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex); values.swap(g_filesystemHandles); }
+    for(auto& item:values){auto& v=item.second;std::lock_guard<std::mutex> lock(v->mutex);
+        if(!v->closed){v->closed=true;XboxFsClose(v->file);v->file=nullptr;}}
+}
 DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
-LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
+LONG NtCreateFileImpl(HANDLE* out,uint32_t access,GuestObjectAttributes* oa,GuestIoStatusBlock* io,const LARGE_INTEGER* allocationSize,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options) {
     if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
-    if (oa->RootDirectory) return LONG(0xC00000BBu);
+    *out=nullptr;
+    if(oa->RootDirectory)return LONG(0xC00000BBu);
+    const std::wstring devicePath=TranslateXboxDevicePath(oa->ObjectName);
+    if(!devicePath.empty()&&XboxFsIsPathMounted(devicePath.c_str())){
+        // Provider ABI v1 supports opening existing files; creation and allocation changes need explicit callbacks.
+        if(allocationSize||disposition!=1u||(options&~1u))return LONG(0xC00000BBu);
+        XBOX_FS_FILE providerFile=nullptr;
+        LONG status=XboxFsOpen(devicePath.c_str(),access,share,&providerFile);
+        if(status!=0){if(io){io->Status=status;io->Information=0;}return status;}
+        HANDLE token=PublishFilesystemHandle(providerFile);
+        if(!token){XboxFsClose(providerFile);if(io){io->Status=LONG(0xC0000017u);io->Information=0;}return LONG(0xC0000017u);}
+        *out=token;if(io){io->Status=0;io->Information=1;}return 0;
+    }
     std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
-    DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
-    if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
+    DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
     HANDLE h=CreateFileW(path.c_str(),FileAccess(access),((share&1)?FILE_SHARE_READ:0)|((share&2)?FILE_SHARE_WRITE:0)|((share&4)?FILE_SHARE_DELETE:0),nullptr,FileDisposition(disposition),flags,nullptr);
     if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
     *out=h;if(io){io->Status=0;io->Information=1;}return 0;
 }
-extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
-extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER* allocationSize,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,allocationSize,attrs,share,disposition,options);}
+extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,nullptr,FILE_ATTRIBUTE_NORMAL,share,1,options);}
 
 #pragma pack(push, 4)
 struct GuestAnsiStringIo { USHORT Length; USHORT MaximumLength; char* Buffer; };
@@ -746,12 +800,32 @@ extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (error == ERROR_DIRECTORY) return LONG(0xC0000103u);
     return LONG(0xC0000001u);
 }
-extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void* apcRoutine,void* apcContext,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(auto file=FindFilesystemHandle(h)){
+        if(apcRoutine||apcContext)return LONG(0xC00000BBu);
+        if(!buffer&&length)return LONG(0xC000000Du);
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        if(offset&&offset->QuadPart<0)return LONG(0xC000000Du);
+        const ULONGLONG start=offset?ULONGLONG(offset->QuadPart):file->currentOffset;
+        ULONG transferred=0;LONG status=XboxFsRead(file->file,start,buffer,length,&transferred);
+        if(status==0)file->currentOffset=start+transferred;
+        if(io){io->Status=status;io->Information=transferred;}if(event&&status==0)SetEvent(event);return status;
+    }
     if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
     DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
     if(io){io->Status=read?0:LONG(0xC0000011u);io->Information=read;}if(event)SetEvent(event);return read?0:LONG(0xC0000011u);
 }
-extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void* apcRoutine,void* apcContext,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(auto file=FindFilesystemHandle(h)){
+        if(apcRoutine||apcContext)return LONG(0xC00000BBu);
+        if(!buffer&&length)return LONG(0xC000000Du);
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        if(offset&&offset->QuadPart<0)return LONG(0xC000000Du);
+        const ULONGLONG start=offset?ULONGLONG(offset->QuadPart):file->currentOffset;
+        ULONG transferred=0;LONG status=XboxFsWrite(file->file,start,buffer,length,&transferred);
+        if(status==0)file->currentOffset=start+transferred;
+        if(io){io->Status=status;io->Information=transferred;}if(event&&status==0)SetEvent(event);return status;
+    }
     if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
     DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
     if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
@@ -787,6 +861,24 @@ static LONG FileStatusFromWin32(DWORD e) {
 extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                        void* out, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
+    if(auto file=FindFilesystemHandle(h)){
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        XBOX_FS_FILE_INFO info{};LONG status=XboxFsQueryInformation(file->file,&info);
+        if(status!=0){if(io){io->Status=status;io->Information=0;}return status;}
+        if(infoClass==4){
+            if(length<sizeof(GuestFileBasicInformation))return LONG(0xC0000004u);
+            GuestFileBasicInformation value{};value.FileAttributes=info.attributes;
+            std::memcpy(out,&value,sizeof(value));if(io){io->Status=0;io->Information=sizeof(value);}return 0;
+        }
+        if(infoClass==5){
+            if(length<sizeof(GuestFileStandardInformation))return LONG(0xC0000004u);
+            GuestFileStandardInformation value{};value.AllocationSize.QuadPart=LONGLONG(info.allocationSize);
+            value.EndOfFile.QuadPart=LONGLONG(info.size);value.NumberOfLinks=1;
+            value.Directory=(info.attributes&FILE_ATTRIBUTE_DIRECTORY)?TRUE:FALSE;
+            std::memcpy(out,&value,sizeof(value));if(io){io->Status=0;io->Information=sizeof(value);}return 0;
+        }
+        return LONG(0xC00000BBu);
+    }
     ULONG required = 0;
     switch (infoClass) {
     case 4: required = sizeof(GuestFileBasicInformation); break;
@@ -838,6 +930,14 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
 extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                      void* in, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
+    if(auto file=FindFilesystemHandle(h)){
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        if(infoClass!=14)return LONG(0xC00000BBu);
+        if(length<sizeof(GuestFilePositionInformation))return LONG(0xC0000004u);
+        const LONGLONG position=static_cast<GuestFilePositionInformation*>(in)->CurrentByteOffset.QuadPart;
+        if(position<0)return LONG(0xC000000Du);
+        file->currentOffset=ULONGLONG(position);if(io){io->Status=0;io->Information=0;}return 0;
+    }
     BOOL ok=FALSE;
     if(infoClass==4) {
         if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
@@ -972,6 +1072,7 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
 }
 
 extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    if(CloseFilesystemHandle(h))return 0;
     CloseGuestDirectorySearch(h);
     if (XboxKernelCloseObjectHandle(h)) return 0;
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
@@ -2962,6 +3063,7 @@ void XboxKernelSetStartupEvent(HANDLE eventHandle) {
 
 void XboxKernelShutdownTitle() {
     XboxKernelInvokeShutdownNotifications();
+    CloseAllFilesystemHandles();
     XboxKernelResetThreadExports();
     g_startupEvent = nullptr;
     XboxKernelCloseAllObjectHandles();
