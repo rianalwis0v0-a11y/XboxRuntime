@@ -145,6 +145,10 @@ __declspec(dllexport) int __cdecl XboxNV2A_MapTextureAddress(
     uint32_t parameter, uint32_t* address_u_out,
     uint32_t* address_v_out, uint32_t* address_w_out);
 
+/* Convert the signed 13-bit NV097 LOD bias (8.8 fixed point) to D3D float bits. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapTextureLodBias(
+    uint32_t parameter, uint32_t* lod_bias_float_bits_out);
+
 /* Map NV097 texture-filter fields to D3D8 minification, magnification and mip filters. */
 __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,
