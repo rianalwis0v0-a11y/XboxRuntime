@@ -45,8 +45,8 @@ typedef struct FATX_ENTRY {
     ULONGLONG size;
 } FATX_ENTRY;
 
-__declspec(dllexport) int __cdecl ModuleStart();
-__declspec(dllexport) void __cdecl ModuleStop();
+__declspec(dllexport) int __cdecl FATX_ModuleStart();
+__declspec(dllexport) void __cdecl FATX_ModuleStop();
 
 __declspec(dllexport)
 int __cdecl FATX_OpenVolumeW(
