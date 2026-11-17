@@ -97,3 +97,10 @@ int __cdecl FATX_WriteFileW(
     DWORD bytesToWrite,
     DWORD* bytesWritten
 );
+
+__declspec(dllexport)
+int __cdecl FATX_GetFileInfoW(
+    FATX_VOLUME volume,
+    LPCWSTR path,
+    FATX_ENTRY* entry
+);
