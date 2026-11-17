@@ -45,6 +45,8 @@ int main() {
     assert(XboxFsMount(L"\\Device\\Harddisk0\\Partition1", &provider,
         nullptr, 0, &mount) == 0);
     assert(mount != nullptr);
+    assert(XboxFsIsPathMounted(L"\\Device\\Harddisk0\\Partition1\\boot.bin"));
+    assert(!XboxFsIsPathMounted(L"\\Device\\Harddisk0\\Partition10\\boot.bin"));
 
     XBOX_FS_FILE file = nullptr;
     assert(XboxFsOpen(L"\\device\\harddisk0\\partition1\\boot.bin",
@@ -70,6 +72,7 @@ int main() {
     XBOX_FS_MOUNT dvd = nullptr;
     assert(XboxFsMount(L"\\Device\\CdRom0", &provider, nullptr,
         XBOX_FS_MOUNT_READ_ONLY, &dvd) == 0);
+    assert(XboxFsIsPathMounted(L"\\device\\cdrom0\\boot.bin"));
     assert(XboxFsOpen(L"\\Device\\CdRom0\\boot.bin",
         0x40000000u, 0, &file) == static_cast<LONG>(0xC0000022u));
     assert(XboxFsOpen(L"\\Device\\CdRom0\\boot.bin",
