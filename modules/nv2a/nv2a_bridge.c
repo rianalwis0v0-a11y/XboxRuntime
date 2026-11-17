@@ -401,9 +401,13 @@ int __cdecl XboxNV2A_MapTextureAddress(uint32_t parameter,
         return 0;
 
     uint32_t address_u = 0u, address_v = 0u, address_w = 0u;
+    const uint32_t mode_p = (parameter >> 16) & 0x7u;
     if (!map_texture_address_mode(parameter & 0x7u, &address_u) ||
-        !map_texture_address_mode((parameter >> 8) & 0x7u, &address_v) ||
-        !map_texture_address_mode((parameter >> 16) & 0x7u, &address_w))
+        !map_texture_address_mode((parameter >> 8) & 0x7u, &address_v))
+        return 0;
+    /* P is unused by the D3D8 2D sampler path. Zero means no P mode was
+     * supplied; preserve that as an explicit unsupported/default value. */
+    if (mode_p != 0u && !map_texture_address_mode(mode_p, &address_w))
         return 0;
 
     *address_u_out = address_u;
