@@ -112,9 +112,10 @@ invalid classes, truncated RAMIN objects and VRAM ranges that exceed the 64 MiB
 aperture. The reported mapped span follows the upstream NV2A DMA helper's
 `limit` contract.
 
-This is the object lookup/mapping layer only. It does not yet implement PCI/AGP
-DMA, page tables, DMA pusher GET/PUT processing, jump/call/return flow, or
-channel switching and puller scheduling.
+This section describes the object lookup/mapping layer. DMA pusher GET/PUT
+processing and bounded JUMP/CALL/RETURN execution are implemented in the
+following section. PCI/AGP DMA, page tables, and channel switching/puller
+scheduling remain unsupported.
 
 
 ## NV4-style DMA pusher
@@ -486,7 +487,9 @@ The NV2A HLSL smoke test exercises real microcode rather than only a terminated 
 
 ## Bounded nested DMA CALL/RETURN
 
-The NV4-style DMA pusher now maintains a 16-entry return-address stack instead of a single saved return address. Nested helper routines unwind in LIFO order. The validation pass and dispatch pass use the same bounded stack logic, so excessive nesting is rejected before any PGRAPH methods are dispatched. The smoke test covers a two-level nested routine that binds three DMA contexts, the maximum supported depth of 16, rejection of depth 17 with the PFIFO CALL_ACTIVE error, invalid call targets, and RETURN without an active call. This remains a bounded software pusher; it does not add DMA ring wraparound, nested-depth beyond 16, PCI/AGP DMA or full PFIFO scheduling.
+The NV4-style DMA pusher now maintains a 16-entry return-address stack instead of a single saved return address. Nested helper routines unwind in LIFO order. The validation pass and dispatch pass use the same bounded stack logic, so excessive nesting is rejected before any PGRAPH methods are dispatched. The smoke test covers a two-level nested routine that binds three DMA contexts, the maximum supported depth of 16, rejection of depth 17 with the PFIFO CALL_ACTIVE error, invalid call targets, and RETURN without an active call. This remains a bounded software pusher. Explicit JUMP-based circular GET/PUT
+wrap is supported; nested depth beyond 16, PCI/AGP DMA, page translation,
+interrupt-driven scheduling, channel switching and IB mode remain unsupported.
 
 
 ## Correct NV2A vertex microcode decoding
@@ -537,3 +540,13 @@ explicit NV4 JUMP back into the DMA object; reaching the object limit without
 a valid control-flow command remains a protection fault. The regression test
 places a JUMP near the end of the DMA object, resumes at offset zero, dispatches
 a context-DMA bind, and verifies the final GET/PUT relationship and binding.
+
+
+## DMA read-permission enforcement
+
+Texture, palette and vertex fetches now require a readable NV2A DMA class
+(read-only 0x02 or read/write 0x3D). A write-only 0x03 object can still be
+resolved and bound, but attempts to consume it as texture or vertex source
+memory are rejected before reading VRAM. The smoke test rebinds a live texture
+stage to a write-only object and verifies decoding fails, then restores the
+readable object and verifies decoding succeeds.
