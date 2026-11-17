@@ -339,7 +339,7 @@ int main() {
         uint32_t biasBits = 0u;
         const uint32_t biasCases[] = { 0x0000u, 0x0100u, 0x1F00u, 0x1FFFu, 0x1000u };
         const uint32_t expectedBits[] = {
-            0x00000000u, 0x3F800000u, 0xBF800000u, 0xB7800000u, 0xC0000000u
+            0x00000000u, 0x3F800000u, 0xBF800000u, 0xBB800000u, 0xC1800000u
         };
         for (uint32_t i = 0; i < 5u; ++i) {
             if (!mapTextureLodBias(biasCases[i], &biasBits) ||
