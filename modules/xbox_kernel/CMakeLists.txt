@@ -79,3 +79,20 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
   set_target_properties(kernel_nvsettings_host_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
 endforeach()
 add_test(NAME kernel_nvsettings_host_tests COMMAND kernel_nvsettings_host_tests)
+
+# Host-side contract tests for FATX/XDVDFS kernel filesystem provider adapters.
+add_executable(kernel_filesystem_bridge_tests
+  ../../tests/kernel_filesystem_bridge_tests.cpp
+  ../../guest32/kernel_filesystem_bridge.cpp
+)
+target_compile_features(kernel_filesystem_bridge_tests PRIVATE cxx_std_17)
+target_compile_definitions(kernel_filesystem_bridge_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_filesystem_bridge_tests PRIVATE /W4 /permissive-)
+target_include_directories(kernel_filesystem_bridge_tests PRIVATE ../../guest32)
+set_target_properties(kernel_filesystem_bridge_tests PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out")
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+  set_target_properties(kernel_filesystem_bridge_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
+endforeach()
+add_test(NAME kernel_filesystem_bridge_tests COMMAND kernel_filesystem_bridge_tests)
