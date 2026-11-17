@@ -1856,7 +1856,12 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
 
     if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
         return 5;
-    if (target != 0u) return 6;
+    /* This bridge currently has a PGRAPH-local VRAM mapper only.  RAMHT's
+     * engine field is part of the object identity: accepting an object bound
+     * to another engine would reinterpret its instance as a graphics DMA
+     * descriptor and could expose unrelated RAMIN bytes to PGRAPH. */
+    if (engine != 1u) return 8; /* PGRAPH engine only; other engines unmapped. */
+    if (target != 0u) return 6; /* PCI/AGP require a guest system-memory mapper. */
     if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
         return 7;
 
