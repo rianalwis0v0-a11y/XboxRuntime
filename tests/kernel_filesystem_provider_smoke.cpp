@@ -25,11 +25,13 @@ int main() {
 
     std::vector<BYTE> fatx(64 * 1024, 0);
     std::memcpy(fatx.data(), "FATX", 4); Put32(fatx, 8, 2); Put32(fatx, 12, 1);
-    Put16(fatx, 0x1000 + 2, 0xFFFF); Put16(fatx, 0x1000 + 4, 0xFFFF);
+    Put16(fatx, 0x1000 + 2, 0xFFFF); Put16(fatx, 0x1000 + 4, 3); Put16(fatx, 0x1000 + 6, 0xFFFF);
     const size_t data = 0x2000;
     BYTE* root = fatx.data() + data;
     root[0] = 8; root[1] = 0x20; std::memcpy(root + 2, "TEST.BIN", 8);
-    Put32(fatx, data + 0x2C, 2); Put32(fatx, data + 0x30, 8); root[64] = 0xFF;
+    Put32(fatx, data + 0x2C, 2); Put32(fatx, data + 0x30, 1500); root[64] = 0xFF;
+    std::memset(fatx.data() + data + 1024, 'A', 1024);
+    std::memset(fatx.data() + data + 2048, 'B', 1024);
     std::memcpy(fatx.data() + data + 1024, "fatxdata", 8);
     if (!WriteImage(fatxPath, fatx)) return Fail("FATX fixture write failed");
 
@@ -42,7 +44,7 @@ int main() {
         GENERIC_READ | GENERIC_WRITE, 0, &file) != 0 || !file)
         return Fail("FATX bridge open failed");
     XBOX_FS_FILE_INFO info{};
-    if (XboxFsQueryInformation(file, &info) != 0 || info.size != 8 || info.allocationSize != 1024)
+    if (XboxFsQueryInformation(file, &info) != 0 || info.size != 1500 || info.allocationSize != 2048)
         return Fail("FATX query information mismatch");
     BYTE readback[8]{}; ULONG transferred = 0;
     if (XboxFsRead(file, 0, readback, sizeof(readback), &transferred) != 0 ||
@@ -56,6 +58,18 @@ int main() {
     if (XboxFsRead(file, 0, readback, sizeof(readback), &transferred) != 0 ||
         transferred != 8 || std::memcmp(readback, "write!!!", 8) != 0)
         return Fail("FATX write was not persisted");
+    BYTE patch[500]; std::memset(patch, 'W', sizeof(patch));
+    if (XboxFsWrite(file, 1000, patch, sizeof(patch), &transferred) != 0 ||
+        transferred != sizeof(patch))
+        return Fail("FATX cross-cluster write failed");
+    BYTE verify[500]{}; transferred = 0;
+    if (XboxFsRead(file, 1000, verify, sizeof(verify), &transferred) != 0 ||
+        transferred != sizeof(verify) || std::memcmp(verify, patch, sizeof(patch)) != 0)
+        return Fail("FATX cross-cluster write was not persisted");
+    transferred = 99;
+    if (XboxFsWrite(file, 1499, patch, 2, &transferred) != static_cast<LONG>(0xC000000Du) ||
+        transferred != 0)
+        return Fail("FATX out-of-range write was accepted");
     XboxFsClose(file);
     if (FATX_UnregisterFilesystemProvider(fatxMount) != 0)
         return Fail("FATX provider unmount failed");
