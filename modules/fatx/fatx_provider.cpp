@@ -5,7 +5,7 @@
 #include <string>
 #include <mutex>
 #include <unordered_map>
-#include "guest32/kernel_filesystem_bridge.h"
+#include "fatx_provider.h"
 #include "include/fatx.h"
 
 namespace {
