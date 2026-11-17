@@ -30,7 +30,6 @@ static bool WriteSparseImage(const wchar_t* path, ULONGLONG size) {
     bool ok = SetFilePointerEx(f, end, nullptr, FILE_BEGIN) && SetEndOfFile(f);
     BYTE header[0x1000]{};
     std::memcpy(header, "FATX", 4);
-    Put32(*reinterpret_cast<std::vector<BYTE>*>(nullptr), 0, 0); // never executed
     header[8] = 2; header[12] = 1;
     LARGE_INTEGER zero{};
     ok = ok && SetFilePointerEx(f, zero, nullptr, FILE_BEGIN);
