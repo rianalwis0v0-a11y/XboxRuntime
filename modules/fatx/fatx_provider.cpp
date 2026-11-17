@@ -116,13 +116,13 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
     if (!deviceName || !*deviceName || !backingDevicePath || !*backingDevicePath || !mountHandle)
         return STATUS_INVALID_PARAMETER_VALUE;
     *mountHandle = nullptr;
-    if (ModuleStart() != FATX_OK) return STATUS_IO_DEVICE_ERROR_VALUE;
+    if (FATX_ModuleStart() != FATX_OK) return STATUS_IO_DEVICE_ERROR_VALUE;
     auto* context = new (std::nothrow) FatxProviderContext();
-    if (!context) { ModuleStop(); return STATUS_NO_MEMORY_VALUE; }
+    if (!context) { FATX_ModuleStop(); return STATUS_NO_MEMORY_VALUE; }
     const int openStatus = FATX_OpenVolumeW(backingDevicePath, partitionOffset, partitionLength, &context->volume);
-    if (openStatus != FATX_OK) { delete context; ModuleStop(); return MapStatus(openStatus); }
+    if (openStatus != FATX_OK) { delete context; FATX_ModuleStop(); return MapStatus(openStatus); }
     const LONG status = XboxFsMount(deviceName, &kProvider, context, 0, &context->mount);
-    if (status != 0) { FATX_CloseVolume(context->volume); delete context; ModuleStop(); return status; }
+    if (status != 0) { FATX_CloseVolume(context->volume); delete context; FATX_ModuleStop(); return status; }
     *mountHandle = context->mount;
     { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
     return STATUS_SUCCESS_VALUE;
@@ -143,6 +143,6 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_UnregisterFilesystemProvide
     }
     FATX_CloseVolume(context->volume);
     delete context;
-    ModuleStop();
+    FATX_ModuleStop();
     return STATUS_SUCCESS_VALUE;
 }
