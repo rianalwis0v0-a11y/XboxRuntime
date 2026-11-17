@@ -46,6 +46,8 @@ LONG __stdcall XboxFsMount(const WCHAR* deviceName,
     const XBOX_FS_PROVIDER_V1* provider, void* providerContext,
     DWORD mountFlags, XBOX_FS_MOUNT* mountHandle);
 LONG __stdcall XboxFsUnmount(XBOX_FS_MOUNT mountHandle);
+// Returns TRUE when an absolute device path is covered by a registered mount.
+BOOL __stdcall XboxFsIsPathMounted(const WCHAR* absolutePath);
 LONG __stdcall XboxFsOpen(const WCHAR* absolutePath, ACCESS_MASK desiredAccess,
     ULONG shareAccess, XBOX_FS_FILE* fileHandle);
 LONG __stdcall XboxFsRead(XBOX_FS_FILE fileHandle, ULONGLONG offset,
