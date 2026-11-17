@@ -754,6 +754,22 @@ extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     if (!oa || !oa->ObjectName || !out)
         return LONG(0xC000000Du);
     if (oa->RootDirectory) return LONG(0xC00000BBu);
+    const std::wstring devicePath = TranslateXboxDevicePath(oa->ObjectName);
+    if (!devicePath.empty() && XboxFsIsPathMounted(devicePath.c_str())) {
+        XBOX_FS_FILE file = nullptr;
+        LONG status = XboxFsOpen(devicePath.c_str(), 0, 7, &file);
+        if (status != 0) return status;
+        XBOX_FS_FILE_INFO info{};
+        status = XboxFsQueryInformation(file, &info);
+        XboxFsClose(file);
+        if (status != 0) return status;
+        GuestFileNetworkOpenInformation value{};
+        value.AllocationSize.QuadPart = LONGLONG(info.allocationSize);
+        value.EndOfFile.QuadPart = LONGLONG(info.size);
+        value.FileAttributes = info.attributes;
+        *out = value;
+        return 0;
+    }
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     WIN32_FILE_ATTRIBUTE_DATA data{};
@@ -1132,6 +1148,7 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
     if (!file || file == INVALID_HANDLE_VALUE) return SetDirectoryIoStatus(io, statusInvalidHandle);
+    if (FindFilesystemHandle(file)) return SetDirectoryIoStatus(io, statusNotSupported);
     if (!information) return SetDirectoryIoStatus(io, statusInvalidParameter);
     if (informationClass != 1 && informationClass != 12)
         return SetDirectoryIoStatus(io, LONG(0xC0000003u)); // STATUS_INVALID_INFO_CLASS
