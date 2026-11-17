@@ -5,11 +5,8 @@
 #include <cstring>
 #include <vector>
 #include "kernel_filesystem_bridge.h"
-
-extern "C" LONG __stdcall FATX_RegisterFilesystemProvider(const WCHAR*, const WCHAR*, ULONGLONG, ULONGLONG, XBOX_FS_MOUNT*);
-extern "C" LONG __stdcall FATX_UnregisterFilesystemProvider(XBOX_FS_MOUNT);
-extern "C" LONG __stdcall XDVDFS_RegisterFilesystemProvider(const WCHAR*, const WCHAR*, XBOX_FS_MOUNT*);
-extern "C" LONG __stdcall XDVDFS_UnregisterFilesystemProvider(XBOX_FS_MOUNT);
+#include "modules/fatx/fatx_provider.h"
+#include "modules/xdvdfs/xdvdfs_provider.h"
 
 static void Put16(std::vector<BYTE>& b, size_t o, uint16_t v) { b[o] = BYTE(v); b[o+1] = BYTE(v >> 8); }
 static void Put32(std::vector<BYTE>& b, size_t o, uint32_t v) { for (int i=0;i<4;++i) b[o+i] = BYTE(v >> (i*8)); }
