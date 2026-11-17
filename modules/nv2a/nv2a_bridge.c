@@ -64,6 +64,7 @@ static NV2A_TEXTURE_CACHE g_texture_cache[32][8][4];
 static void mark_all_textures_dirty(void);
 static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
 static void release_texture_cache(void);
+static int dma_can_read(const XboxNV2A_DMA_INFO* dma);
 
 
 int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
