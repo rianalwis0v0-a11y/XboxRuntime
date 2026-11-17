@@ -1710,3 +1710,14 @@ Head SHA: 9337934ac76e9dff993ab6b31920cf19742e5ec7
 Changes: added standalone MSVC build targets for the existing kernel-branch FATX reader and the XDVDFS module; ported XDVDFS reader/header and synthetic regression test; extended kernel CI to build both filesystem DLLs and run XDVDFS smoke test.
 Compatibility: no branch-wide merge, no vendor dependency, preserves existing kernel FATX reader API. Runtime main already lists fatx.dll and xdvdfs.dll. This PR supplies build targets and XDVDFS module source, not filesystem syscall routing into guest Nt* APIs.
 Validation: PR CI started (kernel backend workflow + kernel memory API workflow). Awaiting completed results; do not merge until all checks pass.
+
+
+[2026-11-17 UTC] [FILESYSTEM INTEGRATION — FATX 75% MILESTONE / XDVDFS TESTS GREEN]
+Owner branch: work/filesystem-kernel-integration
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/30
+Latest branch commit at update: de4319adc3227426174b49088984755605be07a3
+FATX: kernel-compatible read module hardened for FATX EOC markers (only 0xFFFF / 0xFFFFFFFF), cluster geometry 1..1024 sectors, overflow-safe FAT alignment, CP437 OEM names, hash-set chain cycle detection. Added regression tests for partition bounds, 16/32-bit FAT widths, nested directories, case-insensitive paths, CP437 filenames, multi-cluster reads, EOF bounds, cycles, and reserved markers.
+XDVDFS: module and regression test integrated with MSVC build target.
+Verified: independent Windows/MSVC filesystem workflow run 44115627767 SUCCESS at commit f0ac8a43c6e1557a296ce50443b791ce3b8485c1; all FATX and XDVDFS configure/build/test steps passed. Latest CMake warning-cleanup commit triggered repeat run 44115698971, still in progress at update.
+Kernel runtime workflow run 44115698864 still in progress; waiting for XBE artifact then builds modules and runs full kernel/XBE integration.
+Scope: filesystem module build/test integration is green. FATX write/mutation API and guest Nt* filesystem syscall routing are not implemented in this PR and must not be reported as complete.
