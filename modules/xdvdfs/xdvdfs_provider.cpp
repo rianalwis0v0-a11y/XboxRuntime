@@ -5,7 +5,7 @@
 #include <new>
 #include <string>
 #include <unordered_map>
-#include "guest32/kernel_filesystem_bridge.h"
+#include "xdvdfs_provider.h"
 #include "xdvdfs.h"
 
 namespace {
