@@ -505,6 +505,32 @@ int main() {
         return 1;
     }
 
+    /* DMA object validation must reject unsupported memory targets/classes
+     * and spans that overflow the local VRAM aperture, then accept the
+     * restored valid object. PCI/AGP is deliberately fail-closed until mapped. */
+    const uint32_t dmaBadTarget[3] = {
+        0x00010002u, 0x00000FFFu, 0x00001000u
+    };
+    const uint32_t dmaBadClass[3] = {
+        0x00000099u, 0x00000FFFu, 0x00001000u
+    };
+    const uint32_t dmaBadRange[3] = {
+        0x00000002u, 0x00002000u, 0x03FFF000u
+    };
+    if (writeRamin(0x100u, dmaBadTarget, sizeof(dmaBadTarget)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) == 0 ||
+        writeRamin(0x100u, dmaBadClass, sizeof(dmaBadClass)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) == 0 ||
+        writeRamin(0x100u, dmaBadRange, sizeof(dmaBadRange)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) == 0 ||
+        writeRamin(0x100u, dmaObject, sizeof(dmaObject)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) != 0 ||
+        dmaInfo.base_address != 0x1000u || dmaInfo.mapped_length != 0x0FFFu) {
+        std::cerr << "FAIL: NV2A DMA target/class/range validation\\n";
+        stop();
+        return 1;
+    }
+
     /* Exercise NV4-style DMA GET/PUT with a real RAMHT-bound PGRAPH object.
      * CALL enters a helper at +24, binds the object, RETURN resumes at +4. */
     const uint32_t dmaCallStream[] = {
