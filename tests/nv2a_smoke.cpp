@@ -1004,6 +1004,28 @@ int main() {
         return 1;
     }
 
+    /* A write-only DMA object may be bound, but never read as a texture. */
+    const uint32_t writeOnlyDmaObject[3] = {
+        0x00000003u, 0x00000FFFu, 0x00001000u
+    };
+    const uint32_t readOnlyDmaObject[3] = {
+        0x00000002u, 0x00000FFFu, 0x00001000u
+    };
+    if (writeRamin(0x100u, writeOnlyDmaObject, sizeof(writeOnlyDmaObject)) != 0 ||
+        submit(0u, 0x018Cu, dmaHandle) != 0 ||
+        submit(0u, 0x1B04u, (textureFormat & ~3u) | 3u) != 0 ||
+        decodeTextureStage(channel, 0u, 0u, stagePixels, sizeof(stagePixels),
+            stageOffsets, stageSizes) == 0 ||
+        writeRamin(0x100u, readOnlyDmaObject, sizeof(readOnlyDmaObject)) != 0 ||
+        submit(0u, 0x018Cu, dmaHandle) != 0 ||
+        submit(0u, 0x1B04u, textureFormat) != 0 ||
+        decodeTextureStage(channel, 0u, 0u, stagePixels, sizeof(stagePixels),
+            stageOffsets, stageSizes) != 0) {
+        std::cerr << "FAIL: NV2A DMA read permission enforcement\\n";
+        stop();
+        return 1;
+    }
+
     /* Linear stage dimensions and row pitch come from IMAGE_RECT/CONTROL1. */
     const uint32_t linearStageFormat = 1u | (2u << 4) | (0x12u << 8) | (1u << 16);
     TextureInfo linearStageInfo{};
