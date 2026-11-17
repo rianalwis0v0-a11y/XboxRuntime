@@ -45,8 +45,8 @@ typedef struct FATX_ENTRY {
     ULONGLONG size;
 } FATX_ENTRY;
 
-__declspec(dllexport) int __cdecl ModuleStart();
-__declspec(dllexport) void __cdecl ModuleStop();
+__declspec(dllexport) int __cdecl FATX_ModuleStart();
+__declspec(dllexport) void __cdecl FATX_ModuleStop();
 
 __declspec(dllexport)
 int __cdecl FATX_OpenVolumeW(
@@ -82,6 +82,17 @@ int __cdecl FATX_ReadFileW(
     void* buffer,
     DWORD bytesToRead,
     DWORD* bytesRead
+);
+
+__declspec(dllexport)
+int __cdecl FATX_WriteFileW(
+    FATX_VOLUME volume, LPCWSTR path, ULONGLONG offset,
+    const void* buffer, DWORD bytesToWrite, DWORD* bytesWritten
+);
+
+__declspec(dllexport)
+int __cdecl FATX_GetFileInfoW(
+    FATX_VOLUME volume, LPCWSTR path, FATX_ENTRY* entry
 );
 
 #ifdef __cplusplus
