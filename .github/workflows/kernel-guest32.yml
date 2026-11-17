@@ -92,6 +92,17 @@ jobs:
       - name: Build host kernel backend
         run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke
 
+      - name: Configure and build FATX filesystem module
+        run: |
+          cmake -S modules/fatx -B build-fatx -A x64
+          cmake --build build-fatx --config Release --target fatx
+
+      - name: Configure and build XDVDFS filesystem module and tests
+        run: |
+          cmake -S modules/xdvdfs -B build-xdvdfs -A x64
+          cmake --build build-xdvdfs --config Release --target xdvdfs xdvdfs_smoke
+          ctest --test-dir build-xdvdfs -C Release --output-on-failure -R xdvdfs_smoke
+
       - name: Configure main runtime module
         run: cmake -S main -B build-main -A x64
 
