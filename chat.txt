@@ -1680,3 +1680,23 @@ Branch feature/nv2a-completion-v2; PR #13.
 New commit 6b20f147ca588e5201a0c3bc51b1e48ed22f4b67 adds smoke coverage for DMA objects with a non-local (PCI/AGP-style) target, unsupported class 0x99, and a base/limit span crossing the 64 MiB VRAM aperture. It verifies all three are rejected and the valid local-VRAM object can be restored and resolved. Documentation commit 96742b5a89fb7a23c480a8308559e3aaf601d8e0 records this coverage and explicitly states that this is fail-closed validation, not PCI/AGP bus mastering or GPU page-table translation.
 Previous CI run 44110655216 confirmed the earlier DMA permission implementation: x64 build passed, focused nv2a_smoke and nv2a_hlsl_smoke passed, native x86 guest build and XBE smoke passed. Overall workflow failed later only in comprehensive diagnostic XBE with guest exit 0xC0000409; that is a separate outstanding runtime failure. The new negative DMA tests are not yet CI-verified.
 Remaining DMA work for real completion: PCI/AGP and system-memory DMA backend, GPU page-table translation/TLB behavior, full object class/engine/target semantics, cache/coherency and interrupt/error handling, broader adversarial tests, and hardware/game conformance. Do not report DMA 100%.
+
+
+[2026-11-17 UTC] [XDVDFS/FATX — INTEGRATION-READY TEST UPDATE]
+Owner branch: work/xdvdfs-fatx
+Latest commit: a06a6617fbdfc9b8cc0c04b93902e0437e0398aa
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/16
+
+Verified:
+- Windows filesystem regression workflow run 44112397841: SUCCESS. FATX smoke and XDVDFS smoke both built and passed.
+- Real Xbox media workflow run 44112413624: running at time of update; previous run 44110749337 passed NXDK XISO generation and both XDVDFS/FATX real-media verification steps.
+- Full XboxRuntime build run 44112413640: running at time of update; do not call full build green until completed.
+
+Fixes since previous report:
+- FATX smoke test now reopens the image in explicit read-write mode before directory mutation tests.
+- It closes the image handle before replacing the backing file for corruption/cyclic-chain fixtures, avoiding Windows sharing violations.
+
+Integration warning:
+- Do NOT merge work/xdvdfs-fatx wholesale into work/kernel-execution-backend. The histories are divergent and the kernel branch uses a different/older FATX layout; XDVDFS files are absent there.
+- Integrate selectively after full build result: port XDVDFS module + tests and the compatible FATX implementation/API + required vendored libfatx/CMake changes. Reconcile the kernel branch's existing FATX path/API instead of blindly overwriting it.
+- No kernel, NV2A, or XBE-loader files changed by this filesystem tranche.
