@@ -11,6 +11,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <algorithm>
 #include <limits>
 
@@ -228,7 +229,7 @@ static int ReadDirectory(
     if (!ValidCluster(v, firstCluster))
         return FATX_CORRUPT;
 
-    std::vector<DWORD> visited;
+    std::unordered_set<DWORD> visited;
     std::vector<BYTE> clusterData(v->clusterSize);
 
     DWORD current = firstCluster;
@@ -237,13 +238,8 @@ static int ReadDirectory(
          count < v->clusterCount;
          ++count)
     {
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
+        if (!visited.insert(current).second)
             return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         if (!ReadAt(
             v,
@@ -768,17 +764,12 @@ extern "C" int __cdecl FATX_ReadFileW(
     if (entry.size && !ValidCluster(v, current))
         return FATX_CORRUPT;
 
-    std::vector<DWORD> visited;
+    std::unordered_set<DWORD> visited;
 
     for (ULONGLONG i = 0; i < skip; ++i)
     {
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
+        if (!visited.insert(current).second)
             return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         DWORD next = 0;
         bool end = false;
@@ -798,16 +789,9 @@ extern "C" int __cdecl FATX_ReadFileW(
     while (remaining)
     {
         if (!ValidCluster(v, current) ||
-            visited.size() >= v->clusterCount)
+            visited.size() >= v->clusterCount ||
+            !visited.insert(current).second)
             return FATX_CORRUPT;
-
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
-            return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         DWORD amount = static_cast<DWORD>(
             std::min<ULONGLONG>(
