@@ -53,9 +53,9 @@ int wmain(int argc, wchar_t** argv) {
                      XboxXbe::ErrorName(parsed.error), parsed.detail);
         return 4;
     }
-    std::printf("NXDK XBE metadata: base=0x%08X size=0x%08X entry=0x%08X "
+    std::printf("NXDK XBE metadata: base=0x%08X size=0x%08X header=0x%08X entry=0x%08X "
                 "TLS=0x%08X sections=%u\n",
-                image.baseAddress, image.imageSize, image.entryPoint,
+                image.baseAddress, image.imageSize, image.headerSize, image.entryPoint,
                 image.tlsAddress, image.sectionCount);
     for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
         const auto& section = image.sections[i];
@@ -145,6 +145,23 @@ int wmain(int argc, wchar_t** argv) {
         } else {
             xbeActive = true;
             std::puts("PASS: LoadXbe mapped the on-disk NXDK image and the real kernel backend accepted startup.");
+            // Diagnostic only: report the actual host protection of every XBE section.
+            for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+                const auto& section = image.sections[i];
+                MEMORY_BASIC_INFORMATION sectionMemory{};
+                if (VirtualQuery(reinterpret_cast<const void*>(
+                        static_cast<std::uintptr_t>(section.virtualAddress)),
+                        &sectionMemory, sizeof(sectionMemory)) == sizeof(sectionMemory)) {
+                    std::printf("Mapped section %u: flags=0x%08X VA=0x%08X size=0x%08X "
+                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\\n",
+                                i, section.flags, section.virtualAddress, section.virtualSize,
+                                sectionMemory.BaseAddress, sectionMemory.State,
+                                sectionMemory.Protect, sectionMemory.Type);
+                } else {
+                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\\n",
+                                i, GetLastError());
+                }
+            }
         }
     }
 
