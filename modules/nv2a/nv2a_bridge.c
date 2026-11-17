@@ -18,6 +18,14 @@
 
 static uint8_t* g_vram;
 static uint8_t* g_ramin;
+/* Borrowed guest-physical RAM mapping for PCI and the linear AGP alias. */
+static uint8_t* g_guest_physical_memory;
+static uint32_t g_guest_physical_base;
+static uint32_t g_guest_physical_length;
+/* Optional host override for non-linear AGP mappings. The default Xbox path
+ * resolves the linear aperture alias through g_guest_physical_memory. */
+static XboxNV2A_AGP_TRANSLATE_FN g_agp_translate;
+static void* g_agp_translate_context;
 
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
@@ -41,6 +49,8 @@ static uint32_t g_nv2a_vsh_context_write;
 static DWORD g_nv2a_vsh_handle;
 static uint16_t g_nv2a_vsh_input_mask;
 static uint32_t g_nv2a_vsh_program_hash;
+static uint32_t g_nv2a_vsh_cached_instruction_count;
+static DWORD g_nv2a_vsh_cached_program[136][4];
 static uint8_t* g_nv2a_gpu_vertex_stream;
 static size_t g_nv2a_gpu_vertex_capacity;
 static int g_nv2a_vsh_dirty = 1;
@@ -56,15 +66,74 @@ typedef struct NV2A_TEXTURE_CACHE {
     IDirect3DTexture8* texture;
     IDirect3DDevice8* owner_device;
     uint32_t format, offset, control0, control1, image_rect;
-    uint32_t dma_handle, dma_base, dma_length;
-    uint32_t palette, palette_dma_handle, palette_dma_base, palette_dma_length;
+    uint32_t dma_handle, dma_target, dma_base, dma_length;
+    uint32_t palette, palette_dma_handle, palette_dma_target, palette_dma_base, palette_dma_length;
     int dirty;
 } NV2A_TEXTURE_CACHE;
 static NV2A_TEXTURE_CACHE g_texture_cache[32][8][4];
 static void mark_all_textures_dirty(void);
 static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
 static void release_texture_cache(void);
-static int dma_can_read(const XboxNV2A_DMA_INFO* dma);
+
+static int dma_can_read(const XboxNV2A_DMA_INFO* dma)
+{
+    /* NV_DMA_CLASS_2 is read-only; NV_DMA_CLASS_3D permits read/write.
+     * Class 3 is write-only and must never back a GPU data fetch. */
+    return dma && (dma->dma_class == 0x02u || dma->dma_class == 0x3Du);
+}
+
+/* Resolve a checked byte span from NV2A local VRAM, explicitly bound PCI
+ * memory, or the host-supplied AGP/GART adapter. DMA target encodings are
+ * defined by the NV2A object format; NVM_TILED is rejected until tile
+ * address swizzling is implemented. */
+static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
+                        uint32_t length, const uint8_t** output)
+{
+    if (output) *output = NULL;
+    if (!dma || !output || !dma->mapped_length ||
+        offset > dma->mapped_length ||
+        length > dma->mapped_length - offset)
+        return 0;
+
+    const uint64_t address = (uint64_t)dma->base_address + offset;
+    if (dma->dma_target == XBOX_NV2A_DMA_TARGET_LOCAL) {
+        if (!g_vram || address > XBOX_VRAM_SIZE ||
+            length > (uint64_t)XBOX_VRAM_SIZE - address)
+            return 0;
+        *output = g_vram + (size_t)address;
+        return 1;
+    }
+    if (dma->dma_target == XBOX_NV2A_DMA_TARGET_PCI) {
+        if (!g_guest_physical_memory || address > g_guest_physical_length ||
+            length > (uint64_t)g_guest_physical_length - address)
+            return 0;
+        *output = g_guest_physical_memory + (size_t)address;
+        return 1;
+    }
+    if (dma->dma_target == XBOX_NV2A_DMA_TARGET_AGP) {
+        if (g_agp_translate) {
+            const void* translated = NULL;
+            uint32_t contiguous_length = 0;
+            if (!g_agp_translate((uint32_t)address, length, &translated,
+                                 &contiguous_length, g_agp_translate_context) ||
+                !translated || contiguous_length < length)
+                return 0;
+            *output = (const uint8_t*)translated;
+            return 1;
+        }
+        /* Xbox AGP memory is exposed through the linear 0xF0000000 alias;
+         * the DMA object's 27-bit base is the guest-physical page offset. */
+        if (!g_guest_physical_memory || address < g_guest_physical_base ||
+            address - g_guest_physical_base > g_guest_physical_length ||
+            length > (uint64_t)g_guest_physical_length -
+                (address - g_guest_physical_base))
+            return 0;
+        *output = g_guest_physical_memory +
+            (size_t)(address - g_guest_physical_base);
+        return 1;
+    }
+    return 0; /* Reserved targets are never interpreted as host pointers. */
+}
 
 
 int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
@@ -186,6 +255,13 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         state = D3DRS_DESTBLEND;
         if (!map_blend_factor(parameter, &value)) return 0;
         break;
+    case 0x0358u:
+        state = D3DRS_COLORWRITEENABLE;
+        value = ((parameter >> 16) & 1u) |
+                (((parameter >> 8) & 1u) << 1) |
+                ((parameter & 1u) << 2) |
+                (((parameter >> 24) & 1u) << 3);
+        break;
     case NV097_SET_ALPHA_FUNC:
         state = D3DRS_ALPHAFUNC;
         if (!map_compare_function(parameter, &value)) return 0;
@@ -269,6 +345,8 @@ int __cdecl XboxNV2A_MapRenderState(uint32_t method, uint32_t parameter,
         break;
     case NV097_SET_POINT_SIZE:
         state = D3DRS_POINTSIZE; break;
+    case 0x0318u:
+        state = D3DRS_POINTSCALEENABLE; value = parameter ? 1u : 0u; break;
     default:
         return 0;
     }
@@ -319,6 +397,47 @@ static int map_texture_address_mode(uint32_t mode, uint32_t* output)
     }
 }
 
+int __cdecl XboxNV2A_MapTextureAddress(uint32_t parameter,
+    uint32_t* address_u_out, uint32_t* address_v_out,
+    uint32_t* address_w_out)
+{
+    if (address_u_out) *address_u_out = 0u;
+    if (address_v_out) *address_v_out = 0u;
+    if (address_w_out) *address_w_out = 0u;
+    if (!address_u_out || !address_v_out || !address_w_out)
+        return 0;
+
+    uint32_t address_u = 0u, address_v = 0u, address_w = 0u;
+    const uint32_t mode_p = (parameter >> 16) & 0x7u;
+    if (!map_texture_address_mode(parameter & 0x7u, &address_u) ||
+        !map_texture_address_mode((parameter >> 8) & 0x7u, &address_v))
+        return 0;
+    /* P is unused by the D3D8 2D sampler path. Zero means no P mode was
+     * supplied; preserve that as an explicit unsupported/default value. */
+    if (mode_p != 0u && !map_texture_address_mode(mode_p, &address_w))
+        return 0;
+
+    *address_u_out = address_u;
+    *address_v_out = address_v;
+    *address_w_out = address_w;
+    return 1;
+}
+
+int __cdecl XboxNV2A_MapTextureLodBias(uint32_t parameter,
+    uint32_t* lod_bias_float_bits_out)
+{
+    if (lod_bias_float_bits_out) *lod_bias_float_bits_out = 0u;
+    if (!lod_bias_float_bits_out)
+        return 0;
+
+    int32_t signed_bias = (int32_t)(parameter & 0x1FFFu);
+    if (signed_bias & 0x1000)
+        signed_bias |= ~0x1FFF;
+    const float lod_bias = (float)signed_bias / 256.0f;
+    memcpy(lod_bias_float_bits_out, &lod_bias, sizeof(lod_bias));
+    return 1;
+}
+
 int __cdecl XboxNV2A_MapTextureFilter(uint32_t parameter,
     uint32_t* min_filter_out, uint32_t* mag_filter_out,
     uint32_t* mip_filter_out)
@@ -355,30 +474,35 @@ int __cdecl XboxNV2A_MapTextureFilter(uint32_t parameter,
 
 static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
 {
-    uint32_t stage=0, state_u=0, state_v=0;
+    uint32_t stage=0, state_u=0, state_v=0, state_w=0;
     IDirect3DDevice8* device=xbox_GetD3DDevice();
     if(!device || !device->lpVtbl || !device->lpVtbl->SetTextureStageState)
         return 0;
     if(method>=0x1B08u && method<=0x1BC8u &&
        ((method-0x1B08u)%0x40u)==0u) {
         stage=(method-0x1B08u)/0x40u;
-        if(stage>=4u ||
-           !map_texture_address_mode(parameter&0xFu,&state_u) ||
-           !map_texture_address_mode((parameter>>4)&0xFu,&state_v))
+        if (stage >= 4u ||
+            !XboxNV2A_MapTextureAddress(parameter, &state_u, &state_v, &state_w))
             return 0;
-        if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
-                D3DTSS_ADDRESSU,state_u))) return 0;
-        if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
-                D3DTSS_ADDRESSV,state_v))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_ADDRESSU, state_u))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_ADDRESSV, state_v))) return 0;
+        /* Xbox exposes P addressing for volume textures; the current D3D8
+         * compatibility interface has no ADDRESSW stage-state token. Keep
+         * the P mode decoded/validated, but do not invent a host state. */
+        (void)state_w;
         return 1;
     }
     if (method >= 0x1B14u && method <= 0x1BD4u &&
         ((method - 0x1B14u) % 0x40u) == 0u) {
         uint32_t min_filter = 0, mag_filter = 0, mip_filter = 0;
+        uint32_t lod_bias_bits = 0;
         stage = (method - 0x1B14u) / 0x40u;
         if (stage >= 4u ||
             !XboxNV2A_MapTextureFilter(parameter, &min_filter,
-                                       &mag_filter, &mip_filter))
+                                       &mag_filter, &mip_filter) ||
+            !XboxNV2A_MapTextureLodBias(parameter, &lod_bias_bits))
             return 0;
         if (FAILED(device->lpVtbl->SetTextureStageState(
                 device, stage, D3DTSS_MINFILTER, min_filter))) return 0;
@@ -386,6 +510,8 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
                 device, stage, D3DTSS_MAGFILTER, mag_filter))) return 0;
         if (FAILED(device->lpVtbl->SetTextureStageState(
                 device, stage, D3DTSS_MIPFILTER, mip_filter))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_MIPMAPLODBIAS, lod_bias_bits))) return 0;
         return 1;
     }
     if(method>=0x1B24u && method<=0x1BE4u &&
@@ -601,7 +727,9 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
         method == NV097_SET_FOG_COLOR ||
         method == NV097_SET_FOG_MODE ||
         method == NV097_SET_LIGHTING_ENABLE ||
-        method == NV097_SET_POINT_SIZE) {
+        method == NV097_SET_POINT_SIZE ||
+        method == 0x0318u ||
+        method == 0x0358u) {
         if (apply_nv2a_render_state(method, parameter))
             ++g_pgraph_custom_methods;
         g_gpu->pgraph.regs[method / 4u] = parameter;
@@ -671,6 +799,8 @@ int __cdecl ModuleStart(void)
     g_nv2a_vsh_constant_word = 0;
     g_nv2a_vsh_context_write = 0;
     g_nv2a_vsh_program_hash = 0;
+    g_nv2a_vsh_cached_instruction_count = 0;
+    memset(g_nv2a_vsh_cached_program, 0, sizeof(g_nv2a_vsh_cached_program));
     if (g_nv2a_vsh_handle) {
         (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
         g_nv2a_vsh_handle = 0;
@@ -707,6 +837,12 @@ void __cdecl ModuleStop(void)
     // Keep its backing allocation alive until the host process exits; freeing
     // it here would leave the singleton's VRAM/RAMIN pointers dangling.
     g_started = 0;
+    /* Never retain a borrowed guest-memory pointer across module shutdown. */
+    g_guest_physical_memory = NULL;
+    g_guest_physical_base = 0;
+    g_guest_physical_length = 0;
+    g_agp_translate = NULL;
+    g_agp_translate_context = NULL;
     OutputDebugStringW(L"[XboxRuntime:NV2A] Translator stopped. GPU memory retained until process exit.\n");
 }
 
@@ -785,6 +921,63 @@ static int memory_range_valid(uint32_t offset, uint32_t length, uint32_t capacit
     return offset <= capacity && length <= capacity - offset;
 }
 
+static void invalidate_dma_contexts_for_target(uint32_t target)
+{
+    for (uint32_t channel = 0; channel < 32u; ++channel)
+        for (uint32_t subchannel = 0; subchannel < 8u; ++subchannel)
+            for (uint32_t slot = 0; slot < 32u; ++slot) {
+                XboxNV2A_DMA_INFO* dma =
+                    &g_dma_contexts[channel][subchannel][slot];
+                if (dma->mapped_length && dma->dma_target == target)
+                    memset(dma, 0, sizeof(*dma));
+            }
+    mark_all_textures_dirty();
+}
+
+int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
+                                              void* memory, uint32_t length)
+{
+    if (!g_started) return 1;
+    if (!memory && !length && !guest_physical_base) {
+        if (g_guest_physical_memory)
+            invalidate_dma_contexts_for_target(XBOX_NV2A_DMA_TARGET_PCI);
+        g_guest_physical_memory = NULL;
+        g_guest_physical_base = 0;
+        g_guest_physical_length = 0;
+        return 0;
+    }
+    if (!memory || !length || guest_physical_base >= 0x08000000u ||
+        length > 0x08000000u - guest_physical_base)
+        return 2;
+
+    /* DMA_INFO stores a mapping-relative PCI base. If the physical window
+     * moves, old contexts would point at the wrong bytes; force them to be
+     * rebound through their RAMHT handles. A same-base remap only dirties
+     * cached textures because the context-relative offsets remain valid. */
+    if (g_guest_physical_memory &&
+        (g_guest_physical_base != guest_physical_base ||
+         g_guest_physical_length != length))
+        invalidate_dma_contexts_for_target(XBOX_NV2A_DMA_TARGET_PCI);
+    else
+        mark_all_textures_dirty();
+
+    g_guest_physical_memory = (uint8_t*)memory;
+    g_guest_physical_base = guest_physical_base;
+    g_guest_physical_length = length;
+    return 0;
+}
+
+
+int __cdecl XboxNV2A_BindAGPAddressTranslator(
+    XboxNV2A_AGP_TRANSLATE_FN translate, void* context)
+{
+    if (!g_started) return 1;
+    if (!translate && context) return 2;
+    g_agp_translate = translate;
+    g_agp_translate_context = context;
+    mark_all_textures_dirty();
+    return 0;
+}
 
 static uint8_t expand5(uint32_t value) { return (uint8_t)((value << 3) | (value >> 2)); }
 static uint8_t expand6(uint32_t value) { return (uint8_t)((value << 2) | (value >> 4)); }
@@ -1095,21 +1288,17 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
      * NV097 context slots: DMA_A, DMA_B, DMA_C and DMA_D. */
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
 
-    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
-    if (source_address > XBOX_VRAM_SIZE)
-        return 4;
-
     const uint32_t available = dma->mapped_length - texture_offset;
-    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
-        return 5;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, texture_offset, available, &source))
+        return 4;
     return XboxNV2A_DecodeTextureMipChainRGBA8(
-        format, width, height, level_count,
-        g_vram + (size_t)source_address, available,
+        format, width, height, level_count, source, available,
         destination, destination_capacity, level_offsets, level_sizes);
 }
 
@@ -1126,19 +1315,17 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
         return 1;
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
-    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
-    if (source_address > XBOX_VRAM_SIZE)
-        return 4;
     const uint32_t available = dma->mapped_length - texture_offset;
-    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
-        return 5;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, texture_offset, available, &source))
+        return 4;
     return XboxNV2A_DecodeTextureRGBA8(format, width, height, source_pitch,
-        g_vram + (size_t)source_address, available, destination,
-        destination_capacity, destination_pitch);
+        source, available, destination, destination_capacity,
+        destination_pitch);
 }
 
 
@@ -1161,14 +1348,20 @@ static void release_texture_cache(void)
         memset(e,0,sizeof(*e));
     }
 }
-static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevice8* device)
+static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,
+                              IDirect3DDevice8* device,uint32_t stage_mask)
 {
     if(!device||!device->lpVtbl||!device->lpVtbl->SetTexture||!device->lpVtbl->CreateTexture)return 1;
     for(uint32_t stage=0;stage<4u;++stage){
         const uint32_t base=0x1B00u+stage*0x40u;
         const uint32_t control0=g_gpu->pgraph.regs[(base+0x0Cu)/4u];
         NV2A_TEXTURE_CACHE* e=&g_texture_cache[channel][subchannel][stage];
-        if(!(control0&(1u<<30))){
+        const int packet_enabled = (stage_mask & (1u << stage)) != 0;
+        const int state_enabled = (control0 & (1u << 30)) != 0;
+        /* The draw packet owns the active-stage decision. A mismatch means
+         * guest state changed after packet construction and must not be drawn. */
+        if (packet_enabled != state_enabled) return 11;
+        if(!packet_enabled){
             if(FAILED(device->lpVtbl->SetTexture(device,stage,NULL)))return 2;
             continue;
         }
@@ -1186,9 +1379,10 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
         const int changed=e->dirty||!e->texture||e->owner_device!=device||e->format!=info.format||
             e->offset!=info.texture_offset||e->control0!=control0||
             e->control1!=control1||e->image_rect!=image_rect||
-            e->dma_handle!=dma->handle||e->dma_base!=dma->base_address||
-            e->dma_length!=dma->mapped_length||e->palette!=palette||
-            e->palette_dma_handle!=palette_dma->handle||
+            e->dma_handle!=dma->handle||e->dma_target!=dma->dma_target||
+            e->dma_base!=dma->base_address||e->dma_length!=dma->mapped_length||
+            e->palette!=palette||e->palette_dma_handle!=palette_dma->handle||
+            e->palette_dma_target!=palette_dma->dma_target||
             e->palette_dma_base!=palette_dma->base_address||
             e->palette_dma_length!=palette_dma->mapped_length;
         if(changed){
@@ -1239,9 +1433,10 @@ static int bind_nv2a_textures(uint32_t channel,uint32_t subchannel,IDirect3DDevi
             if(e->texture&&e->texture->lpVtbl&&e->texture->lpVtbl->Release)e->texture->lpVtbl->Release(e->texture);
             e->texture=texture;e->owner_device=device;e->format=info.format;e->offset=info.texture_offset;
             e->control0=control0;e->control1=control1;e->image_rect=image_rect;
-            e->dma_handle=dma->handle;e->dma_base=dma->base_address;
-            e->dma_length=dma->mapped_length;e->palette=palette;
-            e->palette_dma_handle=palette_dma->handle;
+            e->dma_handle=dma->handle;e->dma_target=dma->dma_target;
+            e->dma_base=dma->base_address;e->dma_length=dma->mapped_length;
+            e->palette=palette;e->palette_dma_handle=palette_dma->handle;
+            e->palette_dma_target=palette_dma->dma_target;
             e->palette_dma_base=palette_dma->base_address;
             e->palette_dma_length=palette_dma->mapped_length;e->dirty=0;
         }
@@ -1327,7 +1522,14 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
 
     const XboxNV2A_DMA_INFO* dma =
         &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length)
+        return 5;
+    /* PCI-target textures require the explicitly bound guest-physical
+     * window; AGP-target textures require the host GART resolver. dma_get_span
+     * applies the same checked translation used by the actual texture decoder.
+     * NVM_TILED remains unsupported until tile address swizzling is added. */
+    const uint8_t* texture_span = NULL;
+    if (!dma_get_span(dma, offset, 0u, &texture_span))
         return 5;
 
     output->texture_offset = offset;
@@ -1361,16 +1563,12 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
     const uint32_t texture_slot=(info->context_method-0x0180u)/4u;
     const XboxNV2A_DMA_INFO* texture_dma=&g_dma_contexts[channel][subchannel][texture_slot];
     if(palette_method<0x0180u||!dma_can_read(palette_dma)||
-       !palette_dma->mapped_length||palette_dma->dma_target!=0u||
-       !dma_can_read(texture_dma)||!texture_dma->mapped_length||
-       texture_dma->dma_target!=0u)return 2;
-    if(palette_offset>palette_dma->mapped_length||
-       palette_bytes>palette_dma->mapped_length-palette_offset||
-       info->texture_offset>texture_dma->mapped_length)return 3;
-    const uint64_t palette_address=(uint64_t)palette_dma->base_address+palette_offset;
-    const uint64_t texture_address=(uint64_t)texture_dma->base_address+info->texture_offset;
-    if(palette_address>XBOX_VRAM_SIZE||palette_bytes>(uint64_t)XBOX_VRAM_SIZE-palette_address||
-       texture_address>XBOX_VRAM_SIZE)return 4;
+       !dma_can_read(texture_dma)||!palette_dma->mapped_length||
+       !texture_dma->mapped_length)return 2;
+    const uint8_t* palette_data=NULL;
+    const uint8_t* swizzled=NULL;
+    if(!dma_get_span(palette_dma,palette_offset,palette_bytes,&palette_data)||
+       !dma_get_span(texture_dma,info->texture_offset,0u,&swizzled))return 3;
 
     uint64_t source_total=0,destination_total=0;
     uint32_t w=info->width,h=info->height;
@@ -1386,11 +1584,10 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
         source_total+=input;destination_total+=output;
         w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
     }
-    if(source_total>(uint64_t)XBOX_VRAM_SIZE-texture_address)return 6;
+    if(source_total>UINT32_MAX||
+       !dma_get_span(texture_dma,info->texture_offset,(uint32_t)source_total,&swizzled))return 6;
     uint8_t* linear=(uint8_t*)HeapAlloc(GetProcessHeap(),0,(SIZE_T)source_total);
     if(!linear)return 7;
-    const uint8_t* swizzled=g_vram+(size_t)texture_address;
-    const uint8_t* palette_data=g_vram+(size_t)palette_address;
     w=info->width;h=info->height;
     uint64_t source_offset=0;
     for(uint32_t level=0;level<info->level_count;++level){
@@ -1856,16 +2053,40 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
 
     if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
         return 5;
-    if (target != 0u) return 6; /* PCI/AGP require a guest system-memory mapper. */
-    if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
-        return 7;
+    if (target == XBOX_NV2A_DMA_TARGET_LOCAL) {
+        if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
+            return 7;
+    } else if (target == XBOX_NV2A_DMA_TARGET_PCI) {
+        /* PCI DMA addresses resolve against the host runtime's explicitly
+         * bound guest-physical RAM window. */
+        if (!g_guest_physical_memory || base < g_guest_physical_base ||
+            base - g_guest_physical_base > g_guest_physical_length ||
+            limit > g_guest_physical_length - (base - g_guest_physical_base))
+            return 7;
+    } else if (target == XBOX_NV2A_DMA_TARGET_AGP) {
+        /* Xbox AGP memory is a linear alias of guest physical RAM at
+         * 0xF0000000; the DMA object's address field already masks to its
+         * 27-bit aperture offset. A host callback may override this mapping. */
+        if ((uint64_t)base + limit > 0x08000000ull)
+            return 7;
+        if (!g_agp_translate &&
+            (!g_guest_physical_memory || base < g_guest_physical_base ||
+             base - g_guest_physical_base > g_guest_physical_length ||
+             limit > g_guest_physical_length - (base - g_guest_physical_base)))
+            return 7;
+    } else if (target == XBOX_NV2A_DMA_TARGET_LOCAL_TILED) {
+        return 6; /* Valid target encoding, tiled address swizzle not implemented. */
+    } else {
+        return 6; /* Unknown DMA target encoding. */
+    }
 
     output->handle = handle;
     output->instance_offset = instance;
     output->dma_class = dma_class;
     output->dma_target = target;
     output->engine = engine;
-    output->base_address = base;
+    output->base_address = target == XBOX_NV2A_DMA_TARGET_PCI
+        ? base - g_guest_physical_base : base;
     output->limit = limit;
     output->mapped_length = limit;
     return 0;
@@ -1882,8 +2103,7 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
 
     const uint32_t instance = (context & 0xFFFFu) << 4;
     const uint32_t engine = (context & 0x00030000u) >> 16;
-    /* This resolver is the RAMHT-to-PGRAPH binding path.  Keep the PFIFO
-     * CACHE1_DMA_INSTANCE path (which has no RAMHT engine field) separate. */
+    /* RAMHT DMA handles bound by this bridge must target PGRAPH. */
     if (engine != 1u) return 8;
     return resolve_dma_instance(instance, handle, engine, output);
 }
@@ -1921,7 +2141,7 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     const uint32_t context_method = array_index < 8u ? 0x019Cu : 0x01A0u;
     const uint32_t context_slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length)
         return 2;
 
     const uint32_t offset_method = 0x1720u + array_index * 4u;
@@ -1969,16 +2189,17 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
         source_span > (uint64_t)dma->mapped_length - first_offset)
         return 7;
 
-    const uint64_t gpu_offset = (uint64_t)dma->base_address + first_offset;
-    if (gpu_offset > XBOX_VRAM_SIZE ||
-        source_span > (uint64_t)XBOX_VRAM_SIZE - gpu_offset)
+    const uint8_t* source = NULL;
+    if (first_offset > UINT32_MAX || source_span > UINT32_MAX ||
+        !dma_get_span(dma, (uint32_t)first_offset,
+                      (uint32_t)source_span, &source))
         return 8;
 
     uint8_t* output = (uint8_t*)destination;
     for (uint32_t vertex = 0; vertex < vertex_count; ++vertex) {
-        const uint64_t source_offset = gpu_offset + (uint64_t)vertex * stride;
+        const uint64_t source_offset = (uint64_t)vertex * stride;
         memcpy(output + (size_t)vertex * element_bytes,
-               g_vram + (size_t)source_offset, element_bytes);
+               source + (size_t)source_offset, element_bytes);
     }
     return 0;
 }
@@ -2051,9 +2272,15 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     if (((position_format >> 4) & 0xFu) != 3u) return 3;
 
     float positions[255u * 3u];
+    float weights[255u * 4u];
     float normals[255u * 3u];
+    float fog_coords[255u];
+    float point_sizes[255u];
+    float generic[3][255u * 4u];
     uint32_t colors[255u];
     uint32_t specular[255u];
+    uint32_t backface_diffuse[255u];
+    uint32_t backface_specular[255u];
     float texcoords[255u * 2u];
     float texcoords1[255u * 2u];
     float texcoords2[255u * 2u];
@@ -2062,6 +2289,45 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     int result=read_vertex_float_array(channel,subchannel,0u,
         first_vertex,vertex_count,3u,positions,sizeof(positions));
     if(result!=0)return 4;
+
+    /* Optional shader arrays are decoded when their format is supported.
+     * If a shader actually consumes an unavailable/unsupported array, the
+     * draw-packet validation rejects it rather than failing unrelated draws. */
+    int has_weights = 0;
+    const uint32_t weight_format = g_gpu->pgraph.regs[0x1764u / 4u];
+    if (weight_format != 0u &&
+        ((weight_format >> 4) & 0xFu) == 4u &&
+        read_vertex_float_array(channel, subchannel, 1u,
+            first_vertex, vertex_count, 4u, weights, sizeof(weights)) == 0)
+        has_weights = 1;
+
+    int has_fog = 0;
+    const uint32_t fog_format = g_gpu->pgraph.regs[0x1774u / 4u];
+    if (fog_format != 0u &&
+        ((fog_format >> 4) & 0xFu) == 1u &&
+        read_vertex_float_array(channel, subchannel, 5u,
+            first_vertex, vertex_count, 1u, fog_coords, sizeof(fog_coords)) == 0)
+        has_fog = 1;
+
+    int has_point_size = 0;
+    const uint32_t point_size_format = g_gpu->pgraph.regs[0x1778u / 4u];
+    if (point_size_format != 0u &&
+        ((point_size_format >> 4) & 0xFu) == 1u &&
+        read_vertex_float_array(channel, subchannel, 6u,
+            first_vertex, vertex_count, 1u, point_sizes, sizeof(point_sizes)) == 0)
+        has_point_size = 1;
+
+    int has_generic[3] = { 0, 0, 0 };
+    for (uint32_t generic_index = 0; generic_index < 3u; ++generic_index) {
+        const uint32_t array_index = 13u + generic_index;
+        const uint32_t format = g_gpu->pgraph.regs[
+            (0x1760u + array_index * 4u) / 4u];
+        if (format != 0u && ((format >> 4) & 0xFu) == 4u &&
+            read_vertex_float_array(channel, subchannel, array_index,
+                first_vertex, vertex_count, 4u, generic[generic_index],
+                sizeof(generic[generic_index])) == 0)
+            has_generic[generic_index] = 1;
+    }
 
     int has_normal = 0;
     const uint32_t normal_format = g_gpu->pgraph.regs[0x1768u / 4u];
@@ -2114,6 +2380,49 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         }
         has_specular = 1;
     }
+
+    int has_backface_diffuse = 0;
+    const uint32_t backface_diffuse_format = g_gpu->pgraph.regs[0x178Cu / 4u];
+    if (backface_diffuse_format != 0u) {
+        const uint32_t type = backface_diffuse_format & 0xFu;
+        if ((type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+             type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) &&
+            ((backface_diffuse_format >> 4) & 0xFu) == 4u &&
+            XboxNV2A_ReadVertexArray(channel, subchannel, 11u,
+                first_vertex, vertex_count, backface_diffuse,
+                sizeof(backface_diffuse), &stride, &element_bytes) == 0 &&
+            element_bytes == 4u) {
+            if (type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) {
+                for (uint32_t i = 0; i < vertex_count; ++i)
+                    backface_diffuse[i] = (backface_diffuse[i] & 0xFF00FF00u) |
+                        ((backface_diffuse[i] & 0x000000FFu) << 16) |
+                        ((backface_diffuse[i] & 0x00FF0000u) >> 16);
+            }
+            has_backface_diffuse = 1;
+        }
+    }
+
+    int has_backface_specular = 0;
+    const uint32_t backface_specular_format = g_gpu->pgraph.regs[0x1790u / 4u];
+    if (backface_specular_format != 0u) {
+        const uint32_t type = backface_specular_format & 0xFu;
+        if ((type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D ||
+             type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) &&
+            ((backface_specular_format >> 4) & 0xFu) == 4u &&
+            XboxNV2A_ReadVertexArray(channel, subchannel, 12u,
+                first_vertex, vertex_count, backface_specular,
+                sizeof(backface_specular), &stride, &element_bytes) == 0 &&
+            element_bytes == 4u) {
+            if (type == NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_OGL) {
+                for (uint32_t i = 0; i < vertex_count; ++i)
+                    backface_specular[i] = (backface_specular[i] & 0xFF00FF00u) |
+                        ((backface_specular[i] & 0x000000FFu) << 16) |
+                        ((backface_specular[i] & 0x00FF0000u) >> 16);
+            }
+            has_backface_specular = 1;
+        }
+    }
+
     int has_texcoord = 0;
     const uint32_t tex_format = g_gpu->pgraph.regs[0x177Cu / 4u];
     if (tex_format != 0u) {
@@ -2172,6 +2481,33 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
         vertex->v2 = has_texcoord2 ? texcoords2[i * 2u + 1u] : 0.0f;
         vertex->u3 = has_texcoord3 ? texcoords3[i * 2u + 0u] : 0.0f;
         vertex->v3 = has_texcoord3 ? texcoords3[i * 2u + 1u] : 0.0f;
+        vertex->backface_diffuse = has_backface_diffuse ? backface_diffuse[i] : 0u;
+        vertex->backface_specular = has_backface_specular ? backface_specular[i] : 0u;
+        if (has_weights)
+            memcpy(vertex->weights, &weights[i * 4u], sizeof(vertex->weights));
+        else
+            memset(vertex->weights, 0, sizeof(vertex->weights));
+        vertex->fog = has_fog ? fog_coords[i] : 0.0f;
+        vertex->point_size = has_point_size ? point_sizes[i] : 0.0f;
+        for (uint32_t generic_index = 0; generic_index < 3u; ++generic_index) {
+            if (has_generic[generic_index])
+                memcpy(vertex->generic[generic_index],
+                    &generic[generic_index][i * 4u],
+                    sizeof(vertex->generic[generic_index]));
+            else
+                memset(vertex->generic[generic_index], 0,
+                    sizeof(vertex->generic[generic_index]));
+        }
+        vertex->input_valid_mask = (uint16_t)(
+            (has_weights ? (1u << 1) : 0u) |
+            (has_fog ? (1u << 5) : 0u) |
+            (has_point_size ? (1u << 6) : 0u) |
+            (has_backface_diffuse ? (1u << 7) : 0u) |
+            (has_backface_specular ? (1u << 8) : 0u) |
+            (has_generic[0] ? (1u << 13) : 0u) |
+            (has_generic[1] ? (1u << 14) : 0u) |
+            (has_generic[2] ? (1u << 15) : 0u));
+        vertex->reserved = 0u;
     }
 
     if (stride_out) *stride_out = (uint32_t)sizeof(XboxNV2A_VERTEX);
@@ -2179,6 +2515,40 @@ int __cdecl XboxNV2A_BuildVertexStream(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
+
+static int nv2a_get_active_vertex_program_info(
+    uint32_t* instruction_count_out, XboxNV2A_VERTEX_PROGRAM_INFO* metadata_out,
+    uint32_t* hash_out)
+{
+    if (instruction_count_out) *instruction_count_out = 0;
+    if (hash_out) *hash_out = 0;
+    if (!instruction_count_out || !metadata_out || !hash_out ||
+        g_nv2a_vsh_start_slot >= 136u)
+        return 0;
+
+    uint32_t instruction_count = 0;
+    for (uint32_t slot = g_nv2a_vsh_start_slot; slot < 136u; ++slot) {
+        ++instruction_count;
+        if (g_nv2a_vsh_program[slot][3] & 1u)
+            break;
+    }
+    if (!instruction_count ||
+        !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
+        return 0;
+
+    const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
+    memset(metadata_out, 0, sizeof(*metadata_out));
+    if (XboxNV2A_ValidateVertexProgram(words, instruction_count, metadata_out) != 0)
+        return 0;
+
+    uint32_t hash = 2166136261u;
+    for (uint32_t i = 0; i < instruction_count * 4u; ++i)
+        hash = (hash ^ words[i]) * 16777619u;
+
+    *instruction_count_out = instruction_count;
+    *hash_out = hash;
+    return 1;
+}
 
 static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
 {
@@ -2190,44 +2560,34 @@ static int nv2a_prepare_gpu_vertex_shader(IDirect3DDevice8* device)
      * back to CPU vertex execution. */
     if (g_nv2a_vsh_context_write)
         return 0;
-    if (g_nv2a_vsh_dirty || !g_nv2a_vsh_handle) {
-        uint32_t instruction_count = 0;
-        XboxNV2A_VERTEX_PROGRAM_INFO metadata;
-        if (g_nv2a_vsh_start_slot >= 136u)
-            return 0;
-        for (uint32_t slot = g_nv2a_vsh_start_slot; slot < 136u; ++slot) {
-            ++instruction_count;
-            if (g_nv2a_vsh_program[slot][3] & 1u)
-                break;
-        }
-        if (!instruction_count ||
-            !(g_nv2a_vsh_program[g_nv2a_vsh_start_slot + instruction_count - 1u][3] & 1u))
-            return 0;
-        if (XboxNV2A_ValidateVertexProgram(
-                &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0],
-                instruction_count, &metadata) != 0)
-            return 0;
-        g_nv2a_vsh_input_mask = metadata.input_mask;
-        uint32_t hash = 2166136261u;
-        const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
-        for (uint32_t i = 0; i < instruction_count * 4u; ++i)
-            hash = (hash ^ words[i]) * 16777619u;
 
-        /* Writes to inactive slots must not churn the active shader handle. */
-        if (g_nv2a_vsh_handle && hash == g_nv2a_vsh_program_hash) {
-            g_nv2a_vsh_dirty = 0;
-        } else {
-            if (g_nv2a_vsh_handle) {
-                (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
-                g_nv2a_vsh_handle = 0;
-            }
-            if (FAILED(d3d8_vsh_create_shader(
-                    words, (int)instruction_count, &g_nv2a_vsh_handle)))
-                return 0;
-            g_nv2a_vsh_program_hash = hash;
-            g_nv2a_vsh_dirty = 0;
+    uint32_t instruction_count = 0, hash = 0;
+    XboxNV2A_VERTEX_PROGRAM_INFO metadata;
+    if (!nv2a_get_active_vertex_program_info(
+            &instruction_count, &metadata, &hash))
+        return 0;
+    g_nv2a_vsh_input_mask = metadata.input_mask;
+
+    const uint32_t* words = &g_nv2a_vsh_program[g_nv2a_vsh_start_slot][0];
+    const int cached_program_matches = g_nv2a_vsh_handle &&
+        instruction_count == g_nv2a_vsh_cached_instruction_count &&
+        hash == g_nv2a_vsh_program_hash &&
+        memcmp(words, g_nv2a_vsh_cached_program,
+            (size_t)instruction_count * 4u * sizeof(DWORD)) == 0;
+    if (!cached_program_matches) {
+        if (g_nv2a_vsh_handle) {
+            (void)d3d8_vsh_delete_shader(g_nv2a_vsh_handle);
+            g_nv2a_vsh_handle = 0;
         }
+        if (FAILED(d3d8_vsh_create_shader(
+                words, (int)instruction_count, &g_nv2a_vsh_handle)))
+            return 0;
+        memcpy(g_nv2a_vsh_cached_program, words,
+            (size_t)instruction_count * 4u * sizeof(DWORD));
+        g_nv2a_vsh_cached_instruction_count = instruction_count;
+        g_nv2a_vsh_program_hash = hash;
     }
+    g_nv2a_vsh_dirty = 0;
     /* D3D8's D3D11-backed implementation translates the microcode to HLSL,
      * compiles it on cache miss, and binds the cached GPU vertex shader. */
     return SUCCEEDED(device->lpVtbl->SetVertexShader(device, g_nv2a_vsh_handle));
@@ -2239,11 +2599,21 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     uint32_t vertex_count, uint16_t input_mask,
     const uint8_t** output, uint32_t* stride_out)
 {
+    const uint16_t supported_mask =
+        (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
+                   (1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 8) |
+                   (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12) |
+                   (1u << 13) | (1u << 14) | (1u << 15));
+    const uint16_t required_array_mask =
+        (uint16_t)((1u << 1) | (1u << 5) | (1u << 6) |
+                   (1u << 7) | (1u << 8) |
+                   (1u << 13) | (1u << 14) | (1u << 15));
     uint32_t offsets[16] = {0}, sizes[16] = {0}, stride = 0;
     size_t required;
     if (output) *output = NULL;
     if (stride_out) *stride_out = 0;
-    if (!vertices || !vertex_count || !output || !stride_out)
+    if (!vertices || !vertex_count || !output || !stride_out ||
+        (input_mask & (uint16_t)~supported_mask))
         return 0;
 
     for (uint32_t reg = 0; reg < 16u; ++reg) {
@@ -2252,10 +2622,14 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
         offsets[reg] = stride;
         switch (reg) {
         case 0u: case 2u: sizes[reg] = 12u; break;
-        case 3u: case 4u: case 7u: sizes[reg] = 4u; break;
-        case 5u: case 6u: sizes[reg] = 4u; break;
-        case 8u: case 9u: case 10u: case 11u: sizes[reg] = 8u; break;
-        default: sizes[reg] = 16u; break;
+        case 1u: sizes[reg] = 16u; break;
+        case 3u: case 4u: case 5u: case 6u: case 7u: case 8u:
+            sizes[reg] = 4u; break;
+        /* NV097 array slots 7..10 supply TEX0..TEX3, which map to
+         * programmable shader inputs v9..v12; v7/v8 are backface colors. */
+        case 9u: case 10u: case 11u: case 12u: sizes[reg] = 8u; break;
+        case 13u: case 14u: case 15u: sizes[reg] = 16u; break;
+        default: return 0;
         }
         if (stride > UINT32_MAX - sizes[reg]) return 0;
         stride += sizes[reg];
@@ -2271,6 +2645,9 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
     }
 
     for (uint32_t i = 0; i < vertex_count; ++i) {
+        if ((vertices[i].input_valid_mask & required_array_mask) !=
+            (input_mask & required_array_mask))
+            return 0;
         for (uint32_t reg = 0; reg < 16u; ++reg) {
             if (!(input_mask & (uint16_t)(1u << reg)))
                 continue;
@@ -2279,35 +2656,49 @@ static int nv2a_pack_gpu_vertex_stream(const XboxNV2A_VERTEX* vertices,
             const XboxNV2A_VERTEX* v = &vertices[i];
             switch (reg) {
             case 0u: memcpy(dst, &v->x, 12u); break;
-            case 1u: {
-                const float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-                memcpy(dst, weights, sizeof(weights)); break;
-            }
+            case 1u: memcpy(dst, v->weights, 16u); break;
             case 2u: memcpy(dst, &v->nx, 12u); break;
             case 3u: memcpy(dst, &v->diffuse, 4u); break;
             case 4u: memcpy(dst, &v->specular, 4u); break;
-            case 5u: case 6u: {
-                const float zero = 0.0f;
-                memcpy(dst, &zero, sizeof(zero)); break;
-            }
-            case 7u: {
-                const uint32_t opaque_black = 0xFF000000u;
-                memcpy(dst, &opaque_black, sizeof(opaque_black)); break;
-            }
-            case 8u: memcpy(dst, &v->u, 8u); break;
-            case 9u: memcpy(dst, &v->u1, 8u); break;
-            case 10u: memcpy(dst, &v->u2, 8u); break;
-            case 11u: memcpy(dst, &v->u3, 8u); break;
-            default: {
-                const float generic[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-                memcpy(dst, generic, sizeof(generic)); break;
-            }
+            case 5u: memcpy(dst, &v->fog, 4u); break;
+            case 6u: memcpy(dst, &v->point_size, 4u); break;
+            case 7u: memcpy(dst, &v->backface_diffuse, 4u); break;
+            case 8u: memcpy(dst, &v->backface_specular, 4u); break;
+            case 9u: memcpy(dst, &v->u, 8u); break;
+            case 10u: memcpy(dst, &v->u1, 8u); break;
+            case 11u: memcpy(dst, &v->u2, 8u); break;
+            case 12u: memcpy(dst, &v->u3, 8u); break;
+            case 13u: case 14u: case 15u:
+                memcpy(dst, v->generic[reg - 13u], 16u); break;
+            default: return 0;
             }
         }
     }
     *output = g_nv2a_gpu_vertex_stream;
     *stride_out = stride;
     return 1;
+}
+
+/* Public deterministic staging helper so the exact shader-input layout can
+ * be regression-tested without requiring a live D3D device. */
+int __cdecl XboxNV2A_PackVertexProgramInputs(
+    const XboxNV2A_VERTEX* vertices, uint32_t vertex_count,
+    uint16_t input_mask, void* destination, uint32_t destination_capacity,
+    uint32_t* stride_out)
+{
+    const uint8_t* packed = NULL;
+    uint32_t stride = 0;
+    if (stride_out) *stride_out = 0;
+    if (!destination || !stride_out ||
+        !nv2a_pack_gpu_vertex_stream(vertices, vertex_count, input_mask,
+                                     &packed, &stride))
+        return 1;
+    const uint64_t required = (uint64_t)vertex_count * stride;
+    if (required > destination_capacity)
+        return 2;
+    memcpy(destination, packed, (size_t)required);
+    *stride_out = stride;
+    return 0;
 }
 
 static void nv2a_flush_vertex_constants(void)
@@ -2442,6 +2833,168 @@ int __cdecl XboxNV2A_ExpandPrimitive(uint32_t mode,
     return 0;
 }
 
+/* Guest PGRAPH state is converted into this API-neutral packet before
+ * the first host backend sees it. Vertex bytes are already translated host
+ * staging data; no raw guest pointer or D3D object crosses this boundary. */
+typedef enum NV2A_TRANSLATED_TOPOLOGY {
+    NV2A_TOPOLOGY_POINT_LIST = 1,
+    NV2A_TOPOLOGY_LINE_LIST = 2,
+    NV2A_TOPOLOGY_LINE_STRIP = 3,
+    NV2A_TOPOLOGY_TRIANGLE_LIST = 4,
+    NV2A_TOPOLOGY_TRIANGLE_STRIP = 5,
+    NV2A_TOPOLOGY_TRIANGLE_FAN = 6
+} NV2A_TRANSLATED_TOPOLOGY;
+
+#define NV2A_VERTEX_ATTR_POSITION  0x00000001u
+#define NV2A_VERTEX_ATTR_NORMAL    0x00000002u
+#define NV2A_VERTEX_ATTR_DIFFUSE   0x00000004u
+#define NV2A_VERTEX_ATTR_SPECULAR  0x00000008u
+
+typedef struct NV2A_TRANSLATED_DRAW_PACKET {
+    uint32_t topology;
+    uint32_t primitive_count;
+    uint32_t vertex_count;
+    uint32_t source_vertex_count;
+    uint32_t vertex_stride;
+    uint32_t vertex_attribute_mask;
+    uint32_t texture_stage_mask;
+    uint32_t texture_coordinate_count;
+    uint32_t vertex_shader_mode;
+    uint32_t vertex_shader_input_mask;
+    uint32_t vertex_shader_hash;
+    const void* vertex_data;
+} NV2A_TRANSLATED_DRAW_PACKET;
+
+static int nv2a_topology_from_d3d(uint32_t primitive_type, uint32_t* topology)
+{
+    if (!topology) return 0;
+    switch (primitive_type) {
+    case D3DPT_POINTLIST: *topology = NV2A_TOPOLOGY_POINT_LIST; return 1;
+    case D3DPT_LINELIST: *topology = NV2A_TOPOLOGY_LINE_LIST; return 1;
+    case D3DPT_LINESTRIP: *topology = NV2A_TOPOLOGY_LINE_STRIP; return 1;
+    case D3DPT_TRIANGLELIST: *topology = NV2A_TOPOLOGY_TRIANGLE_LIST; return 1;
+    case D3DPT_TRIANGLESTRIP: *topology = NV2A_TOPOLOGY_TRIANGLE_STRIP; return 1;
+    case D3DPT_TRIANGLEFAN: *topology = NV2A_TOPOLOGY_TRIANGLE_FAN; return 1;
+    default: return 0;
+    }
+}
+
+static int nv2a_topology_to_d3d(uint32_t topology, D3DPRIMITIVETYPE* primitive_type)
+{
+    if (!primitive_type) return 0;
+    switch (topology) {
+    case NV2A_TOPOLOGY_POINT_LIST: *primitive_type = D3DPT_POINTLIST; return 1;
+    case NV2A_TOPOLOGY_LINE_LIST: *primitive_type = D3DPT_LINELIST; return 1;
+    case NV2A_TOPOLOGY_LINE_STRIP: *primitive_type = D3DPT_LINESTRIP; return 1;
+    case NV2A_TOPOLOGY_TRIANGLE_LIST: *primitive_type = D3DPT_TRIANGLELIST; return 1;
+    case NV2A_TOPOLOGY_TRIANGLE_STRIP: *primitive_type = D3DPT_TRIANGLESTRIP; return 1;
+    case NV2A_TOPOLOGY_TRIANGLE_FAN: *primitive_type = D3DPT_TRIANGLEFAN; return 1;
+    default: return 0;
+    }
+}
+
+static int nv2a_build_translated_draw_packet(
+    uint32_t primitive_type, uint32_t primitive_count, uint32_t draw_count,
+    uint32_t source_vertex_count, uint32_t stride, uint32_t fvf,
+    const void* vertex_data, NV2A_TRANSLATED_DRAW_PACKET* packet)
+{
+    if (!packet) return 0;
+    memset(packet, 0, sizeof(*packet));
+    if (!vertex_data || !primitive_count || !draw_count || !stride ||
+        !nv2a_topology_from_d3d(primitive_type, &packet->topology))
+        return 0;
+
+    packet->primitive_count = primitive_count;
+    packet->vertex_count = draw_count;
+    packet->source_vertex_count = source_vertex_count;
+    packet->vertex_stride = stride;
+    packet->vertex_data = vertex_data;
+    if (fvf & D3DFVF_XYZ) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_POSITION;
+    if (fvf & D3DFVF_NORMAL) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_NORMAL;
+    if (fvf & D3DFVF_DIFFUSE) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_DIFFUSE;
+    if (fvf & D3DFVF_SPECULAR) packet->vertex_attribute_mask |= NV2A_VERTEX_ATTR_SPECULAR;
+    packet->texture_coordinate_count = (fvf & 0x0F00u) >> 8;
+    packet->vertex_shader_mode = g_transform_execution_mode & 3u;
+    if (packet->vertex_shader_mode == 2u) {
+        uint32_t instruction_count = 0;
+        XboxNV2A_VERTEX_PROGRAM_INFO metadata;
+        if (g_nv2a_vsh_context_write ||
+            !nv2a_get_active_vertex_program_info(
+                &instruction_count, &metadata, &packet->vertex_shader_hash))
+            return 0;
+        const uint16_t supported_input_mask =
+            (uint16_t)((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) |
+                       (1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 8) |
+                       (1u << 9) | (1u << 10) | (1u << 11) | (1u << 12) |
+                        (1u << 13) | (1u << 14) | (1u << 15));
+        if (metadata.input_mask & (uint16_t)~supported_input_mask)
+            return 0;
+        const uint16_t required_array_mask =
+            (uint16_t)((1u << 1) | (1u << 5) | (1u << 6) |
+                       (1u << 7) | (1u << 8) |
+                       (1u << 13) | (1u << 14) | (1u << 15));
+        const XboxNV2A_VERTEX* staged_vertices =
+            (const XboxNV2A_VERTEX*)vertex_data;
+        for (uint32_t i = 0; i < packet->vertex_count; ++i) {
+            if ((staged_vertices[i].input_valid_mask & required_array_mask) !=
+                (metadata.input_mask & required_array_mask))
+                return 0;
+        }
+        packet->vertex_shader_input_mask = metadata.input_mask;
+    }
+    for (uint32_t stage = 0; stage < 4u; ++stage) {
+        const uint32_t base = 0x1B00u + stage * 0x40u;
+        if (g_gpu->pgraph.regs[(base + 0x0Cu) / 4u] & (1u << 30))
+            packet->texture_stage_mask |= 1u << stage;
+    }
+    return 1;
+}
+
+/* First backend adapter: consume the neutral packet through the existing
+ * Xbox D3D8 ABI, whose implementation compiles/binds shaders and draws on D3D11. */
+static int nv2a_submit_d3d8_draw_packet(
+    const NV2A_TRANSLATED_DRAW_PACKET* packet, uint32_t fvf,
+    uint32_t channel, uint32_t subchannel)
+{
+    if (!packet || !packet->vertex_data) return 4;
+    D3DPRIMITIVETYPE primitive_type;
+    if (!nv2a_topology_to_d3d(packet->topology, &primitive_type)) return 4;
+
+    IDirect3DDevice8* d = xbox_GetD3DDevice();
+    if (!d || !d->lpVtbl || !d->lpVtbl->SetVertexShader ||
+        !d->lpVtbl->DrawPrimitiveUP)
+        return 5;
+
+    const void* draw_data = packet->vertex_data;
+    uint32_t draw_stride = packet->vertex_stride;
+    if (packet->vertex_shader_mode == 2u) {
+        nv2a_flush_vertex_constants();
+        if (!nv2a_prepare_gpu_vertex_shader(d))
+            return 9;
+        /* The backend must compile/bind exactly the shader and input layout
+         * captured by the neutral packet, never silently use newer globals. */
+        if (packet->vertex_shader_hash != g_nv2a_vsh_program_hash ||
+            packet->vertex_shader_input_mask != g_nv2a_vsh_input_mask)
+            return 12;
+        const uint8_t* packed = NULL;
+        if (!nv2a_pack_gpu_vertex_stream(
+                (const XboxNV2A_VERTEX*)packet->vertex_data,
+                packet->vertex_count, packet->vertex_shader_input_mask,
+                &packed, &draw_stride))
+            return 10;
+        draw_data = packed;
+    } else if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) {
+        return 6;
+    }
+    if (bind_nv2a_textures(channel, subchannel, d,
+            packet->texture_stage_mask) != 0)
+        return 8;
+    if (FAILED(d->lpVtbl->DrawPrimitiveUP(d, primitive_type,
+            packet->primitive_count, draw_data, draw_stride)))
+        return 7;
+    return 0;
+}
+
 static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t* indices,uint32_t count)
 {
     const uint32_t mode = g_primitive_mode[channel][subchannel];
@@ -2449,52 +3002,53 @@ static int draw_nv2a_indexed(uint32_t channel,uint32_t subchannel,const uint32_t
         mode == NV097_SET_BEGIN_END_OP_END)
         return 1;
 
-    XboxNV2A_VERTEX vertices[NV2A_MAX_BATCH_VERTICES];
-    /* QUAD_STRIP expands 1,024 source vertices into 3,066 triangle-list
-     * vertices. Keep the staging capacity tied to that true worst case. */
-    XboxNV2A_VERTEX expanded[NV2A_MAX_BATCH_VERTICES * 3u];
+    /* Keep the large expanded-vertex staging buffers off the emulation
+     * thread's stack. QUAD_STRIP needs at most three output vertices per
+     * source vertex; count is already capped above. */
+    const uint32_t expanded_capacity = count * 3u;
+    const size_t vertices_bytes = sizeof(XboxNV2A_VERTEX) * (size_t)count;
+    const size_t expanded_bytes =
+        sizeof(XboxNV2A_VERTEX) * (size_t)expanded_capacity;
+    XboxNV2A_VERTEX* vertices = (XboxNV2A_VERTEX*)malloc(vertices_bytes);
+    XboxNV2A_VERTEX* expanded = (XboxNV2A_VERTEX*)malloc(expanded_bytes);
+    if (!vertices || !expanded) {
+        free(expanded);
+        free(vertices);
+        return 11;
+    }
+
+    int result = 0;
     uint32_t stride = 0, fvf = 0;
     if (XboxNV2A_BuildIndexedVertexStream(channel, subchannel, indices,
-            count, vertices, (uint32_t)sizeof(vertices), &stride, &fvf) != 0)
-        return 2;
+            count, vertices, (uint32_t)vertices_bytes, &stride, &fvf) != 0) {
+        result = 2;
+        goto cleanup;
+    }
 
     uint32_t primitive_type = 0, primitive_count = 0, draw_count = 0;
     if (XboxNV2A_ExpandPrimitive(mode, vertices, count, expanded,
-            (uint32_t)(sizeof(expanded) / sizeof(expanded[0])),
-            &primitive_type, &primitive_count, &draw_count) != 0)
-        return 3;
-
-    IDirect3DDevice8* d = xbox_GetD3DDevice();
-    if (!d || !d->lpVtbl || !d->lpVtbl->SetVertexShader ||
-        !d->lpVtbl->DrawPrimitiveUP)
-        return 5;
-
-    const void *draw_data = expanded;
-    uint32_t draw_stride = stride;
-    if ((g_transform_execution_mode & 3u) == 2u) {
-        if (FAILED(d->lpVtbl->SetVertexShader(d, fvf)))
-            return 6;
-        nv2a_flush_vertex_constants();
-        if (!nv2a_prepare_gpu_vertex_shader(d))
-            return 9;
-        const uint8_t* packed = NULL;
-        if (!nv2a_pack_gpu_vertex_stream(expanded, draw_count,
-                g_nv2a_vsh_input_mask, &packed, &draw_stride))
-            return 10;
-        draw_data = packed;
-    } else if (FAILED(d->lpVtbl->SetVertexShader(d, fvf))) {
-        return 6;
+            expanded_capacity, &primitive_type, &primitive_count, &draw_count) != 0) {
+        result = 3;
+        goto cleanup;
     }
-    if (bind_nv2a_textures(channel, subchannel, d) != 0)
-        return 8;
-    if (FAILED(d->lpVtbl->DrawPrimitiveUP(d, (D3DPRIMITIVETYPE)primitive_type,
-            primitive_count, draw_data, draw_stride)))
-        return 7;
 
-    ++g_pgraph_custom_methods;
-    ++g_pgraph_custom_draws;
-    g_pgraph_custom_vertices += count;
-    return 0;
+    NV2A_TRANSLATED_DRAW_PACKET packet;
+    if (!nv2a_build_translated_draw_packet(primitive_type, primitive_count,
+            draw_count, count, stride, fvf, expanded, &packet)) {
+        result = 4;
+        goto cleanup;
+    }
+    result = nv2a_submit_d3d8_draw_packet(&packet, fvf, channel, subchannel);
+    if (result == 0) {
+        ++g_pgraph_custom_methods;
+        ++g_pgraph_custom_draws;
+        g_pgraph_custom_vertices += count;
+    }
+
+cleanup:
+    free(expanded);
+    free(vertices);
+    return result;
 }
 static int draw_nv2a_arrays(uint32_t channel,uint32_t subchannel,uint32_t parameter)
 {
@@ -2570,8 +3124,8 @@ static int validate_puller_method(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
-static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
-                               uint32_t mapped_length, uint32_t initial_get,
+static int walk_dma_pushbuffer(uint32_t channel, const uint8_t* memory,
+                               uint32_t base, uint32_t mapped_length, uint32_t initial_get,
                                uint32_t put, uint32_t* final_get,
                                uint32_t* methods_submitted, int dispatch)
 {
@@ -2588,14 +3142,14 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
     uint32_t subroutine_returns[16];
     uint32_t call_depth = 0;
 
-    if ((get & 3u) || (put & 3u) || get > mapped_length || put > mapped_length)
+    if (!memory || (get & 3u) || (put & 3u) || get > mapped_length || put > mapped_length)
         return 1;
 
     while (get != put) {
         if (++steps > 1048576u || get > mapped_length || mapped_length - get < 4u)
             return 2;
 
-        const uint32_t word = read_le32(g_vram + base + get);
+        const uint32_t word = read_le32(memory + base + get);
         get += 4u;
 
         if (remaining) {
@@ -2699,13 +3253,6 @@ static void raise_dma_pusher_error(int result)
     nv2a_update_irq(g_gpu);
 }
 
-/* NV2A DMA classes 0x02 and 0x3D permit device reads. Class 0x03 is
- * write-only and must never be used as a texture/vertex/pushbuffer source. */
-static int dma_can_read(const XboxNV2A_DMA_INFO* dma)
-{
-    return dma && (dma->dma_class == 0x02u || dma->dma_class == 0x3Du);
-}
-
 static int submit_dma_pushbuffer_info(uint32_t channel,
                                        const XboxNV2A_DMA_INFO* dma,
                                        uint32_t get, uint32_t put,
@@ -2718,8 +3265,14 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     if (get > dma->mapped_length || put > dma->mapped_length || (get & 3u) || (put & 3u))
         return 9;
 
+    /* Use the same checked address-space resolver for pushbuffer reads as
+     * vertex and texture fetches. Pass a resolved span with base=0 so the
+     * packet walker never needs to know whether memory is VRAM or PCI RAM. */
+    const uint8_t* dma_memory = NULL;
+    if (!dma_get_span(dma, 0u, dma->mapped_length, &dma_memory))
+        return 10;
     uint32_t checked_get = get, checked_methods = 0;
-    int result = walk_dma_pushbuffer(channel, dma->base_address,
+    int result = walk_dma_pushbuffer(channel, dma_memory, 0u,
         dma->mapped_length, get, put, &checked_get, &checked_methods, 0);
     if (result != 0) {
         raise_dma_pusher_error(result);
@@ -2728,7 +3281,7 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
 
     /* Only dispatch after the complete packet/control-flow stream validates. */
     uint32_t executed_get = get, executed_methods = 0;
-    result = walk_dma_pushbuffer(channel, dma->base_address,
+    result = walk_dma_pushbuffer(channel, dma_memory, 0u,
         dma->mapped_length, get, put, &executed_get, &executed_methods, 1);
     if (result != 0) {
         raise_dma_pusher_error(result);

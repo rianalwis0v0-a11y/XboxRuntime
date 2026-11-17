@@ -359,4 +359,54 @@ typedef enum NV2AVshRegType {
     file(WRITE "${_vsh_h}" "${_vsh_hdr}")
 endif()
 
+
+file(READ "${_vsh_c}" _vsh_src)
+string(FIND "${_vsh_src}" "XBOXRUNTIME_NV2A_VSH_INPUT_LAYOUT_PATCH" _input_layout_patched)
+if(_input_layout_patched LESS 0)
+    set(_input_layout_block [=[
+/* XBOXRUNTIME_NV2A_VSH_INPUT_LAYOUT_PATCH
+ * Hardware input registers v7/v8 are backface colors; TEX0..TEX3 are v9..v12.
+ * The PGRAPH vertex-array slots for TEX0..TEX3 are separately mapped by the
+ * runtime's vertex fetcher and must not shift the shader input register IDs. */
+static DXGI_FORMAT default_input_format(int vreg, DWORD fvf)
+{
+    switch (vreg) {
+    case 0:  return DXGI_FORMAT_R32G32B32_FLOAT;    /* Position (xyz) */
+    case 1:  return DXGI_FORMAT_R32G32B32A32_FLOAT; /* Blend weights */
+    case 2:  return DXGI_FORMAT_R32G32B32_FLOAT;    /* Normal */
+    case 3:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* D3DCOLOR diffuse (BGRA bytes) */
+    case 4:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* D3DCOLOR specular (BGRA bytes) */
+    case 5:  return DXGI_FORMAT_R32_FLOAT;          /* Fog */
+    case 6:  return DXGI_FORMAT_R32_FLOAT;          /* Point size */
+    case 7:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* Backface diffuse (BGRA bytes) */
+    case 8:  return DXGI_FORMAT_B8G8R8A8_UNORM;     /* Backface specular (BGRA bytes) */
+    case 9:  return vsh_fvf_texcoord_size(fvf, 0) == 1 ? DXGI_FORMAT_R32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 0) == 3 ? DXGI_FORMAT_R32G32B32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 0) == 4 ? DXGI_FORMAT_R32G32B32A32_FLOAT
+                 : DXGI_FORMAT_R32G32_FLOAT;          /* TEX0 */
+    case 10: return vsh_fvf_texcoord_size(fvf, 1) == 1 ? DXGI_FORMAT_R32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 1) == 3 ? DXGI_FORMAT_R32G32B32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 1) == 4 ? DXGI_FORMAT_R32G32B32A32_FLOAT
+                 : DXGI_FORMAT_R32G32_FLOAT;          /* TEX1 */
+    case 11: return vsh_fvf_texcoord_size(fvf, 2) == 1 ? DXGI_FORMAT_R32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 2) == 3 ? DXGI_FORMAT_R32G32B32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 2) == 4 ? DXGI_FORMAT_R32G32B32A32_FLOAT
+                 : DXGI_FORMAT_R32G32_FLOAT;          /* TEX2 */
+    case 12: return vsh_fvf_texcoord_size(fvf, 3) == 1 ? DXGI_FORMAT_R32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 3) == 3 ? DXGI_FORMAT_R32G32B32_FLOAT
+                 : vsh_fvf_texcoord_size(fvf, 3) == 4 ? DXGI_FORMAT_R32G32B32A32_FLOAT
+                 : DXGI_FORMAT_R32G32_FLOAT;          /* TEX3 */
+    default: return DXGI_FORMAT_R32G32B32A32_FLOAT;   /* Generic */
+    }
+}
+
+]=])
+    string(REPLACE
+        "Texcoord registers 8-11 use the FVF-declared size (float1/2/3/4)."
+        "Texcoord registers 9-12 use the FVF-declared size (float1/2/3/4)."
+        _vsh_src "${_vsh_src}")
+    _replace_range(_vsh_src "static DXGI_FORMAT default_input_format(" "static UINT input_format_size(" _input_layout_block _vsh_src)
+    file(WRITE "${_vsh_c}" "${_vsh_src}")
+endif()
+
 message(STATUS "Applied XboxRuntime NV2A vertex-shader microcode layout patch to pinned xboxrecomp")

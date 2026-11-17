@@ -32,19 +32,66 @@ struct DmaInfo {
 };
 using LookupRamhtFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*);
 using ResolveDmaFn = int (__cdecl*)(uint32_t, uint32_t, DmaInfo*);
+using BindGuestPhysicalMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
+using AgpTranslateFn = int (__cdecl*)(uint32_t, uint32_t, const void**,
+    uint32_t*, void*);
+using BindAgpTranslatorFn = int (__cdecl*)(AgpTranslateFn, void*);
+struct AgpTestView { std::vector<uint8_t>* bytes; uint32_t aperture_base; };
+static int __cdecl TranslateTestAgp(uint32_t aperture_offset,
+    uint32_t requested_length, const void** host_span,
+    uint32_t* contiguous_length, void* context)
+{
+    if (host_span) *host_span = nullptr;
+    if (contiguous_length) *contiguous_length = 0;
+    auto* view = static_cast<AgpTestView*>(context);
+    if (!view || !view->bytes || !host_span || !contiguous_length ||
+        aperture_offset < view->aperture_base)
+        return 0;
+    const uint32_t offset = aperture_offset - view->aperture_base;
+    if (offset > view->bytes->size() ||
+        requested_length > view->bytes->size() - offset)
+        return 0;
+    *host_span = view->bytes->data() + offset;
+    *contiguous_length = static_cast<uint32_t>(view->bytes->size() - offset);
+    return 1;
+}
+static int __cdecl TranslateShortAgp(uint32_t aperture_offset,
+    uint32_t requested_length, const void** host_span,
+    uint32_t* contiguous_length, void* context)
+{
+    if (!TranslateTestAgp(aperture_offset, requested_length, host_span,
+            contiguous_length, context))
+        return 0;
+    /* Deliberately return one byte less than requested to exercise the
+     * bridge's contiguous-span guard even when the backing vector is larger. */
+    *contiguous_length = requested_length ? requested_length - 1u : 0u;
+    return 1;
+}
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
+using MapTextureAddressFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
+using MapTextureLodBiasFn = int (__cdecl*)(uint32_t, uint32_t*);
 using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     uint32_t, void*, uint32_t, uint32_t*, uint32_t*);
-struct HostVertex { float x, y, z, nx, ny, nz; uint32_t diffuse, specular; float u, v, u1, v1, u2, v2, u3, v3; };
+struct HostVertex {
+    float x, y, z, nx, ny, nz;
+    uint32_t diffuse, specular;
+    float u, v, u1, v1, u2, v2, u3, v3;
+    uint32_t backface_diffuse, backface_specular;
+    float weights[4], fog, point_size;
+    float generic[3][4];
+    uint16_t input_valid_mask, reserved;
+};
 using ExpandPrimitiveFn = int (__cdecl*)(uint32_t, const HostVertex*, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using BuildIndexedVertexStreamFn = int (__cdecl*)(uint32_t,uint32_t,const uint32_t*,uint32_t,HostVertex*,uint32_t,uint32_t*,uint32_t*);
 using BuildVertexStreamFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
     HostVertex*, uint32_t, uint32_t*, uint32_t*);
+using PackVertexProgramInputsFn = int (__cdecl*)(const HostVertex*, uint32_t,
+    uint16_t, void*, uint32_t, uint32_t*);
 struct SurfaceInfo {
     uint32_t width, height, color_format, zeta_format;
     uint32_t color_bytes_per_pixel, zeta_bytes_per_pixel;
@@ -112,14 +159,24 @@ int main() {
     auto submitPushBuffer = reinterpret_cast<PushBufferFn>(Need(module, "XboxNV2A_SubmitPushBuffer"));
     auto lookupRamht = reinterpret_cast<LookupRamhtFn>(Need(module, "XboxNV2A_LookupRAMHT"));
     auto resolveDma = reinterpret_cast<ResolveDmaFn>(Need(module, "XboxNV2A_ResolveDMAHandle"));
+    auto bindGuestPhysicalMemory = reinterpret_cast<BindGuestPhysicalMemoryFn>(
+        Need(module, "XboxNV2A_BindGuestPhysicalMemory"));
+    auto bindAgpTranslator = reinterpret_cast<BindAgpTranslatorFn>(
+        Need(module, "XboxNV2A_BindAGPAddressTranslator"));
     auto submitDmaPush = reinterpret_cast<SubmitDmaPushFn>(Need(module, "XboxNV2A_SubmitDMAPushBuffer"));
     auto submitDmaInstance = reinterpret_cast<SubmitDmaInstanceFn>(Need(module, "XboxNV2A_SubmitDMAInstance"));
     auto getDmaContext = reinterpret_cast<GetDmaContextFn>(Need(module, "XboxNV2A_GetDMAContext"));
     auto readVertexArray = reinterpret_cast<ReadVertexArrayFn>(Need(module, "XboxNV2A_ReadVertexArray"));
     auto buildVertexStream = reinterpret_cast<BuildVertexStreamFn>(Need(module, "XboxNV2A_BuildVertexStream"));
     auto buildIndexedVertexStream = reinterpret_cast<BuildIndexedVertexStreamFn>(Need(module, "XboxNV2A_BuildIndexedVertexStream"));
+    auto packVertexProgramInputs = reinterpret_cast<PackVertexProgramInputsFn>(
+        Need(module, "XboxNV2A_PackVertexProgramInputs"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
+    auto mapTextureAddress = reinterpret_cast<MapTextureAddressFn>(
+        Need(module, "XboxNV2A_MapTextureAddress"));
+    auto mapTextureLodBias = reinterpret_cast<MapTextureLodBiasFn>(
+        Need(module, "XboxNV2A_MapTextureLodBias"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
     auto decodeMipChainFromDma = reinterpret_cast<DecodeMipChainDmaFn>(Need(module, "XboxNV2A_DecodeTextureMipChainFromDMA"));
@@ -236,7 +293,11 @@ int main() {
         mappedState != 19u || mappedValue != 5u ||
         !mapRenderState(0x0348u, 0x0307u, &mappedState, &mappedValue) ||
         mappedState != 20u || mappedValue != 10u ||
-        mapRenderState(0x034Cu, 0x80402010u, &mappedState, &mappedValue) ||
+        mapRenderState(0x034Cu, 0xAA112233u, &mappedState, &mappedValue) ||
+        !mapRenderState(0x0358u, 0x01000101u, &mappedState, &mappedValue) ||
+        mappedState != 168u || mappedValue != 14u ||
+        !mapRenderState(0x0318u, 1u, &mappedState, &mappedValue) ||
+        mappedState != 157u || mappedValue != 1u ||
         mapRenderState(0x0344u, 0x7777u, &mappedState, &mappedValue) ||
         mapRenderState(0x0999u, 0u, &mappedState, &mappedValue)) {
         std::cerr << "FAIL: NV097 fixed-function render-state mapping\\n";
@@ -270,6 +331,55 @@ int main() {
             mapTextureFilter((1u << 16) | (3u << 24), &minFilter, &magFilter, &mipFilter) ||
             mapTextureFilter((1u << 16) | (1u << 24), nullptr, &magFilter, &mipFilter)) {
             std::cerr << "FAIL: invalid NV097 texture filter accepted\\n";
+            FreeLibrary(module); return 1;
+        }
+    }
+
+    {
+        uint32_t biasBits = 0u;
+        const uint32_t biasCases[] = { 0x0000u, 0x0100u, 0x1F00u, 0x1FFFu, 0x1000u };
+        const uint32_t expectedBits[] = {
+            0x00000000u, 0x3F800000u, 0xBF800000u, 0xBB800000u, 0xC1800000u
+        };
+        for (uint32_t i = 0; i < 5u; ++i) {
+            if (!mapTextureLodBias(biasCases[i], &biasBits) ||
+                biasBits != expectedBits[i]) {
+                std::cerr << "FAIL: NV097 signed 8.8 LOD bias mapping case " << i << "\\n";
+                FreeLibrary(module); return 1;
+            }
+        }
+        biasBits = 99u;
+        if (mapTextureLodBias(0x0100u, nullptr) ||
+            !mapTextureLodBias(0x0100u, &biasBits) || biasBits != 0x3F800000u) {
+            std::cerr << "FAIL: NV097 LOD bias output validation\\n";
+            FreeLibrary(module); return 1;
+        }
+    }
+
+    {
+        uint32_t addressU = 0, addressV = 0, addressW = 0;
+        const uint32_t addressCases[] = {
+            1u | (2u << 8) | (6u << 16), /* wrap U, mirror V, mirror-once P */
+            5u | (3u << 8) | (4u << 16), /* clamp-edge U/V, border P */
+            1u | (2u << 8)              /* 2D stage: P mode omitted */
+        };
+        const uint32_t expectedU[] = { 1u, 3u, 1u };
+        const uint32_t expectedV[] = { 2u, 3u, 2u };
+        const uint32_t expectedW[] = { 5u, 4u, 0u };
+        for (uint32_t i = 0; i < 3u; ++i) {
+            if (!mapTextureAddress(addressCases[i], &addressU, &addressV, &addressW) ||
+                addressU != expectedU[i] || addressV != expectedV[i] ||
+                addressW != expectedW[i]) {
+                std::cerr << "FAIL: NV097 U/V/P texture address mapping case " << i << "\\n";
+                FreeLibrary(module); return 1;
+            }
+        }
+        addressU = addressV = addressW = 99u;
+        if (mapTextureAddress(1u | (2u << 8) | (7u << 16),
+                &addressU, &addressV, &addressW) ||
+            addressU != 0u || addressV != 0u || addressW != 0u ||
+            mapTextureAddress(addressCases[0], nullptr, &addressV, &addressW)) {
+            std::cerr << "FAIL: invalid NV097 texture address accepted\\n";
             FreeLibrary(module); return 1;
         }
     }
@@ -401,6 +511,89 @@ int main() {
         return 1;
     }
 
+    /* NV097 texture-array slots 7..10 must feed programmable inputs v9..v12.
+     * Backface inputs v7/v8 are not aliases for TEX0/TEX1. */
+    {
+        HostVertex vertex{};
+        vertex.weights[0] = 0.1f; vertex.weights[1] = 0.2f;
+        vertex.weights[2] = 0.3f; vertex.weights[3] = 0.4f;
+        vertex.fog = 0.6f; vertex.point_size = 7.0f;
+        vertex.backface_diffuse = 0xFFABCDEFu;
+        vertex.backface_specular = 0xFF123456u;
+        for (uint32_t g = 0; g < 3u; ++g)
+            for (uint32_t component = 0; component < 4u; ++component)
+                vertex.generic[g][component] =
+                    (float)(13u + g) + 0.1f * (float)(component + 1u);
+        vertex.input_valid_mask = (uint16_t)(
+            (1u << 1) | (1u << 5) | (1u << 6) |
+            (1u << 7) | (1u << 8) |
+            (1u << 13) | (1u << 14) | (1u << 15));
+        vertex.u = 0.25f; vertex.v = 0.5f;
+        vertex.u1 = 1.25f; vertex.v1 = 1.5f;
+        vertex.u2 = 2.25f; vertex.v2 = 2.5f;
+        vertex.u3 = 3.25f; vertex.v3 = 3.5f;
+        uint8_t expected[112]{};
+        size_t expectedOffset = 0;
+        auto appendExpected = [&](const void* source, size_t bytes) {
+            std::memcpy(expected + expectedOffset, source, bytes);
+            expectedOffset += bytes;
+        };
+        appendExpected(vertex.weights, sizeof(vertex.weights));
+        appendExpected(&vertex.fog, sizeof(vertex.fog));
+        appendExpected(&vertex.point_size, sizeof(vertex.point_size));
+        appendExpected(&vertex.backface_diffuse, sizeof(vertex.backface_diffuse));
+        appendExpected(&vertex.backface_specular, sizeof(vertex.backface_specular));
+        appendExpected(&vertex.u, sizeof(float) * 2u);
+        appendExpected(&vertex.u1, sizeof(float) * 2u);
+        appendExpected(&vertex.u2, sizeof(float) * 2u);
+        appendExpected(&vertex.u3, sizeof(float) * 2u);
+        appendExpected(vertex.generic[0], sizeof(vertex.generic[0]));
+        appendExpected(vertex.generic[1], sizeof(vertex.generic[1]));
+        appendExpected(vertex.generic[2], sizeof(vertex.generic[2]));
+        uint8_t packed[112]{};
+        uint32_t stride = 0;
+        const uint16_t allInputs = (uint16_t)(0x1E00u | (1u << 1) | (1u << 5) |
+            (1u << 6) | (1u << 7) | (1u << 8) |
+            (1u << 13) | (1u << 14) | (1u << 15));
+        const int packResult = packVertexProgramInputs(
+            &vertex, 1u, allInputs, packed, sizeof(packed), &stride);
+        if (packResult != 0 || stride != sizeof(packed) ||
+            expectedOffset != sizeof(expected) ||
+            std::memcmp(packed, expected, sizeof(expected)) != 0) {
+            std::cerr << "FAIL: NV2A programmable vertex input packing\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
+        HostVertex missingBackface = vertex;
+        missingBackface.input_valid_mask &= (uint16_t)~(1u << 8);
+        stride = 99u;
+        const int missingBackfaceResult = packVertexProgramInputs(
+            &missingBackface, 1u, allInputs, packed, sizeof(packed), &stride);
+        if (missingBackfaceResult == 0 || stride != 0u) {
+            std::cerr << "FAIL: missing back-face shader input was accepted\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
+        HostVertex missingWeight = vertex;
+        missingWeight.input_valid_mask &= (uint16_t)~(1u << 1);
+        stride = 99u;
+        const int missingArrayResult = packVertexProgramInputs(
+            &missingWeight, 1u,
+            allInputs, packed, sizeof(packed), &stride);
+        if (missingArrayResult == 0 || stride != 0u) {
+            std::cerr << "FAIL: shader input without a valid guest array was accepted\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
+        HostVertex missingGeneric = vertex;
+        missingGeneric.input_valid_mask &= (uint16_t)~(1u << 14);
+        stride = 99u;
+        const int missingGenericResult = packVertexProgramInputs(
+            &missingGeneric, 1u,
+            allInputs, packed, sizeof(packed), &stride);
+        if (missingGenericResult == 0 || stride != 0u) {
+            std::cerr << "FAIL: missing generic shader input was accepted\\n";
+            stop(); FreeLibrary(module); return 1;
+        }
+    }
+
     /* NV097 combiner method families map to the Xbox D3D8 combiner states. */
     {
         struct Case { uint32_t method, state, stage; };
@@ -505,6 +698,45 @@ int main() {
         return 1;
     }
 
+    /* PCI-target DMA must read its pushbuffer from the host runtime's explicitly
+     * bound guest-physical RAM window, without aliasing GPU-local VRAM. */
+    {
+        const uint32_t pciPhysicalBase = 0x00200000u;
+        std::vector<uint8_t> guestPhysical(0x1000u, 0u);
+        const uint32_t pciStream[] = {
+            (1u << 18) | 0x0000u, dmaHandle, /* Bind the PGRAPH engine first. */
+            (1u << 18) | 0x1D90u, 0xFF123456u
+        };
+        std::memcpy(guestPhysical.data(), pciStream, sizeof(pciStream));
+        const uint32_t pciDmaObject[3] = {
+            0x00020002u, 0x00000FFFu, pciPhysicalBase
+        };
+        DmaInfo pciInfo{};
+        uint32_t pciGet = 0, pciMethods = 0;
+        const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
+            guestPhysical.data(), (uint32_t)guestPhysical.size());
+        const int objectWrite = writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject));
+        const int resolveResult = resolveDma(channel, dmaHandle, &pciInfo);
+        const int submitResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(pciStream), &pciGet, &pciMethods);
+        const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        const int restoreResult = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        if (bindResult != 0 || objectWrite != 0 || resolveResult != 0 ||
+            pciInfo.dma_target != 0x00020000u || pciInfo.base_address != 0u ||
+            submitResult != 0 || pciGet != sizeof(pciStream) || pciMethods != 2u ||
+            unbindResult != 0 || restoreResult != 0) {
+            std::cerr << "FAIL: PCI-target guest-physical DMA pushbuffer mapping"
+                      << " bind=" << bindResult << " object=" << objectWrite
+                      << " resolve=" << resolveResult << " target=0x" << std::hex
+                      << pciInfo.dma_target << " base=0x" << pciInfo.base_address
+                      << " submit=" << std::dec << submitResult
+                      << " get=" << pciGet << " methods=" << pciMethods
+                      << " unbind=" << unbindResult << " restore=" << restoreResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
     /* DMA object validation must reject unsupported memory targets/classes
      * and spans that overflow the local VRAM aperture, then accept the
      * restored valid object. PCI/AGP is deliberately fail-closed until mapped. */
@@ -603,6 +835,312 @@ int main() {
     }
 
 
+    /* PCI-target vertex and texture DMA must use the same checked guest
+     * physical mapping as the DMA pusher, not be rejected or read from VRAM. */
+    {
+        const uint32_t pciPhysicalBase = 0x00200000u;
+        std::vector<uint8_t> guestPhysical(0x1000u, 0u);
+        const uint32_t pciContextStream[] = {
+            (1u << 18) | 0x019Cu, dmaHandle, /* VERTEX_A */
+            (1u << 18) | 0x0180u, dmaHandle, /* palette DMA_A */
+            (1u << 18) | 0x0184u, dmaHandle  /* texture DMA_B */
+        };
+        const float pciVertexData[6] = { 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f };
+        const uint8_t pciTextureData[20] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF, 0xDE,0xAD,0xBE,0xEF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
+        };
+        const uint8_t pciMipData[20] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF,
+            0x0F,0x0E,0x0D,0xFF
+        };
+        std::memcpy(guestPhysical.data(), pciContextStream, sizeof(pciContextStream));
+        std::memcpy(guestPhysical.data() + 0x300u, pciVertexData, sizeof(pciVertexData));
+        std::memcpy(guestPhysical.data() + 0x500u, pciTextureData, sizeof(pciTextureData));
+        std::memcpy(guestPhysical.data() + 0x800u, pciMipData, sizeof(pciMipData));
+        const uint8_t pciPaletteEntries[16] = {
+            0x30,0x20,0x10,0xFF, 0x60,0x50,0x40,0xFF,
+            0x90,0x80,0x70,0xFF, 0xC0,0xB0,0xA0,0xFF
+        };
+        const uint8_t pciPaletteIndices[4] = {0u,1u,2u,3u};
+        std::memcpy(guestPhysical.data() + 0x600u, pciPaletteEntries, sizeof(pciPaletteEntries));
+        std::memcpy(guestPhysical.data() + 0x700u, pciPaletteIndices, sizeof(pciPaletteIndices));
+        const uint32_t pciDmaObject[3] = {
+            0x00020002u, 0x00000FFFu, pciPhysicalBase
+        };
+        float pciFetchedVertices[6]{};
+        uint8_t pciDecodedTexture[16]{}, pciDecodedPaletteTexture[16]{};
+        uint8_t pciDecodedMipChain[20]{};
+        uint32_t pciMipOffsets[2]{}, pciMipSizes[2]{};
+        uint32_t pciPaletteOffsets[1]{}, pciPaletteSizes[1]{};
+        uint32_t pciTexturePitch = 0, pciGet = 0, pciMethods = 0;
+        uint32_t restoreGet = 0, restoreMethods = 0;
+        const int bindResult = bindGuestPhysicalMemory(pciPhysicalBase,
+            guestPhysical.data(), (uint32_t)guestPhysical.size());
+        const int objectResult = writeRamin(0x100u, pciDmaObject, sizeof(pciDmaObject));
+        const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(pciContextStream), &pciGet, &pciMethods);
+        const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
+            submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) == 0
+            ? readVertexArray(channel, 0u, 0u, 0u, 2u, pciFetchedVertices,
+                sizeof(pciFetchedVertices), &vertexStride, &vertexElementBytes) : -1;
+        const int textureResult = decodeTextureFromDma(channel, 0u, 0x0180u,
+            0x500u, 0x1200u, 2u, 2u, 12u, pciDecodedTexture,
+            sizeof(pciDecodedTexture), &pciTexturePitch);
+        const int pciMipResult = decodeMipChainFromDma(channel, 0u, 0x0184u,
+            0x800u, 0x0600u, 2u, 2u, 2u, pciDecodedMipChain,
+            sizeof(pciDecodedMipChain), pciMipOffsets, pciMipSizes);
+        const uint32_t pciPalettedFormat = 1u | (2u << 4) | (0x0Bu << 8) |
+            (1u << 16) | (1u << 20) | (1u << 24);
+        const int paletteStateResult = submit(0u, 0x1B00u, 0x700u) == 0 &&
+            submit(0u, 0x1B04u, pciPalettedFormat) == 0 &&
+            submit(0u, 0x1B0Cu, (1u << 30)) == 0 &&
+            submit(0u, 0x1B20u, 0x600u) == 0 ? 0 : -1;
+        const int paletteDecodeResult = paletteStateResult == 0
+            ? decodeTextureStage(channel, 0u, 0u, pciDecodedPaletteTexture,
+                sizeof(pciDecodedPaletteTexture), pciPaletteOffsets,
+                pciPaletteSizes) : -1;
+
+        /* Moving the borrowed physical window invalidates cached PCI DMA
+         * contexts so their old mapping-relative offsets cannot alias new RAM. */
+        std::vector<uint8_t> remappedPhysical(0x1000u, 0u);
+        const int remapResult = bindGuestPhysicalMemory(
+            pciPhysicalBase + 0x1000u, remappedPhysical.data(),
+            (uint32_t)remappedPhysical.size());
+        DmaInfo invalidatedContext{};
+        const int invalidatedContextResult = getDmaContext(
+            channel, 0u, 0x0184u, &invalidatedContext);
+        const int restoreMappingResult = bindGuestPhysicalMemory(
+            pciPhysicalBase, guestPhysical.data(), (uint32_t)guestPhysical.size());
+
+        const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const uint32_t restoreContexts[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        const int restoreStream = writeVram(0x1000u, restoreContexts,
+            sizeof(restoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
+                &restoreGet, &restoreMethods) : -1;
+        const int unbindResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        if (bindResult != 0 || objectResult != 0 || pushResult != 0 ||
+            pciGet != sizeof(pciContextStream) || pciMethods != 3u ||
+            vertexResult != 0 ||
+            std::memcmp(pciVertexData, pciFetchedVertices, sizeof(pciVertexData)) != 0 ||
+            textureResult != 0 || pciTexturePitch != 8u ||
+            pciDecodedTexture[0] != 1u || pciDecodedTexture[1] != 2u ||
+            pciDecodedTexture[2] != 3u || pciDecodedTexture[8] != 7u ||
+            pciMipResult != 0 || pciMipOffsets[0] != 0u || pciMipSizes[0] != 16u ||
+            pciMipOffsets[1] != 16u || pciMipSizes[1] != 4u ||
+            pciDecodedMipChain[0] != 1u || pciDecodedMipChain[1] != 2u ||
+            pciDecodedMipChain[2] != 3u || pciDecodedMipChain[16] != 13u ||
+            paletteStateResult != 0 || paletteDecodeResult != 0 ||
+            remapResult != 0 || invalidatedContextResult != 3 ||
+            restoreMappingResult != 0 ||
+            pciPaletteSizes[0] != 16u || pciDecodedPaletteTexture[0] != 0x10u ||
+            pciDecodedPaletteTexture[1] != 0x20u || pciDecodedPaletteTexture[2] != 0x30u ||
+            pciDecodedPaletteTexture[4] != 0x40u || pciDecodedPaletteTexture[8] != 0x70u ||
+            restoreObject != 0 || restoreStream != 0 ||
+            restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
+            unbindResult != 0) {
+            std::cerr << "FAIL: PCI-target guest vertex/texture translation"
+                      << " bind=" << bindResult << " object=" << objectResult
+                      << " push=" << pushResult << " methods=" << pciMethods
+                      << " vertex=" << vertexResult << " texture=" << textureResult
+                      << " pitch=" << pciTexturePitch << " palette="
+                      << paletteStateResult << "/" << paletteDecodeResult
+                      << " remap=" << remapResult << "/" << invalidatedContextResult
+                      << "/" << restoreMappingResult << " restore="
+                      << restoreObject << "/" << restoreStream
+                      << " restore_get=" << restoreGet
+                      << " restore_methods=" << restoreMethods
+                      << " unbind=" << unbindResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
+    /* AGP DMA uses a host-supplied GART resolver. The bridge passes an
+     * aperture-relative span request; this test adapter models the host
+     * page-table service without baking a chipset-specific PTE format in. */
+    {
+        const uint32_t agpBase = 0x00100000u;
+        std::vector<uint8_t> agpMemory(0x1000u, 0u);
+        AgpTestView agpView{ &agpMemory, agpBase };
+        const uint32_t agpContextStream[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        const float agpVertexData[6] = {21.0f,22.0f,23.0f,24.0f,25.0f,26.0f};
+        const uint8_t agpTextureData[16] = {
+            0x03,0x02,0x01,0xFF, 0x06,0x05,0x04,0xFF,
+            0x09,0x08,0x07,0xFF, 0x0C,0x0B,0x0A,0xFF
+        };
+        std::memcpy(agpMemory.data(), agpContextStream, sizeof(agpContextStream));
+        std::memcpy(agpMemory.data() + 0x300u, agpVertexData, sizeof(agpVertexData));
+        std::memcpy(agpMemory.data() + 0x500u, agpTextureData, sizeof(agpTextureData));
+        /* NV_DMA_TARGET_AGP is 0x00030000; 0x00010000 is NVM_TILED. */
+        const uint32_t agpDmaObject[3] = {
+            0x00030002u, 0x00000FFFu, agpBase
+        };
+        float agpFetchedVertices[6]{};
+        uint8_t agpDecodedTexture[16]{};
+        uint32_t agpTexturePitch = 0, agpGet = 0, agpMethods = 0;
+        uint32_t restoreGet = 0, restoreMethods = 0;
+        const int bindResult = bindAgpTranslator(TranslateTestAgp, &agpView);
+        const int objectResult = writeRamin(0x100u, agpDmaObject, sizeof(agpDmaObject));
+        DmaInfo agpResolvedInfo{};
+        const int resolveAgpResult = resolveDma(channel, dmaHandle, &agpResolvedInfo);
+        const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(agpContextStream), &agpGet, &agpMethods);
+        const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
+            submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) == 0
+            ? readVertexArray(channel, 0u, 0u, 0u, 2u, agpFetchedVertices,
+                sizeof(agpFetchedVertices), &vertexStride, &vertexElementBytes) : -1;
+        const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
+            0x500u, 0x1200u, 2u, 2u, 8u, agpDecodedTexture,
+            sizeof(agpDecodedTexture), &agpTexturePitch);
+        const int shortBindResult = bindAgpTranslator(TranslateShortAgp, &agpView);
+        uint32_t shortGet = 0, shortMethods = 0;
+        const int shortSpanPushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(agpContextStream), &shortGet, &shortMethods);
+        const int restoreAgpResolverResult = bindAgpTranslator(
+            TranslateTestAgp, &agpView);
+
+        /* NVM_TILED (0x00010000) is not AGP and must never reach the GART
+         * callback. Until tile swizzling is implemented, reject it cleanly. */
+        const uint32_t tiledDmaObject[3] = {
+            0x00010002u, 0x00000FFFu, agpBase
+        };
+        const int tiledObjectResult = writeRamin(
+            0x100u, tiledDmaObject, sizeof(tiledDmaObject));
+        DmaInfo tiledResolvedInfo{};
+        const int tiledResolveResult = resolveDma(
+            channel, dmaHandle, &tiledResolvedInfo);
+        const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const uint32_t restoreContexts[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        const int restoreStream = writeVram(0x1000u, restoreContexts,
+            sizeof(restoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(restoreContexts),
+                &restoreGet, &restoreMethods) : -1;
+        const int unbindResult = bindAgpTranslator(nullptr, nullptr);
+        if (bindResult != 0 || objectResult != 0 ||
+            resolveAgpResult != 0 || agpResolvedInfo.dma_target != 0x00030000u ||
+            pushResult != 0 || agpGet != sizeof(agpContextStream) || agpMethods != 3u ||
+            shortBindResult != 0 || shortSpanPushResult != 10 ||
+            shortGet != 0u || shortMethods != 0u || restoreAgpResolverResult != 0 ||
+            vertexResult != 0 ||
+            std::memcmp(agpVertexData, agpFetchedVertices, sizeof(agpVertexData)) != 0 ||
+            textureResult != 0 || agpTexturePitch != 8u ||
+            agpDecodedTexture[0] != 1u || agpDecodedTexture[1] != 2u ||
+            agpDecodedTexture[2] != 3u ||
+            tiledObjectResult != 0 || tiledResolveResult != 6 ||
+            restoreObject != 0 || restoreStream != 0 ||
+            restoreGet != sizeof(restoreContexts) || restoreMethods != 3u ||
+            unbindResult != 0) {
+            std::cerr << "FAIL: AGP aperture resolver vertex/texture translation"
+                      << " bind=" << bindResult << " object=" << objectResult
+                      << " resolveAGP=" << resolveAgpResult
+                      << " target=0x" << std::hex << agpResolvedInfo.dma_target << std::dec
+                      << " push=" << pushResult << " methods=" << agpMethods
+                      << " short=" << shortBindResult << "/" << shortSpanPushResult
+                      << "/" << restoreAgpResolverResult
+                      << " vertex=" << vertexResult << " texture=" << textureResult
+                      << " pitch=" << agpTexturePitch
+                      << " tiled=" << tiledObjectResult << "/" << tiledResolveResult
+                      << " restore=" << restoreObject << "/" << restoreStream
+                      << " unbind=" << unbindResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
+    /* The Xbox 0xF0000000 AGP aperture is a linear alias of guest RAM.
+     * Verify the built-in path without a host GART callback. */
+    {
+        std::vector<uint8_t> directMemory(0x4000u, 0u);
+        const uint32_t directContextStream[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        const float directVertexData[6] = {31.0f,32.0f,33.0f,34.0f,35.0f,36.0f};
+        const uint8_t directTextureData[16] = {
+            0x13,0x12,0x11,0xFF, 0x16,0x15,0x14,0xFF,
+            0x19,0x18,0x17,0xFF, 0x1C,0x1B,0x1A,0xFF
+        };
+        std::memcpy(directMemory.data() + 0x1000u,
+            directContextStream, sizeof(directContextStream));
+        std::memcpy(directMemory.data() + 0x1300u,
+            directVertexData, sizeof(directVertexData));
+        std::memcpy(directMemory.data() + 0x1500u,
+            directTextureData, sizeof(directTextureData));
+        const uint32_t directAgpDmaObject[3] = {
+            0x00030002u, 0x00000FFFu, 0xF0001000u
+        };
+        const int bindMemoryResult = bindGuestPhysicalMemory(
+            0u, directMemory.data(), (uint32_t)directMemory.size());
+        const int objectResult = writeRamin(
+            0x100u, directAgpDmaObject, sizeof(directAgpDmaObject));
+        DmaInfo directInfo{};
+        const int resolveResult = resolveDma(channel, dmaHandle, &directInfo);
+        uint32_t pushGet = 0, pushMethods = 0;
+        const int pushResult = submitDmaPush(channel, dmaHandle, 0u,
+            sizeof(directContextStream), &pushGet, &pushMethods);
+        float fetched[6]{};
+        uint32_t fetchStride = 0, fetchBytes = 0;
+        const int vertexResult = submit(0u, 0x1720u, 0x300u) == 0 &&
+            submit(0u, 0x1760u, (12u << 8) | (3u << 4) | 2u) == 0
+            ? readVertexArray(channel, 0u, 0u, 0u, 2u, fetched,
+                sizeof(fetched), &fetchStride, &fetchBytes) : -1;
+        uint8_t decoded[16]{};
+        uint32_t pitch = 0;
+        const int textureResult = decodeTextureFromDma(channel, 0u, 0x0184u,
+            0x500u, 0x1200u, 2u, 2u, 8u, decoded, sizeof(decoded), &pitch);
+        const int restoreObject = writeRamin(0x100u, dmaObject, sizeof(dmaObject));
+        const uint32_t directRestoreContexts[] = {
+            (1u << 18) | 0x019Cu, dmaHandle,
+            (1u << 18) | 0x0180u, dmaHandle,
+            (1u << 18) | 0x0184u, dmaHandle
+        };
+        uint32_t restoreGet = 0, restoreMethods = 0;
+        const int restoreStream = writeVram(0x1000u, directRestoreContexts,
+            sizeof(directRestoreContexts)) == 0
+            ? submitDmaPush(channel, dmaHandle, 0u, sizeof(directRestoreContexts),
+                &restoreGet, &restoreMethods) : -1;
+        const int unbindMemoryResult = bindGuestPhysicalMemory(0u, nullptr, 0u);
+        if (bindMemoryResult != 0 || objectResult != 0 || resolveResult != 0 ||
+            directInfo.dma_target != 0x00030000u ||
+            directInfo.base_address != 0x1000u ||
+            pushResult != 0 || pushGet != sizeof(directContextStream) ||
+            pushMethods != 3u || vertexResult != 0 ||
+            std::memcmp(directVertexData, fetched, sizeof(directVertexData)) != 0 ||
+            textureResult != 0 || pitch != 8u ||
+            decoded[0] != 0x11u || decoded[1] != 0x12u || decoded[2] != 0x13u ||
+            restoreObject != 0 || restoreStream != 0 ||
+            restoreGet != sizeof(directRestoreContexts) || restoreMethods != 3u ||
+            unbindMemoryResult != 0) {
+            std::cerr << "FAIL: direct Xbox AGP linear alias translation"
+                      << " bind=" << bindMemoryResult << " object=" << objectResult
+                      << " resolve=" << resolveResult
+                      << " target=0x" << std::hex << directInfo.dma_target
+                      << " base=0x" << directInfo.base_address << std::dec
+                      << " push=" << pushResult << " vertex=" << vertexResult
+                      << " texture=" << textureResult << " pitch=" << pitch
+                      << " restore=" << restoreObject << "/" << restoreStream
+                      << " unbind=" << unbindMemoryResult << "\\n";
+            stop();
+            return 1;
+        }
+    }
+
     const uint32_t vertexIndices[3] = {1u, 0u, 1u};
     HostVertex indexedVertices[3]{};
     uint32_t indexedStride = 0, indexedFvf = 0;
@@ -623,6 +1161,16 @@ int main() {
     const uint32_t vertexColors[2] = { 0xFF112233u, 0xFF445566u };
     const uint32_t vertexSpecular[2] = { 0x00112233u, 0x00445566u };
     const float vertexNormals[6] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
+    const float vertexWeights[8] = {
+        0.1f,0.2f,0.3f,0.4f, 0.5f,0.6f,0.7f,0.8f
+    };
+    const float vertexFog[2] = { 0.25f,0.75f };
+    const float vertexPointSize[2] = { 1.0f,2.0f };
+    const uint32_t vertexBackfaceDiffuse[2] = { 0xFFABCDEFu, 0xFF102030u };
+    const uint32_t vertexBackfaceSpecular[2] = { 0xFF123456u, 0xFF654321u };
+    const float vertexGeneric0[8] = { 13.1f,13.2f,13.3f,13.4f, 13.5f,13.6f,13.7f,13.8f };
+    const float vertexGeneric1[8] = { 14.1f,14.2f,14.3f,14.4f, 14.5f,14.6f,14.7f,14.8f };
+    const float vertexGeneric2[8] = { 15.1f,15.2f,15.3f,15.4f, 15.5f,15.6f,15.7f,15.8f };
     const float vertexTexcoords[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
     const float vertexTexcoords1[4] = { 0.125f, 0.25f, 0.625f, 0.875f };
     const float vertexTexcoords2[4] = { 0.2f, 0.3f, 0.4f, 0.5f };
@@ -631,6 +1179,14 @@ int main() {
     HostVertex hostVertices[2]{};
     uint32_t hostVertexStride = 0, hostFvf = 0;
     if (writeVram(0x1400u, vertexColors, sizeof(vertexColors)) != 0 ||
+        writeVram(0x1B00u, vertexWeights, sizeof(vertexWeights)) != 0 ||
+        writeVram(0x1C00u, vertexFog, sizeof(vertexFog)) != 0 ||
+        writeVram(0x1D00u, vertexPointSize, sizeof(vertexPointSize)) != 0 ||
+        writeVram(0x1E00u, vertexGeneric0, sizeof(vertexGeneric0)) != 0 ||
+        writeVram(0x1E40u, vertexGeneric1, sizeof(vertexGeneric1)) != 0 ||
+        writeVram(0x1E80u, vertexGeneric2, sizeof(vertexGeneric2)) != 0 ||
+        writeVram(0x1EC0u, vertexBackfaceDiffuse, sizeof(vertexBackfaceDiffuse)) != 0 ||
+        writeVram(0x1ED0u, vertexBackfaceSpecular, sizeof(vertexBackfaceSpecular)) != 0 ||
         writeVram(0x1500u, vertexTexcoords, sizeof(vertexTexcoords)) != 0 ||
         writeVram(0x1600u, vertexNormals, sizeof(vertexNormals)) != 0 ||
         writeVram(0x1700u, vertexSpecular, sizeof(vertexSpecular)) != 0 ||
@@ -640,8 +1196,14 @@ int main() {
         writeVram(0x1000u, vertexContextBStream, sizeof(vertexContextBStream)) != 0 ||
         submitDmaPush(channel, dmaHandle, 0u, sizeof(vertexContextBStream),
                       &dmaGet, &dmaMethods) != 0 ||
+        submit(0u, 0x1724u, 0xB00u) != 0 ||
+        submit(0u, 0x1764u, (16u << 8) | (4u << 4) | 2u) != 0 ||
         submit(0u, 0x1728u, 0x600u) != 0 ||
         submit(0u, 0x1768u, (12u << 8) | (3u << 4) | 2u) != 0 ||
+        submit(0u, 0x1734u, 0xC00u) != 0 ||
+        submit(0u, 0x1774u, (4u << 8) | (1u << 4) | 2u) != 0 ||
+        submit(0u, 0x1738u, 0xD00u) != 0 ||
+        submit(0u, 0x1778u, (4u << 8) | (1u << 4) | 2u) != 0 ||
         submit(0u, 0x1730u, 0x700u) != 0 ||
         submit(0u, 0x1770u, (4u << 8) | (4u << 4)) != 0 ||
         submit(0u, 0x172Cu, 0x400u) != 0 ||
@@ -654,15 +1216,47 @@ int main() {
         submit(0u, 0x1784u, (8u << 8) | (2u << 4) | 2u) != 0 ||
         submit(0u, 0x1748u, 0xA00u) != 0 ||
         submit(0u, 0x1788u, (8u << 8) | (2u << 4) | 2u) != 0 ||
+        submit(0u, 0x1754u, 0xE00u) != 0 ||
+        submit(0u, 0x1794u, (16u << 8) | (4u << 4) | 2u) != 0 ||
+        submit(0u, 0x1758u, 0xE40u) != 0 ||
+        submit(0u, 0x1798u, (16u << 8) | (4u << 4) | 2u) != 0 ||
+        submit(0u, 0x175Cu, 0xE80u) != 0 ||
+        submit(0u, 0x179Cu, (16u << 8) | (4u << 4) | 2u) != 0 ||
+        submit(0u, 0x174Cu, 0xEC0u) != 0 ||
+        submit(0u, 0x178Cu, (4u << 8) | (4u << 4)) != 0 ||
+        submit(0u, 0x1750u, 0xED0u) != 0 ||
+        submit(0u, 0x1790u, (4u << 8) | (4u << 4)) != 0 ||
         buildVertexStream(channel, 0u, 0u, 2u, hostVertices,
                           sizeof(hostVertices), &hostVertexStride, &hostFvf) != 0 ||
-        hostVertexStride != 64u || hostFvf != 0x4D2u ||
+        hostVertexStride != sizeof(HostVertex) || hostFvf != 0x4D2u ||
         hostVertices[0].nx != 0.0f || hostVertices[0].ny != 0.0f || hostVertices[0].nz != 1.0f ||
         hostVertices[1].nx != 0.0f || hostVertices[1].ny != 1.0f || hostVertices[1].nz != 0.0f ||
         hostVertices[0].diffuse != vertexColors[0] ||
         hostVertices[1].diffuse != vertexColors[1] ||
         hostVertices[0].specular != vertexSpecular[0] ||
         hostVertices[1].specular != vertexSpecular[1] ||
+        hostVertices[0].weights[0] != 0.1f ||
+        hostVertices[0].weights[3] != 0.4f ||
+        hostVertices[1].weights[0] != 0.5f ||
+        hostVertices[1].weights[3] != 0.8f ||
+        hostVertices[0].fog != 0.25f || hostVertices[1].fog != 0.75f ||
+        hostVertices[0].point_size != 1.0f || hostVertices[1].point_size != 2.0f ||
+        hostVertices[0].backface_diffuse != vertexBackfaceDiffuse[0] ||
+        hostVertices[1].backface_diffuse != vertexBackfaceDiffuse[1] ||
+        hostVertices[0].backface_specular != vertexBackfaceSpecular[0] ||
+        hostVertices[1].backface_specular != vertexBackfaceSpecular[1] ||
+        (hostVertices[0].input_valid_mask & ((1u << 1) | (1u << 5) | (1u << 6) |
+            (1u << 7) | (1u << 8) |
+            (1u << 13) | (1u << 14) | (1u << 15))) !=
+            ((1u << 1) | (1u << 5) | (1u << 6) |
+             (1u << 7) | (1u << 8) |
+             (1u << 13) | (1u << 14) | (1u << 15)) ||
+        hostVertices[0].generic[0][0] != 13.1f ||
+        hostVertices[1].generic[0][3] != 13.8f ||
+        hostVertices[0].generic[1][0] != 14.1f ||
+        hostVertices[1].generic[1][3] != 14.8f ||
+        hostVertices[0].generic[2][0] != 15.1f ||
+        hostVertices[1].generic[2][3] != 15.8f ||
         hostVertices[0].u != 0.25f || hostVertices[0].v != 0.5f ||
         hostVertices[1].u != 0.75f || hostVertices[1].v != 1.0f ||
         hostVertices[0].u1 != 0.125f || hostVertices[0].v1 != 0.25f ||
@@ -676,6 +1270,27 @@ int main() {
         std::cerr << "FAIL: NV2A position/color/TEX0-TEX3 host vertex stream build\\n";
         stop();
         return 1;
+    }
+
+    /* An unsupported optional weight array is ignored if the shader does
+     * not consume v1; if a shader does consume it, packet validation rejects it. */
+    {
+        const int setUnsupportedWeight = submit(
+            0u, 0x1764u, (12u << 8) | (3u << 4) | 2u);
+        const int optionalBuild = buildVertexStream(channel, 0u, 0u, 2u,
+            hostVertices, sizeof(hostVertices), &hostVertexStride, &hostFvf);
+        const int missingWeight = (hostVertices[0].input_valid_mask & (1u << 1)) == 0u;
+        const int restoreWeight = submit(
+            0u, 0x1764u, (16u << 8) | (4u << 4) | 2u);
+        const int restoredBuild = buildVertexStream(channel, 0u, 0u, 2u,
+            hostVertices, sizeof(hostVertices), &hostVertexStride, &hostFvf);
+        if (setUnsupportedWeight != 0 || optionalBuild != 0 || !missingWeight ||
+            restoreWeight != 0 || restoredBuild != 0 ||
+            (hostVertices[0].input_valid_mask & (1u << 1)) == 0u) {
+            std::cerr << "FAIL: optional unsupported weight-array handling\\n";
+            stop();
+            return 1;
+        }
     }
 
     /* Indexed expansion must handle batches larger than the old 255-vertex cap. */

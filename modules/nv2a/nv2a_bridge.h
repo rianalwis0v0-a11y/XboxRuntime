@@ -9,6 +9,12 @@ extern "C" {
 
 #include "nv2a_vertex_shader.h"
 
+/* NV_DMA_TARGET values from the NV2A DMA object format. */
+#define XBOX_NV2A_DMA_TARGET_LOCAL       0x00000000u
+#define XBOX_NV2A_DMA_TARGET_LOCAL_TILED 0x00010000u
+#define XBOX_NV2A_DMA_TARGET_PCI         0x00020000u
+#define XBOX_NV2A_DMA_TARGET_AGP         0x00030000u
+
 
 
 
@@ -37,6 +43,29 @@ __declspec(dllexport) int __cdecl XboxNV2A_SubmitMethod(
 );
 
 __declspec(dllexport) void __cdecl XboxNV2A_Flush(void);
+
+/* Borrow a host mapping of guest physical RAM. It backs PCI DMA and the Xbox
+ * linear AGP aperture alias at 0xF0000000. The caller owns the memory and must
+ * keep it alive until unbound or ModuleStop. Rebinding/unbinding must be
+ * synchronized against in-flight DMA submissions. */
+__declspec(dllexport) int __cdecl XboxNV2A_BindGuestPhysicalMemory(
+    uint32_t guest_physical_base, void* memory, uint32_t length);
+
+/* Optional host override for Xbox AGP aperture translation. By default, the
+ * bridge resolves the 0xF0000000 linear alias through the bound guest-physical
+ * RAM mapping. Bind this callback only when the host uses a different/nonlinear
+ * AGP mapping; it must return a bounded contiguous host span for the requested
+ * aperture offset. The bridge validates the returned span length. The caller
+ * owns the callback context and backing memory and must keep them valid until
+ * unbound or ModuleStop. The callback is invoked synchronously and must not
+ * retain output pointers beyond the call. Rebinding/unbinding must be
+ * synchronized against in-flight DMA submissions. Pass NULL,NULL to unbind. */
+typedef int (__cdecl *XboxNV2A_AGP_TRANSLATE_FN)(
+    uint32_t aperture_offset, uint32_t requested_length,
+    const void** host_span_out, uint32_t* contiguous_length_out,
+    void* context);
+__declspec(dllexport) int __cdecl XboxNV2A_BindAGPAddressTranslator(
+    XboxNV2A_AGP_TRANSLATE_FN translate, void* context);
 
 /* Bounded access to Xbox GPU-local memory. Offsets are byte offsets. */
 __declspec(dllexport) int __cdecl XboxNV2A_ReadVRAM(uint32_t offset, void* destination, uint32_t length);
@@ -111,6 +140,15 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureFromDMA(
     uint32_t height, uint32_t source_pitch, void* destination,
     uint32_t destination_capacity, uint32_t* destination_pitch);
 
+/* Map the NV097 texture-address register's U/V/P fields to D3D8 address modes. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapTextureAddress(
+    uint32_t parameter, uint32_t* address_u_out,
+    uint32_t* address_v_out, uint32_t* address_w_out);
+
+/* Convert the signed 13-bit NV097 LOD bias (8.8 fixed point) to D3D float bits. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapTextureLodBias(
+    uint32_t parameter, uint32_t* lod_bias_float_bits_out);
+
 /* Map NV097 texture-filter fields to D3D8 minification, magnification and mip filters. */
 __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,
@@ -183,6 +221,17 @@ typedef struct XboxNV2A_VERTEX {
     float u1, v1;
     float u2, v2;
     float u3, v3;
+    /* Back-face color arrays map to shader inputs v7 and v8. */
+    uint32_t backface_diffuse;
+    uint32_t backface_specular;
+    /* Optional shader inputs from NV097 arrays 1, 5, and 6. */
+    float weights[4];
+    float fog;
+    float point_size;
+    float generic[3][4]; /* Shader inputs v13-v15. */
+    /* Bits 1, 5, 6, 7, 8, and 13-15 mark optional inputs fetched. */
+    uint16_t input_valid_mask;
+    uint16_t reserved;
 } XboxNV2A_VERTEX;
 
 /* Expand NV097 primitive streams into D3D8-compatible topology. primitive_type
@@ -194,7 +243,10 @@ __declspec(dllexport) int __cdecl XboxNV2A_ExpandPrimitive(
     uint32_t* primitive_type_out, uint32_t* primitive_count_out,
     uint32_t* vertex_count_out);
 
-/* Build a host FVF stream from position/normal/color and TEX0..TEX3 guest arrays. */
+/* Build a host FVF stream from position/normal/colors/TEX0..TEX3. Also
+ * captures 4-float weights (v1), scalar fog (v5), scalar point size (v6),
+ * back-face colors (v7/v8), and generic float4 inputs (v13-v15) when arrays have supported
+ * formats; input_valid_mask marks which optional values are safe to pack. */
 __declspec(dllexport) int __cdecl XboxNV2A_BuildVertexStream(
     uint32_t channel, uint32_t subchannel, uint32_t first_vertex,
     uint32_t vertex_count, XboxNV2A_VERTEX* destination,
@@ -204,6 +256,12 @@ __declspec(dllexport) int __cdecl XboxNV2A_BuildIndexedVertexStream(
     uint32_t index_count, XboxNV2A_VERTEX* destination,
     uint32_t destination_capacity, uint32_t* stride_out,
     uint32_t* fvf_out);
+/* Pack supported NV2A shader inputs into the same ordered stream used by
+ * the D3D11 input layout. Unsupported input registers are rejected. */
+__declspec(dllexport) int __cdecl XboxNV2A_PackVertexProgramInputs(
+    const XboxNV2A_VERTEX* vertices, uint32_t vertex_count,
+    uint16_t input_mask, void* destination, uint32_t destination_capacity,
+    uint32_t* stride_out);
 
 /* Fetch packed vertex elements from the bound NV097 VERTEX_A/B DMA context. */
 __declspec(dllexport) int __cdecl XboxNV2A_ReadVertexArray(
