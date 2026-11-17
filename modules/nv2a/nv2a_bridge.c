@@ -390,6 +390,28 @@ static int map_texture_address_mode(uint32_t mode, uint32_t* output)
     }
 }
 
+int __cdecl XboxNV2A_MapTextureAddress(uint32_t parameter,
+    uint32_t* address_u_out, uint32_t* address_v_out,
+    uint32_t* address_w_out)
+{
+    if (address_u_out) *address_u_out = 0u;
+    if (address_v_out) *address_v_out = 0u;
+    if (address_w_out) *address_w_out = 0u;
+    if (!address_u_out || !address_v_out || !address_w_out)
+        return 0;
+
+    uint32_t address_u = 0u, address_v = 0u, address_w = 0u;
+    if (!map_texture_address_mode(parameter & 0x7u, &address_u) ||
+        !map_texture_address_mode((parameter >> 8) & 0x7u, &address_v) ||
+        !map_texture_address_mode((parameter >> 16) & 0x7u, &address_w))
+        return 0;
+
+    *address_u_out = address_u;
+    *address_v_out = address_v;
+    *address_w_out = address_w;
+    return 1;
+}
+
 int __cdecl XboxNV2A_MapTextureFilter(uint32_t parameter,
     uint32_t* min_filter_out, uint32_t* mag_filter_out,
     uint32_t* mip_filter_out)
@@ -426,21 +448,22 @@ int __cdecl XboxNV2A_MapTextureFilter(uint32_t parameter,
 
 static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
 {
-    uint32_t stage=0, state_u=0, state_v=0;
+    uint32_t stage=0, state_u=0, state_v=0, state_w=0;
     IDirect3DDevice8* device=xbox_GetD3DDevice();
     if(!device || !device->lpVtbl || !device->lpVtbl->SetTextureStageState)
         return 0;
     if(method>=0x1B08u && method<=0x1BC8u &&
        ((method-0x1B08u)%0x40u)==0u) {
         stage=(method-0x1B08u)/0x40u;
-        if(stage>=4u ||
-           !map_texture_address_mode(parameter&0xFu,&state_u) ||
-           !map_texture_address_mode((parameter>>4)&0xFu,&state_v))
+        if (stage >= 4u ||
+            !XboxNV2A_MapTextureAddress(parameter, &state_u, &state_v, &state_w))
             return 0;
-        if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
-                D3DTSS_ADDRESSU,state_u))) return 0;
-        if(FAILED(device->lpVtbl->SetTextureStageState(device,stage,
-                D3DTSS_ADDRESSV,state_v))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_ADDRESSU, state_u))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_ADDRESSV, state_v))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_ADDRESSW, state_w))) return 0;
         return 1;
     }
     if (method >= 0x1B14u && method <= 0x1BD4u &&
