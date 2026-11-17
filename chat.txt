@@ -1721,3 +1721,13 @@ XDVDFS: module and regression test integrated with MSVC build target.
 Verified: independent Windows/MSVC filesystem workflow run 44115627767 SUCCESS at commit f0ac8a43c6e1557a296ce50443b791ce3b8485c1; all FATX and XDVDFS configure/build/test steps passed. Latest CMake warning-cleanup commit triggered repeat run 44115698971, still in progress at update.
 Kernel runtime workflow run 44115698864 still in progress; waiting for XBE artifact then builds modules and runs full kernel/XBE integration.
 Scope: filesystem module build/test integration is green. FATX write/mutation API and guest Nt* filesystem syscall routing are not implemented in this PR and must not be reported as complete.
+
+
+[2026-11-17 UTC] [FILESYSTEM REGRESSION SUITE — BOTH MODULES GREEN]
+PR #30: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/30
+Owner branch: work/filesystem-kernel-integration
+Validated commit: 5bf919fd7471662a21aa38a9b349a169c8e1b98b
+Windows/MSVC workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/44115673209 — SUCCESS. FATX configure/build/smoke and XDVDFS configure/build/smoke all passed.
+Latest branch head then received XDVDFS CMake warning cleanup (de4319adc3227426174b49088984755605be07a3); repeat workflow run 44115698971 is in progress.
+Full kernel host/guest32/XBE workflow run 44115698864: NXDK fixture generation succeeded; kernel integration job now running. It builds FATX and XDVDFS in the actual kernel branch context, then continues main runtime and real XBE backend tests.
+FATX milestone: 75% read-path implementation, with all current read-path regressions passing. XDVDFS read-only module: build and smoke regression pass. Do not label complete guest filesystem syscall integration or FATX write/mutation APIs; those are not part of this PR yet.
