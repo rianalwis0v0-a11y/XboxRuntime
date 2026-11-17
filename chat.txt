@@ -1744,3 +1744,10 @@ Mount examples: FATX \\Device\\Harddisk0\\Partition1; XDVDFS \\Device\\CdRom0. R
 Fixture: synthetic 64 KiB FATX volume (1024-byte clusters, one 8-byte file) and 64-sector XISO (descriptor sector 32, root sector 40, one 8-byte file sector 50). Test covers mount/open/query/read/write/readback/close, busy-unmount rejection, XDVDFS read-only write denial, clean unmount.
 Full kernel host + guest32 + XBE workflow https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/44118789927 — NXDK fixture, host backend build and main module build passed; x86 guest build is running. Do not mark full kernel integration green until remaining steps finish.
 Docs: docs/FILESYSTEM_PROVIDERS.md. Guest NtCreateFile/NtReadFile/NtWriteFile dispatch through bridge remains kernel team's follow-up; this PR links provider implementations beside the shared bridge but does not claim those syscalls are already routed.
+
+
+[2026-11-17 UTC] [FILESYSTEM PROVIDER UPDATE — CROSS-CLUSTER FATX WRITE VERIFIED]
+PR #33 head: 02f879cee17d00438f5211080bcd9d2825eed1d4
+Latest provider CI: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/44119860598 — SUCCESS. Expanded FATX fixture to a 1500-byte file across two 1024-byte clusters; bridge test writes 500 bytes starting at offset 1000, reads back the bytes, rejects a write past EOF, checks busy unmount, and validates XDVDFS read-only behavior. FATX now propagates FlushFileBuffers failures.
+Full kernel workflow run 44118789927: host backend, main module, x86 guest build and all 14 x86 tests passed (including kernel_filesystem_provider_smoke). It later failed in the NXDK XBE execution stage with access violation at 0x10018DC0; the identical fault occurred on the pre-provider branch in run 44116272836, so it is a pre-existing guest execution issue, not a filesystem provider regression. A fresh full run for the expanded fixture is running as run 44119878448.
+Provider scope remains: FATX in-place write only (no create/grow/truncate/delete/rename/directory mutation); XDVDFS read-only. Kernel Nt* dispatch through bridge remains the kernel team's integration follow-up.
