@@ -72,6 +72,30 @@ int main() {
     if (volume.rootDirectorySector != 40 || volume.rootDirectorySize != 48)
         return Fail("root descriptor metadata mismatch");
 
+    uint32_t required = 0;
+    if (XDVDFS_ListDirectory("", nullptr, 0, &required) != 6 || required != 2)
+        return Fail("root directory sizing failed");
+    XDVDFS_FILE_INFO rootEntries[2]{};
+    if (XDVDFS_ListDirectory("/", rootEntries, 2, &required) != 0 || required != 2)
+        return Fail("root directory enumeration failed");
+    bool foundHello = false, foundMedia = false;
+    for (const auto& entry : rootEntries) {
+        foundHello |= std::strcmp(entry.name, "HELLO.TXT") == 0 &&
+            !(entry.attributes & XDVDFS_ATTR_DIRECTORY);
+        foundMedia |= std::strcmp(entry.name, "MEDIA") == 0 &&
+            (entry.attributes & XDVDFS_ATTR_DIRECTORY);
+    }
+    if (!foundHello || !foundMedia)
+        return Fail("root directory entries mismatch");
+    if (XDVDFS_ListDirectory("MEDIA", nullptr, 0, &required) != 6 || required != 1)
+        return Fail("nested directory sizing failed");
+    XDVDFS_FILE_INFO nestedEntries[1]{};
+    if (XDVDFS_ListDirectory("media", nestedEntries, 1, &required) != 0 ||
+        required != 1 || std::strcmp(nestedEntries[0].name, "A.TXT") != 0)
+        return Fail("nested directory enumeration failed");
+    if (XDVDFS_ListDirectory("HELLO.TXT", nullptr, 0, &required) != 4)
+        return Fail("file path was incorrectly treated as a directory");
+
     XDVDFS_FILE_INFO file{};
     if (XDVDFS_GetFileInfo("hello.txt", &file) != 0 ||
         file.size != 5 || file.startSector != 50 || file.nameLength != 9)
@@ -102,6 +126,6 @@ int main() {
 
     ModuleStop();
     DeleteFileW(path);
-    std::puts("PASS: XDVDFS descriptor, nested tree lookup, bounded reads, and malformed-tree rejection");
+    std::puts("PASS: XDVDFS descriptor, root/nested enumeration, path lookup, bounded reads, and malformed-tree rejection");
     return 0;
 }
