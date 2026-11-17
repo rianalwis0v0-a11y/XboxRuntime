@@ -54,9 +54,10 @@ int wmain(int argc, wchar_t** argv) {
         return 4;
     }
     std::printf("NXDK XBE metadata: base=0x%08X size=0x%08X header=0x%08X entry=0x%08X "
-                "TLS=0x%08X sections=%u\n",
+                "TLS=0x%08X kernelThunk=0x%08X nonKernelImports=0x%08X sections=%u\n",
                 image.baseAddress, image.imageSize, image.headerSize, image.entryPoint,
-                image.tlsAddress, image.sectionCount);
+                image.tlsAddress, image.kernelThunkAddress,
+                image.nonKernelImportDirectoryAddress, image.sectionCount);
     for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
         const auto& section = image.sections[i];
         std::printf("Section %u: flags=0x%08X VA=0x%08X virtual=0x%08X raw=0x%08X rawSize=0x%08X\n",
@@ -228,6 +229,19 @@ int wmain(int argc, wchar_t** argv) {
             &exceptionInstruction, &accessType, &faultAddress,
             &faultProtection, &faultState);
         if (exceptionInstruction) {
+            for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+                const auto& section = image.sections[i];
+                const std::uint64_t sectionEnd =
+                    std::uint64_t(section.virtualAddress) + section.virtualSize;
+                if (exceptionInstruction >= section.virtualAddress &&
+                    std::uint64_t(exceptionInstruction) < sectionEnd) {
+                    std::printf("Faulting EIP is in XBE section %u: flags=0x%08X "
+                                "executable=%u writable=%u\n",
+                                i, section.flags, (section.flags & 4u) != 0,
+                                (section.flags & 1u) != 0);
+                    break;
+                }
+            }
             std::uint8_t faultBytes[32]{};
             SIZE_T faultCopied = 0;
             if (ReadProcessMemory(GetCurrentProcess(),
