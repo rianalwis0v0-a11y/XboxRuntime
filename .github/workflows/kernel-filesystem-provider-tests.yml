@@ -3,7 +3,7 @@ name: Kernel filesystem provider integration tests
 on:
   push:
     branches:
-      - work/filesystem-provider-integration-current-latest
+      - work/filesystem-provider-integration-current
     paths:
       - "guest32/kernel_filesystem_bridge.*"
       - "guest32/CMakeLists.txt"
