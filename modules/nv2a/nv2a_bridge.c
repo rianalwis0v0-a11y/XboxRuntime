@@ -75,6 +75,13 @@ static void mark_all_textures_dirty(void);
 static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
 static void release_texture_cache(void);
 
+static int dma_can_read(const XboxNV2A_DMA_INFO* dma)
+{
+    /* NV_DMA_CLASS_2 is read-only; NV_DMA_CLASS_3D permits read/write.
+     * Class 3 is write-only and must never back a GPU data fetch. */
+    return dma && (dma->dma_class == 0x02u || dma->dma_class == 0x3Du);
+}
+
 /* Resolve a checked byte span from NV2A local VRAM, explicitly bound PCI
  * memory, or the host-supplied AGP/GART adapter. DMA target encodings are
  * defined by the NV2A object format; NVM_TILED is rejected until tile
@@ -1281,7 +1288,7 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
      * NV097 context slots: DMA_A, DMA_B, DMA_C and DMA_D. */
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length)
+    if (!dma_can_read(dma) || !dma->mapped_length)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
@@ -1308,7 +1315,7 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
         return 1;
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length)
+    if (!dma_can_read(dma) || !dma->mapped_length)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
@@ -1555,7 +1562,8 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
     const XboxNV2A_DMA_INFO* palette_dma=&g_dma_contexts[channel][subchannel][palette_slot];
     const uint32_t texture_slot=(info->context_method-0x0180u)/4u;
     const XboxNV2A_DMA_INFO* texture_dma=&g_dma_contexts[channel][subchannel][texture_slot];
-    if(palette_method<0x0180u||!palette_dma->mapped_length||
+    if(palette_method<0x0180u||!dma_can_read(palette_dma)||
+       !dma_can_read(texture_dma)||!palette_dma->mapped_length||
        !texture_dma->mapped_length)return 2;
     const uint8_t* palette_data=NULL;
     const uint8_t* swizzled=NULL;
@@ -2131,7 +2139,7 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     const uint32_t context_method = array_index < 8u ? 0x019Cu : 0x01A0u;
     const uint32_t context_slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length)
+    if (!dma_can_read(dma) || !dma->mapped_length)
         return 2;
 
     const uint32_t offset_method = 0x1720u + array_index * 4u;
