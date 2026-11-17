@@ -1,0 +1,41 @@
+name: Kernel filesystem regression tests
+
+on:
+  push:
+    branches:
+      - work/filesystem-kernel-integration
+    paths:
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "tests/fatx_smoke.cpp"
+      - "tests/xdvdfs_smoke.cpp"
+      - ".github/workflows/kernel-filesystem-tests.yml"
+  pull_request:
+    branches:
+      - work/kernel-execution-backend
+    paths:
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "tests/fatx_smoke.cpp"
+      - "tests/xdvdfs_smoke.cpp"
+      - ".github/workflows/kernel-filesystem-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  windows-filesystems:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure FATX module and regression test
+        run: cmake -S modules/fatx -B build-fatx -A x64
+      - name: Build FATX DLL and regression test
+        run: cmake --build build-fatx --config Release --target fatx fatx_smoke
+      - name: Run FATX regression test
+        run: ctest --test-dir build-fatx -C Release --output-on-failure -R fatx_smoke
+      - name: Configure XDVDFS module and regression test
+        run: cmake -S modules/xdvdfs -B build-xdvdfs -A x64
+      - name: Build XDVDFS DLL and regression test
+        run: cmake --build build-xdvdfs --config Release --target xdvdfs xdvdfs_smoke
+      - name: Run XDVDFS regression test
+        run: ctest --test-dir build-xdvdfs -C Release --output-on-failure -R xdvdfs_smoke
