@@ -2103,6 +2103,8 @@ int __cdecl XboxNV2A_ResolveDMAHandle(uint32_t channel, uint32_t handle,
 
     const uint32_t instance = (context & 0xFFFFu) << 4;
     const uint32_t engine = (context & 0x00030000u) >> 16;
+    /* RAMHT DMA handles bound by this bridge must target PGRAPH. */
+    if (engine != 1u) return 8;
     return resolve_dma_instance(instance, handle, engine, output);
 }
 
