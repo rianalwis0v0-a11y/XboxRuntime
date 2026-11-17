@@ -54,11 +54,23 @@ int main() {
     Put32(image, 8, 2); Put32(image, 12, 1);
     Put16(image, 0x1000 + 2, 0xFFFF); // root cluster
     Put16(image, 0x1000 + 4, 3); Put16(image, 0x1000 + 6, 0xFFFF);
+    Put16(image, 0x1000 + 8, 0xFFFF); // MEDIA directory cluster
+    Put16(image, 0x1000 + 10, 0xFFFF); // nested file cluster
     BYTE* root = image.data() + data;
     root[0] = 8; root[1] = FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE;
     std::memcpy(root + 2, "TEST.BIN", 8);
     Put32(image, data + 0x2C, 2); Put32(image, data + 0x30, payloadSize);
-    root[64] = 0xFF;
+    root[64] = 5; root[65] = FATX_ATTRIBUTE_DIRECTORY;
+    std::memcpy(root + 66, "MEDIA", 5);
+    Put32(image, data + 64 + 0x2C, 4);
+    root[128] = 0xFF;
+    BYTE* media = image.data() + data + cluster * 3;
+    media[0] = 9; media[1] = FATX_ATTRIBUTE_ARCHIVE;
+    std::memcpy(media + 2, "INNER.TXT", 9);
+    Put32(image, data + cluster * 3 + 0x2C, 5);
+    Put32(image, data + cluster * 3 + 0x30, 4);
+    media[64] = 0xFF;
+    std::memcpy(image.data() + data + cluster * 4, "nest", 4);
     std::vector<BYTE> expected(payloadSize);
     for (DWORD i = 0; i < payloadSize; ++i) expected[i] = BYTE((i * 37u) % 251u);
     std::memcpy(image.data() + data + cluster, expected.data(), cluster);
@@ -87,12 +99,21 @@ int main() {
     {
         DWORD required = 0;
         if (FATX_ListDirectoryW(volume, L"\\", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
-            required != 1) { Fail("directory size query failed"); goto stop; }
-        FATX_ENTRY entry{};
-        if (FATX_ListDirectoryW(volume, L"\\", &entry, 1, &required) != FATX_OK ||
-            std::wcscmp(entry.name, L"TEST.BIN") != 0 || entry.size != payloadSize ||
-            entry.attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE)) {
-            Fail("directory listing mismatch"); goto stop;
+            required != 2) { Fail("directory size query failed"); goto stop; }
+        FATX_ENTRY entries[2]{};
+        if (FATX_ListDirectoryW(volume, L"\\", entries, 2, &required) != FATX_OK ||
+            std::wcscmp(entries[0].name, L"TEST.BIN") != 0 || entries[0].size != payloadSize ||
+            entries[0].attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE) ||
+            std::wcscmp(entries[1].name, L"MEDIA") != 0 ||
+            !(entries[1].attributes & FATX_ATTRIBUTE_DIRECTORY)) {
+            Fail("root directory listing mismatch"); goto stop;
+        }
+        if (FATX_ListDirectoryW(volume, L"media", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
+            required != 1) { Fail("nested directory lookup failed"); goto stop; }
+        BYTE nested[4]{}; DWORD nestedRead = 0;
+        if (FATX_ReadFileW(volume, L"MEDIA/inner.txt", 0, nested, sizeof(nested), &nestedRead) != FATX_OK ||
+            nestedRead != 4 || std::memcmp(nested, "nest", 4) != 0) {
+            Fail("case-insensitive nested path read failed"); goto stop;
         }
     }
     {
