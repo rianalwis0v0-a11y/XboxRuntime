@@ -163,7 +163,7 @@ static bool WriteAt(FatxVolume* v, ULONGLONG offset, const void* buffer, DWORD l
         if (!WriteFile(v->file, source, amount, &written, nullptr) || written != amount) { ok = false; break; }
         source += written; remaining -= written;
     }
-    if (ok && length) FlushFileBuffers(v->file);
+    if (ok && length && !FlushFileBuffers(v->file)) ok = false;
     ReleaseSRWLockExclusive(&v->lock);
     return ok;
 }
