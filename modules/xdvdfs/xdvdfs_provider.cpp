@@ -52,7 +52,9 @@ LONG __stdcall ProviderRead(void*, void* fileOpaque, ULONGLONG offset, void* buf
     auto* file = static_cast<XdvdfsProviderFile*>(fileOpaque);
     if (!file || !transferred || (!buffer && length)) return STATUS_INVALID_PARAMETER_VALUE;
     *transferred = 0;
-    const int result = XDVDFS_ReadFile(file->path.c_str(), offset, buffer, length, transferred);
+    uint32_t bytesRead = 0;
+    const int result = XDVDFS_ReadFile(file->path.c_str(), offset, buffer, length, &bytesRead);
+    *transferred = static_cast<ULONG>(bytesRead);
     if (result == 0) return STATUS_SUCCESS_VALUE;
     if (result == 3) return STATUS_OBJECT_NAME_NOT_FOUND_VALUE;
     if (result == 4) return STATUS_FILE_IS_A_DIRECTORY_VALUE;
