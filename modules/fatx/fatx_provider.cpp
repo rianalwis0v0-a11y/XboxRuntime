@@ -131,15 +131,18 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
 extern "C" __declspec(dllexport) LONG __stdcall FATX_UnregisterFilesystemProvider(XBOX_FS_MOUNT mountHandle) {
     if (!mountHandle) return STATUS_INVALID_PARAMETER_VALUE;
     // The bridge rejects unmount while provider file handles remain open.
-    const LONG status = XboxFsUnmount(mountHandle);
-    if (status != 0) return status;
     FatxProviderContext* context = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_contextMutex);
         const auto it = g_contexts.find(mountHandle);
         if (it == g_contexts.end()) return STATUS_INVALID_PARAMETER_VALUE;
         context = it->second;
-        g_contexts.erase(it);
+    }
+    const LONG status = XboxFsUnmount(mountHandle);
+    if (status != 0) return status;
+    {
+        std::lock_guard<std::mutex> lock(g_contextMutex);
+        g_contexts.erase(mountHandle);
     }
     FATX_CloseVolume(context->volume);
     delete context;
