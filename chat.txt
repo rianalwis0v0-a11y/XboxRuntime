@@ -1761,3 +1761,12 @@ Provider CI: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/44121
 Latest kernel CMake now preserves the current kernel_compat Nt* dispatch and links kernel_filesystem_bridge.cpp into kernel_io_group_a_guest_smoke, resolving the 6 missing XboxFs* link symbols found in the base branch CI. Providers are linked into xbe_guest32 and their bridge-level smoke target is included in guest32 tests.
 Full kernel host + guest32 + XBE workflow: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/44121701433 — NXDK fixture generation passed; kernel build and XBE integration are running.
 FATX provider callbacks complete for existing-file reads and bounded in-place writes; no create/delete/rename/directory mutation/cluster allocation/file growth/truncation. XDVDFS provider is read-only. Guest Nt* dispatch remains owned by kernel branch and is preserved in this PR.
+
+
+[2026-11-17 UTC] [PR #35 CURRENT KERNEL BASE — GUEST32 TESTS GREEN]
+PR #35: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/35
+Branch: work/filesystem-provider-integration-current; latest head d4eedc81752a19b4224b4799ea7a8201989e5dc7; compare against work/kernel-combined-clean-import: 20 ahead / 0 behind.
+Provider CI passed on code commit af134540ffaff9fe2d32b4accf090e3007a4e928: https://github.com/rianalwis0v0-a11y/XboxRuntime/actions/runs/44121701356. Latest docs-only head provider workflow 44122481146 has built and run provider smoke successfully again.
+Full kernel workflow 44121701433 on code commit af134: host backend, main module, x86 guest build, all 14 x86 tests (provider smoke and kernel_io_group_a_guest_smoke included), backend export verification, shared-memory backend smoke and loader build all passed. Final NXDK XBE execution still fails at 0x10018DC0 because section 2 is PAGE_READWRITE/non-executable. The same fault existed before provider work on branch work/filesystem-kernel-integration (run 44116272836).
+Latest docs-only head full workflow 44122481174 is running; no source changes since af134 except documentation update.
+Providers: FATX writable mount with Open/Read/bounded cross-cluster in-place Write/Query/Close; XDVDFS read-only optical mount with Open/Read/Query/Close and write-protected callback. Mount registration functions accept actual backing paths and FATX partition geometry; storage initialization must call them when those are known. FATX create/delete/rename/directory mutation/cluster allocation/growth/truncate remain unsupported. Kernel Nt* dispatch is already present in latest base and preserved by PR #35.
