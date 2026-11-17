@@ -531,6 +531,22 @@ int main() {
         return 1;
     }
 
+    /* RAMHT engine ownership is validated independently of the DMA class.
+     * An otherwise valid DMA descriptor bound to a non-PGRAPH engine must not
+     * be reinterpreted as a graphics-local DMA object. */
+    const uint32_t dmaWrongEngineEntry[2] = {
+        dmaHandle, 0x80000000u | (channel << 24) | (2u << 16) | 0x10u
+    };
+    if (writeRamin(ramhtHash * 8u, dmaWrongEngineEntry,
+            sizeof(dmaWrongEngineEntry)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) == 0 ||
+        writeRamin(ramhtHash * 8u, ramhtEntry, sizeof(ramhtEntry)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) != 0) {
+        std::cerr << "FAIL: NV2A DMA engine ownership validation\\n";
+        stop();
+        return 1;
+    }
+
     /* Exercise NV4-style DMA GET/PUT with a real RAMHT-bound PGRAPH object.
      * CALL enters a helper at +24, binds the object, RETURN resumes at +4. */
     const uint32_t dmaCallStream[] = {
