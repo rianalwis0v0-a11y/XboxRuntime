@@ -446,7 +446,7 @@ static int ResolvePath(
     return FATX_OK;
 }
 
-extern "C" int __cdecl ModuleStart()
+extern "C" int __cdecl FATX_ModuleStart()
 {
     g_initialized = true;
 
@@ -457,7 +457,7 @@ extern "C" int __cdecl ModuleStart()
     return FATX_OK;
 }
 
-extern "C" void __cdecl ModuleStop()
+extern "C" void __cdecl FATX_ModuleStop()
 {
     g_initialized = false;
 
