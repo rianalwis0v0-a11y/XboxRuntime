@@ -70,6 +70,7 @@ static int __cdecl TranslateShortAgp(uint32_t aperture_offset,
 using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
+using MapTextureAddressFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
@@ -171,6 +172,8 @@ int main() {
         Need(module, "XboxNV2A_PackVertexProgramInputs"));
     auto mapRenderState = reinterpret_cast<MapRenderStateFn>(Need(module, "XboxNV2A_MapRenderState"));
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
+    auto mapTextureAddress = reinterpret_cast<MapTextureAddressFn>(
+        Need(module, "XboxNV2A_MapTextureAddress"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
     auto decodeMipChainFromDma = reinterpret_cast<DecodeMipChainDmaFn>(Need(module, "XboxNV2A_DecodeTextureMipChainFromDMA"));
@@ -325,6 +328,33 @@ int main() {
             mapTextureFilter((1u << 16) | (3u << 24), &minFilter, &magFilter, &mipFilter) ||
             mapTextureFilter((1u << 16) | (1u << 24), nullptr, &magFilter, &mipFilter)) {
             std::cerr << "FAIL: invalid NV097 texture filter accepted\\n";
+            FreeLibrary(module); return 1;
+        }
+    }
+
+    {
+        uint32_t addressU = 0, addressV = 0, addressW = 0;
+        const uint32_t addressCases[] = {
+            1u | (2u << 8) | (6u << 16), /* wrap U, mirror V, mirror-once P */
+            5u | (3u << 8) | (4u << 16)  /* clamp-edge U/V, border P */
+        };
+        const uint32_t expectedU[] = { 1u, 3u };
+        const uint32_t expectedV[] = { 2u, 3u };
+        const uint32_t expectedW[] = { 5u, 4u };
+        for (uint32_t i = 0; i < 2u; ++i) {
+            if (!mapTextureAddress(addressCases[i], &addressU, &addressV, &addressW) ||
+                addressU != expectedU[i] || addressV != expectedV[i] ||
+                addressW != expectedW[i]) {
+                std::cerr << "FAIL: NV097 U/V/P texture address mapping case " << i << "\\n";
+                FreeLibrary(module); return 1;
+            }
+        }
+        addressU = addressV = addressW = 99u;
+        if (mapTextureAddress(1u | (2u << 8) | (7u << 16),
+                &addressU, &addressV, &addressW) ||
+            addressU != 0u || addressV != 0u || addressW != 0u ||
+            mapTextureAddress(addressCases[0], nullptr, &addressV, &addressW)) {
+            std::cerr << "FAIL: invalid NV097 texture address accepted\\n";
             FreeLibrary(module); return 1;
         }
     }
