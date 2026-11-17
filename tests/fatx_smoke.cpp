@@ -108,12 +108,18 @@ int main() {
         if (FATX_ListDirectoryW(volume, L"\\", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
             required != 3) { Fail("directory size query failed"); goto stop; }
         FATX_ENTRY entries[3]{};
-        if (FATX_ListDirectoryW(volume, L"\\", entries, 3, &required) != FATX_OK ||
+        const int listStatus = FATX_ListDirectoryW(volume, L"\\", entries, 3, &required);
+        if (listStatus != FATX_OK ||
             std::wcscmp(entries[0].name, L"TEST.BIN") != 0 || entries[0].size != payloadSize ||
             entries[0].attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE) ||
             std::wcscmp(entries[1].name, L"MEDIA") != 0 ||
             !(entries[1].attributes & FATX_ATTRIBUTE_DIRECTORY) ||
             std::wcscmp(entries[2].name, L"CAF\u00C9.TXT") != 0) {
+            std::fwprintf(stderr, L"list=%d required=%lu [0]=%ls attr=%lu size=%llu [1]=%ls attr=%lu [2]=%ls\n",
+                listStatus, static_cast<unsigned long>(required), entries[0].name,
+                static_cast<unsigned long>(entries[0].attributes),
+                static_cast<unsigned long long>(entries[0].size), entries[1].name,
+                static_cast<unsigned long>(entries[1].attributes), entries[2].name);
             Fail("root directory listing mismatch"); goto stop;
         }
         if (FATX_ListDirectoryW(volume, L"media", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
