@@ -708,7 +708,7 @@ extern "C" LONG __stdcall K_IoCreateFile(
     converted.ObjectName = &convertedName;
     converted.Attributes = objectAttributes->Attributes;
     return NtCreateFileImpl(fileHandle, desiredAccess, &converted, ioStatus,
-                            fileAttributes, shareAccess, disposition,
+                            allocationSize, fileAttributes, shareAccess, disposition,
                             createOptions);
 }
 
@@ -790,6 +790,8 @@ extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
     if (oa->RootDirectory) return LONG(0xC00000BBu);
+    const std::wstring devicePath = TranslateXboxDevicePath(oa->ObjectName);
+    if (!devicePath.empty() && XboxFsIsPathMounted(devicePath.c_str())) return LONG(0xC00000BBu);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
@@ -830,7 +832,7 @@ extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void* apcRoutine,v
     DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
     if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
 }
-extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
+extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){if(FindFilesystemHandle(h)){if(io){io->Status=LONG(0xC00000BBu);io->Information=0;}return LONG(0xC00000BBu);}BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
 
 // NT FILE_INFORMATION_CLASS values used by retail Xbox titles.
 struct GuestFileBasicInformation {
@@ -971,6 +973,7 @@ extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* i
 }
 extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     HANDLE h, GuestIoStatusBlock* io, void* out, ULONG length, ULONG infoClass) {
+    if (FindFilesystemHandle(h)) { if (io) { io->Status = LONG(0xC00000BBu); io->Information = 0; } return LONG(0xC00000BBu); }
     constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
     constexpr LONG statusInfoLengthMismatch = LONG(0xC0000004u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
