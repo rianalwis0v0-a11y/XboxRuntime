@@ -1700,3 +1700,13 @@ Integration warning:
 - Do NOT merge work/xdvdfs-fatx wholesale into work/kernel-execution-backend. The histories are divergent and the kernel branch uses a different/older FATX layout; XDVDFS files are absent there.
 - Integrate selectively after full build result: port XDVDFS module + tests and the compatible FATX implementation/API + required vendored libfatx/CMake changes. Reconcile the kernel branch's existing FATX path/API instead of blindly overwriting it.
 - No kernel, NV2A, or XBE-loader files changed by this filesystem tranche.
+
+
+[2026-11-17 UTC] [FILESYSTEM → KERNEL INTEGRATION PR OPEN]
+Owner branch: work/filesystem-kernel-integration
+Target: work/kernel-execution-backend (base SHA e932b9aa097ba6f431c445dbb63d2aaa906921c6)
+PR: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/30
+Head SHA: 9337934ac76e9dff993ab6b31920cf19742e5ec7
+Changes: added standalone MSVC build targets for the existing kernel-branch FATX reader and the XDVDFS module; ported XDVDFS reader/header and synthetic regression test; extended kernel CI to build both filesystem DLLs and run XDVDFS smoke test.
+Compatibility: no branch-wide merge, no vendor dependency, preserves existing kernel FATX reader API. Runtime main already lists fatx.dll and xdvdfs.dll. This PR supplies build targets and XDVDFS module source, not filesystem syscall routing into guest Nt* APIs.
+Validation: PR CI started (kernel backend workflow + kernel memory API workflow). Awaiting completed results; do not merge until all checks pass.
