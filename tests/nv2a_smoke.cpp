@@ -71,6 +71,7 @@ using SubmitDmaPushFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, u
 using MapRenderStateFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t*, uint32_t*);
 using MapTextureFilterFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
 using MapTextureAddressFn = int (__cdecl*)(uint32_t, uint32_t*, uint32_t*, uint32_t*);
+using MapTextureLodBiasFn = int (__cdecl*)(uint32_t, uint32_t*);
 using SubmitDmaInstanceFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t*, uint32_t*);
 using GetDmaContextFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, DmaInfo*);
 using ReadVertexArrayFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t, uint32_t,
@@ -174,6 +175,8 @@ int main() {
     auto mapTextureFilter = reinterpret_cast<MapTextureFilterFn>(Need(module, "XboxNV2A_MapTextureFilter"));
     auto mapTextureAddress = reinterpret_cast<MapTextureAddressFn>(
         Need(module, "XboxNV2A_MapTextureAddress"));
+    auto mapTextureLodBias = reinterpret_cast<MapTextureLodBiasFn>(
+        Need(module, "XboxNV2A_MapTextureLodBias"));
     auto decodeTexture = reinterpret_cast<DecodeTextureFn>(Need(module, "XboxNV2A_DecodeTextureRGBA8"));
     auto decodeMipChain = reinterpret_cast<DecodeMipChainFn>(Need(module, "XboxNV2A_DecodeTextureMipChainRGBA8"));
     auto decodeMipChainFromDma = reinterpret_cast<DecodeMipChainDmaFn>(Need(module, "XboxNV2A_DecodeTextureMipChainFromDMA"));
@@ -328,6 +331,27 @@ int main() {
             mapTextureFilter((1u << 16) | (3u << 24), &minFilter, &magFilter, &mipFilter) ||
             mapTextureFilter((1u << 16) | (1u << 24), nullptr, &magFilter, &mipFilter)) {
             std::cerr << "FAIL: invalid NV097 texture filter accepted\\n";
+            FreeLibrary(module); return 1;
+        }
+    }
+
+    {
+        uint32_t biasBits = 0u;
+        const uint32_t biasCases[] = { 0x0000u, 0x0100u, 0x1F00u, 0x1FFFu, 0x1000u };
+        const uint32_t expectedBits[] = {
+            0x00000000u, 0x3F800000u, 0xBF800000u, 0xB7800000u, 0xC0000000u
+        };
+        for (uint32_t i = 0; i < 5u; ++i) {
+            if (!mapTextureLodBias(biasCases[i], &biasBits) ||
+                biasBits != expectedBits[i]) {
+                std::cerr << "FAIL: NV097 signed 8.8 LOD bias mapping case " << i << "\\n";
+                FreeLibrary(module); return 1;
+            }
+        }
+        biasBits = 99u;
+        if (mapTextureLodBias(0x0100u, nullptr) ||
+            !mapTextureLodBias(0x0100u, &biasBits) || biasBits != 0x3F800000u) {
+            std::cerr << "FAIL: NV097 LOD bias output validation\\n";
             FreeLibrary(module); return 1;
         }
     }
