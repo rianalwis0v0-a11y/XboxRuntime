@@ -141,13 +141,13 @@ void CloseUnlocked() {
 }
 }
 
-extern "C" int __cdecl ModuleStart(void) {
+extern "C" int __cdecl XDVDFS_ModuleStart(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_started = true;
     OutputDebugStringW(L"[XboxRuntime:XDVDFS] Read-only disc filesystem ready.\n");
     return 0;
 }
-extern "C" void __cdecl ModuleStop(void) {
+extern "C" void __cdecl XDVDFS_ModuleStop(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
     CloseUnlocked();
     g_started = false;
