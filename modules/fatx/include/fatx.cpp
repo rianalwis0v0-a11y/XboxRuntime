@@ -68,11 +68,17 @@ static bool AddOverflow(
     return false;
 }
 
-static ULONGLONG AlignUp(
+static bool AlignUp(
     ULONGLONG value,
-    ULONGLONG alignment)
+    ULONGLONG alignment,
+    ULONGLONG* result)
 {
-    return (value + alignment - 1) & ~(alignment - 1);
+    if (!result || alignment == 0 ||
+        (alignment & (alignment - 1)) != 0 ||
+        value > UINT64_MAX - (alignment - 1))
+        return false;
+    *result = (value + alignment - 1) & ~(alignment - 1);
+    return true;
 }
 
 static bool ReadAt(
@@ -183,8 +189,8 @@ static int NextCluster(
 
     uint32_t endMarker =
         v->entrySize == 2
-        ? 0xFFF8
-        : 0xFFFFFFF8;
+        ? 0xFFFF
+        : 0xFFFFFFFF;
 
     uint32_t badMarker =
         v->entrySize == 2
@@ -196,7 +202,7 @@ static int NextCluster(
         ? 0xFFF0
         : 0xFFFFFFF0;
 
-    if (value >= endMarker)
+    if (value == endMarker)
     {
         *end = true;
         *next = 0;
@@ -540,7 +546,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     DWORD spc = v->sectorsPerCluster;
 
-    if (spc < 8 || spc > 128 ||
+    if (spc == 0 || spc > 1024 ||
         (spc & (spc - 1)) != 0)
     {
         delete v;
@@ -564,10 +570,15 @@ extern "C" int __cdecl FATX_OpenVolumeW(
         return FATX_INVALID_VOLUME;
     }
 
-    v->fatSize = AlignUp(
+    if (!AlignUp(
         maxClusters * v->entrySize,
-        0x1000
-    );
+        0x1000,
+        &v->fatSize))
+    {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_VOLUME;
+    }
 
     if (v->fatSize > partitionLength - 0x1000)
     {
