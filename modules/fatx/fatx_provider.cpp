@@ -6,7 +6,7 @@
 #include <mutex>
 #include <unordered_map>
 #include "guest32/kernel_filesystem_bridge.h"
-#include "fatx.h"
+#include "include/fatx.h"
 
 namespace {
 constexpr LONG STATUS_SUCCESS_VALUE = 0;
