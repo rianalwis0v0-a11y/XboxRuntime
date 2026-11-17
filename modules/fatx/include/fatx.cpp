@@ -908,3 +908,24 @@ extern "C" int __cdecl FATX_WriteFileW(
     }
     return FATX_OK;
 }
+
+extern "C" int __cdecl FATX_GetFileInfoW(FATX_VOLUME handle, LPCWSTR path, FATX_ENTRY* output)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path || !output) return FATX_INVALID_ARGUMENT;
+    FatxDirEntry entry; bool root = false;
+    const int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK) return status;
+    std::memset(output, 0, sizeof(*output));
+    if (root) {
+        output->attributes = FATX_ATTRIBUTE_DIRECTORY;
+        output->firstCluster = v->rootCluster;
+        return FATX_OK;
+    }
+    const size_t count = (std::min<size_t>)(entry.name.size(), 42);
+    std::wmemcpy(output->name, entry.name.c_str(), count);
+    output->attributes = entry.attributes;
+    output->firstCluster = entry.firstCluster;
+    output->size = entry.size;
+    return FATX_OK;
+}
