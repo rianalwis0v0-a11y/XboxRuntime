@@ -92,14 +92,14 @@ extern "C" __declspec(dllexport) LONG __stdcall XDVDFS_RegisterFilesystemProvide
     if (!deviceName || !*deviceName || !imagePath || !*imagePath || !mountHandle)
         return STATUS_INVALID_PARAMETER_VALUE;
     *mountHandle = nullptr;
-    if (ModuleStart() != 0) return STATUS_IO_DEVICE_ERROR_VALUE;
+    if (XDVDFS_ModuleStart() != 0) return STATUS_IO_DEVICE_ERROR_VALUE;
     XDVDFS_VOLUME_INFO volume{};
-    if (XDVDFS_OpenImage(imagePath, &volume) != 0) { ModuleStop(); return STATUS_IO_DEVICE_ERROR_VALUE; }
+    if (XDVDFS_OpenImage(imagePath, &volume) != 0) { XDVDFS_ModuleStop(); return STATUS_IO_DEVICE_ERROR_VALUE; }
     auto* context = new (std::nothrow) XdvdfsProviderContext();
-    if (!context) { XDVDFS_CloseImage(); ModuleStop(); return STATUS_NO_MEMORY_VALUE; }
+    if (!context) { XDVDFS_CloseImage(); XDVDFS_ModuleStop(); return STATUS_NO_MEMORY_VALUE; }
     const LONG status = XboxFsMount(deviceName, &kProvider, context,
         XBOX_FS_MOUNT_READ_ONLY, &context->mount);
-    if (status != 0) { delete context; XDVDFS_CloseImage(); ModuleStop(); return status; }
+    if (status != 0) { delete context; XDVDFS_CloseImage(); XDVDFS_ModuleStop(); return status; }
     *mountHandle = context->mount;
     { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
     return STATUS_SUCCESS_VALUE;
@@ -119,6 +119,6 @@ extern "C" __declspec(dllexport) LONG __stdcall XDVDFS_UnregisterFilesystemProvi
     }
     delete context;
     XDVDFS_CloseImage();
-    ModuleStop();
+    XDVDFS_ModuleStop();
     return STATUS_SUCCESS_VALUE;
 }
