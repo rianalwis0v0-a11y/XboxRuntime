@@ -141,6 +141,17 @@ int main() {
             got != cluster) { Fail("reserved marker accepted as EOC"); goto stop; }
     }
     FATX_CloseVolume(volume); volume = nullptr;
+    // A cyclic chain must stop after the first cluster instead of looping.
+    Put16(image, 0x1000 + 4, 2);
+    if (!WriteImage(path, image) || FATX_OpenVolumeW(path, 0, imageSize, &volume) != FATX_OK) {
+        Fail("could not prepare cyclic-chain fixture"); goto stop;
+    }
+    {
+        BYTE out[payloadSize]{}; DWORD got = 0;
+        if (FATX_ReadFileW(volume, L"TEST.BIN", 0, out, payloadSize, &got) != FATX_CORRUPT ||
+            got != cluster) { Fail("cyclic FAT chain was not detected"); goto stop; }
+    }
+    FATX_CloseVolume(volume); volume = nullptr;
     // The 64 MiB geometry crosses the 0xFFF0 cluster threshold and uses 32-bit FAT entries.
     if (!WriteSparseImage(path, 64ULL * 1024 * 1024) ||
         FATX_OpenVolumeW(path, 0, 64ULL * 1024 * 1024, &volume) != FATX_OK) {
