@@ -118,6 +118,34 @@ following section. PCI/AGP DMA, page tables, and channel switching/puller
 scheduling remain unsupported.
 
 
+## DMA target, engine, and translation boundary
+
+The local DMA-object resolver now validates the RAMHT engine field as well as
+the descriptor class, target, and VRAM span. Only PGRAPH-engine objects
+(engine field 1) are accepted by this graphics bridge. A descriptor associated
+with another engine is rejected instead of being decoded as a PGRAPH DMA
+object. Read-only, write-only, and read/write classes remain distinct; data
+fetch paths separately require read permission.
+
+The supported address path is currently:
+
+- RAMHT handle -> 16-byte-aligned RAMIN instance -> DMA descriptor.
+- PGRAPH engine + linear local-VRAM target -> bounded 64 MiB VRAM span.
+- DMA-relative byte offset -> checked local VRAM byte address.
+
+PCI/AGP targets are deliberately rejected. This repository does not yet expose
+a guest system-memory backing store or a safe guest-physical-address mapping
+contract for the NV2A bridge. Likewise, GPU page-table/PTE formats, page
+permissions, fault reporting, and TLB fill/invalidate behavior are not
+implemented. Treating a PCI/AGP address as a VRAM offset, or inventing a
+page-table format, would silently corrupt memory; these paths must remain
+fail-closed until the guest memory subsystem and hardware-accurate translation
+rules are integrated.
+
+The new smoke coverage checks rejection of a non-PGRAPH RAMHT engine while
+preserving the valid PGRAPH path. This is validation hardening, not a claim
+that PCI/AGP DMA or GPU virtual memory is complete.
+
 ## NV4-style DMA pusher
 
 `XboxNV2A_SubmitDMAPushBuffer(channel, handle, get, put, new_get, methods_submitted)`
