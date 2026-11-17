@@ -542,6 +542,15 @@ places a JUMP near the end of the DMA object, resumes at offset zero, dispatches
 a context-DMA bind, and verifies the final GET/PUT relationship and binding.
 
 
+## DMA object validation regression coverage
+
+The RAMHT/DMA smoke test also exercises fail-closed object validation: it
+rejects a non-local target (including PCI/AGP-style target selection), an
+unsupported DMA class, and a base/limit span that crosses the 64 MiB local
+VRAM aperture. It then restores the valid object and verifies resolution
+continues to succeed. This validates rejection behavior; it does not implement
+PCI/AGP bus mastering, system-memory DMA, or GPU page-table translation.
+
 ## DMA read-permission enforcement
 
 Texture, palette and vertex fetches now require a readable NV2A DMA class
