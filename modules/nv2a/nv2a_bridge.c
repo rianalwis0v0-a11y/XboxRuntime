@@ -477,8 +477,10 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
                 device, stage, D3DTSS_ADDRESSU, state_u))) return 0;
         if (FAILED(device->lpVtbl->SetTextureStageState(
                 device, stage, D3DTSS_ADDRESSV, state_v))) return 0;
-        if (FAILED(device->lpVtbl->SetTextureStageState(
-                device, stage, D3DTSS_ADDRESSW, state_w))) return 0;
+        /* Xbox exposes P addressing for volume textures; the current D3D8
+         * compatibility interface has no ADDRESSW stage-state token. Keep
+         * the P mode decoded/validated, but do not invent a host state. */
+        (void)state_w;
         return 1;
     }
     if (method >= 0x1B14u && method <= 0x1BD4u &&
