@@ -2845,6 +2845,8 @@ void XboxKernelFlushEeprom() {
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
+bool XboxKernelProtectImage();
+
 bool XboxKernelResolveImports(const XboxKernelState& image) {
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);
@@ -2865,9 +2867,13 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
     // The loader has already selected the correct retail/debug/Chihiro XOR
     // scheme and validated this decoded guest VA. Never decode it a second time.
     const uint32_t thunk = image.kernelThunkAddress;
-    if (!thunk)
-        return XboxGuestResolveNonKernelImports(g_base, g_size,
-            image.nonKernelImportDirectoryAddress);
+    if (!thunk) {
+        const bool importsResolved = XboxGuestResolveNonKernelImports(
+            g_base, g_size, image.nonKernelImportDirectoryAddress);
+        // Apply the XBE section permissions only after import fixups have
+        // finished writing into the mapped guest image.
+        return importsResolved && XboxKernelProtectImage();
+    }
     if ((thunk & 3u) != 0 || !InImage(thunk, 4))
         return false;
 
@@ -2880,8 +2886,11 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
         const uint32_t value = table[i];
         if (value == 0) {
             FlushInstructionCache(GetCurrentProcess(), g_stubPage, g_stubCount * 10u);
-            return XboxGuestResolveNonKernelImports(g_base, g_size,
-                image.nonKernelImportDirectoryAddress);
+            const bool importsResolved = XboxGuestResolveNonKernelImports(
+                g_base, g_size, image.nonKernelImportDirectoryAddress);
+            // ProtectImage is deliberately last: import fixups above may
+            // modify guest thunk data and must run while the image is writable.
+            return importsResolved && XboxKernelProtectImage();
         }
         if ((value & 0x80000000u) == 0) return false;
         const uint32_t ordinal = value & 0x7FFFFFFFu;
