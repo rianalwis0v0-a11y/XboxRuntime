@@ -238,6 +238,12 @@ int main() {
     FATX_CloseVolume(volume);
     volume = nullptr;
 
+    // Reopen in explicit image-write mode before exercising mutations.
+    if (FATX_OpenImageReadWriteW(filePath, 0, imageSize, &volume) != FATX_OK) {
+        Fail("could not reopen FATX image for directory mutations");
+        goto stop;
+    }
+
     // Exercise directory create, file rename/delete, directory removal and shrink-only truncate.
     if (FATX_CreateDirectoryW(volume, L"DIR") != FATX_OK ||
         FATX_CreateDirectoryW(volume, L"DIR") != FATX_INVALID_ARGUMENT ||
