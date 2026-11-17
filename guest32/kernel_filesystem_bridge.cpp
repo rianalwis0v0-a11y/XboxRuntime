@@ -101,6 +101,16 @@ extern "C" LONG __stdcall XboxFsUnmount(XBOX_FS_MOUNT handle) {
     return kSuccess;
 }
 
+extern "C" BOOL __stdcall XboxFsIsPathMounted(const WCHAR* absolutePath) {
+    if (!absolutePath || !*absolutePath) return FALSE;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (const Mount* mount : g_mounts) {
+        if (mount->active && EqualPrefix(absolutePath, mount->deviceName))
+            return TRUE;
+    }
+    return FALSE;
+}
+
 extern "C" LONG __stdcall XboxFsOpen(const WCHAR* absolutePath,
     ACCESS_MASK desiredAccess, ULONG shareAccess, XBOX_FS_FILE* fileHandle) {
     if (!absolutePath || !*absolutePath || !fileHandle) return kInvalidParameter;
