@@ -95,7 +95,8 @@ jobs:
       - name: Configure and build FATX filesystem module
         run: |
           cmake -S modules/fatx -B build-fatx -A x64
-          cmake --build build-fatx --config Release --target fatx
+          cmake --build build-fatx --config Release --target fatx fatx_smoke
+          ctest --test-dir build-fatx -C Release --output-on-failure -R fatx_smoke
 
       - name: Configure and build XDVDFS filesystem module and tests
         run: |
