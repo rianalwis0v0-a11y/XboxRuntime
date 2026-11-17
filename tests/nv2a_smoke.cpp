@@ -737,6 +737,22 @@ int main() {
         }
     }
 
+    /* RAMHT engine ownership is validated independently of the DMA class.
+     * An otherwise valid DMA descriptor bound to a non-PGRAPH engine must not
+     * be reinterpreted as a graphics-local DMA object. */
+    const uint32_t dmaWrongEngineEntry[2] = {
+        dmaHandle, 0x80000000u | (channel << 24) | (2u << 16) | 0x10u
+    };
+    if (writeRamin(ramhtHash * 8u, dmaWrongEngineEntry,
+            sizeof(dmaWrongEngineEntry)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) == 0 ||
+        writeRamin(ramhtHash * 8u, ramhtEntry, sizeof(ramhtEntry)) != 0 ||
+        resolveDma(channel, dmaHandle, &dmaInfo) != 0) {
+        std::cerr << "FAIL: NV2A DMA engine ownership validation\\n";
+        stop();
+        return 1;
+    }
+
     /* Exercise NV4-style DMA GET/PUT with a real RAMHT-bound PGRAPH object.
      * CALL enters a helper at +24, binds the object, RETURN resumes at +4. */
     const uint32_t dmaCallStream[] = {
@@ -1615,6 +1631,46 @@ int main() {
     }
     if (submit(0u, 0x1B04u, textureFormat) != 0) {
         std::cerr << "FAIL: restore NV097 texture DMA_B context\\n";
+        stop();
+        return 1;
+    }
+
+    /* A write-only DMA object may be bound, but never read as a texture.
+     * Bind it through the real PFIFO pusher (direct PGRAPH submission does not
+     * perform context-DMA handle resolution). */
+    const uint32_t writeOnlyHandle = 0x87654321u;
+    const uint32_t writeOnlyHash = 9u;
+    const uint32_t writeOnlyRamhtEntry[2] = {
+        writeOnlyHandle, 0x80000000u | (channel << 24) | (1u << 16) | 0x12u
+    };
+    const uint32_t writeOnlyDmaObject[3] = {
+        0x00000003u, 0x00000FFFu, 0x00001000u
+    };
+    const uint32_t bindWriteOnlyDma[2] = {
+        (1u << 18) | 0x018Cu, writeOnlyHandle
+    };
+    const uint32_t bindReadOnlyDma[2] = {
+        (1u << 18) | 0x018Cu, dmaHandle
+    };
+    uint32_t bindGet = 0u, bindMethods = 0u;
+    if (writeRamin(writeOnlyHash * 8u, writeOnlyRamhtEntry,
+            sizeof(writeOnlyRamhtEntry)) != 0 ||
+        writeRamin(0x120u, writeOnlyDmaObject, sizeof(writeOnlyDmaObject)) != 0 ||
+        writeVram(0x1800u, bindWriteOnlyDma, sizeof(bindWriteOnlyDma)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0x800u, 0x808u,
+            &bindGet, &bindMethods) != 0 ||
+        bindGet != 0x808u || bindMethods != 1u ||
+        submit(0u, 0x1B04u, (textureFormat & ~3u) | 3u) != 0 ||
+        decodeTextureStage(channel, 0u, 0u, stagePixels, sizeof(stagePixels),
+            stageOffsets, stageSizes) == 0 ||
+        writeVram(0x1808u, bindReadOnlyDma, sizeof(bindReadOnlyDma)) != 0 ||
+        submitDmaPush(channel, dmaHandle, 0x808u, 0x810u,
+            &bindGet, &bindMethods) != 0 ||
+        bindGet != 0x810u || bindMethods != 1u ||
+        submit(0u, 0x1B04u, textureFormat) != 0 ||
+        decodeTextureStage(channel, 0u, 0u, stagePixels, sizeof(stagePixels),
+            stageOffsets, stageSizes) != 0) {
+        std::cerr << "FAIL: NV2A DMA read permission enforcement\\n";
         stop();
         return 1;
     }
