@@ -360,12 +360,13 @@ int main() {
         uint32_t addressU = 0, addressV = 0, addressW = 0;
         const uint32_t addressCases[] = {
             1u | (2u << 8) | (6u << 16), /* wrap U, mirror V, mirror-once P */
-            5u | (3u << 8) | (4u << 16)  /* clamp-edge U/V, border P */
+            5u | (3u << 8) | (4u << 16), /* clamp-edge U/V, border P */
+            1u | (2u << 8)              /* 2D stage: P mode omitted */
         };
-        const uint32_t expectedU[] = { 1u, 3u };
-        const uint32_t expectedV[] = { 2u, 3u };
-        const uint32_t expectedW[] = { 5u, 4u };
-        for (uint32_t i = 0; i < 2u; ++i) {
+        const uint32_t expectedU[] = { 1u, 3u, 1u };
+        const uint32_t expectedV[] = { 2u, 3u, 2u };
+        const uint32_t expectedW[] = { 5u, 4u, 0u };
+        for (uint32_t i = 0; i < 3u; ++i) {
             if (!mapTextureAddress(addressCases[i], &addressU, &addressV, &addressW) ||
                 addressU != expectedU[i] || addressV != expectedV[i] ||
                 addressW != expectedW[i]) {
