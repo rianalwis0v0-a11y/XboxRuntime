@@ -412,6 +412,21 @@ int __cdecl XboxNV2A_MapTextureAddress(uint32_t parameter,
     return 1;
 }
 
+int __cdecl XboxNV2A_MapTextureLodBias(uint32_t parameter,
+    uint32_t* lod_bias_float_bits_out)
+{
+    if (lod_bias_float_bits_out) *lod_bias_float_bits_out = 0u;
+    if (!lod_bias_float_bits_out)
+        return 0;
+
+    int32_t signed_bias = (int32_t)(parameter & 0x1FFFu);
+    if (signed_bias & 0x1000)
+        signed_bias |= ~0x1FFF;
+    const float lod_bias = (float)signed_bias / 256.0f;
+    memcpy(lod_bias_float_bits_out, &lod_bias, sizeof(lod_bias));
+    return 1;
+}
+
 int __cdecl XboxNV2A_MapTextureFilter(uint32_t parameter,
     uint32_t* min_filter_out, uint32_t* mag_filter_out,
     uint32_t* mip_filter_out)
@@ -469,10 +484,12 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
     if (method >= 0x1B14u && method <= 0x1BD4u &&
         ((method - 0x1B14u) % 0x40u) == 0u) {
         uint32_t min_filter = 0, mag_filter = 0, mip_filter = 0;
+        uint32_t lod_bias_bits = 0;
         stage = (method - 0x1B14u) / 0x40u;
         if (stage >= 4u ||
             !XboxNV2A_MapTextureFilter(parameter, &min_filter,
-                                       &mag_filter, &mip_filter))
+                                       &mag_filter, &mip_filter) ||
+            !XboxNV2A_MapTextureLodBias(parameter, &lod_bias_bits))
             return 0;
         if (FAILED(device->lpVtbl->SetTextureStageState(
                 device, stage, D3DTSS_MINFILTER, min_filter))) return 0;
@@ -480,6 +497,8 @@ static int apply_texture_stage_method(uint32_t method, uint32_t parameter)
                 device, stage, D3DTSS_MAGFILTER, mag_filter))) return 0;
         if (FAILED(device->lpVtbl->SetTextureStageState(
                 device, stage, D3DTSS_MIPFILTER, mip_filter))) return 0;
+        if (FAILED(device->lpVtbl->SetTextureStageState(
+                device, stage, D3DTSS_MIPMAPLODBIAS, lod_bias_bits))) return 0;
         return 1;
     }
     if(method>=0x1B24u && method<=0x1BE4u &&
