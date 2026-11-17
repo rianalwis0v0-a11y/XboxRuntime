@@ -56,6 +56,7 @@ int main() {
     Put16(image, 0x1000 + 4, 3); Put16(image, 0x1000 + 6, 0xFFFF);
     Put16(image, 0x1000 + 8, 0xFFFF); // MEDIA directory cluster
     Put16(image, 0x1000 + 10, 0xFFFF); // nested file cluster
+    Put16(image, 0x1000 + 12, 0xFFFF); // CP437 filename cluster
     BYTE* root = image.data() + data;
     root[0] = 8; root[1] = FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE;
     std::memcpy(root + 2, "TEST.BIN", 8);
@@ -63,7 +64,12 @@ int main() {
     root[64] = 5; root[65] = FATX_ATTRIBUTE_DIRECTORY;
     std::memcpy(root + 66, "MEDIA", 5);
     Put32(image, data + 64 + 0x2C, 4);
-    root[128] = 0xFF;
+    root[128] = 8; root[129] = FATX_ATTRIBUTE_ARCHIVE;
+    const BYTE cp437Name[8] = {'C','A','F',0x82,'.','T','X','T'};
+    std::memcpy(root + 130, cp437Name, sizeof(cp437Name));
+    Put32(image, data + 128 + 0x2C, 6);
+    Put32(image, data + 128 + 0x30, 2);
+    root[192] = 0xFF;
     BYTE* media = image.data() + data + cluster * 3;
     media[0] = 9; media[1] = FATX_ATTRIBUTE_ARCHIVE;
     std::memcpy(media + 2, "INNER.TXT", 9);
@@ -71,6 +77,7 @@ int main() {
     Put32(image, data + cluster * 3 + 0x30, 4);
     media[64] = 0xFF;
     std::memcpy(image.data() + data + cluster * 4, "nest", 4);
+    std::memcpy(image.data() + data + cluster * 5, "ok", 2);
     std::vector<BYTE> expected(payloadSize);
     for (DWORD i = 0; i < payloadSize; ++i) expected[i] = BYTE((i * 37u) % 251u);
     std::memcpy(image.data() + data + cluster, expected.data(), cluster);
@@ -99,17 +106,23 @@ int main() {
     {
         DWORD required = 0;
         if (FATX_ListDirectoryW(volume, L"\\", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
-            required != 2) { Fail("directory size query failed"); goto stop; }
-        FATX_ENTRY entries[2]{};
-        if (FATX_ListDirectoryW(volume, L"\\", entries, 2, &required) != FATX_OK ||
+            required != 3) { Fail("directory size query failed"); goto stop; }
+        FATX_ENTRY entries[3]{};
+        if (FATX_ListDirectoryW(volume, L"\\", entries, 3, &required) != FATX_OK ||
             std::wcscmp(entries[0].name, L"TEST.BIN") != 0 || entries[0].size != payloadSize ||
             entries[0].attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE) ||
             std::wcscmp(entries[1].name, L"MEDIA") != 0 ||
-            !(entries[1].attributes & FATX_ATTRIBUTE_DIRECTORY)) {
+            !(entries[1].attributes & FATX_ATTRIBUTE_DIRECTORY) ||
+            std::wcscmp(entries[2].name, L"CAF\\u00C9.TXT") != 0) {
             Fail("root directory listing mismatch"); goto stop;
         }
         if (FATX_ListDirectoryW(volume, L"media", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
             required != 1) { Fail("nested directory lookup failed"); goto stop; }
+        BYTE cp437[2]{}; DWORD cp437Read = 0;
+        if (FATX_ReadFileW(volume, L"caf\\u00E9.txt", 0, cp437, sizeof(cp437), &cp437Read) != FATX_OK ||
+            cp437Read != 2 || std::memcmp(cp437, "ok", 2) != 0) {
+            Fail("CP437 filename decoding failed"); goto stop;
+        }
         BYTE nested[4]{}; DWORD nestedRead = 0;
         if (FATX_ReadFileW(volume, L"MEDIA/inner.txt", 0, nested, sizeof(nested), &nestedRead) != FATX_OK ||
             nestedRead != 4 || std::memcmp(nested, "nest", 4) != 0) {
