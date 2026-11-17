@@ -200,6 +200,46 @@ extern "C" int __cdecl XDVDFS_GetFileInfo(const char* path, XDVDFS_FILE_INFO* in
     std::memcpy(info->name, e.name.data(), info->nameLength);
     return 0;
 }
+extern "C" int __cdecl XDVDFS_ListDirectory(const char* path, XDVDFS_FILE_INFO* output, uint32_t capacity, uint32_t* required) {
+    if (required) *required = 0;
+    if (!path || !required || (!output && capacity)) return 1;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_started || !g_volume.open) return 2;
+
+    const std::string parent = Normalize(path);
+    if (!parent.empty()) {
+        const auto directory = g_volume.entries.find(parent);
+        if (directory == g_volume.entries.end()) return 3;
+        if (!directory->second.directory) return 4;
+    }
+
+    const std::string prefix = parent.empty() ? std::string() : parent + "/";
+    std::vector<const Entry*> children;
+    for (const auto& item : g_volume.entries) {
+        if (item.first.size() <= prefix.size() ||
+            item.first.compare(0, prefix.size(), prefix) != 0)
+            continue;
+        const std::string remainder = item.first.substr(prefix.size());
+        if (remainder.find('/') == std::string::npos)
+            children.push_back(&item.second);
+    }
+
+    if (children.size() > UINT32_MAX) return 5;
+    *required = static_cast<uint32_t>(children.size());
+    if (capacity < *required || (!output && *required)) return 6;
+
+    for (uint32_t i = 0; i < *required; ++i) {
+        const Entry& entry = *children[i];
+        XDVDFS_FILE_INFO& info = output[i];
+        std::memset(&info, 0, sizeof(info));
+        info.startSector = entry.sector;
+        info.size = entry.size;
+        info.attributes = entry.attributes;
+        info.nameLength = static_cast<uint8_t>((std::min)(entry.name.size(), size_t(255)));
+        std::memcpy(info.name, entry.name.data(), info.nameLength);
+    }
+    return 0;
+}
 extern "C" int __cdecl XDVDFS_ReadFile(const char* path, uint64_t offset, void* buffer, uint32_t bytesToRead, uint32_t* bytesRead) {
     if (bytesRead) *bytesRead = 0;
     if (!path || (!buffer && bytesToRead) || !bytesRead) return 1;
