@@ -557,3 +557,474 @@ texture fetches also remain local-VRAM-only until their readers are routed
 through the same DMA memory abstraction. The current change therefore adds a
 validated PCI pushbuffer path, not general-purpose PCI/AGP DMA or complete
 Xbox guest-memory integration.
+
+
+## DMA target, engine, and translation boundary
+
+The local DMA-object resolver now validates the RAMHT engine field as well as
+the descriptor class, target, and VRAM span. Only PGRAPH-engine objects
+(engine field 1) are accepted by this graphics bridge. A descriptor associated
+with another engine is rejected instead of being decoded as a PGRAPH DMA
+object. Read-only, write-only, and read/write classes remain distinct; data
+fetch paths separately require read permission.
+
+The supported address path is currently:
+
+- RAMHT handle -> 16-byte-aligned RAMIN instance -> DMA descriptor.
+- PGRAPH engine + linear local-VRAM target -> bounded 64 MiB VRAM span.
+- DMA-relative byte offset -> checked local VRAM byte address.
+
+PCI/AGP targets are deliberately rejected. This repository does not yet expose
+a guest system-memory backing store or a safe guest-physical-address mapping
+contract for the NV2A bridge. Likewise, GPU page-table/PTE formats, page
+permissions, fault reporting, and TLB fill/invalidate behavior are not
+implemented. Treating a PCI/AGP address as a VRAM offset, or inventing a
+page-table format, would silently corrupt memory; these paths must remain
+fail-closed until the guest memory subsystem and hardware-accurate translation
+rules are integrated.
+
+The new smoke coverage checks rejection of a non-PGRAPH RAMHT engine while
+preserving the valid PGRAPH path. This is validation hardening, not a claim
+that PCI/AGP DMA or GPU virtual memory is complete.
+
+## NV4-style DMA pusher
+
+`XboxNV2A_SubmitDMAPushBuffer(channel, handle, get, put, new_get, methods_submitted)`
+resolves a readable DMA object through RAMHT and processes its NV4-style command
+stream. GET/PUT are byte offsets within that object. The implementation handles
+incrementing and non-incrementing method packets, legacy and NV1A jump commands,
+nested CALL/RETURN (up to 16 stack levels), and the reference-counter method. It validates
+all reads and control-flow targets against the mapped DMA span, bounds execution
+to one million command/data words, and performs a validation pass before GPU
+dispatch so malformed streams do not partially execute.
+
+The puller currently binds only the graphics engine. It does not enable the later-generation NOP method on NV2A. Object-bind method 0 and
+the RAMHT-handle method range 0x180..0x1fc are resolved through RAMHT; other
+unimplemented puller special methods, calls deeper than 16 levels, PCI/AGP DMA, DMA page
+translation, interrupts, scheduling/channel switching, and IB mode remain
+unsupported. This is a functional NV4-style software pusher path, not a full
+hardware PFIFO implementation.
+
+
+## Additional Kelvin fixed-function state mappings
+
+The bridge now maps a tested subset of additional NV097 methods into the
+D3D8 compatibility device's render states, which the Windows backend applies
+through D3D11. Covered state includes alpha/depth comparisons and masks,
+stencil enable/function/reference/masks/operations, blend equation, fog enable,
+color and mode, lighting enable, shade mode, and point size. Compare functions,
+stencil operations and blend/fog enumerations are translated explicitly rather
+than copied as incompatible numeric values.
+
+The mapping function is separately exported and smoke-tested without requiring
+a graphics device. Runtime application occurs only when the D3D8 compatibility
+device is available. Surface format/offset and render-target binding, texture
+sampling, vertex array formats/data, shader microcode, combiners, and broad
+method coverage are still separate PGRAPH tasks.
+
+
+## NV097 method-offset compatibility
+
+The pinned PGRAPH translator contains several legacy method constants that do
+not match the NV2A register definitions. The bridge now normalizes the actual
+NV097 color-clear, clear-surface, clear-rectangle, depth-enable, and cull-enable
+methods to the translator's expected aliases. It deliberately handles actual
+depth-function, cull-face, shade-mode, and stencil-reference methods itself,
+because those offsets collide with the translator's incorrect aliases. The
+actual PGRAPH register file is still updated using the guest method offset.
+
+This prevents depth-function writes from being mistaken for depth-test enable,
+cull-face writes from being mistaken for cull enable, and stencil-reference
+writes from being mistaken for shade mode. Front/back cull mode, depth compare,
+shade mode, and stencil reference use the D3D8/D3D11 compatibility device when
+available.
+
+
+## Linear render-surface decoding
+
+`XboxNV2A_DecodeSurface` decodes the current NV097 surface-format, pitch,
+color/depth offsets, and clip dimensions. It maps the common 16-bit and 32-bit
+color formats plus Z16/Z24S8 to the D3D8 compatibility formats, checks row
+pitches, and proves the final color/depth byte spans stay inside the 64 MiB
+VRAM aperture. The first implementation intentionally rejects swizzled and
+multisampled render surfaces instead of treating them as linear memory.
+
+
+## Render-target binding and VRAM synchronization
+
+When a game writes NV097 surface format, pitch, color/depth offsets, and clip
+dimensions, the bridge records those registers. Before a clear or draw-begin
+method, it decodes the descriptor, creates a lockable D3D8 compatibility render
+target (and optional depth surface), uploads the guest color-buffer rows from
+VRAM, and binds the target. The compatibility layer's D3D11 implementation
+therefore receives the actual guest render target instead of always drawing
+into the host default target.
+
+On target changes, the previous color target is read back to its guest VRAM
+span before the replacement target is uploaded. `XboxNV2A_Flush` and module
+shutdown also read the active color target back into VRAM. The bridge now also
+uploads the guest Z16 or Z24S8 depth span into the newly created depth surface
+and attempts a row-pitched depth readback during flush, target changes, and
+shutdown. Depth synchronization is conditional on the D3D8 backend exposing a
+lockable depth surface; an unsupported depth LockRect operation is not treated
+as a successful guest-memory update. This path currently supports linear
+single-sample surfaces only; swizzled, multisampled, tiled, and unsupported
+color/depth formats remain rejected.
+
+
+## PFIFO CACHE1 DMA_PUT integration
+
+The bridge now also accepts a PFIFO DMA instance directly, using the RAMIN
+instance address from `CACHE1_DMA_INSTANCE`. When `CACHE1_PUSH1` selects DMA
+mode, `CACHE1_DMA_PUSH_ACCESS` is enabled, and the guest writes
+`CACHE1_DMA_PUT`, the bridge resolves the DMA object, executes the bounded
+GET-to-PUT command stream, and advances `CACHE1_DMA_GET` only after successful
+validation and dispatch. PIO mode and disabled DMA push access are left alone.
+
+This connects the software pusher to the guest-visible PFIFO MMIO path. Ring
+wraparound, DMA fetch caching, push-buffer interrupts/error recovery, channel
+scheduling, and full PFIFO timing/flow semantics are still not implemented.
+
+
+## Per-subchannel context-DMA bindings
+
+NV097 object methods in the 0x180..0x1fc range are now retained as resolved
+per-channel/per-subchannel DMA contexts after RAMHT lookup. The bridge exposes
+`XboxNV2A_GetDMAContext` so vertex, texture, surface, semaphore, and report
+translation paths can retrieve the actual mapped object base and limit rather
+than only seeing the raw guest handle. The first context slot is covered by the
+smoke test; the remaining slots share the same validated storage path.
+
+
+## Bounded vertex-array fetch
+
+`XboxNV2A_ReadVertexArray` now reads guest vertex elements through the bound
+`SET_CONTEXT_DMA_VERTEX_A` or `VERTEX_B` object. It reads the NV097 array
+offset/format registers, supports UB_D3D, UB_OGL, S1, S32K, and float component
+encodings, honors per-array stride, and checks both DMA-object and VRAM bounds
+before copying packed elements. Compressed vertex format and conversion to a
+host vertex declaration are not included yet; this is the validated guest-data
+fetch stage for a later DRAW_ARRAYS translator.
+
+
+## Host FVF vertex stream generation
+
+`XboxNV2A_BuildVertexStream` combines the guest float3 position array with
+optional UB_D3D diffuse color and float2 TEX0 arrays into a D3D8 FVF-compatible
+vertex stream (`XYZ | DIFFUSE | TEX1`). Missing color defaults to opaque white
+and missing TEX0 defaults to (0,0). The smoke test checks two vertices, their
+colors/texture coordinates, the 24-byte host stride, and destination-capacity
+rejection. This prepares a bounded input stream for a subsequent DRAW_ARRAYS
+submission path; it does not yet cover normals, weights, specular, additional
+texture sets, compressed formats, or shader-driven vertex layouts.
+
+
+## DRAW_ARRAYS submission
+
+The bridge tracks the current per-channel/subchannel BEGIN_END primitive mode
+and routes NV097 DRAW_ARRAYS through the bounded FVF builder into the D3D8
+compatibility device's `SetVertexShader(FVF)` and `DrawPrimitiveUP` methods.
+Points, lines, line strips/loops, triangles, triangle strips/fans, polygons,
+quads, and quad strips are mapped; line loops and quad topologies are expanded
+into supported D3D primitive lists. Successful custom draws are included in
+the bridge's draw-call and submitted-vertex statistics.
+
+This initial path consumes float3 position plus optional UB_D3D diffuse and
+float2 TEX0 arrays. It does not yet translate normals, weights, specular,
+additional texture sets, indexed draws, compressed vertex data, or programmable
+vertex/pixel shader microcode.
+
+
+## Texture format decoding
+
+`XboxNV2A_DecodeTextureRGBA8` converts supported NV097 texture payloads to
+tightly packed RGBA8 with checked source pitch, source length, destination
+capacity, and integer-size bounds. Supported formats are Y8, A8, A1R5G5B5,
+X1R5G5B5, A4R4G4B4, R5G6B5, A8R8G8B8, X8R8G8B8, and DXT1, DXT3, and DXT5 (including clipped edge blocks). This is the CPU format-conversion stage only: guest texture DMA
+address resolution, mip chains, palette formats, sampler state,
+texture object caching, and binding to D3D8 texture stages remain to be wired.
+
+
+Texture sampler filter methods (`NV097_SET_TEXTURE_FILTER`, per 0x40-byte stage) now map the NV2A minification and magnification selectors to D3D8 point/linear filters and the mip selector to none/point/linear. The supported NV2A convolution selector uses linear filtering as an explicit fallback. Invalid selector combinations are rejected; the mapping is exported as `XboxNV2A_MapTextureFilter` and covered by host smoke tests. This maps sampler state only: mip-level texture allocation and upload are still not implemented.
+
+Texture sampler address methods are now translated per stage for U/V wrapping:
+wrap, mirror, clamp, border, and mirror-once map to the matching D3D8
+texture-stage states. Per-stage border color is also forwarded. Invalid address
+modes and unavailable device state are not silently reported as handled.
+
+
+## Swizzled texture decode
+
+`XboxNV2A_DecodeSwizzledTextureRGBA8` handles the common power-of-two
+Morton/Z-order texture layout for uncompressed Y8, A8, A1R5G5B5, X1R5G5B5,
+A4R4G4B4, R5G6B5, A8R8G8B8, and X8R8G8B8 data. It validates dimensions,
+source length, destination capacity, and allocation size before unswizzling
+through the pinned D3D8 compatibility helper and passing the linear result to
+the existing RGBA8 decoder. Linear-image and DXT block formats are explicitly
+rejected by this entry point; they use the linear or block decoder. This is
+the swizzle conversion stage, not yet DMA-driven texture creation, cache
+invalidation, mip-chain upload, or D3D8 texture-stage binding.
+
+
+The D3D8 backend does not expose the D3D9 constant-blend-factor render state.
+NV097 blend color is therefore left explicitly unsupported rather than passing a
+D3D9-only state ID into the D3D8 device. Source/destination blend factors and
+the blend equation remain mapped where the D3D8 API has a real equivalent.
+
+
+## Mip-chain decoding
+
+`XboxNV2A_DecodeTextureMipChainRGBA8` validates and decodes up to 16
+consecutive mip levels for the supported swizzled uncompressed formats and
+DXT1/3/5. It computes each level's source and RGBA8 output span with 64-bit
+bounds checks, validates the complete chain before decoding, and returns
+per-level output offsets and byte sizes. The test covers a 2x2-to-1x1 swizzled
+chain and truncated-source / undersized-destination rejection. This still
+does not upload mip levels into a D3D8 texture object or bind them to stages.
+
+
+## DMA-bound texture mip-chain decoding
+
+`XboxNV2A_DecodeTextureMipChainFromDMA` now joins the context-DMA binding
+path to the texture decoder. It reads the selected DMA_A or DMA_B object bound
+to the current channel/subchannel, validates the texture offset against that
+object's mapped local-VRAM span, and decodes the mip chain without accepting
+guest pointers. The smoke test binds a real RAMHT-resolved DMA_A object through
+the NV4 pusher, decodes a 2x2-to-1x1 swizzled chain from its VRAM span, and
+checks unbound-context and out-of-range failures. D3D8 texture allocation,
+upload, cache invalidation, and stage binding remain outstanding.
+
+
+## Additional alpha, depth and cull enables
+
+The NV097 alpha-test enable, depth-test enable and cull-face enable methods now
+have explicit D3D8 render-state mappings and are routed through the bridge's
+state application path. Culling preserves the selected front/back winding when
+enabled and keeps `D3DCULL_NONE` when the face selector changes while culling
+is disabled. Host tests verify the state IDs and enable values.
+
+
+## Linear-image texture formats
+
+The CPU decoder now also handles common NV097 linear-image formats:
+LIN_A1R5G5B5, LIN_R5G6B5, LIN_A8R8G8B8, LIN_Y8, LIN_X1R5G5B5,
+LIN_A4R4G4B4, LIN_X8R8G8B8 and LIN_A8. These use row-major source data and
+can be decoded as a single level; swizzled formats continue through the
+Morton decoder, while DXT formats use the block decoder. Host tests cover
+linear ARGB and luminance input. Padded linear-image pitch and multi-level
+linear images are not yet supported by the mip-chain entry point.
+
+
+## Indexed vertex expansion
+
+`XboxNV2A_BuildIndexedVertexStream` now expands a bounded list of 32-bit
+vertex indices by fetching each referenced element through the existing
+VERTEX_A/VERTEX_B DMA array path. It checks index count, output capacity, and
+that every fetched vertex has a consistent host stride/FVF. Tests cover
+reordered and repeated indices plus null-input and undersized-output rejection.
+This is the index-to-vertex expansion primitive; NV097 ARRAY_ELEMENT16/32
+packet accumulation and the indexed draw submission path are still pending.
+
+
+## NV097 inline indexed drawing
+
+PGRAPH now collects ARRAY_ELEMENT16/32 indices per channel/subchannel during BEGIN_END, then expands them through the checked guest vertex-array DMA path and submits the primitive through D3D8 DrawPrimitiveUP at END. The bounded accumulator now holds up to 1,024 indices per channel/subchannel and drops overflowed batches rather than drawing truncated geometry. The host indexed-expansion API and draw staging buffers use the same 1,024-vertex limit. DRAW_ARRAYS now shares the indexed expansion and primitive conversion path; its encoded count field remains limited by the NV097 method format. Full NV2A indexed DMA drawing remains separate work.
+
+
+## Texture DMA context selection
+
+The mip-chain VRAM decoder now accepts all four aligned NV097 context-DMA
+slots (DMA_A through DMA_D), rather than only DMA_A and DMA_B. It still
+requires a resolved local-VRAM object and validates the selected object's
+mapped range before reading. Smoke tests exercise slots A, B, C and D and
+reject an out-of-range context selector.
+
+
+## Pitched linear texture DMA decode
+
+A single-level DMA texture decoder now accepts an explicit source row pitch
+and reads from a validated local-VRAM DMA object. It reuses the checked RGBA8
+format decoder, so row padding is skipped correctly and source/destination
+bounds remain enforced. The smoke test uses a padded 2x2 ARGB image and checks
+that the second row begins at the requested 12-byte source stride.
+
+
+## Live NV097 texture-stage decoding
+
+The bridge can now derive a 2D texture's dimensions, mip count, linear/swizzled
+layout, image pitch, offset and DMA context directly from the live stage
+registers. It then decodes that stage to RGBA8 through the existing bounded
+DMA readers. Linear-image dimensions come from IMAGE_RECT and pitch from
+CONTROL1; swizzled dimensions come from the format exponents and mip count is
+clamped by the format and MAX_LOD_CLAMP. The current stage decoder supports
+the implemented 2D color formats only; cubemaps, 3D textures, palettes and
+unsupported color encodings remain outside this path.
+
+
+## D3D8 texture-stage binding
+
+The draw path now creates D3D8 A8R8G8B8 textures from the live NV097 stage
+decoder, uploads every decoded mip level with row-pitch handling and RGBA-to-
+BGRA channel conversion, and binds the texture with SetTexture before drawing.
+A per-channel/subchannel/stage cache avoids recreating unchanged textures.
+Register writes, bridge VRAM writes, DMA-context rebinding and surface-to-VRAM
+synchronization invalidate the affected cache entries. The initial uploader is
+limited to the decoder's supported 2D formats and a 64 MiB decoded-texture cap;
+full palette/cubemap/3D support and coherence for DMA writes that bypass the
+bridge VRAM-write API still need implementation and tests.
+
+
+The live stage reader now rejects color-format codes outside the decoder's
+implemented set instead of treating unknown linear/paletted encodings as
+swizzled textures. Cache invalidation is limited to source-shape and DMA
+registers; sampler-only changes no longer force a texture re-decode.
+
+
+The D3D8 cache key now includes the owning device pointer, so recreating the
+host D3D device cannot reuse a texture object from the previous device. The
+stage decoder explicitly rejects cubemap and border-layout flags until their
+layer/edge addressing is implemented.
+
+
+## I8 palette texture decoding
+
+The live stage decoder now supports NV097 I8_A8R8G8B8 textures. It resolves
+the texture's DMA_A/DMA_B context separately from the palette's DMA_A/DMA_B
+selector, validates both mapped VRAM spans, unswizzles each mip level, checks
+every palette index against the selected 32/64/128/256-entry palette, and
+converts palette BGRA entries to the RGBA8 staging format. The smoke test
+binds texture data through DMA_B and its palette through DMA_A.
+
+
+## Four texture-coordinate vertex sets
+
+The host vertex builder now fetches TEX0 through TEX3 from NV097 array slots
+7 through 10 and emits a D3D8 FVF with four two-component texture-coordinate
+sets. Missing sets are zero-filled. The vertex record is now 64 bytes, and
+smoke tests verify the four independent DMA-backed coordinate arrays as well
+as indexed expansion using the expanded record.
+
+
+## Fog render-state routing
+
+Fog enable, fog color and fog mode are now intercepted at their real NV097
+method offsets and applied through D3D8 render states. Fog color is converted
+from the NV097 low-byte-red packing to D3DCOLOR's AARRGGBB packing. The same
+special-method path now routes the already mapped lighting-enable and point-
+size methods instead of allowing the pinned translator to mis-handle them.
+Smoke tests verify fog enable, mode and channel order.
+
+
+## UB_OGL vertex color conversion
+
+Diffuse and specular arrays now accept both packed UB_D3D and byte-ordered
+UB_OGL formats. UB_OGL RGBA bytes are converted to the D3DCOLOR AARRGGBB
+layout expected by the D3D8 FVF. Smoke tests cover both diffuse and specular
+channel ordering.
+
+
+## Signed NV097 vertex attributes
+
+The DMA-backed vertex builder now converts S1 signed-normalized attributes
+to the [-1,1] float range and S32K signed-short attributes to unnormalized
+float values. Float attributes remain bit-preserving. Position, normal and
+TEX0-TEX3 arrays use the shared checked conversion path; color arrays retain
+their dedicated UB_D3D/UB_OGL channel handling. Tests cover signed extrema,
+normalization, and signed UV values.
+
+
+## CMP packed normal decoding
+
+The vertex conversion path now accepts CMP on the normal array and unpacks
+signed 11-bit X, signed 11-bit Y, and signed 10-bit Z into normalized floats.
+This follows the documented NV2A compressed-normal field widths and is
+restricted to the three-component normal attribute. The host smoke test checks
+positive and negative packed extrema. The field interpretation remains an
+implementation assumption pending comparison against hardware captures.
+
+
+CMP fetches use a four-byte packed record per vertex even though the NV097
+format's component field describes the three expanded output components. The
+DMA reader therefore treats CMP as a 4-byte element (and rejects it for
+non-normal arrays) before the normal unpacker expands it to three floats.
+
+
+## GPU vertex-shader translation smoke coverage
+
+The NV2A HLSL smoke test exercises real microcode rather than only a terminated empty/NOP slot. It verifies an input-register MOV (v0 to oPos), a two-source input ADD (v5 + v5 to oPos), and a constant-register MOV (c[17] to oPos). It checks parsed input-register metadata and the expected emitted HLSL, then compiles each generated shader with the Direct3D HLSL compiler targeting shader model 5.0. This proves those three translation cases produce valid GPU shader bytecode; it does not claim complete instruction-set coverage or a physical-GPU draw test. Runtime vertex instructions remain translated to D3D11 HLSL and execute in the D3D11 shader pipeline; CPU-side work in the NV2A bridge is register/constant and vertex-attribute staging, not a CPU vertex-shader interpreter.
+
+
+## Bounded nested DMA CALL/RETURN
+
+The NV4-style DMA pusher now maintains a 16-entry return-address stack instead of a single saved return address. Nested helper routines unwind in LIFO order. The validation pass and dispatch pass use the same bounded stack logic, so excessive nesting is rejected before any PGRAPH methods are dispatched. The smoke test covers a two-level nested routine that binds three DMA contexts, the maximum supported depth of 16, rejection of depth 17 with the PFIFO CALL_ACTIVE error, invalid call targets, and RETURN without an active call. This remains a bounded software pusher. Explicit JUMP-based circular GET/PUT
+wrap is supported; nested depth beyond 16, PCI/AGP DMA, page translation,
+interrupt-driven scheduling, channel switching and IB mode remain unsupported.
+
+
+## Correct NV2A vertex microcode decoding
+
+The pinned xboxrecomp D3D8 HLSL translator previously read opcode/source/destination fields from the wrong DWORD positions, so real NV2A instructions could be parsed as NOPs. On Windows, CMake now applies a small idempotent patch to the pinned submodule source before building: opcodes and shared indices are decoded from DWORD1; source muxes/swizzles/registers from DWORD2/3; and the independent MAC-temp, ILU-temp and output masks plus output routing from DWORD3. The destination structure now retains separate temp and output write masks. The HLSL smoke test uses the actual NV2A DWORD layout and checks exact input masks for MOV v0, ADD v5+v5 and MOV c[17] before compiling the generated VS 5.0 bytecode. The patch is local to the checked-out submodule worktree and does not alter the pinned submodule commit.
+
+
+## Parallel MAC/ILU source semantics
+
+When both execution units are active in one NV2A instruction slot, the hardware reads A, B and C before either unit commits a destination. The HLSL lowering now snapshots all three source vectors into unique per-instruction temporaries before emitting MAC and ILU writes. The regression test pairs a MAC MOV that overwrites R1 with an ILU RCP that reads the old R1.x, and asserts the generated HLSL snapshots R1 before the MAC write and uses the snapshot for the ILU operation.
+
+
+## Vertex opcode compilation matrix
+
+The Windows HLSL smoke suite now compiles representative MAC operations (MOV, MUL, ADD, MAD, DP3, DPH, DP4, DST, MIN, MAX, SLT and SGE) and ILU operations (MOV, RCP, RCC, RSQ, EXP, LOG and LIT) from actual four-DWORD NV2A instruction words. These are targeted translation/bytecode checks, not exhaustive numerical conformance tests against physical NV2A hardware.
+
+
+## Primitive expansion bounds
+
+Primitive topology conversion is now isolated in the exported, deterministic
+`XboxNV2A_ExpandPrimitive` helper and covered independently of a live D3D
+device. A maximum 1,024-vertex QUAD_STRIP expands to 3,066 triangle-list
+vertices. The draw staging buffer is sized for that worst case (3,072 slots),
+and the smoke test checks the final expanded vertex plus rejection when the
+caller supplies only 3,065 slots. This fixes an out-of-bounds write in the
+previous 2,048-vertex staging buffer.
+
+
+## NV097 register-combiner routing
+
+The NV097 general-combiner input/output words, per-stage C0/C1 factors,
+combiner control, and final-combiner input words are now routed into the
+matching Xbox D3D8 pixel-combiner render states. The shader-stage-program
+method is forwarded as the D3D8 pixel-shader token. This lets the pinned
+D3D8/D3D11 combiner translator build and cache the corresponding pixel shader
+instead of leaving these NV097 methods as inert register writes. A host smoke
+test checks all eight stage offsets, both final-combiner words, control, and
+the special shader-token route. This validates method mapping and dispatch
+wiring; a real pixel readback through a running Xbox title is still required
+for visual conformance.
+
+
+## Circular DMA pushbuffer wrap
+
+The DMA pusher now accepts a circular-buffer state where GET is greater than
+PUT after the producer wraps. It still requires the stream to contain an
+explicit NV4 JUMP back into the DMA object; reaching the object limit without
+a valid control-flow command remains a protection fault. The regression test
+places a JUMP near the end of the DMA object, resumes at offset zero, dispatches
+a context-DMA bind, and verifies the final GET/PUT relationship and binding.
+
+
+## DMA object validation regression coverage
+
+The RAMHT/DMA smoke test also exercises fail-closed object validation: it
+rejects a non-local target (including PCI/AGP-style target selection), an
+unsupported DMA class, and a base/limit span that crosses the 64 MiB local
+VRAM aperture. It then restores the valid object and verifies resolution
+continues to succeed. This validates rejection behavior; it does not implement
+PCI/AGP bus mastering, system-memory DMA, or GPU page-table translation.
+
+## DMA read-permission enforcement
+
+Texture, palette and vertex fetches now require a readable NV2A DMA class
+(read-only 0x02 or read/write 0x3D). A write-only 0x03 object can still be
+resolved and bound, but attempts to consume it as texture or vertex source
+memory are rejected before reading VRAM. The smoke test rebinds a live texture
+stage to a write-only object and verifies decoding fails, then restores the
+readable object and verifies decoding succeeds.
