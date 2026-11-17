@@ -17,7 +17,7 @@ constexpr LONG STATUS_OBJECT_NAME_NOT_FOUND_VALUE = static_cast<LONG>(0xC0000034
 constexpr LONG STATUS_FILE_IS_A_DIRECTORY_VALUE = static_cast<LONG>(0xC00000BA);
 constexpr LONG STATUS_MEDIA_WRITE_PROTECTED_VALUE = static_cast<LONG>(0xC00000A2);
 constexpr LONG STATUS_IO_DEVICE_ERROR_VALUE = static_cast<LONG>(0xC0000185);
-constexpr ACCESS_MASK WRITE_MASK = 0x40000000u | 0x00000002u | 0x00000004u | 0x00010000u | 0x10000000u;
+constexpr ACCESS_MASK WRITE_MASK = 0x40000000u | 0x00000002u | 0x00000004u | 0x00000100u | 0x00010000u | 0x10000000u;
 
 struct XdvdfsProviderContext { XBOX_FS_MOUNT mount = nullptr; };
 struct XdvdfsProviderFile { std::string path; XDVDFS_FILE_INFO entry{}; };
