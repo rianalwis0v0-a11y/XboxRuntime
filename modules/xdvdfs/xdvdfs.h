@@ -29,8 +29,8 @@ typedef struct XDVDFS_FILE_INFO {
     char name[256];
 } XDVDFS_FILE_INFO;
 
-__declspec(dllexport) int __cdecl ModuleStart(void);
-__declspec(dllexport) void __cdecl ModuleStop(void);
+__declspec(dllexport) int __cdecl XDVDFS_ModuleStart(void);
+__declspec(dllexport) void __cdecl XDVDFS_ModuleStop(void);
 __declspec(dllexport) int __cdecl XDVDFS_OpenImage(const wchar_t* imagePath, XDVDFS_VOLUME_INFO* info);
 __declspec(dllexport) void __cdecl XDVDFS_CloseImage(void);
 __declspec(dllexport) int __cdecl XDVDFS_GetFileInfo(const char* path, XDVDFS_FILE_INFO* info);
