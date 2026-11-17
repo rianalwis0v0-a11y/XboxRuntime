@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <new>
 #include <string>
+#include <mutex>
+#include <unordered_map>
 #include "guest32/kernel_filesystem_bridge.h"
 #include "fatx.h"
 
@@ -20,6 +22,8 @@ constexpr ACCESS_MASK READ_MASK = 0x80000000u | 0x00000001u;
 constexpr ACCESS_MASK WRITE_MASK = 0x40000000u | 0x00000002u | 0x00000004u | 0x00010000u | 0x10000000u;
 
 struct FatxProviderContext { FATX_VOLUME volume = nullptr; XBOX_FS_MOUNT mount = nullptr; };
+std::mutex g_contextMutex;
+std::unordered_map<XBOX_FS_MOUNT, FatxProviderContext*> g_contexts;
 struct FatxProviderFile { std::wstring path; FATX_ENTRY entry{}; };
 
 LONG MapStatus(int status) {
@@ -120,6 +124,7 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
     const LONG status = XboxFsMount(deviceName, &kProvider, context, 0, &context->mount);
     if (status != 0) { FATX_CloseVolume(context->volume); delete context; ModuleStop(); return status; }
     *mountHandle = context->mount;
+    { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
     return STATUS_SUCCESS_VALUE;
 }
 
@@ -128,7 +133,16 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_UnregisterFilesystemProvide
     // The bridge rejects unmount while provider file handles remain open.
     const LONG status = XboxFsUnmount(mountHandle);
     if (status != 0) return status;
-    // Context is stored by the mount; recover it through a private registry.
-    // Registration bookkeeping below owns the context lifetime.
+    FatxProviderContext* context = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_contextMutex);
+        const auto it = g_contexts.find(mountHandle);
+        if (it == g_contexts.end()) return STATUS_INVALID_PARAMETER_VALUE;
+        context = it->second;
+        g_contexts.erase(it);
+    }
+    FATX_CloseVolume(context->volume);
+    delete context;
+    ModuleStop();
     return STATUS_SUCCESS_VALUE;
 }
