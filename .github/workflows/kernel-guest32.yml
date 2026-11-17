@@ -6,9 +6,11 @@ on:
     branches:
       - work/kernel-execution-backend
       - work/kernel-combined-clean-import
+      - work/filesystem-provider-integration
   pull_request:
     branches:
       - work/kernel-execution-backend
+      - work/kernel-combined-clean-import
   workflow_dispatch:
 
 concurrency:
@@ -104,10 +106,10 @@ jobs:
         run: cmake -S guest32 -B build-guest32 -A Win32
 
       - name: Build x86 guest and networking tests
-        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke kernel_crypto_guest_smoke kernel_time_guest_smoke kernel_object_reference_guest_smoke kernel_system_guest_smoke kernel_io_guest_smoke kernel_notification_guest_smoke kernel_nvsettings_guest_smoke kernel_thread_exports_guest_smoke kernel_io_completion_guest_smoke kernel_directory_object_guest_smoke kernel_io_group_a_guest_smoke
+        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke kernel_crypto_guest_smoke kernel_time_guest_smoke kernel_object_reference_guest_smoke kernel_system_guest_smoke kernel_io_guest_smoke kernel_notification_guest_smoke kernel_nvsettings_guest_smoke kernel_thread_exports_guest_smoke kernel_io_completion_guest_smoke kernel_directory_object_guest_smoke kernel_io_group_a_guest_smoke kernel_filesystem_provider_smoke
 
       - name: Run x86 networking and guest API tests
-        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke|kernel_crypto_guest_smoke|kernel_time_guest_smoke|kernel_object_reference_guest_smoke|kernel_system_guest_smoke|kernel_io_guest_smoke|kernel_notification_guest_smoke|kernel_nvsettings_guest_smoke|kernel_thread_exports_guest_smoke|kernel_io_completion_guest_smoke|kernel_directory_object_guest_smoke|kernel_io_group_a_guest_smoke"
+        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke|kernel_crypto_guest_smoke|kernel_time_guest_smoke|kernel_object_reference_guest_smoke|kernel_system_guest_smoke|kernel_io_guest_smoke|kernel_notification_guest_smoke|kernel_nvsettings_guest_smoke|kernel_thread_exports_guest_smoke|kernel_io_completion_guest_smoke|kernel_directory_object_guest_smoke|kernel_io_group_a_guest_smoke|kernel_filesystem_provider_smoke"
 
       - name: Verify backend exports
         shell: pwsh
