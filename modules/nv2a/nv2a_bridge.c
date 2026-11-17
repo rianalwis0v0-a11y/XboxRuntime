@@ -1094,7 +1094,7 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
      * NV097 context slots: DMA_A, DMA_B, DMA_C and DMA_D. */
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
@@ -1125,7 +1125,7 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
         return 1;
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
         return 2;
     if (texture_offset > dma->mapped_length)
         return 3;
@@ -1326,7 +1326,7 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
 
     const XboxNV2A_DMA_INFO* dma =
         &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
         return 5;
 
     output->texture_offset = offset;
@@ -1359,8 +1359,9 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
     const XboxNV2A_DMA_INFO* palette_dma=&g_dma_contexts[channel][subchannel][palette_slot];
     const uint32_t texture_slot=(info->context_method-0x0180u)/4u;
     const XboxNV2A_DMA_INFO* texture_dma=&g_dma_contexts[channel][subchannel][texture_slot];
-    if(palette_method<0x0180u||!palette_dma->mapped_length||
-       palette_dma->dma_target!=0u||!texture_dma->mapped_length||
+    if(palette_method<0x0180u||!dma_can_read(palette_dma)||
+       !palette_dma->mapped_length||palette_dma->dma_target!=0u||
+       !dma_can_read(texture_dma)||!texture_dma->mapped_length||
        texture_dma->dma_target!=0u)return 2;
     if(palette_offset>palette_dma->mapped_length||
        palette_bytes>palette_dma->mapped_length-palette_offset||
@@ -1916,7 +1917,7 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     const uint32_t context_method = array_index < 8u ? 0x019Cu : 0x01A0u;
     const uint32_t context_slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma_can_read(dma) || !dma->mapped_length || dma->dma_target != 0u)
         return 2;
 
     const uint32_t offset_method = 0x1720u + array_index * 4u;
@@ -2692,6 +2693,13 @@ static void raise_dma_pusher_error(int result)
                     error << 29, 4u);
     g_gpu->pfifo.pending_interrupts |= NV_PFIFO_INTR_0_DMA_PUSHER;
     nv2a_update_irq(g_gpu);
+}
+
+/* NV2A DMA classes 0x02 and 0x3D permit device reads. Class 0x03 is
+ * write-only and must never be used as a texture/vertex/pushbuffer source. */
+static int dma_can_read(const XboxNV2A_DMA_INFO* dma)
+{
+    return dma && (dma->dma_class == 0x02u || dma->dma_class == 0x3Du);
 }
 
 static int submit_dma_pushbuffer_info(uint32_t channel,
