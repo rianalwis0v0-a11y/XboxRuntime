@@ -11,6 +11,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <algorithm>
 #include <limits>
 
@@ -68,11 +69,17 @@ static bool AddOverflow(
     return false;
 }
 
-static ULONGLONG AlignUp(
+static bool AlignUp(
     ULONGLONG value,
-    ULONGLONG alignment)
+    ULONGLONG alignment,
+    ULONGLONG* result)
 {
-    return (value + alignment - 1) & ~(alignment - 1);
+    if (!result || alignment == 0 ||
+        (alignment & (alignment - 1)) != 0 ||
+        value > UINT64_MAX - (alignment - 1))
+        return false;
+    *result = (value + alignment - 1) & ~(alignment - 1);
+    return true;
 }
 
 static bool ReadAt(
@@ -183,8 +190,8 @@ static int NextCluster(
 
     uint32_t endMarker =
         v->entrySize == 2
-        ? 0xFFF8
-        : 0xFFFFFFF8;
+        ? 0xFFFF
+        : 0xFFFFFFFF;
 
     uint32_t badMarker =
         v->entrySize == 2
@@ -196,7 +203,7 @@ static int NextCluster(
         ? 0xFFF0
         : 0xFFFFFFF0;
 
-    if (value >= endMarker)
+    if (value == endMarker)
     {
         *end = true;
         *next = 0;
@@ -222,7 +229,7 @@ static int ReadDirectory(
     if (!ValidCluster(v, firstCluster))
         return FATX_CORRUPT;
 
-    std::vector<DWORD> visited;
+    std::unordered_set<DWORD> visited;
     std::vector<BYTE> clusterData(v->clusterSize);
 
     DWORD current = firstCluster;
@@ -231,13 +238,8 @@ static int ReadDirectory(
          count < v->clusterCount;
          ++count)
     {
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
+        if (!visited.insert(current).second)
             return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         if (!ReadAt(
             v,
@@ -276,9 +278,15 @@ static int ReadDirectory(
                 if (character == 0 || character == 0xFF)
                     break;
 
-                item.name.push_back(
-                    static_cast<wchar_t>(character)
-                );
+                wchar_t decoded = static_cast<wchar_t>(character);
+                if (character >= 0x80)
+                {
+                    const char encoded = static_cast<char>(character);
+                    if (MultiByteToWideChar(
+                        437, 0, &encoded, 1, &decoded, 1) != 1)
+                        return FATX_CORRUPT;
+                }
+                item.name.push_back(decoded);
             }
 
             if (!item.name.empty())
@@ -540,7 +548,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     DWORD spc = v->sectorsPerCluster;
 
-    if (spc < 8 || spc > 128 ||
+    if (spc == 0 || spc > 1024 ||
         (spc & (spc - 1)) != 0)
     {
         delete v;
@@ -564,10 +572,15 @@ extern "C" int __cdecl FATX_OpenVolumeW(
         return FATX_INVALID_VOLUME;
     }
 
-    v->fatSize = AlignUp(
+    if (!AlignUp(
         maxClusters * v->entrySize,
-        0x1000
-    );
+        0x1000,
+        &v->fatSize))
+    {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_VOLUME;
+    }
 
     if (v->fatSize > partitionLength - 0x1000)
     {
@@ -751,17 +764,12 @@ extern "C" int __cdecl FATX_ReadFileW(
     if (entry.size && !ValidCluster(v, current))
         return FATX_CORRUPT;
 
-    std::vector<DWORD> visited;
+    std::unordered_set<DWORD> visited;
 
     for (ULONGLONG i = 0; i < skip; ++i)
     {
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
+        if (!visited.insert(current).second)
             return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         DWORD next = 0;
         bool end = false;
@@ -781,16 +789,9 @@ extern "C" int __cdecl FATX_ReadFileW(
     while (remaining)
     {
         if (!ValidCluster(v, current) ||
-            visited.size() >= v->clusterCount)
+            visited.size() >= v->clusterCount ||
+            !visited.insert(current).second)
             return FATX_CORRUPT;
-
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
-            return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         DWORD amount = static_cast<DWORD>(
             std::min<ULONGLONG>(
