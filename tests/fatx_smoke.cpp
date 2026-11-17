@@ -113,13 +113,13 @@ int main() {
             entries[0].attributes != (FATX_ATTRIBUTE_SYSTEM | FATX_ATTRIBUTE_HIDDEN | FATX_ATTRIBUTE_ARCHIVE) ||
             std::wcscmp(entries[1].name, L"MEDIA") != 0 ||
             !(entries[1].attributes & FATX_ATTRIBUTE_DIRECTORY) ||
-            std::wcscmp(entries[2].name, L"CAF\\u00C9.TXT") != 0) {
+            std::wcscmp(entries[2].name, L"CAF\u00C9.TXT") != 0) {
             Fail("root directory listing mismatch"); goto stop;
         }
         if (FATX_ListDirectoryW(volume, L"media", nullptr, 0, &required) != FATX_BUFFER_TOO_SMALL ||
             required != 1) { Fail("nested directory lookup failed"); goto stop; }
         BYTE cp437[2]{}; DWORD cp437Read = 0;
-        if (FATX_ReadFileW(volume, L"caf\\u00E9.txt", 0, cp437, sizeof(cp437), &cp437Read) != FATX_OK ||
+        if (FATX_ReadFileW(volume, L"caf\u00E9.txt", 0, cp437, sizeof(cp437), &cp437Read) != FATX_OK ||
             cp437Read != 2 || std::memcmp(cp437, "ok", 2) != 0) {
             Fail("CP437 filename decoding failed"); goto stop;
         }
