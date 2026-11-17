@@ -133,6 +133,26 @@ target_compile_definitions(kernel_io_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOM
 target_compile_options(kernel_io_guest_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_io_guest_smoke COMMAND kernel_io_guest_smoke)
 
+# Exercise real FATX and XDVDFS providers through the shared kernel bridge.
+add_executable(kernel_filesystem_provider_smoke
+  ../tests/kernel_filesystem_provider_smoke.cpp
+  kernel_filesystem_bridge.cpp
+  ../modules/fatx/include/fatx.cpp
+  ../modules/fatx/fatx_provider.cpp
+  ../modules/xdvdfs/xdvdfs.cpp
+  ../modules/xdvdfs/xdvdfs_provider.cpp
+)
+target_include_directories(kernel_filesystem_provider_smoke PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/fatx/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
+)
+target_compile_features(kernel_filesystem_provider_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_filesystem_provider_smoke PRIVATE NOMINMAX)
+target_compile_options(kernel_filesystem_provider_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_filesystem_provider_smoke COMMAND kernel_filesystem_provider_smoke)
+
 add_executable(kernel_notification_guest_smoke ../tests/kernel_notification_guest_smoke.cpp kernel_system.cpp)
 target_include_directories(kernel_notification_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(kernel_notification_guest_smoke PRIVATE cxx_std_17)
