@@ -270,6 +270,11 @@ int main() {
     }
     std::puts("PASS: FATX image-only file creation, overwrite, append, cluster allocation, and persisted data");
 
+    // Close the image handle before replacing the backing file. Windows
+    // sharing rules otherwise reject CREATE_ALWAYS while this volume is open.
+    FATX_CloseVolume(volume);
+    volume = nullptr;
+
     // Reopen a cyclic FAT chain and verify that reads stop with corruption,
     // rather than looping or returning fabricated data.
     Put16(image, 0x1000 + 4, 2);
