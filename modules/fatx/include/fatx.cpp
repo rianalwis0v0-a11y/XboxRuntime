@@ -282,9 +282,15 @@ static int ReadDirectory(
                 if (character == 0 || character == 0xFF)
                     break;
 
-                item.name.push_back(
-                    static_cast<wchar_t>(character)
-                );
+                wchar_t decoded = static_cast<wchar_t>(character);
+                if (character >= 0x80)
+                {
+                    const char encoded = static_cast<char>(character);
+                    if (MultiByteToWideChar(
+                        437, 0, &encoded, 1, &decoded, 1) != 1)
+                        return FATX_CORRUPT;
+                }
+                item.name.push_back(decoded);
             }
 
             if (!item.name.empty())
