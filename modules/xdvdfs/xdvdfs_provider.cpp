@@ -107,15 +107,18 @@ extern "C" __declspec(dllexport) LONG __stdcall XDVDFS_RegisterFilesystemProvide
 
 extern "C" __declspec(dllexport) LONG __stdcall XDVDFS_UnregisterFilesystemProvider(XBOX_FS_MOUNT mountHandle) {
     if (!mountHandle) return STATUS_INVALID_PARAMETER_VALUE;
-    const LONG status = XboxFsUnmount(mountHandle);
-    if (status != 0) return status;
     XdvdfsProviderContext* context = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_contextMutex);
         const auto it = g_contexts.find(mountHandle);
         if (it == g_contexts.end()) return STATUS_INVALID_PARAMETER_VALUE;
         context = it->second;
-        g_contexts.erase(it);
+    }
+    const LONG status = XboxFsUnmount(mountHandle);
+    if (status != 0) return status;
+    {
+        std::lock_guard<std::mutex> lock(g_contextMutex);
+        g_contexts.erase(mountHandle);
     }
     delete context;
     XDVDFS_CloseImage();
