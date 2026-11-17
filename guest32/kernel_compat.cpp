@@ -2870,9 +2870,9 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
     if (!thunk) {
         const bool importsResolved = XboxGuestResolveNonKernelImports(
             g_base, g_size, image.nonKernelImportDirectoryAddress);
-        // Apply the XBE section permissions only after import fixups have
-        // finished writing into the mapped guest image.
-        return importsResolved && XboxKernelProtectImage();
+        // The guest process applies final section permissions once, after
+        // this resolver returns. Keep the image writable until that point.
+        return importsResolved;
     }
     if ((thunk & 3u) != 0 || !InImage(thunk, 4))
         return false;
@@ -2888,9 +2888,9 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
             FlushInstructionCache(GetCurrentProcess(), g_stubPage, g_stubCount * 10u);
             const bool importsResolved = XboxGuestResolveNonKernelImports(
                 g_base, g_size, image.nonKernelImportDirectoryAddress);
-            // ProtectImage is deliberately last: import fixups above may
-            // modify guest thunk data and must run while the image is writable.
-            return importsResolved && XboxKernelProtectImage();
+            // The guest process applies final section permissions once
+            // after import resolution has completed.
+            return importsResolved;
         }
         if ((value & 0x80000000u) == 0) return false;
         const uint32_t ordinal = value & 0x7FFFFFFFu;
