@@ -84,23 +84,17 @@ int __cdecl FATX_ReadFileW(
     DWORD* bytesRead
 );
 
-#ifdef __cplusplus
-}
-#endif
-
 __declspec(dllexport)
 int __cdecl FATX_WriteFileW(
-    FATX_VOLUME volume,
-    LPCWSTR path,
-    ULONGLONG offset,
-    const void* buffer,
-    DWORD bytesToWrite,
-    DWORD* bytesWritten
+    FATX_VOLUME volume, LPCWSTR path, ULONGLONG offset,
+    const void* buffer, DWORD bytesToWrite, DWORD* bytesWritten
 );
 
 __declspec(dllexport)
 int __cdecl FATX_GetFileInfoW(
-    FATX_VOLUME volume,
-    LPCWSTR path,
-    FATX_ENTRY* entry
+    FATX_VOLUME volume, LPCWSTR path, FATX_ENTRY* entry
 );
+
+#ifdef __cplusplus
+}
+#endif
