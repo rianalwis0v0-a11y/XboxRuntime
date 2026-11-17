@@ -140,6 +140,11 @@ __declspec(dllexport) int __cdecl XboxNV2A_DecodeTextureFromDMA(
     uint32_t height, uint32_t source_pitch, void* destination,
     uint32_t destination_capacity, uint32_t* destination_pitch);
 
+/* Map the NV097 texture-address register's U/V/P fields to D3D8 address modes. */
+__declspec(dllexport) int __cdecl XboxNV2A_MapTextureAddress(
+    uint32_t parameter, uint32_t* address_u_out,
+    uint32_t* address_v_out, uint32_t* address_w_out);
+
 /* Map NV097 texture-filter fields to D3D8 minification, magnification and mip filters. */
 __declspec(dllexport) int __cdecl XboxNV2A_MapTextureFilter(
     uint32_t parameter, uint32_t* min_filter_out,
