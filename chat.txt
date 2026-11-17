@@ -1655,3 +1655,17 @@ Current combined static route audit remains complete: Group A 308 + Group B 304 
 Latest branch head `work/kernel-crypto-apis`: `6f46fd53445683d006f19604c43b92a522507906`. PR #24: https://github.com/rianalwis0v0-a11y/XboxRuntime/pull/24 (draft, separate from mapping PR #21).
 This branch now routes and implements/partially implements 12 Group B exports: 228 NtSetSystemTime; 246 ObReferenceObjectByHandle (partial, generic/null ObjectType only); 250 ObfDereferenceObject (partial); 251 ObfReferenceObject (partial); 335 XcSHAInit; 336 XcSHAUpdate; 337 XcSHAFinal; 338 XcRC4Key; 339 XcRC4Crypt; 340 XcHMAC; 346 XcDESKeyParity; 350 XcCryptService.
 CI run 43709227781: export audit, host/runtime builds, x86 guest build, guest API test step, backend export check, shared-memory backend smoke, loader build and staging all PASS. Only final real-XBE execution fails at the established 0x10018DC0 instruction-fetch AV on PAGE_READONLY. Separate memory/object workflow run 43709227681 host64 and guest32 jobs PASS. An earlier build failure in object-reference smoke test was a test enum qualification typo; corrected on current head. A prior unresolved-link failure from the first ObReferenceObjectByHandle draft was corrected by adding its function definition; current memory workflow links successfully.
+
+
+[2026-11-17 15:05 UTC] [NV2A completion — DMA read-access validation]
+Status: IN_PROGRESS — implementation and regression coverage committed; Windows CI run 44110260635 is running on the latest documentation/code head. No new pass claimed yet.
+Branch: feature/nv2a-completion-v2
+Commits:
+- ac5f484ae5e0df09658fe3f47902d60dbf6f990a — enforce DMA read permissions for texture and vertex fetches.
+- 4f12de2241edf57c5cceca1f52645982ca84ee97 — add write-only texture DMA regression.
+- af15e14a8732bd337e449ea4723e350d96f987ba — add forward declaration required by C compilation.
+- 5a19887c40df04a194354f7229983a88591664fd — document current pusher support and DMA permission behavior.
+Changes: Added a shared dma_can_read check. Read-only (0x02) and read/write (0x3D) DMA classes are accepted as texture, palette, and vertex sources; write-only (0x03) objects may still be resolved/bound but are rejected before source reads. The smoke test temporarily binds a write-only object to live texture DMA_D, verifies decode rejection, restores read-only DMA and verifies decode success. Updated NV2A integration notes to remove stale statements about DMA pusher CALL/RETURN and circular wrap support.
+Files changed: modules/nv2a/nv2a_bridge.c; tests/nv2a_smoke.cpp; docs/NV2A-INTEGRATION.md.
+Build/tests: Latest workflow run 44110260635 (head 5a19887c40df04a194354f7229983a88591664fd) is in progress. Earlier run 43601850174 passed x64 build, focused CTest, native x86 guest build and basic XBE smoke, then failed only at comprehensive diagnostic XBE with guest exit 0xC0000409. Do not count the current permission regression as verified until the latest nv2a_smoke test passes.
+Known issues / next work: PCI/AGP DMA and page translation, guest-address-space/MMIO hook integration, PFIFO interrupts/scheduling/channel switching/IB mode, broader PGRAPH and unsupported texture dimensionalities, real rendered-frame readback and game/hardware conformance remain open.
