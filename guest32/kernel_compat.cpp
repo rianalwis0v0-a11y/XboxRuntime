@@ -1137,7 +1137,7 @@ using NtResetEventFn = LONG (NTAPI*)(HANDLE, PLONG);
 extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK access,void* attributes,uint32_t type,BOOL initial){
     if(!out)return LONG(0xC000000Du);
     static const NtCreateEventFn create = ResolveNtService<NtCreateEventFn>("NtCreateEvent");
-    if (create) return create(out, access, attributes, type, initial ? TRUE : FALSE);
+    if (create) return create(out, access, nullptr, type, initial ? TRUE : FALSE);
     HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
 extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){
@@ -1701,7 +1701,7 @@ using NtReleaseSemaphoreFn = LONG (NTAPI*)(HANDLE, LONG, PLONG);
 extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK access, void* attributes, LONG initial, LONG maximum){
     if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
     static const NtCreateSemaphoreFn create = ResolveNtService<NtCreateSemaphoreFn>("NtCreateSemaphore");
-    if (create) return create(out, access, attributes, initial, maximum);
+    if (create) return create(out, access, nullptr, initial, maximum);
     HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
 }
 
@@ -2145,7 +2145,7 @@ using NtCreateMutantFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, BOOLEAN);
 extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK access, void* attributes, BOOL initialOwner) {
     if (!out) return LONG(0xC000000Du);
     static const NtCreateMutantFn create = ResolveNtService<NtCreateMutantFn>("NtCreateMutant");
-    if (create) return create(out, access, attributes, initialOwner ? TRUE : FALSE);
+    if (create) return create(out, access, nullptr, initialOwner ? TRUE : FALSE);
     HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
@@ -2161,7 +2161,7 @@ using NtCreateTimerFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, ULONG);
 extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK access, void* attributes, ULONG type) {
     if (!out) return LONG(0xC000000Du);
     static const NtCreateTimerFn create = ResolveNtService<NtCreateTimerFn>("NtCreateTimer");
-    if (create) return create(out, access, attributes, type);
+    if (create) return create(out, access, nullptr, type);
     HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
