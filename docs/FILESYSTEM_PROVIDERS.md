@@ -14,7 +14,7 @@ Example NT mount names:
 - FATX: \\Device\\Harddisk0\\Partition1 (writable mount flags 0)
 - XDVDFS: \\Device\\Cdrom0 (XBOX_FS_MOUNT_READ_ONLY)
 
-The backing path is supplied by the host storage layer, such as a Windows physical-drive path or XISO image path. FATX partition offsets and lengths are relative to that backing device; they must come from actual partition discovery, not guessed defaults. The kernel storage initialization code should call the relevant registration function when the backing device is ready.
+The backing path is supplied by the host storage layer, such as a Windows physical-drive path or XISO image path. FATX partition offsets and lengths are relative to that backing device; they must come from actual partition discovery, not guessed defaults. The current repository does not yet contain a working `xbox_storage.dll` implementation or a physical-device/partition enumerator, so registration is an explicit integration API today—not an automatically mounted device. The storage layer must call the relevant registration function when the backing device is ready.
 
 Always close every XBOX_FS_FILE through XboxFsClose before unregistering a mount. The bridge rejects unmount while provider handles are open. If unmount returns STATUS_DEVICE_BUSY, close outstanding handles and retry.
 
@@ -41,4 +41,4 @@ tests/kernel_filesystem_provider_smoke.cpp builds two synthetic images:
 - 64 KiB FATX volume, 512-byte sectors, two sectors per 1024-byte cluster, one 1500-byte TEST.BIN file spanning two clusters.
 - 64-sector XISO image with the XDVDFS descriptor at sector 32, a root directory at sector 40 and one 8-byte DISC.BIN file at sector 50.
 
-The bridge-level test mounts both providers, opens and queries files, reads data, verifies FATX single- and cross-cluster writes with readback, rejects a FATX write past EOF, confirms an open FATX handle prevents unmount, checks XDVDFS writes are denied, closes handles, and unmounts cleanly.
+The bridge-level test mounts both providers, opens and queries files, reads data, verifies FATX single- and cross-cluster writes with readback, rejects a FATX write past EOF, confirms an open FATX handle prevents unmount, checks XDVDFS writes are denied, rejects a second XDVDFS mount, closes handles, and unmounts cleanly. The kernel I/O Group A smoke test also exercises FATX through `K_IoCreateFile`/`NtCreateFile`, `NtReadFile`, `NtWriteFile`, `NtQueryInformationFile`, and `NtClose`.
