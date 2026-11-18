@@ -24,6 +24,17 @@ constexpr ACCESS_MASK WRITE_MASK = 0x40000000u | 0x00000002u | 0x00000004u | 0x0
 struct FatxProviderContext { FATX_VOLUME volume = nullptr; XBOX_FS_MOUNT mount = nullptr; };
 std::mutex g_contextMutex;
 std::unordered_map<XBOX_FS_MOUNT, FatxProviderContext*> g_contexts;
+ULONG g_moduleUsers = 0;
+bool AcquireFatxModule() {
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    if (g_moduleUsers == 0 && FATX_ModuleStart() != FATX_OK) return false;
+    ++g_moduleUsers;
+    return true;
+}
+void ReleaseFatxModule() {
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    if (g_moduleUsers && --g_moduleUsers == 0) FATX_ModuleStop();
+}
 struct FatxProviderFile { std::wstring path; FATX_ENTRY entry{}; };
 
 LONG MapStatus(int status) {
@@ -116,13 +127,13 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
     if (!deviceName || !*deviceName || !backingDevicePath || !*backingDevicePath || !mountHandle)
         return STATUS_INVALID_PARAMETER_VALUE;
     *mountHandle = nullptr;
-    if (FATX_ModuleStart() != FATX_OK) return STATUS_IO_DEVICE_ERROR_VALUE;
+    if (!AcquireFatxModule()) return STATUS_IO_DEVICE_ERROR_VALUE;
     auto* context = new (std::nothrow) FatxProviderContext();
-    if (!context) { FATX_ModuleStop(); return STATUS_NO_MEMORY_VALUE; }
+    if (!context) { ReleaseFatxModule(); return STATUS_NO_MEMORY_VALUE; }
     const int openStatus = FATX_OpenVolumeW(backingDevicePath, partitionOffset, partitionLength, &context->volume);
-    if (openStatus != FATX_OK) { delete context; FATX_ModuleStop(); return MapStatus(openStatus); }
+    if (openStatus != FATX_OK) { delete context; ReleaseFatxModule(); return MapStatus(openStatus); }
     const LONG status = XboxFsMount(deviceName, &kProvider, context, 0, &context->mount);
-    if (status != 0) { FATX_CloseVolume(context->volume); delete context; FATX_ModuleStop(); return status; }
+    if (status != 0) { FATX_CloseVolume(context->volume); delete context; ReleaseFatxModule(); return status; }
     *mountHandle = context->mount;
     { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
     return STATUS_SUCCESS_VALUE;
@@ -146,6 +157,6 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_UnregisterFilesystemProvide
     }
     FATX_CloseVolume(context->volume);
     delete context;
-    FATX_ModuleStop();
+    ReleaseFatxModule();
     return STATUS_SUCCESS_VALUE;
 }
