@@ -9,6 +9,11 @@ on:
       - "guest32/CMakeLists.txt"
       - "modules/fatx/**"
       - "modules/xdvdfs/**"
+      - "modules/xbox_storage/**"
+      - "guest32/kernel_storage_mounts.*"
+      - "tests/fatx_smoke.cpp"
+      - "tests/xdvdfs_smoke.cpp"
+      - "tests/xbox_storage_smoke.cpp"
       - "tests/kernel_filesystem_provider_smoke.cpp"
       - ".github/workflows/kernel-filesystem-provider-tests.yml"
   pull_request:
