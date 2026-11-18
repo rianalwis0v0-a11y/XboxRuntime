@@ -136,6 +136,7 @@ extern "C" void __cdecl XboxStorageClearConfiguration(void) {
     }
     SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", nullptr);
     SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_DEVICE", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_AUTO", nullptr);
 }
 
 extern "C" int __cdecl XboxStorageDiscoverAndConfigure(DWORD* discoveredVolumes) {
@@ -220,7 +221,8 @@ extern "C" int __cdecl XboxStorageDiscoverAndConfigure(DWORD* discoveredVolumes)
         CloseHandle(drive);
         if (!valid) continue;
         opticalMounted = Set(L"XBOX_RUNTIME_XDVDFS_IMAGE", rawPath) &&
-            Set(L"XBOX_RUNTIME_XDVDFS_DEVICE", L"\\Device\\CdRom0");
+            Set(L"XBOX_RUNTIME_XDVDFS_DEVICE", L"\\Device\\CdRom0") &&
+            Set(L"XBOX_RUNTIME_XDVDFS_AUTO", L"1");
         if (opticalMounted) ++*discoveredVolumes;
     }
     return *discoveredVolumes ? ERROR_SUCCESS : ERROR_NOT_FOUND;
