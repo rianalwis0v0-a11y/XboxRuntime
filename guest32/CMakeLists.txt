@@ -6,9 +6,20 @@ endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "xbe_guest32 must be configured with the Win32/x86 toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp)
+add_executable(xbe_guest32 guest32.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp kernel_storage_mounts.cpp)
+target_sources(xbe_guest32 PRIVATE
+  ../modules/fatx/include/fatx.cpp
+  ../modules/fatx/fatx_provider.cpp
+  ../modules/xdvdfs/xdvdfs.cpp
+  ../modules/xdvdfs/xdvdfs_provider.cpp
+)
+target_include_directories(xbe_guest32 PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/fatx/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
+)
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
-target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME)
+target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
 target_link_libraries(xbe_guest32 PRIVATE ws2_32 iphlpapi)
 target_link_options(xbe_guest32 PRIVATE /BASE:0x70000000 /DYNAMICBASE:NO)
@@ -160,13 +171,41 @@ add_test(NAME kernel_directory_object_guest_smoke COMMAND kernel_directory_objec
 
 add_executable(kernel_io_group_a_guest_smoke
   ../tests/kernel_io_group_a_guest_smoke.cpp
-  kernel_compat.cpp kernel_system.cpp kernel_time.cpp kernel_nvsettings.cpp kernel_memory.cpp
+  kernel_compat.cpp kernel_filesystem_bridge.cpp kernel_system.cpp kernel_time.cpp kernel_nvsettings.cpp kernel_memory.cpp
   kernel_object_manager.cpp kernel_thread_exports.cpp kernel_io_completion.cpp
-  kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
+  kernel_io_exports.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
+  ../modules/fatx/include/fatx.cpp ../modules/fatx/fatx_provider.cpp
+  ../modules/xdvdfs/xdvdfs.cpp ../modules/xdvdfs/xdvdfs_provider.cpp
 )
-target_include_directories(kernel_io_group_a_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(kernel_io_group_a_guest_smoke PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/fatx"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
+)
 target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
-target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME)
+target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi)
 add_test(NAME kernel_io_group_a_guest_smoke COMMAND kernel_io_group_a_guest_smoke)
+
+# Exercise real FATX and XDVDFS providers through the shared kernel bridge.
+add_executable(kernel_filesystem_provider_smoke
+  ../tests/kernel_filesystem_provider_smoke.cpp
+  kernel_filesystem_bridge.cpp
+  ../modules/fatx/include/fatx.cpp
+  ../modules/fatx/fatx_provider.cpp
+  ../modules/xdvdfs/xdvdfs.cpp
+  ../modules/xdvdfs/xdvdfs_provider.cpp
+  kernel_storage_mounts.cpp
+)
+target_include_directories(kernel_filesystem_provider_smoke PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/fatx/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
+)
+target_compile_features(kernel_filesystem_provider_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_filesystem_provider_smoke PRIVATE NOMINMAX XBOX_FS_PROVIDER_TEST)
+target_compile_options(kernel_filesystem_provider_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_filesystem_provider_smoke COMMAND kernel_filesystem_provider_smoke)
