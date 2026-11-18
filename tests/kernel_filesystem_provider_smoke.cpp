@@ -130,6 +130,26 @@ int main() {
     if (XDVDFS_UnregisterFilesystemProvider(discMount) != 0)
         return Fail("XDVDFS provider unmount failed");
 
+
+    // Auto-discovered physical disks are registered read-only. Verify that
+    // the provider returns STATUS_MEDIA_WRITE_PROTECTED rather than touching
+    // the underlying disk.
+    XBOX_FS_MOUNT readonlyMount = nullptr;
+    if (FATX_RegisterFilesystemProviderEx(L"\\Device\\Harddisk8\\Partition1",
+        fatxPath, 0, fatx.size(), TRUE, &readonlyMount) != 0 || !readonlyMount)
+        return Fail("read-only FATX provider mount failed");
+    file = nullptr;
+    if (XboxFsOpen(L"\\Device\\Harddisk8\\Partition1\\TEST.BIN",
+        GENERIC_READ | GENERIC_WRITE, 0, &file) != 0 || !file)
+        return Fail("open file on read-only FATX volume failed");
+    transferred = 77;
+    if (XboxFsWrite(file, 0, "blocked!", 8, &transferred) != static_cast<LONG>(0xC00000A2u) ||
+        transferred != 0)
+        return Fail("auto-discovered read-only FATX volume accepted a write");
+    XboxFsClose(file);
+    if (FATX_UnregisterFilesystemProvider(readonlyMount) != 0)
+        return Fail("read-only FATX provider unmount failed");
+
     // Exercise the real guest startup storage initializer: it reads explicit
     // image configuration, registers providers inside this process, and
     // releases both registrations on orderly shutdown.
