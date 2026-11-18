@@ -40,7 +40,21 @@ bool GuestSpanAccessible(const void* pointer, std::size_t length, bool write) {
     }
     return true;
 }
+// Use the Windows NT system-service entry point as the host clock source.
+// Keep the Win32 fallback for unusual hosts where the export is unavailable.
+using NtQuerySystemTimeFn = LONG (NTAPI*)(PLARGE_INTEGER);
+NtQuerySystemTimeFn ResolveNtQuerySystemTime() {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return nullptr;
+    return reinterpret_cast<NtQuerySystemTimeFn>(
+        GetProcAddress(ntdll, "NtQuerySystemTime"));
+}
 LONGLONG HostSystemTime100ns() {
+    static const NtQuerySystemTimeFn querySystemTime = ResolveNtQuerySystemTime();
+    LARGE_INTEGER nativeTime{};
+    if (querySystemTime && querySystemTime(&nativeTime) >= 0)
+        return nativeTime.QuadPart;
+
     FILETIME ft{};
     GetSystemTimeAsFileTime(&ft);
     ULARGE_INTEGER value{};
