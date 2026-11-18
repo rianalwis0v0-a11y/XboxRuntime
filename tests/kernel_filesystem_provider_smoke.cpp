@@ -39,6 +39,15 @@ int main() {
     if (FATX_RegisterFilesystemProvider(L"\\Device\\Harddisk0\\Partition1",
         fatxPath, 0, fatx.size(), &fatxMount) != 0 || !fatxMount)
         return Fail("FATX provider mount failed");
+    XBOX_FS_MOUNT fatxMount2 = nullptr;
+    if (FATX_RegisterFilesystemProvider(L"\\Device\\Harddisk0\\Partition2",
+        fatxPath, 0, fatx.size(), &fatxMount2) != 0 || !fatxMount2)
+        return Fail("second FATX provider mount failed");
+    XBOX_FS_FILE secondFatxFile = nullptr;
+    if (XboxFsOpen(L"\\Device\\Harddisk0\\Partition2\\TEST.BIN",
+        GENERIC_READ, 0, &secondFatxFile) != 0 || !secondFatxFile)
+        return Fail("second FATX mount open failed");
+
     XBOX_FS_FILE file = nullptr;
     if (XboxFsOpen(L"\\Device\\Harddisk0\\Partition1\\TEST.BIN",
         GENERIC_READ | GENERIC_WRITE, 0, &file) != 0 || !file)
@@ -73,6 +82,15 @@ int main() {
     XboxFsClose(file);
     if (FATX_UnregisterFilesystemProvider(fatxMount) != 0)
         return Fail("FATX provider unmount failed");
+    // Removing one FATX mount must not stop the shared module while another
+    // independently mounted volume still has an open provider handle.
+    std::memset(readback, 0, sizeof(readback));
+    if (XboxFsRead(secondFatxFile, 0, readback, sizeof(readback), &transferred) != 0 ||
+        transferred != 8 || std::memcmp(readback, "fatxdata", 8) != 0)
+        return Fail("remaining FATX mount stopped when sibling unmounted");
+    XboxFsClose(secondFatxFile);
+    if (FATX_UnregisterFilesystemProvider(fatxMount2) != 0)
+        return Fail("second FATX provider unmount failed");
 
     constexpr size_t sector = 2048;
     std::vector<BYTE> xiso(64 * sector, 0xFF);
