@@ -174,8 +174,15 @@ add_executable(kernel_io_group_a_guest_smoke
   kernel_compat.cpp kernel_filesystem_bridge.cpp kernel_system.cpp kernel_time.cpp kernel_nvsettings.cpp kernel_memory.cpp
   kernel_object_manager.cpp kernel_thread_exports.cpp kernel_io_completion.cpp
   kernel_io_exports.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
+  ../modules/fatx/include/fatx.cpp ../modules/fatx/fatx_provider.cpp
+  ../modules/xdvdfs/xdvdfs.cpp ../modules/xdvdfs/xdvdfs_provider.cpp
 )
-target_include_directories(kernel_io_group_a_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(kernel_io_group_a_guest_smoke PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/fatx"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
+)
 target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME)
 target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
