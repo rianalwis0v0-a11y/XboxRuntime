@@ -40,8 +40,25 @@ int main() {
         return Fail("configure XDVDFS image");
     }
     XboxStorageClearConfiguration();
+    DWORD discovered = 0;
+    const int discovery = XboxStorageDiscoverAndConfigure(&discovered);
+    if ((discovery != ERROR_SUCCESS && discovery != ERROR_NOT_FOUND) ||
+        (discovery == ERROR_SUCCESS && discovered == 0)) {
+        ModuleStop(); DeleteFileW(path); return Fail("automatic storage discovery result");
+    }
+    if (discovery == ERROR_SUCCESS) {
+        if (GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_AUTO_COUNT", value, MAX_PATH)) {
+            // Every automatically discovered FATX partition must be read-only.
+            wchar_t readOnly[MAX_PATH]{};
+            if (GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_READ_ONLY", readOnly, MAX_PATH)) {
+                ModuleStop(); DeleteFileW(path); return Fail("unexpected legacy writable FATX setting");
+            }
+        }
+    }
+    XboxStorageClearConfiguration();
     if (GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", value, MAX_PATH) ||
-        GetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", value, MAX_PATH)) {
+        GetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", value, MAX_PATH) ||
+        GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_AUTO_COUNT", value, MAX_PATH)) {
         ModuleStop(); DeleteFileW(path); return Fail("clear storage configuration");
     }
     ModuleStop();
