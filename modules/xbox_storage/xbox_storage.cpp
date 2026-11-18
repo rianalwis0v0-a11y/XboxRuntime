@@ -55,9 +55,17 @@ bool ConfigureFatxRaw(const std::wstring& path, const std::wstring& device,
 bool IsXdvdfsOptical(HANDLE drive) {
     BYTE descriptor[2048]{};
     const char magic[] = "MICROSOFT*XBOX*MEDIA";
-    return ReadAt(drive, 32ull * 2048ull, descriptor, sizeof(descriptor)) &&
-        std::memcmp(descriptor, magic, 20) == 0 &&
-        std::memcmp(descriptor + 0x7EC, magic, 20) == 0;
+    // Raw XISO images start at byte zero; original Xbox XGD1 media can
+    // carry the XDVDFS volume at the known game-partition base.
+    const ULONGLONG bases[] = { 0, 0x18300000ull };
+    for (ULONGLONG base : bases) {
+        if (base > UINT64_MAX - 32ull * 2048ull) continue;
+        if (ReadAt(drive, base + 32ull * 2048ull, descriptor, sizeof(descriptor)) &&
+            std::memcmp(descriptor, magic, 20) == 0 &&
+            std::memcmp(descriptor + 0x7EC, magic, 20) == 0)
+            return true;
+    }
+    return false;
 }
 }
 
