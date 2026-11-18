@@ -40,6 +40,7 @@ struct Volume {
 Volume g_volume;
 std::mutex g_mutex;
 bool g_started = false;
+unsigned long g_startReferences = 0;
 
 uint16_t U16(const uint8_t* p) { return uint16_t(p[0] | (uint16_t(p[1]) << 8)); }
 uint32_t U32(const uint8_t* p) { return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24); }
@@ -143,14 +144,28 @@ void CloseUnlocked() {
 
 extern "C" int __cdecl XDVDFS_ModuleStart(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_started = true;
-    OutputDebugStringW(L"[XboxRuntime:XDVDFS] Read-only disc filesystem ready.\n");
+    if (g_startReferences++ == 0) {
+        g_started = true;
+        OutputDebugStringW(L"[XboxRuntime:XDVDFS] Read-only disc filesystem ready.\n");
+    }
     return 0;
 }
 extern "C" void __cdecl XDVDFS_ModuleStop(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    CloseUnlocked();
-    g_started = false;
+    if (g_startReferences == 0) return;
+    if (--g_startReferences == 0) {
+        CloseUnlocked();
+        g_started = false;
+    }
+}
+
+// The host module loader expects this common ABI; provider mounts retain
+// their own XDVDFS_ModuleStart reference while a disc image is registered.
+extern "C" __declspec(dllexport) int __cdecl ModuleStart() {
+    return XDVDFS_ModuleStart();
+}
+extern "C" __declspec(dllexport) void __cdecl ModuleStop() {
+    XDVDFS_ModuleStop();
 }
 extern "C" void __cdecl XDVDFS_CloseImage(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
