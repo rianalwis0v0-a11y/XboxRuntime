@@ -471,6 +471,7 @@ extern "C" void __cdecl FATX_ModuleStop()
 
 // The host module loader uses the common ModuleStart/ModuleStop ABI.
 // Provider mounts hold their own FATX_ModuleStart reference independently.
+#ifndef XBOX_FS_PROVIDER_TEST
 extern "C" __declspec(dllexport) int __cdecl ModuleStart()
 {
     return FATX_ModuleStart() == FATX_OK ? 0 : 1;
@@ -479,6 +480,7 @@ extern "C" __declspec(dllexport) void __cdecl ModuleStop()
 {
     FATX_ModuleStop();
 }
+#endif
 
 extern "C" int __cdecl FATX_OpenVolumeW(
     LPCWSTR devicePath,
