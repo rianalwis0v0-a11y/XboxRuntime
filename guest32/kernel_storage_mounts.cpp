@@ -72,7 +72,13 @@ bool XboxKernelMountConfiguredStorage() {
             XBOX_FS_MOUNT mount = nullptr;
             const LONG status = FATX_RegisterFilesystemProviderEx(
                 autoDevice.c_str(), autoImage.c_str(), offset, length, TRUE, &mount);
-            if (status != 0 || !mount) { RollbackMounts(); return false; }
+            if (status != 0 || !mount) {
+                // A signature-only discovery can encounter damaged or
+                // unsupported FATX metadata. Skip that partition rather than
+                // preventing the guest from booting.
+                OutputDebugStringW(L"[XboxRuntime:Storage] Skipping an invalid auto-discovered FATX partition.\\n");
+                continue;
+            }
             g_mounts.push_back({mount, true});
         }
     }
@@ -110,8 +116,15 @@ bool XboxKernelMountConfiguredStorage() {
         XBOX_FS_MOUNT mount = nullptr;
         const LONG status = XDVDFS_RegisterFilesystemProvider(
             device.c_str(), image.c_str(), &mount);
-        if (status != 0 || !mount) { RollbackMounts(); return false; }
-        g_mounts.push_back({mount, false});
+        if (status != 0 || !mount) {
+            std::wstring autoDiscText;
+            const bool autoDisc = ReadEnvironment(L"XBOX_RUNTIME_XDVDFS_AUTO", autoDiscText) &&
+                autoDiscText == L"1";
+            if (!autoDisc) { RollbackMounts(); return false; }
+            OutputDebugStringW(L"[XboxRuntime:Storage] Skipping invalid auto-discovered XDVDFS media.\\n");
+        } else {
+            g_mounts.push_back({mount, false});
+        }
     }
     return true;
 }
