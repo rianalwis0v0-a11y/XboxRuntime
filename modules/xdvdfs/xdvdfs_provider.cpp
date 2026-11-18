@@ -12,6 +12,7 @@ namespace {
 constexpr LONG STATUS_SUCCESS_VALUE = 0;
 constexpr LONG STATUS_INVALID_PARAMETER_VALUE = static_cast<LONG>(0xC000000D);
 constexpr LONG STATUS_NO_MEMORY_VALUE = static_cast<LONG>(0xC0000017);
+constexpr LONG STATUS_DEVICE_BUSY_VALUE = static_cast<LONG>(0x80000011);
 constexpr LONG STATUS_ACCESS_DENIED_VALUE = static_cast<LONG>(0xC0000022);
 constexpr LONG STATUS_OBJECT_NAME_NOT_FOUND_VALUE = static_cast<LONG>(0xC0000034);
 constexpr LONG STATUS_FILE_IS_A_DIRECTORY_VALUE = static_cast<LONG>(0xC00000BA);
@@ -94,6 +95,10 @@ extern "C" __declspec(dllexport) LONG __stdcall XDVDFS_RegisterFilesystemProvide
     if (!deviceName || !*deviceName || !imagePath || !*imagePath || !mountHandle)
         return STATUS_INVALID_PARAMETER_VALUE;
     *mountHandle = nullptr;
+    // The parser currently owns one process-global XDVDFS volume. Refuse a
+    // second mount instead of silently replacing the image behind open handles.
+    std::unique_lock<std::mutex> registrationLock(g_contextMutex);
+    if (!g_contexts.empty()) return STATUS_DEVICE_BUSY_VALUE;
     if (XDVDFS_ModuleStart() != 0) return STATUS_IO_DEVICE_ERROR_VALUE;
     XDVDFS_VOLUME_INFO volume{};
     if (XDVDFS_OpenImage(imagePath, &volume) != 0) { XDVDFS_ModuleStop(); return STATUS_IO_DEVICE_ERROR_VALUE; }
@@ -103,7 +108,7 @@ extern "C" __declspec(dllexport) LONG __stdcall XDVDFS_RegisterFilesystemProvide
         XBOX_FS_MOUNT_READ_ONLY, &context->mount);
     if (status != 0) { delete context; XDVDFS_CloseImage(); XDVDFS_ModuleStop(); return status; }
     *mountHandle = context->mount;
-    { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
+    g_contexts.emplace(context->mount, context);
     return STATUS_SUCCESS_VALUE;
 }
 
