@@ -103,6 +103,7 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 
 namespace {
+int Fail(int code, const char* message);
 void PutFatx16(std::vector<BYTE>& bytes, size_t offset, uint16_t value) {
     bytes[offset] = BYTE(value); bytes[offset + 1] = BYTE(value >> 8);
 }
