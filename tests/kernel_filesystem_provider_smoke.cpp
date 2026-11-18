@@ -109,6 +109,10 @@ int main() {
     XBOX_FS_MOUNT discMount = nullptr;
     if (XDVDFS_RegisterFilesystemProvider(L"\\Device\\CdRom0", xisoPath, &discMount) != 0 || !discMount)
         return Fail("XDVDFS provider mount failed");
+    XBOX_FS_MOUNT secondDiscMount = nullptr;
+    if (XDVDFS_RegisterFilesystemProvider(L"\\Device\\CdRom1", xisoPath, &secondDiscMount) !=
+        static_cast<LONG>(0x80000011u) || secondDiscMount)
+        return Fail("XDVDFS accepted a second mount despite its single-volume backend");
     file = nullptr;
     if (XboxFsOpen(L"\\Device\\CdRom0\\DISC.BIN", GENERIC_READ, 0, &file) != 0 || !file)
         return Fail("XDVDFS bridge open failed");
