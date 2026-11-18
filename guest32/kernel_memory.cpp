@@ -104,8 +104,13 @@ extern "C" LONG __stdcall K_NtAllocateVirtualMemory(
     alignedSize = static_cast<std::uint32_t>(nativeSize);
     const std::uintptr_t actual = reinterpret_cast<std::uintptr_t>(allocation);
     if (actual > 0xFFFFFFFFu) {
-        if (ntAllocate) { SIZE_T releaseSize = 0; (void)ntAllocate; }
-        VirtualFree(allocation, 0, MEM_RELEASE);
+        SIZE_T releaseSize = 0;
+        static const NtFreeVirtualMemoryFn ntFreeOnRangeError =
+            ResolveNtMemoryService<NtFreeVirtualMemoryFn>("NtFreeVirtualMemory");
+        if (ntFreeOnRangeError)
+            (void)ntFreeOnRangeError(GetCurrentProcess(), &allocation, &releaseSize, MEM_RELEASE);
+        else
+            VirtualFree(allocation, 0, MEM_RELEASE);
         return kInvalidParameter;
     }
     *baseAddress = allocation;
