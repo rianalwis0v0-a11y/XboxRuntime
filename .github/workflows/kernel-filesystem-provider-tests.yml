@@ -46,3 +46,9 @@ jobs:
         run: cmake --build build-xdvdfs --config Release --target xdvdfs xdvdfs_smoke
       - name: Run XDVDFS smoke test
         run: ctest --test-dir build-xdvdfs -C Release --output-on-failure -R xdvdfs_smoke
+      - name: Configure host storage module
+        run: cmake -S modules/xbox_storage -B build-storage -A x64
+      - name: Build host storage module and smoke test
+        run: cmake --build build-storage --config Release --target xbox_storage xbox_storage_smoke
+      - name: Run host storage configuration smoke test
+        run: ctest --test-dir build-storage -C Release --output-on-failure -R xbox_storage_smoke
