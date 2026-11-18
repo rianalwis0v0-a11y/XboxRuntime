@@ -69,9 +69,12 @@ bool XboxKernelMountConfiguredStorage() {
             (offset > fileLength || length > fileLength - offset))) return false;
         if (!ReadEnvironment(L"XBOX_RUNTIME_FATX_DEVICE", device))
             device = L"\\Device\\Harddisk0\\Partition1";
+        std::wstring readOnlyText;
+        const bool readOnly = ReadEnvironment(L"XBOX_RUNTIME_FATX_READ_ONLY", readOnlyText) &&
+            (readOnlyText == L"1" || _wcsicmp(readOnlyText.c_str(), L"true") == 0);
         XBOX_FS_MOUNT mount = nullptr;
-        const LONG status = FATX_RegisterFilesystemProvider(
-            device.c_str(), image.c_str(), offset, length, &mount);
+        const LONG status = FATX_RegisterFilesystemProviderEx(
+            device.c_str(), image.c_str(), offset, length, readOnly ? TRUE : FALSE, &mount);
         if (status != 0 || !mount) { RollbackMounts(); return false; }
         g_mounts.push_back({mount, true});
     }
