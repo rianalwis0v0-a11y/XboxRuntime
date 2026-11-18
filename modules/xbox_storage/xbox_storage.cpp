@@ -118,6 +118,14 @@ extern "C" void __cdecl XboxStorageClearConfiguration(void) {
     SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_OFFSET", nullptr);
     SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_LENGTH", nullptr);
     SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_READ_ONLY", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_AUTO_COUNT", nullptr);
+    for (DWORD i = 0; i < 16; ++i) {
+        wchar_t key[96]{};
+        swprintf_s(key, L"XBOX_RUNTIME_FATX_AUTO_%lu_IMAGE", i); SetEnvironmentVariableW(key, nullptr);
+        swprintf_s(key, L"XBOX_RUNTIME_FATX_AUTO_%lu_DEVICE", i); SetEnvironmentVariableW(key, nullptr);
+        swprintf_s(key, L"XBOX_RUNTIME_FATX_AUTO_%lu_OFFSET", i); SetEnvironmentVariableW(key, nullptr);
+        swprintf_s(key, L"XBOX_RUNTIME_FATX_AUTO_%lu_LENGTH", i); SetEnvironmentVariableW(key, nullptr);
+    }
     SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", nullptr);
     SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_DEVICE", nullptr);
 }
@@ -127,10 +135,10 @@ extern "C" int __cdecl XboxStorageDiscoverAndConfigure(DWORD* discoveredVolumes)
     *discoveredVolumes = 0;
     XboxStorageClearConfiguration();
 
-    // Search physical disks read-only and accept only partitions with a
-    // FATX boot header plus plausible geometry. Never mount arbitrary NTFS
-    // or unknown partitions, and never enable writes for auto-discovered media.
-    for (DWORD diskNumber = 0; diskNumber < 32 && *discoveredVolumes == 0; ++diskNumber) {
+    // Search every physical disk read-only. Up to 16 validated FATX partitions
+    // can be handed to the guest; none is writable by default.
+    DWORD fatxCount = 0;
+    for (DWORD diskNumber = 0; diskNumber < 32 && fatxCount < 16; ++diskNumber) {
         wchar_t rawPath[64]{};
         swprintf_s(rawPath, L"\\\\.\\PhysicalDrive%lu", diskNumber);
         HANDLE disk = CreateFileW(rawPath, GENERIC_READ,
@@ -140,23 +148,40 @@ extern "C" int __cdecl XboxStorageDiscoverAndConfigure(DWORD* discoveredVolumes)
         DWORD returned = 0;
         if (DeviceIoControl(disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX,
             nullptr, 0, layoutBytes.data(), static_cast<DWORD>(layoutBytes.size()),
-            &returned, nullptr)) {
+            &returned, nullptr) &&
+            returned >= FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry)) {
             const auto* layout = reinterpret_cast<const DRIVE_LAYOUT_INFORMATION_EX*>(layoutBytes.data());
-            for (DWORD i = 0; i < layout->PartitionCount && *discoveredVolumes == 0; ++i) {
-                const auto& part = layout->PartitionEntry[i];
-                if (part.PartitionNumber == 0 || part.StartingOffset.QuadPart < 0 ||
-                    part.PartitionLength.QuadPart < 0x2000) continue;
-                const ULONGLONG offset = static_cast<ULONGLONG>(part.StartingOffset.QuadPart);
-                const ULONGLONG length = static_cast<ULONGLONG>(part.PartitionLength.QuadPart);
-                if (!IsFatxPartition(disk, offset, length)) continue;
-                wchar_t ntName[96]{};
-                swprintf_s(ntName, L"\\Device\\Harddisk%lu\\Partition%lu",
-                    diskNumber, part.PartitionNumber);
-                if (ConfigureFatxRaw(rawPath, ntName, offset, length))
-                    ++*discoveredVolumes;
+            const size_t headerBytes = FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry);
+            const size_t entryBytes = size_t(layout->PartitionCount) * sizeof(PARTITION_INFORMATION_EX);
+            if (entryBytes <= returned - headerBytes) {
+                for (DWORD i = 0; i < layout->PartitionCount && fatxCount < 16; ++i) {
+                    const auto& part = layout->PartitionEntry[i];
+                    if (part.PartitionNumber == 0 || part.StartingOffset.QuadPart < 0 ||
+                        part.PartitionLength.QuadPart < 0x2000) continue;
+                    const ULONGLONG offset = static_cast<ULONGLONG>(part.StartingOffset.QuadPart);
+                    const ULONGLONG length = static_cast<ULONGLONG>(part.PartitionLength.QuadPart);
+                    if (!IsFatxPartition(disk, offset, length)) continue;
+                    wchar_t ntName[96]{};
+                    swprintf_s(ntName, L"\\Device\\Harddisk%lu\\Partition%lu",
+                        diskNumber, part.PartitionNumber);
+                    wchar_t key[96]{};
+                    const auto setIndexed = [&](const wchar_t* suffix, const std::wstring& value) {
+                        swprintf_s(key, L"XBOX_RUNTIME_FATX_AUTO_%lu_%s", fatxCount, suffix);
+                        return Set(key, value);
+                    };
+                    if (setIndexed(L"IMAGE", rawPath) && setIndexed(L"DEVICE", ntName) &&
+                        setIndexed(L"OFFSET", Number(offset)) && setIndexed(L"LENGTH", Number(length)))
+                        ++fatxCount;
+                }
             }
         }
         CloseHandle(disk);
+    }
+    if (fatxCount) {
+        wchar_t count[16]{};
+        swprintf_s(count, L"%lu", fatxCount);
+        Set(L"XBOX_RUNTIME_FATX_AUTO_COUNT", count);
+        *discoveredVolumes = fatxCount;
     }
 
     // Probe mounted optical drive letters for an XDVDFS volume descriptor.
