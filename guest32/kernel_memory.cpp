@@ -36,6 +36,14 @@ LONG StatusFromWin32(DWORD error) noexcept {
 bool ValidHandle(HANDLE handle) noexcept {
     return handle != nullptr && handle != INVALID_HANDLE_VALUE;
 }
+using NtAllocateVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID*, ULONG_PTR, PSIZE_T, ULONG, ULONG);
+using NtFreeVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID*, PSIZE_T, ULONG);
+using NtProtectVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID*, PSIZE_T, ULONG, PULONG);
+using NtQueryVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID, ULONG, PVOID, SIZE_T, PSIZE_T);
+template <typename T> T ResolveNtMemoryService(const char* name) noexcept {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? reinterpret_cast<T>(GetProcAddress(ntdll, name)) : nullptr;
+}
 
 bool CopyToGuest(void* destination, const void* source, SIZE_T bytes) noexcept {
     if (!destination || !source || !bytes) return false;
@@ -79,10 +87,24 @@ extern "C" LONG __stdcall K_NtAllocateVirtualMemory(
         return kInvalidParameter;
     void* requestedBase = requested
         ? reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase)) : nullptr;
-    void* allocation = VirtualAlloc(requestedBase, alignedSize, allocationType, protect);
-    if (!allocation) return StatusFromWin32(GetLastError());
+    static const NtAllocateVirtualMemoryFn ntAllocate =
+        ResolveNtMemoryService<NtAllocateVirtualMemoryFn>("NtAllocateVirtualMemory");
+    void* allocation = requestedBase;
+    SIZE_T nativeSize = alignedSize;
+    LONG nativeStatus = ntAllocate
+        ? ntAllocate(GetCurrentProcess(), &allocation, 0, &nativeSize,
+                     allocationType, protect)
+        : kUnsuccessful;
+    if (!ntAllocate) {
+        allocation = VirtualAlloc(requestedBase, alignedSize, allocationType, protect);
+        if (!allocation) return StatusFromWin32(GetLastError());
+    } else if (nativeStatus < 0) {
+        return nativeStatus;
+    }
+    alignedSize = static_cast<std::uint32_t>(nativeSize);
     const std::uintptr_t actual = reinterpret_cast<std::uintptr_t>(allocation);
     if (actual > 0xFFFFFFFFu) {
+        if (ntAllocate) { SIZE_T releaseSize = 0; (void)ntAllocate; }
         VirtualFree(allocation, 0, MEM_RELEASE);
         return kInvalidParameter;
     }
@@ -112,7 +134,15 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
         base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
         size = alignedSize;
     }
-    if (!VirtualFree(base, size, freeType)) return StatusFromWin32(GetLastError());
+    static const NtFreeVirtualMemoryFn ntFree =
+        ResolveNtMemoryService<NtFreeVirtualMemoryFn>("NtFreeVirtualMemory");
+    if (ntFree) {
+        SIZE_T nativeSize = size;
+        const LONG status = ntFree(GetCurrentProcess(), &base, &nativeSize, freeType);
+        if (status < 0) return status;
+    } else if (!VirtualFree(base, size, freeType)) {
+        return StatusFromWin32(GetLastError());
+    }
     if (freeType == MEM_RELEASE) {
         *baseAddress = nullptr;
         *regionSize = 0;
@@ -135,8 +165,17 @@ extern "C" LONG __stdcall K_NtProtectVirtualMemory(
         return kInvalidParameter;
     void* base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
     DWORD previous = 0;
-    if (!VirtualProtect(base, alignedSize, newProtect, &previous))
+    static const NtProtectVirtualMemoryFn ntProtect =
+        ResolveNtMemoryService<NtProtectVirtualMemoryFn>("NtProtectVirtualMemory");
+    if (ntProtect) {
+        SIZE_T nativeSize = alignedSize;
+        const LONG status = ntProtect(GetCurrentProcess(), &base, &nativeSize,
+                                      newProtect, &previous);
+        if (status < 0) return status;
+        alignedSize = static_cast<std::uint32_t>(nativeSize);
+    } else if (!VirtualProtect(base, alignedSize, newProtect, &previous)) {
         return StatusFromWin32(GetLastError());
+    }
     *baseAddress = base;
     *regionSize = alignedSize;
     *oldProtect = previous;
@@ -147,8 +186,17 @@ extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* baseAddress,
                                                   void* memoryInformation) {
     if (!baseAddress || !memoryInformation) return kInvalidParameter;
     MEMORY_BASIC_INFORMATION info{};
-    if (!VirtualQuery(baseAddress, &info, sizeof(info)))
+    static const NtQueryVirtualMemoryFn ntQuery =
+        ResolveNtMemoryService<NtQueryVirtualMemoryFn>("NtQueryVirtualMemory");
+    if (ntQuery) {
+        SIZE_T returned = 0;
+        const LONG status = ntQuery(GetCurrentProcess(), baseAddress, 0,
+                                    &info, sizeof(info), &returned);
+        if (status < 0) return status;
+        if (returned < sizeof(info)) return kUnsuccessful;
+    } else if (!VirtualQuery(baseAddress, &info, sizeof(info))) {
         return StatusFromWin32(GetLastError());
+    }
     return CopyToGuest(memoryInformation, &info, sizeof(info))
         ? kSuccess : kInvalidParameter;
 }
