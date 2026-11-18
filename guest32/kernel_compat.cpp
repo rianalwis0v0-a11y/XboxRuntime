@@ -1136,12 +1136,19 @@ extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t 
 }
 extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
 extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
+using NtWaitForSingleObjectFn = LONG (NTAPI*)(HANDLE, BOOLEAN, PLARGE_INTEGER);
+using NtWaitForMultipleObjectsFn = LONG (NTAPI*)(ULONG, HANDLE*, ULONG, BOOLEAN, PLARGE_INTEGER);
+using NtSignalAndWaitForSingleObjectFn = LONG (NTAPI*)(HANDLE, HANDLE, BOOLEAN, PLARGE_INTEGER);
 extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, const LARGE_INTEGER* timeout) {
     if (!h || h == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    static const NtWaitForSingleObjectFn wait =
+        ResolveNtService<NtWaitForSingleObjectFn>("NtWaitForSingleObject");
+    if (wait) return wait(h, alertable ? TRUE : FALSE,
+                          const_cast<PLARGE_INTEGER>(timeout));
     const DWORD result = WaitForSingleObjectEx(h, KernelTimeout(timeout), alertable ? TRUE : FALSE);
     if (result == WAIT_OBJECT_0) return 0;
     if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
-    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
     return LONG(0xC0000008u);
 }
 struct GuestFileDirectoryInformation {
@@ -1712,6 +1719,13 @@ extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* 
     if (!handles || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
     for (ULONG i = 0; i < count; ++i)
         if (!handles[i] || handles[i] == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    static const NtWaitForMultipleObjectsFn wait =
+        ResolveNtService<NtWaitForMultipleObjectsFn>("NtWaitForMultipleObjects");
+    if (wait) {
+        HANDLE* mutableHandles = const_cast<HANDLE*>(handles);
+        return wait(count, mutableHandles, waitType, alertable ? TRUE : FALSE,
+                    const_cast<PLARGE_INTEGER>(timeout));
+    }
     const DWORD result = WaitForMultipleObjectsEx(count, handles, waitType == 0,
                                                    KernelTimeout(timeout), alertable ? TRUE : FALSE);
     if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count)
@@ -1724,6 +1738,11 @@ extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* 
 extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE wait, BOOL alertable, const LARGE_INTEGER* timeout) {
     if (!signal || !wait || signal == INVALID_HANDLE_VALUE || wait == INVALID_HANDLE_VALUE)
         return LONG(0xC0000008u);
+    static const NtSignalAndWaitForSingleObjectFn signalAndWait =
+        ResolveNtService<NtSignalAndWaitForSingleObjectFn>("NtSignalAndWaitForSingleObject");
+    if (signalAndWait)
+        return signalAndWait(signal, wait, alertable ? TRUE : FALSE,
+                             const_cast<PLARGE_INTEGER>(timeout));
     const DWORD result = SignalObjectAndWait(signal, wait, KernelTimeout(timeout), alertable ? TRUE : FALSE);
     if (result == WAIT_OBJECT_0) return 0;
     if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
