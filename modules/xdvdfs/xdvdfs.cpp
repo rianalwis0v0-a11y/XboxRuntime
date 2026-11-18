@@ -161,12 +161,14 @@ extern "C" void __cdecl XDVDFS_ModuleStop(void) {
 
 // The host module loader expects this common ABI; provider mounts retain
 // their own XDVDFS_ModuleStart reference while a disc image is registered.
+#ifndef XBOX_FS_PROVIDER_TEST
 extern "C" __declspec(dllexport) int __cdecl ModuleStart() {
     return XDVDFS_ModuleStart();
 }
 extern "C" __declspec(dllexport) void __cdecl ModuleStop() {
     XDVDFS_ModuleStop();
 }
+#endif
 extern "C" void __cdecl XDVDFS_CloseImage(void) {
     std::lock_guard<std::mutex> lock(g_mutex);
     CloseUnlocked();
