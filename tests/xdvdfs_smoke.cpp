@@ -6,6 +6,8 @@
 #include <fstream>
 #include <vector>
 #include "xdvdfs.h"
+extern "C" int __cdecl ModuleStart();
+extern "C" void __cdecl ModuleStop();
 
 static void Put16(std::vector<uint8_t>& b, size_t o, uint16_t v) {
     b[o] = uint8_t(v); b[o + 1] = uint8_t(v >> 8);
@@ -65,7 +67,9 @@ int main() {
 
     const wchar_t* path = L"xdvdfs-smoke.iso";
     if (!WriteImage(path, image)) return Fail("could not write synthetic image");
-    if (XDVDFS_ModuleStart() != 0) return Fail("XDVDFS_ModuleStart failed");
+    if (ModuleStart() != 0) return Fail("common XDVDFS ModuleStart export failed");
+    if (XDVDFS_ModuleStart() != 0) { ModuleStop(); return Fail("XDVDFS_ModuleStart failed"); }
+    ModuleStop(); // Keep the parser initialized while the direct reference remains.
 
     XDVDFS_VOLUME_INFO volume{};
     if (XDVDFS_OpenImage(path, &volume) != 0) return Fail("valid XISO image was rejected");
@@ -125,6 +129,7 @@ int main() {
         return Fail("aliased directory child pointers were accepted");
 
     XDVDFS_ModuleStop();
+    ModuleStop();
     DeleteFileW(path);
     std::puts("PASS: XDVDFS descriptor, root/nested enumeration, path lookup, bounded reads, and malformed-tree rejection");
     return 0;
