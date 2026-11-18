@@ -21,7 +21,7 @@ constexpr LONG STATUS_IO_DEVICE_ERROR_VALUE = static_cast<LONG>(0xC0000185);
 constexpr ACCESS_MASK READ_MASK = 0x80000000u | 0x00000001u | 0x00000080u;
 constexpr ACCESS_MASK WRITE_MASK = 0x40000000u | 0x00000002u | 0x00000004u | 0x00000100u | 0x00010000u | 0x10000000u;
 
-struct FatxProviderContext { FATX_VOLUME volume = nullptr; XBOX_FS_MOUNT mount = nullptr; };
+struct FatxProviderContext { FATX_VOLUME volume = nullptr; XBOX_FS_MOUNT mount = nullptr; bool readOnly = false; };
 std::mutex g_contextMutex;
 std::unordered_map<XBOX_FS_MOUNT, FatxProviderContext*> g_contexts;
 ULONG g_moduleUsers = 0;
@@ -86,6 +86,7 @@ LONG __stdcall ProviderWrite(void* opaque, void* fileOpaque, ULONGLONG offset,
     if (!context || !context->volume || !file || !transferred || (!buffer && length))
         return STATUS_INVALID_PARAMETER_VALUE;
     *transferred = 0;
+    if (context->readOnly) return static_cast<LONG>(0xC00000A2u); // STATUS_MEDIA_WRITE_PROTECTED
     if (file->entry.attributes & FATX_ATTRIBUTE_READONLY) return STATUS_ACCESS_DENIED_VALUE;
     return MapStatus(FATX_WriteFileW(context->volume, file->path.c_str(),
         offset, buffer, length, transferred));
@@ -121,22 +122,33 @@ const XBOX_FS_PROVIDER_V1 kProvider = {
 };
 }
 
-extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
+extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProviderEx(
     const WCHAR* deviceName, const WCHAR* backingDevicePath,
-    ULONGLONG partitionOffset, ULONGLONG partitionLength, XBOX_FS_MOUNT* mountHandle) {
+    ULONGLONG partitionOffset, ULONGLONG partitionLength, BOOL readOnly, XBOX_FS_MOUNT* mountHandle) {
     if (!deviceName || !*deviceName || !backingDevicePath || !*backingDevicePath || !mountHandle)
         return STATUS_INVALID_PARAMETER_VALUE;
     *mountHandle = nullptr;
     if (!AcquireFatxModule()) return STATUS_IO_DEVICE_ERROR_VALUE;
     auto* context = new (std::nothrow) FatxProviderContext();
     if (!context) { ReleaseFatxModule(); return STATUS_NO_MEMORY_VALUE; }
-    const int openStatus = FATX_OpenVolumeW(backingDevicePath, partitionOffset, partitionLength, &context->volume);
+    context->readOnly = readOnly != FALSE;
+    const int openStatus = context->readOnly
+        ? FATX_OpenVolumeReadOnlyW(backingDevicePath, partitionOffset, partitionLength, &context->volume)
+        : FATX_OpenVolumeW(backingDevicePath, partitionOffset, partitionLength, &context->volume);
     if (openStatus != FATX_OK) { delete context; ReleaseFatxModule(); return MapStatus(openStatus); }
     const LONG status = XboxFsMount(deviceName, &kProvider, context, 0, &context->mount);
     if (status != 0) { FATX_CloseVolume(context->volume); delete context; ReleaseFatxModule(); return status; }
     *mountHandle = context->mount;
     { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
     return STATUS_SUCCESS_VALUE;
+}
+
+extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
+    const WCHAR* deviceName, const WCHAR* backingDevicePath,
+    ULONGLONG partitionOffset, ULONGLONG partitionLength, XBOX_FS_MOUNT* mountHandle)
+{
+    return FATX_RegisterFilesystemProviderEx(deviceName, backingDevicePath,
+        partitionOffset, partitionLength, FALSE, mountHandle);
 }
 
 extern "C" __declspec(dllexport) LONG __stdcall FATX_UnregisterFilesystemProvider(XBOX_FS_MOUNT mountHandle) {
