@@ -22,7 +22,6 @@ std::wstring Number(ULONGLONG value) {
     if (_ui64tow_s(value, buffer, _countof(buffer), 16) != 0) return {};
     return std::wstring(L"0x") + buffer;
 }
-bool g_started = false;
 }
 
 extern "C" int __cdecl XboxStorageSetFatxImage(
@@ -47,13 +46,17 @@ extern "C" int __cdecl XboxStorageSetFatxImage(
     }
     if (!partitionLength) return ERROR_INVALID_PARAMETER;
     const std::wstring length = Number(partitionLength);
-    if (length.empty() ||
-        !Set(L"XBOX_RUNTIME_FATX_IMAGE", imagePath) ||
+    if (length.empty()) return ERROR_INVALID_PARAMETER;
+    if (!Set(L"XBOX_RUNTIME_FATX_IMAGE", imagePath) ||
         !Set(L"XBOX_RUNTIME_FATX_DEVICE", deviceName ? deviceName : L"\\Device\\Harddisk0\\Partition1") ||
         !Set(L"XBOX_RUNTIME_FATX_OFFSET", offset) ||
         !Set(L"XBOX_RUNTIME_FATX_LENGTH", length)) {
-        XboxStorageClearConfiguration();
-        return GetLastError() ? GetLastError() : ERROR_INVALID_PARAMETER;
+        const DWORD error = GetLastError() ? GetLastError() : ERROR_INVALID_PARAMETER;
+        SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", nullptr);
+        SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_DEVICE", nullptr);
+        SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_OFFSET", nullptr);
+        SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_LENGTH", nullptr);
+        return error;
     }
     return ERROR_SUCCESS;
 }
@@ -62,8 +65,12 @@ extern "C" int __cdecl XboxStorageSetXdvdfsImage(
     const wchar_t* imagePath, const wchar_t* deviceName) {
     if (!Exists(imagePath) || (deviceName && !*deviceName)) return ERROR_INVALID_PARAMETER;
     if (!Set(L"XBOX_RUNTIME_XDVDFS_IMAGE", imagePath) ||
-        !Set(L"XBOX_RUNTIME_XDVDFS_DEVICE", deviceName ? deviceName : L"\\Device\\CdRom0"))
-        return GetLastError() ? GetLastError() : ERROR_INVALID_PARAMETER;
+        !Set(L"XBOX_RUNTIME_XDVDFS_DEVICE", deviceName ? deviceName : L"\\Device\\CdRom0")) {
+        const DWORD error = GetLastError() ? GetLastError() : ERROR_INVALID_PARAMETER;
+        SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", nullptr);
+        SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_DEVICE", nullptr);
+        return error;
+    }
     return ERROR_SUCCESS;
 }
 
@@ -77,11 +84,8 @@ extern "C" void __cdecl XboxStorageClearConfiguration(void) {
 }
 
 extern "C" int __cdecl ModuleStart(void) {
-    g_started = true;
     OutputDebugStringW(L"[XboxRuntime:Storage] Explicit image-backed storage configuration ready.\n");
     return ERROR_SUCCESS;
 }
-extern "C" void __cdecl ModuleStop(void) {
-    g_started = false;
-}
+extern "C" void __cdecl ModuleStop(void) {}
 BOOL WINAPI DllMain(HINSTANCE, DWORD, LPVOID) { return TRUE; }
