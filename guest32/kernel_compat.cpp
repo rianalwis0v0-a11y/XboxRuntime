@@ -1131,11 +1131,25 @@ extern "C" LONG __stdcall K_NtClose(HANDLE h) {
     if (XboxKernelCloseObjectHandle(h)) return 0;
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
-    if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
+using NtCreateEventFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, ULONG, BOOLEAN);
+using NtSetEventFn = LONG (NTAPI*)(HANDLE, PLONG);
+using NtResetEventFn = LONG (NTAPI*)(HANDLE, PLONG);
+extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK access,void* attributes,uint32_t type,BOOL initial){
+    if(!out)return LONG(0xC000000Du);
+    static const NtCreateEventFn create = ResolveNtService<NtCreateEventFn>("NtCreateEvent");
+    if (create) return create(out, access, attributes, type, initial ? TRUE : FALSE);
+    HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
-extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
-extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){
+    static const NtSetEventFn set = ResolveNtService<NtSetEventFn>("NtSetEvent");
+    if (set) return set(h, previous);
+    if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){
+    static const NtResetEventFn reset = ResolveNtService<NtResetEventFn>("NtResetEvent");
+    if (reset) return reset(h, nullptr);
+    return ResetEvent(h)?0:LONG(0xC0000008u);
+}
 using NtWaitForSingleObjectFn = LONG (NTAPI*)(HANDLE, BOOLEAN, PLARGE_INTEGER);
 using NtWaitForMultipleObjectsFn = LONG (NTAPI*)(ULONG, HANDLE*, ULONG, BOOLEAN, PLARGE_INTEGER);
 using NtSignalAndWaitForSingleObjectFn = LONG (NTAPI*)(HANDLE, HANDLE, BOOLEAN, PLARGE_INTEGER);
@@ -1682,8 +1696,12 @@ extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
-extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK, void*, LONG initial, LONG maximum){
+using NtCreateSemaphoreFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, LONG, LONG);
+using NtReleaseSemaphoreFn = LONG (NTAPI*)(HANDLE, LONG, PLONG);
+extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK access, void* attributes, LONG initial, LONG maximum){
     if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
+    static const NtCreateSemaphoreFn create = ResolveNtService<NtCreateSemaphoreFn>("NtCreateSemaphore");
+    if (create) return create(out, access, attributes, initial, maximum);
     HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
 }
 
@@ -1713,7 +1731,10 @@ extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, ULONG infoClass, void* in
     return QueryNativeObject(timer, infoClass, info, length, returnLength, "NtQueryTimer");
 }
 extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
-    if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
+    if(count<=0)return LONG(0xC000000Du);
+    static const NtReleaseSemaphoreFn release = ResolveNtService<NtReleaseSemaphoreFn>("NtReleaseSemaphore");
+    if (release) return release(h, count, previous);
+    LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
 }
 extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* handles, ULONG waitType, BOOL alertable, const LARGE_INTEGER* timeout, void*) {
     if (!handles || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
@@ -2120,8 +2141,11 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
     return status;
 }
 
-extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
+using NtCreateMutantFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, BOOLEAN);
+extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK access, void* attributes, BOOL initialOwner) {
     if (!out) return LONG(0xC000000Du);
+    static const NtCreateMutantFn create = ResolveNtService<NtCreateMutantFn>("NtCreateMutant");
+    if (create) return create(out, access, attributes, initialOwner ? TRUE : FALSE);
     HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
@@ -2133,8 +2157,11 @@ extern "C" LONG __stdcall K_NtReleaseMutant(HANDLE mutant, LONG* previous) {
     if (previous) *previous = 1;
     return 0;
 }
-extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK, void*, ULONG type) {
+using NtCreateTimerFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, ULONG);
+extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK access, void* attributes, ULONG type) {
     if (!out) return LONG(0xC000000Du);
+    static const NtCreateTimerFn create = ResolveNtService<NtCreateTimerFn>("NtCreateTimer");
+    if (create) return create(out, access, attributes, type);
     HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
