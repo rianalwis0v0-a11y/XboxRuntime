@@ -197,6 +197,7 @@ add_executable(kernel_filesystem_provider_smoke
   ../modules/fatx/fatx_provider.cpp
   ../modules/xdvdfs/xdvdfs.cpp
   ../modules/xdvdfs/xdvdfs_provider.cpp
+  kernel_storage_mounts.cpp
 )
 target_include_directories(kernel_filesystem_provider_smoke PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
