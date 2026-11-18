@@ -7,6 +7,10 @@ __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProvider(
     const WCHAR* deviceName, const WCHAR* backingDevicePath,
     ULONGLONG partitionOffset, ULONGLONG partitionLength,
     XBOX_FS_MOUNT* mountHandle);
+__declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProviderEx(
+    const WCHAR* deviceName, const WCHAR* backingDevicePath,
+    ULONGLONG partitionOffset, ULONGLONG partitionLength,
+    BOOL readOnly, XBOX_FS_MOUNT* mountHandle);
 __declspec(dllexport) LONG __stdcall FATX_UnregisterFilesystemProvider(XBOX_FS_MOUNT mountHandle);
 #ifdef __cplusplus
 }
