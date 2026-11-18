@@ -136,7 +136,8 @@ extern "C" __declspec(dllexport) LONG __stdcall FATX_RegisterFilesystemProviderE
         ? FATX_OpenVolumeReadOnlyW(backingDevicePath, partitionOffset, partitionLength, &context->volume)
         : FATX_OpenVolumeW(backingDevicePath, partitionOffset, partitionLength, &context->volume);
     if (openStatus != FATX_OK) { delete context; ReleaseFatxModule(); return MapStatus(openStatus); }
-    const LONG status = XboxFsMount(deviceName, &kProvider, context, 0, &context->mount);
+    const LONG status = XboxFsMount(deviceName, &kProvider, context,
+        context->readOnly ? XBOX_FS_MOUNT_READ_ONLY : 0, &context->mount);
     if (status != 0) { FATX_CloseVolume(context->volume); delete context; ReleaseFatxModule(); return status; }
     *mountHandle = context->mount;
     { std::lock_guard<std::mutex> lock(g_contextMutex); g_contexts.emplace(context->mount, context); }
