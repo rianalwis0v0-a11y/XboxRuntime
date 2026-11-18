@@ -136,11 +136,10 @@ extern "C" int __cdecl XboxStorageDiscoverAndConfigure(DWORD* discoveredVolumes)
 
     // Explicit caller configuration wins. MainStart invokes discovery
     // automatically, but must never replace an image/device chosen by a launcher.
-    wchar_t explicitPath[2]{};
     const bool explicitFatx =
-        GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", explicitPath, 2) != 0;
+        GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", nullptr, 0) != 0;
     const bool explicitDisc =
-        GetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", explicitPath, 2) != 0;
+        GetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", nullptr, 0) != 0;
     if (explicitFatx || explicitDisc) {
         *discoveredVolumes = (explicitFatx ? 1u : 0u) + (explicitDisc ? 1u : 0u);
         return ERROR_SUCCESS;
