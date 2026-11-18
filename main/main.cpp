@@ -277,6 +277,31 @@ extern "C" int __cdecl MainStart()
     if (!StartModules())
         return 2;
 
+    // Discover Xbox-compatible storage before the guest process is created.
+    // The storage module exports the scanner; its environment configuration
+    // is inherited by xbe_guest32, where the bridge registers the mounts.
+    Module* storage = nullptr;
+    for (auto& module : modules)
+        if (std::wstring(module.name) == L"xbox_storage.dll") storage = &module;
+    using DiscoverStorage = int (__cdecl*)(DWORD*);
+    auto discoverStorage = storage && storage->handle
+        ? reinterpret_cast<DiscoverStorage>(
+            GetProcAddress(storage->handle, "XboxStorageDiscoverAndConfigure"))
+        : nullptr;
+    if (discoverStorage) {
+        DWORD discovered = 0;
+        const int discoveryStatus = discoverStorage(&discovered);
+        if (discoveryStatus == ERROR_SUCCESS) {
+            Log(L"Automatic storage discovery configured Xbox FATX/XDVDFS media.");
+        } else if (discoveryStatus == ERROR_NOT_FOUND) {
+            Log(L"No Xbox FATX partitions or XDVDFS optical media found; continuing.");
+        } else {
+            Log(L"Storage discovery encountered an error; continuing without auto-mounted media.");
+        }
+    } else {
+        Log(L"Storage discovery export unavailable; continuing with explicit configuration.");
+    }
+
     if (!StartDashboard())
     {
         StopModules();
