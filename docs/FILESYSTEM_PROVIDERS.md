@@ -32,7 +32,7 @@ Always close every XBOX_FS_FILE through XboxFsClose before unregistering a mount
 
 FATX currently does not create files, extend or truncate files, allocate/free clusters, rename/delete files, or mutate directories. Writes are deliberately limited to existing file extents so no FAT chain or directory metadata is changed. XDVDFS is read-only by design.
 
-The current kernel NtCreateFile, NtReadFile, NtWriteFile, query and close paths in guest32/kernel_compat.cpp already dispatch mounted device paths through XboxFs*. This provider integration preserves that syscall dispatch and links the provider implementations beside the bridge. The storage layer still needs to call the registration functions with real backing paths and partition geometry.
+The current kernel NtCreateFile, NtReadFile, NtWriteFile, query and close paths in guest32/kernel_compat.cpp already dispatch mounted device paths through XboxFs*. This provider integration preserves that syscall dispatch and links the provider implementations beside the bridge. The host storage module now discovers and configures attached FATX partitions and XDVDFS optical media before guest startup; explicit image configuration remains available as an override.
 
 ## Regression fixture
 
@@ -46,7 +46,7 @@ The bridge-level test mounts both providers, opens and queries files, reads data
 
 ## Runtime storage configuration
 
-The runtime now includes the host-side `xbox_storage.dll` module and an in-guest mount initializer. The host module exports `XboxStorageSetFatxImage`, `XboxStorageSetXdvdfsImage`, and `XboxStorageClearConfiguration`. A launcher may load `xbox_storage.dll`, call these setters, then call `MainStart`; the configured environment is inherited by `xbe_guest32.exe`.
+The runtime now includes the host-side `xbox_storage.dll` module and an in-guest mount initializer. The host module exports `XboxStorageSetFatxImage`, `XboxStorageSetXdvdfsImage`, `XboxStorageClearConfiguration`, and `XboxStorageDiscoverAndConfigure`. `main.dll` calls automatic discovery after starting the modules and before launching the guest; the configured environment is inherited by `xbe_guest32.exe`. A launcher may also call the explicit setters before `MainStart` to choose image files or a specific device.
 
 Alternatively, configure these environment variables before starting XboxRuntime:
 
@@ -57,13 +57,13 @@ Alternatively, configure these environment variables before starting XboxRuntime
 - `XBOX_RUNTIME_XDVDFS_IMAGE`: XISO image path.
 - `XBOX_RUNTIME_XDVDFS_DEVICE`: optional NT device name; defaults to `\\Device\\CdRom0`.
 
-The guest validates the configured ranges, registers providers inside the guest process (where the shared filesystem bridge actually lives), and unregisters mounts during orderly shutdown. If a mount fails, earlier mounts from that configuration are rolled back. No physical disk is scanned or mounted automatically; a caller must explicitly select the image/device and FATX geometry. FATX is writable, so only configure a disk image/device that is safe to modify. The XDVDFS image is read-only.
+The guest validates the configured ranges, registers providers inside the guest process (where the shared filesystem bridge actually lives), and unregisters mounts during orderly shutdown. If a mount fails, earlier mounts from that configuration are rolled back. The main runtime now scans physical disks and mounted optical drives automatically. Auto-discovered FATX volumes are mounted read-only. Explicit `XboxStorageSetFatxImage` configuration remains writable and should only be used with media that is safe to modify. The XDVDFS image is read-only.
 
 
 ## Automatic Windows storage discovery
 
 The host storage DLL exports `XboxStorageDiscoverAndConfigure(&count)`. Call it before launching the guest. It scans Windows physical drives 0–31 using `IOCTL_DISK_GET_DRIVE_LAYOUT_EX`, checks partition start/length bounds, and accepts only partitions with a FATX signature and plausible cluster geometry. It also checks mounted optical drive letters for the XDVDFS volume descriptor at sector 32. Discovered NT names use `\\Device\\HarddiskN\\PartitionM` and `\\Device\\CdRom0`.
 
-**Safety:** physical disks are opened with `GENERIC_READ` during discovery. Auto-discovered FATX partitions are mounted read-only, and writes return `STATUS_MEDIA_WRITE_PROTECTED`. The existing explicit `XboxStorageSetFatxImage` API remains writable for a caller-selected image/device. Discovery selects at most one FATX partition and one XDVDFS optical disc in this version. It does not format, repair, or modify disks.
+**Safety:** physical disks are opened with `GENERIC_READ` during discovery. Auto-discovered FATX partitions are mounted read-only, and writes return `STATUS_MEDIA_WRITE_PROTECTED`. The existing explicit `XboxStorageSetFatxImage` API remains writable for a caller-selected image/device. Discovery configures up to 16 FATX partitions and one XDVDFS optical disc in this version. It does not format, repair, or modify disks.
 
-The optical raw-volume path is passed to the XDVDFS parser after its descriptor is verified. Drive letters must already be assigned by Windows; unmounted optical devices are not yet enumerated independently.
+The optical raw-volume path is passed to the XDVDFS parser after its descriptor is verified. The parser uses Win32 file handles and disk-length IOCTLs so raw optical devices and ordinary XISO image files share the same read path. Drive letters must already be assigned by Windows; unmounted optical devices are not yet enumerated independently.
