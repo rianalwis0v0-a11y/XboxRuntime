@@ -39,6 +39,14 @@ int main() {
         XboxStorageClearConfiguration(); ModuleStop(); DeleteFileW(path);
         return Fail("configure XDVDFS image");
     }
+    DWORD explicitCount = 0;
+    if (XboxStorageDiscoverAndConfigure(&explicitCount) != ERROR_SUCCESS ||
+        explicitCount != 2 ||
+        !GetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", value, MAX_PATH) ||
+        std::wstring(value) != path) {
+        XboxStorageClearConfiguration(); ModuleStop(); DeleteFileW(path);
+        return Fail("automatic discovery must preserve explicit caller configuration");
+    }
     XboxStorageClearConfiguration();
     DWORD discovered = 0;
     const int discovery = XboxStorageDiscoverAndConfigure(&discovered);
