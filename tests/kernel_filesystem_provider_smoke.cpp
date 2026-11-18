@@ -143,7 +143,7 @@ int main() {
         GENERIC_READ | GENERIC_WRITE, 0, &file) != 0 || !file)
         return Fail("open file on read-only FATX volume failed");
     transferred = 77;
-    if (XboxFsWrite(file, 0, "blocked!", 8, &transferred) != static_cast<LONG>(0xC00000A2u) ||
+    if (XboxFsWrite(file, 0, "blocked!", 8, &transferred) != static_cast<LONG>(0xC0000022u) ||
         transferred != 0)
         return Fail("auto-discovered read-only FATX volume accepted a write");
     XboxFsClose(file);
