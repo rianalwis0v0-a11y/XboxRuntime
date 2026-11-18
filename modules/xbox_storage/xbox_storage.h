@@ -12,6 +12,9 @@ __declspec(dllexport) int __cdecl XboxStorageSetFatxImage(
 __declspec(dllexport) int __cdecl XboxStorageSetXdvdfsImage(
     const wchar_t* imagePath, const wchar_t* deviceName);
 __declspec(dllexport) void __cdecl XboxStorageClearConfiguration(void);
+// Enumerate attached physical disks and optical drives. Discovered FATX
+// volumes are mounted read-only; returns a volume count.
+__declspec(dllexport) int __cdecl XboxStorageDiscoverAndConfigure(DWORD* discoveredVolumes);
 
 __declspec(dllexport) int __cdecl ModuleStart(void);
 __declspec(dllexport) void __cdecl ModuleStop(void);
