@@ -19,7 +19,7 @@ target_include_directories(xbe_guest32 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
 )
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
-target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME)
+target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
 target_link_libraries(xbe_guest32 PRIVATE ws2_32 iphlpapi)
 target_link_options(xbe_guest32 PRIVATE /BASE:0x70000000 /DYNAMICBASE:NO)
@@ -184,7 +184,7 @@ target_include_directories(kernel_io_group_a_guest_smoke PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
 )
 target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
-target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME)
+target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi)
 add_test(NAME kernel_io_group_a_guest_smoke COMMAND kernel_io_group_a_guest_smoke)
@@ -205,6 +205,6 @@ target_include_directories(kernel_filesystem_provider_smoke PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/../modules/xdvdfs"
 )
 target_compile_features(kernel_filesystem_provider_smoke PRIVATE cxx_std_17)
-target_compile_definitions(kernel_filesystem_provider_smoke PRIVATE NOMINMAX)
+target_compile_definitions(kernel_filesystem_provider_smoke PRIVATE NOMINMAX XBOX_FS_PROVIDER_TEST)
 target_compile_options(kernel_filesystem_provider_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_filesystem_provider_smoke COMMAND kernel_filesystem_provider_smoke)
