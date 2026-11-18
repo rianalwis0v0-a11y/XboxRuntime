@@ -186,7 +186,7 @@ extern "C" int __cdecl XDVDFS_OpenImage(const wchar_t* imagePath, XDVDFS_VOLUME_
         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (g_volume.file == INVALID_HANDLE_VALUE) return 3;
     LARGE_INTEGER end{};
-    if (!GetFileSizeEx(g_volume.file, &end) || end.QuadPart < 0) {
+    if (!GetFileSizeEx(g_volume.file, &end) || end.QuadPart <= 0) {
         GET_LENGTH_INFORMATION length{};
         DWORD returned = 0;
         if (!DeviceIoControl(g_volume.file, IOCTL_DISK_GET_LENGTH_INFO,
