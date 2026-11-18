@@ -42,3 +42,19 @@ tests/kernel_filesystem_provider_smoke.cpp builds two synthetic images:
 - 64-sector XISO image with the XDVDFS descriptor at sector 32, a root directory at sector 40 and one 8-byte DISC.BIN file at sector 50.
 
 The bridge-level test mounts both providers, opens and queries files, reads data, verifies FATX single- and cross-cluster writes with readback, rejects a FATX write past EOF, confirms an open FATX handle prevents unmount, checks XDVDFS writes are denied, rejects a second XDVDFS mount, closes handles, and unmounts cleanly. The kernel I/O Group A smoke test also exercises FATX through `K_IoCreateFile`/`NtCreateFile`, `NtReadFile`, `NtWriteFile`, `NtQueryInformationFile`, and `NtClose`.
+
+
+## Runtime storage configuration
+
+The runtime now includes the host-side `xbox_storage.dll` module and an in-guest mount initializer. The host module exports `XboxStorageSetFatxImage`, `XboxStorageSetXdvdfsImage`, and `XboxStorageClearConfiguration`. A launcher may load `xbox_storage.dll`, call these setters, then call `MainStart`; the configured environment is inherited by `xbe_guest32.exe`.
+
+Alternatively, configure these environment variables before starting XboxRuntime:
+
+- `XBOX_RUNTIME_FATX_IMAGE`: FATX partition image or readable/writable raw disk path.
+- `XBOX_RUNTIME_FATX_DEVICE`: optional NT device name; defaults to `\\Device\\Harddisk0\\Partition1`.
+- `XBOX_RUNTIME_FATX_OFFSET`: byte offset of the FATX partition; defaults to zero (a standalone partition image).
+- `XBOX_RUNTIME_FATX_LENGTH`: partition byte length; for ordinary image files it may be omitted and is derived from file size minus offset. For raw devices, supply an explicit length.
+- `XBOX_RUNTIME_XDVDFS_IMAGE`: XISO image path.
+- `XBOX_RUNTIME_XDVDFS_DEVICE`: optional NT device name; defaults to `\\Device\\CdRom0`.
+
+The guest validates the configured ranges, registers providers inside the guest process (where the shared filesystem bridge actually lives), and unregisters mounts during orderly shutdown. If a mount fails, earlier mounts from that configuration are rolled back. No physical disk is scanned or mounted automatically; a caller must explicitly select the image/device and FATX geometry. FATX is writable, so only configure a disk image/device that is safe to modify. The XDVDFS image is read-only.
