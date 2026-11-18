@@ -5,6 +5,7 @@
 #include <string>
 #include "kernel_compat.h"
 #include "guest_protocol.h"
+#include "kernel_storage_mounts.h"
 
 namespace {
 bool ReadExact(HANDLE handle, void* output, DWORD bytes) {
@@ -80,7 +81,10 @@ int wmain(int argc, wchar_t** argv) {
 
     std::uint32_t status = ERROR_SUCCESS;
     if (!XboxKernelInitializeEeprom(eepromPath)) status = ERROR_OPEN_FAILED;
-    else XboxKernelSetTitlePath(titlePath);
+    else {
+        XboxKernelSetTitlePath(titlePath);
+        if (!XboxKernelMountConfiguredStorage()) status = ERROR_INVALID_DATA;
+    }
 
     XboxGuestHello hello{
         XBOX_GUEST_PROTOCOL_MAGIC, XBOX_GUEST_PROTOCOL_VERSION,
@@ -221,6 +225,7 @@ int wmain(int argc, wchar_t** argv) {
                 guestThread = nullptr;
             }
             XboxKernelShutdownTitle();
+            XboxKernelUnmountConfiguredStorage();
             XboxKernelFlushEeprom();
             break;
         } else {
@@ -236,6 +241,7 @@ int wmain(int argc, wchar_t** argv) {
             ExitProcess(ERROR_OPERATION_ABORTED);
     }
     XboxKernelShutdownTitle();
+    XboxKernelUnmountConfiguredStorage();
     XboxKernelFlushEeprom();
     CloseHandle(pipe);
     UnmapViewOfFile(image);
