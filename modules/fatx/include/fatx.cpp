@@ -24,6 +24,7 @@ struct FatxVolume {
     HANDLE file = INVALID_HANDLE_VALUE;
     ULONGLONG base = 0;
     ULONGLONG length = 0;
+    bool writable = true;
 
     DWORD sectorsPerCluster = 0;
     DWORD clusterSize = 0;
@@ -152,7 +153,7 @@ static bool ReadAt(
 
 static bool WriteAt(FatxVolume* v, ULONGLONG offset, const void* buffer, DWORD length)
 {
-    if (!v || (!buffer && length)) return false;
+    if (!v || !v->writable || (!buffer && length)) return false;
     ULONGLONG end = 0, absolute = 0;
     if (AddOverflow(offset, length, &end) || end > v->length ||
         AddOverflow(v->base, offset, &absolute) || absolute > INT64_MAX) return false;
@@ -482,11 +483,9 @@ extern "C" __declspec(dllexport) void __cdecl ModuleStop()
 }
 #endif
 
-extern "C" int __cdecl FATX_OpenVolumeW(
-    LPCWSTR devicePath,
-    ULONGLONG partitionOffset,
-    ULONGLONG partitionLength,
-    FATX_VOLUME* output)
+static int OpenVolumeWInternal(
+    LPCWSTR devicePath, ULONGLONG partitionOffset,
+    ULONGLONG partitionLength, FATX_VOLUME* output, bool writable)
 {
     if (!g_initialized || !devicePath || !output)
         return FATX_INVALID_ARGUMENT;
@@ -495,7 +494,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     HANDLE file = CreateFileW(
         devicePath,
-        GENERIC_READ | GENERIC_WRITE,
+        GENERIC_READ | (writable ? GENERIC_WRITE : 0),
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr,
         OPEN_EXISTING,
@@ -567,6 +566,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     }
 
     v->file = file;
+    v->writable = writable;
     v->base = partitionOffset;
     v->length = partitionLength;
 
@@ -648,6 +648,18 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     );
 
     return FATX_OK;
+}
+
+extern "C" int __cdecl FATX_OpenVolumeW(
+    LPCWSTR path, ULONGLONG offset, ULONGLONG length, FATX_VOLUME* volume)
+{
+    return OpenVolumeWInternal(path, offset, length, volume, true);
+}
+
+extern "C" int __cdecl FATX_OpenVolumeReadOnlyW(
+    LPCWSTR path, ULONGLONG offset, ULONGLONG length, FATX_VOLUME* volume)
+{
+    return OpenVolumeWInternal(path, offset, length, volume, false);
 }
 
 extern "C" void __cdecl FATX_CloseVolume(
