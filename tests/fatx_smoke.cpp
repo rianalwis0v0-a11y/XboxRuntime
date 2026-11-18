@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cwchar>
 #include "fatx.h"
+extern "C" int __cdecl ModuleStart();
+extern "C" void __cdecl ModuleStop();
 
 static void Put16(std::vector<BYTE>& b, size_t o, uint16_t v) {
     b[o] = BYTE(v); b[o + 1] = BYTE(v >> 8);
@@ -89,7 +91,9 @@ int main() {
     int result = 1;
     FATX_VOLUME volume = nullptr;
     if (!WriteImage(path, image)) { Fail("could not write image"); goto done; }
-    if (FATX_ModuleStart() != FATX_OK) { Fail("FATX_ModuleStart failed"); goto done; }
+    if (ModuleStart() != 0) { Fail("common FATX ModuleStart export failed"); goto done; }
+    if (FATX_ModuleStart() != FATX_OK) { Fail("FATX_ModuleStart failed"); ModuleStop(); goto done; }
+    ModuleStop(); // The provider/core reference must keep FATX initialized.
     if (FATX_OpenVolumeW(path, imageSize - 512, 1024, &volume) != FATX_INVALID_ARGUMENT) {
         Fail("out-of-range partition accepted"); goto stop;
     }
@@ -188,6 +192,7 @@ int main() {
 stop:
     if (volume) FATX_CloseVolume(volume);
     FATX_ModuleStop();
+    ModuleStop();
 done:
     DeleteFileW(path);
     return result;
