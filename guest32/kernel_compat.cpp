@@ -599,7 +599,7 @@ extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){
     (void)K_KeQueryPerformanceCounter(&frequency);
     return frequency;
 }
-extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){
+extern "C" void __stdcall K_KeQuerySystemTimeNative(LARGE_INTEGER*out){
     if (out) out->QuadPart = XboxKernelCurrentSystemTime100ns();
 }
 extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
@@ -2908,7 +2908,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     current_thread: jmp K_KeGetCurrentThread
     qpc: jmp K_KeQueryPerformanceCounter
     qpf: jmp K_KeQueryPerformanceFrequency
-    qst: jmp K_KeQuerySystemTime
+    qst: jmp K_KeQuerySystemTimeNative
     mm_alloc_system: jmp K_MmAllocateSystemMemory
     mm_free_system: jmp K_MmFreeSystemMemory
     mm_alloc: jmp K_MmAllocateContiguousMemory
