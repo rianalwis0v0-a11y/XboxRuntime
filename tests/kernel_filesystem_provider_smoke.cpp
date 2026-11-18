@@ -5,6 +5,7 @@
 #include <cstring>
 #include <vector>
 #include "kernel_filesystem_bridge.h"
+#include "kernel_storage_mounts.h"
 #include "modules/fatx/fatx_provider.h"
 #include "modules/xdvdfs/xdvdfs_provider.h"
 
@@ -128,6 +129,48 @@ int main() {
     XboxFsClose(file);
     if (XDVDFS_UnregisterFilesystemProvider(discMount) != 0)
         return Fail("XDVDFS provider unmount failed");
+
+    // Exercise the real guest startup storage initializer: it reads explicit
+    // image configuration, registers providers inside this process, and
+    // releases both registrations on orderly shutdown.
+    if (!SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", fatxPath) ||
+        !SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_DEVICE", L"\\Device\\Harddisk9\\Partition1") ||
+        !SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_OFFSET", L"0") ||
+        !SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_LENGTH", L"65536") ||
+        !SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", xisoPath) ||
+        !SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_DEVICE", L"\\Device\\CdRom9"))
+        return Fail("set configured storage environment");
+    if (!XboxKernelMountConfiguredStorage() ||
+        !XboxFsIsPathMounted(L"\\Device\\Harddisk9\\Partition1\\TEST.BIN") ||
+        !XboxFsIsPathMounted(L"\\Device\\CdRom9\\DISC.BIN"))
+        return Fail("configured storage initializer did not mount both providers");
+    file = nullptr;
+    if (XboxFsOpen(L"\\Device\\Harddisk9\\Partition1\\TEST.BIN",
+            GENERIC_READ, 0, &file) != 0 || !file)
+        return Fail("configured FATX mount open failed");
+    std::memset(readback, 0, sizeof(readback));
+    if (XboxFsRead(file, 0, readback, sizeof(readback), &transferred) != 0 ||
+        transferred != 8 || std::memcmp(readback, "write!!!", 8) != 0)
+        return Fail("configured FATX mount read failed");
+    XboxFsClose(file);
+    file = nullptr;
+    if (XboxFsOpen(L"\\Device\\CdRom9\\DISC.BIN", GENERIC_READ, 0, &file) != 0 || !file)
+        return Fail("configured XDVDFS mount open failed");
+    std::memset(readback, 0, sizeof(readback));
+    if (XboxFsRead(file, 0, readback, sizeof(readback), &transferred) != 0 ||
+        transferred != 8 || std::memcmp(readback, "discdata", 8) != 0)
+        return Fail("configured XDVDFS mount read failed");
+    XboxFsClose(file);
+    XboxKernelUnmountConfiguredStorage();
+    if (XboxFsIsPathMounted(L"\\Device\\Harddisk9\\Partition1\\TEST.BIN") ||
+        XboxFsIsPathMounted(L"\\Device\\CdRom9\\DISC.BIN"))
+        return Fail("configured storage mounts survived orderly unmount");
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_IMAGE", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_DEVICE", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_OFFSET", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_FATX_LENGTH", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_IMAGE", nullptr);
+    SetEnvironmentVariableW(L"XBOX_RUNTIME_XDVDFS_DEVICE", nullptr);
 
     DeleteFileW(fatxPath); DeleteFileW(xisoPath);
     std::puts("PASS: FATX provider mount/open/read/write/query/close/busy-unmount and XDVDFS read-only mount/open/read/query/close");
