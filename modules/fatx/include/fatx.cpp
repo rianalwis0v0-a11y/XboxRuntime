@@ -510,7 +510,7 @@ static int OpenVolumeWInternal(
     LARGE_INTEGER fileSize{};
 
     if (GetFileSizeEx(file, &fileSize) &&
-        fileSize.QuadPart >= 0)
+        fileSize.QuadPart > 0)
     {
         availableLength =
             static_cast<ULONGLONG>(fileSize.QuadPart);
