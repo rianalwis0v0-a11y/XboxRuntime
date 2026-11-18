@@ -32,6 +32,7 @@
 #include "kernel_directory_objects.h"
 #include "kernel_object_manager.h"
 #include "kernel_filesystem_bridge.h"
+#include "kernel_time.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -555,18 +556,52 @@ extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return 
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
 extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
+// Resolve NT system services once. Xbox semantics stay in these wrappers;
+// the NT calls provide the host scheduling/clock primitives underneath.
+using NtDelayExecutionFn = LONG (NTAPI*)(BOOLEAN, PLARGE_INTEGER);
+using NtQueryPerformanceCounterFn = LONG (NTAPI*)(PLARGE_INTEGER, PLARGE_INTEGER);
+using NtYieldExecutionFn = LONG (NTAPI*)();
+template <typename T> static T ResolveNtService(const char* name) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? reinterpret_cast<T>(GetProcAddress(ntdll, name)) : nullptr;
+}
 extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t, BOOL alertable, const LARGE_INTEGER* interval) {
-    if (!interval) { SwitchToThread(); return 0; }
-    const DWORD timeout = KernelTimeout(interval);
-    const DWORD result = SleepEx(timeout, alertable ? TRUE : FALSE);
-    // STATUS_USER_APC is returned when an alertable delay is interrupted.
+    if (!interval) {
+        static const NtYieldExecutionFn yield = ResolveNtService<NtYieldExecutionFn>("NtYieldExecution");
+        if (yield) return yield();
+        SwitchToThread();
+        return 0;
+    }
+    static const NtDelayExecutionFn delay = ResolveNtService<NtDelayExecutionFn>("NtDelayExecution");
+    if (delay) {
+        LARGE_INTEGER relative{};
+        relative.QuadPart = interval->QuadPart;
+        return delay(alertable ? TRUE : FALSE, &relative);
+    }
+    const DWORD result = SleepEx(KernelTimeout(interval), alertable ? TRUE : FALSE);
     return result == WAIT_IO_COMPLETION ? LONG(0x000000C0u) : 0;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
-    LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
+    static const NtQueryPerformanceCounterFn query =
+        ResolveNtService<NtQueryPerformanceCounterFn>("NtQueryPerformanceCounter");
+    LARGE_INTEGER counter{}, freq{};
+    if (query && query(&counter, &freq) >= 0) {
+        if (frequency) *frequency = static_cast<uint64_t>(freq.QuadPart);
+        return static_cast<uint64_t>(counter.QuadPart);
+    }
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&freq);
+    if (frequency) *frequency = static_cast<uint64_t>(freq.QuadPart);
+    return static_cast<uint64_t>(counter.QuadPart);
 }
-extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){LARGE_INTEGER f{};QueryPerformanceFrequency(&f);return f.QuadPart;}
-extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){if(out){FILETIME ft{};GetSystemTimeAsFileTime(&ft);out->LowPart=ft.dwLowDateTime;out->HighPart=LONG(ft.dwHighDateTime);}}
+extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){
+    uint64_t frequency = 0;
+    (void)K_KeQueryPerformanceCounter(&frequency);
+    return frequency;
+}
+extern "C" void __stdcall K_KeQuerySystemTime(LARGE_INTEGER*out){
+    if (out) out->QuadPart = XboxKernelCurrentSystemTime100ns();
+}
 extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
 extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
 
@@ -1909,6 +1944,8 @@ extern "C" void __stdcall K_KeStallExecutionProcessor(uint32_t microseconds) {
     while (uint64_t(now.QuadPart - start.QuadPart) < target);
 }
 extern "C" LONG __stdcall K_NtYieldExecution() {
+    static const NtYieldExecutionFn yield = ResolveNtService<NtYieldExecutionFn>("NtYieldExecution");
+    if (yield) return yield();
     SwitchToThread();
     return 0;
 }
