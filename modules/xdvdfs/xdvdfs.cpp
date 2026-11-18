@@ -1,11 +1,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <winioctl.h>
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
-#include <fstream>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -27,7 +27,7 @@ struct Entry {
     bool directory = false;
 };
 struct Volume {
-    std::ifstream file;
+    HANDLE file = INVALID_HANDLE_VALUE;
     uint64_t imageSize = 0;
     uint64_t partition = 0;
     uint32_t rootSector = 0;
@@ -60,10 +60,13 @@ std::string Normalize(const char* path) {
     return out;
 }
 bool ReadAt(Volume& v, uint64_t offset, void* buffer, size_t bytes) {
-    if (!RangeOK(offset, bytes, v.imageSize) || bytes > size_t(std::numeric_limits<std::streamsize>::max())) return false;
-    v.file.clear();
-    v.file.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
-    return bool(v.file) && bool(v.file.read(static_cast<char*>(buffer), static_cast<std::streamsize>(bytes)));
+    if (v.file == INVALID_HANDLE_VALUE || !RangeOK(offset, bytes, v.imageSize) ||
+        bytes > MAXDWORD || offset > uint64_t(INT64_MAX)) return false;
+    LARGE_INTEGER position{}; position.QuadPart = static_cast<LONGLONG>(offset);
+    if (!SetFilePointerEx(v.file, position, nullptr, FILE_BEGIN)) return false;
+    DWORD received = 0;
+    return ReadFile(v.file, buffer, static_cast<DWORD>(bytes), &received, nullptr) &&
+        received == bytes;
 }
 bool ParseDescriptor(Volume& v, uint64_t partition) {
     uint8_t descriptor[kSector]{};
@@ -132,7 +135,7 @@ bool ParseDirectory(Volume& v, const std::string& parent, uint32_t sector, uint3
     return true;
 }
 void CloseUnlocked() {
-    g_volume.file.close();
+    if (g_volume.file != INVALID_HANDLE_VALUE) { CloseHandle(g_volume.file); g_volume.file = INVALID_HANDLE_VALUE; }
     g_volume.entries.clear();
     g_volume.directoryRanges.clear();
     g_volume.directoryBytesParsed = 0;
@@ -178,12 +181,20 @@ extern "C" int __cdecl XDVDFS_OpenImage(const wchar_t* imagePath, XDVDFS_VOLUME_
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_started) return 2;
     CloseUnlocked();
-    g_volume.file.open(imagePath, std::ios::binary);
-    if (!g_volume.file) return 3;
-    g_volume.file.seekg(0, std::ios::end);
-    const auto end = g_volume.file.tellg();
-    if (end < 0) { CloseUnlocked(); return 4; }
-    g_volume.imageSize = static_cast<uint64_t>(end);
+    g_volume.file = CreateFileW(imagePath, GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (g_volume.file == INVALID_HANDLE_VALUE) return 3;
+    LARGE_INTEGER end{};
+    if (!GetFileSizeEx(g_volume.file, &end) || end.QuadPart < 0) {
+        GET_LENGTH_INFORMATION length{};
+        DWORD returned = 0;
+        if (!DeviceIoControl(g_volume.file, IOCTL_DISK_GET_LENGTH_INFO,
+            nullptr, 0, &length, sizeof(length), &returned, nullptr) ||
+            length.Length.QuadPart < 0) { CloseUnlocked(); return 4; }
+        end = length.Length;
+    }
+    g_volume.imageSize = static_cast<uint64_t>(end.QuadPart);
 
     // Raw XISO and original Xbox XGD1 game-partition layouts.
     const uint64_t candidates[] = { 0, 0x18300000ull };
