@@ -140,7 +140,7 @@ int main() {
         return Fail("read-only FATX provider mount failed");
     file = nullptr;
     if (XboxFsOpen(L"\\Device\\Harddisk8\\Partition1\\TEST.BIN",
-        GENERIC_READ | GENERIC_WRITE, 0, &file) != 0 || !file)
+        GENERIC_READ, 0, &file) != 0 || !file)
         return Fail("open file on read-only FATX volume failed");
     transferred = 77;
     if (XboxFsWrite(file, 0, "blocked!", 8, &transferred) != static_cast<LONG>(0xC0000022u) ||
