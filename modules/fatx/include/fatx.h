@@ -50,10 +50,13 @@ __declspec(dllexport) void __cdecl FATX_ModuleStop();
 
 __declspec(dllexport)
 int __cdecl FATX_OpenVolumeW(
-    LPCWSTR devicePath,
-    ULONGLONG partitionOffset,
-    ULONGLONG partitionLength,
-    FATX_VOLUME* volume
+    LPCWSTR devicePath, ULONGLONG partitionOffset,
+    ULONGLONG partitionLength, FATX_VOLUME* volume
+);
+__declspec(dllexport)
+int __cdecl FATX_OpenVolumeReadOnlyW(
+    LPCWSTR devicePath, ULONGLONG partitionOffset,
+    ULONGLONG partitionLength, FATX_VOLUME* volume
 );
 
 __declspec(dllexport)
