@@ -52,6 +52,30 @@ void RollbackMounts() {
 bool XboxKernelMountConfiguredStorage() {
     if (!g_mounts.empty()) return true;
     std::wstring image, device, offsetText, lengthText;
+    std::wstring autoCountText;
+    if (ReadEnvironment(L"XBOX_RUNTIME_FATX_AUTO_COUNT", autoCountText)) {
+        ULONGLONG autoCount = 0;
+        if (!ParseU64(autoCountText, autoCount) || autoCount > 16) return false;
+        for (ULONGLONG i = 0; i < autoCount; ++i) {
+            wchar_t key[96]{};
+            const auto readIndexed = [&](const wchar_t* suffix, std::wstring& value) {
+                swprintf_s(key, L"XBOX_RUNTIME_FATX_AUTO_%llu_%s", i, suffix);
+                return ReadEnvironment(key, value);
+            };
+            std::wstring autoImage, autoDevice, autoOffset, autoLength;
+            ULONGLONG offset = 0, length = 0;
+            if (!readIndexed(L"IMAGE", autoImage) || !readIndexed(L"DEVICE", autoDevice) ||
+                !readIndexed(L"OFFSET", autoOffset) || !readIndexed(L"LENGTH", autoLength) ||
+                !ParseU64(autoOffset, offset) || !ParseU64(autoLength, length) || !length) {
+                RollbackMounts(); return false;
+            }
+            XBOX_FS_MOUNT mount = nullptr;
+            const LONG status = FATX_RegisterFilesystemProviderEx(
+                autoDevice.c_str(), autoImage.c_str(), offset, length, TRUE, &mount);
+            if (status != 0 || !mount) { RollbackMounts(); return false; }
+            g_mounts.push_back({mount, true});
+        }
+    }
     if (ReadEnvironment(L"XBOX_RUNTIME_FATX_IMAGE", image)) {
         ULONGLONG offset = 0, length = 0, fileLength = 0;
         if (!ReadEnvironment(L"XBOX_RUNTIME_FATX_OFFSET", offsetText) &&
