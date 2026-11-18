@@ -13,9 +13,12 @@
 #include <vector>
 #include <unordered_set>
 #include <algorithm>
+#include <mutex>
 #include <limits>
 
 static bool g_initialized = false;
+static std::mutex g_lifecycleMutex;
+static unsigned long g_startReferences = 0;
 
 struct FatxVolume {
     HANDLE file = INVALID_HANDLE_VALUE;
@@ -448,22 +451,33 @@ static int ResolvePath(
 
 extern "C" int __cdecl FATX_ModuleStart()
 {
-    g_initialized = true;
-
-    OutputDebugStringW(
-        L"[XboxRuntime:FATX] FATX filesystem module ready\n"
-    );
-
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+    if (g_startReferences++ == 0) {
+        g_initialized = true;
+        OutputDebugStringW(L"[XboxRuntime:FATX] FATX filesystem module ready\n");
+    }
     return FATX_OK;
 }
 
 extern "C" void __cdecl FATX_ModuleStop()
 {
-    g_initialized = false;
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+    if (g_startReferences == 0) return;
+    if (--g_startReferences == 0) {
+        g_initialized = false;
+        OutputDebugStringW(L"[XboxRuntime:FATX] FATX filesystem module stopped\n");
+    }
+}
 
-    OutputDebugStringW(
-        L"[XboxRuntime:FATX] FATX filesystem module stopped\n"
-    );
+// The host module loader uses the common ModuleStart/ModuleStop ABI.
+// Provider mounts hold their own FATX_ModuleStart reference independently.
+extern "C" __declspec(dllexport) int __cdecl ModuleStart()
+{
+    return FATX_ModuleStart() == FATX_OK ? 0 : 1;
+}
+extern "C" __declspec(dllexport) void __cdecl ModuleStop()
+{
+    FATX_ModuleStop();
 }
 
 extern "C" int __cdecl FATX_OpenVolumeW(
