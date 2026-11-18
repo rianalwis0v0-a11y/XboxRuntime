@@ -34,3 +34,15 @@ jobs:
         run: cmake --build build-provider --config Release --target kernel_filesystem_provider_smoke
       - name: Run provider integration test
         run: ctest --test-dir build-provider -C Release --output-on-failure -R kernel_filesystem_provider_smoke
+      - name: Configure FATX module and smoke tests
+        run: cmake -S modules/fatx -B build-fatx -A x64
+      - name: Build FATX DLL and smoke test
+        run: cmake --build build-fatx --config Release --target fatx fatx_smoke
+      - name: Run FATX smoke test
+        run: ctest --test-dir build-fatx -C Release --output-on-failure -R fatx_smoke
+      - name: Configure XDVDFS module and smoke tests
+        run: cmake -S modules/xdvdfs -B build-xdvdfs -A x64
+      - name: Build XDVDFS DLL and smoke test
+        run: cmake --build build-xdvdfs --config Release --target xdvdfs xdvdfs_smoke
+      - name: Run XDVDFS smoke test
+        run: ctest --test-dir build-xdvdfs -C Release --output-on-failure -R xdvdfs_smoke
