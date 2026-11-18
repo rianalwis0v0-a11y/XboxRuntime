@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstring>
 #include "kernel_thread_exports.h"
+#include "fatx_provider.h"
+#include <vector>
 
 #pragma pack(push, 4)
 struct GuestAnsiString { USHORT Length, MaximumLength; char* Buffer; };
@@ -91,6 +93,109 @@ extern "C" LONG __stdcall K_IoQueryFileInformation(
 extern "C" LONG __stdcall K_IoQueryVolumeInformation(
     void*, ULONG, ULONG, void*, ULONG*);
 
+
+extern "C" LONG __stdcall K_NtReadFile(HANDLE, HANDLE, void*, void*,
+    GuestIoStatusBlock*, void*, ULONG, const LARGE_INTEGER*, ULONG*);
+extern "C" LONG __stdcall K_NtWriteFile(HANDLE, HANDLE, void*, void*,
+    GuestIoStatusBlock*, const void*, ULONG, const LARGE_INTEGER*, ULONG*);
+extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
+    void*, ULONG, ULONG);
+extern "C" LONG __stdcall K_NtClose(HANDLE);
+
+namespace {
+void PutFatx16(std::vector<BYTE>& bytes, size_t offset, uint16_t value) {
+    bytes[offset] = BYTE(value); bytes[offset + 1] = BYTE(value >> 8);
+}
+void PutFatx32(std::vector<BYTE>& bytes, size_t offset, uint32_t value) {
+    for (int i = 0; i < 4; ++i) bytes[offset + i] = BYTE(value >> (i * 8));
+}
+bool WriteFatxFixture(const WCHAR* path) {
+    std::vector<BYTE> image(64 * 1024, 0);
+    std::memcpy(image.data(), "FATX", 4);
+    PutFatx32(image, 8, 2); PutFatx32(image, 12, 1);
+    PutFatx16(image, 0x1000 + 2, 0xFFFF);
+    PutFatx16(image, 0x1000 + 4, 3);
+    PutFatx16(image, 0x1000 + 6, 0xFFFF);
+    const size_t data = 0x2000;
+    BYTE* root = image.data() + data;
+    root[0] = 8; root[1] = 0x20; std::memcpy(root + 2, "TEST.BIN", 8);
+    PutFatx32(image, data + 0x2C, 2); PutFatx32(image, data + 0x30, 1500);
+    root[64] = 0xFF;
+    std::memset(image.data() + data + 1024, 'A', 1024);
+    std::memset(image.data() + data + 2048, 'B', 1024);
+    std::memcpy(image.data() + data + 1024, "fatxdata", 8);
+    HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = WriteFile(file, image.data(), static_cast<DWORD>(image.size()),
+                              &written, nullptr) && written == image.size();
+    CloseHandle(file);
+    return ok;
+}
+int TestFilesystemNtDispatch() {
+    WCHAR temp[MAX_PATH]{}, imagePath[MAX_PATH]{};
+    if (!GetTempPathW(MAX_PATH, temp) ||
+        !GetTempFileNameW(temp, L"ntf", 0, imagePath) ||
+        !WriteFatxFixture(imagePath)) return Fail(40, "create FATX NT-dispatch fixture");
+    XBOX_FS_MOUNT mount = nullptr;
+    if (FATX_RegisterFilesystemProvider(L"\\Device\\Harddisk0\\Partition1",
+            imagePath, 0, 64 * 1024, &mount) != 0 || !mount) {
+        DeleteFileW(imagePath); return Fail(41, "register FATX NT-dispatch mount");
+    }
+    char devicePath[] = "\\Device\\Harddisk0\\Partition1\\TEST.BIN";
+    GuestAnsiString name{};
+    name.Length = static_cast<USHORT>(std::strlen(devicePath));
+    name.MaximumLength = name.Length;
+    name.Buffer = devicePath;
+    GuestObjectAttributes attributes{}; attributes.ObjectName = &name;
+    GuestIoStatusBlock io{};
+    HANDLE handle = nullptr;
+    LONG status = K_IoCreateFile(&handle, 0xC0000000u, &attributes, &io,
+        nullptr, FILE_ATTRIBUTE_NORMAL, 7, 1, 0, 0);
+    if (status != 0 || !handle || io.Status != 0) {
+        FATX_UnregisterFilesystemProvider(mount); DeleteFileW(imagePath);
+        return Fail(42, "NtCreateFile did not open mounted FATX path");
+    }
+    struct FileStandardInformation {
+        LARGE_INTEGER AllocationSize, EndOfFile;
+        ULONG NumberOfLinks; BOOLEAN DeletePending, Directory;
+    } standard{};
+    status = K_NtQueryInformationFile(handle, &io, &standard, sizeof(standard), 5);
+    if (status != 0 || standard.EndOfFile.QuadPart != 1500 ||
+        standard.AllocationSize.QuadPart != 2048) {
+        K_NtClose(handle); FATX_UnregisterFilesystemProvider(mount);
+        DeleteFileW(imagePath); return Fail(43, "NtQueryInformationFile provider data");
+    }
+    char data[8]{}; LARGE_INTEGER offset{}; ULONG key = 0;
+    status = K_NtReadFile(handle, nullptr, nullptr, nullptr, &io,
+                          data, sizeof(data), &offset, &key);
+    if (status != 0 || io.Information != sizeof(data) ||
+        std::memcmp(data, "fatxdata", 8) != 0) {
+        K_NtClose(handle); FATX_UnregisterFilesystemProvider(mount);
+        DeleteFileW(imagePath); return Fail(44, "NtReadFile provider dispatch");
+    }
+    offset.QuadPart = 0;
+    status = K_NtWriteFile(handle, nullptr, nullptr, nullptr, &io,
+                           "ntwrite!", 8, &offset, &key);
+    if (status != 0 || io.Information != 8) {
+        K_NtClose(handle); FATX_UnregisterFilesystemProvider(mount);
+        DeleteFileW(imagePath); return Fail(45, "NtWriteFile provider dispatch");
+    }
+    std::memset(data, 0, sizeof(data)); offset.QuadPart = 0;
+    status = K_NtReadFile(handle, nullptr, nullptr, nullptr, &io,
+                          data, sizeof(data), &offset, &key);
+    if (status != 0 || std::memcmp(data, "ntwrite!", 8) != 0) {
+        K_NtClose(handle); FATX_UnregisterFilesystemProvider(mount);
+        DeleteFileW(imagePath); return Fail(46, "NtWriteFile provider readback");
+    }
+    if (K_NtClose(handle) != 0 || FATX_UnregisterFilesystemProvider(mount) != 0) {
+        DeleteFileW(imagePath); return Fail(47, "NtClose/provider unmount");
+    }
+    DeleteFileW(imagePath);
+    return 0;
+}
+}
 
 namespace {
 int Fail(int code, const char* message) { std::fprintf(stderr, "FAIL %d: %s\n", code, message); return code; }
@@ -321,6 +426,9 @@ int main() {
     if (XboxKernelIsSystemInterruptEnabled(5) != FALSE)
         return Fail(38, "mask system interrupt");
 
-    std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries)");
+    const int filesystemStatus = TestFilesystemNtDispatch();
+    if (filesystemStatus) return filesystemStatus;
+
+    std::puts("kernel_io_group_a_guest_smoke: PASS (ANSI ABI, file create/open, file/volume queries, FATX Nt* dispatch)");
     return 0;
 }
