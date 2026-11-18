@@ -86,7 +86,7 @@ int main() {
     // independently mounted volume still has an open provider handle.
     std::memset(readback, 0, sizeof(readback));
     if (XboxFsRead(secondFatxFile, 0, readback, sizeof(readback), &transferred) != 0 ||
-        transferred != 8 || std::memcmp(readback, "fatxdata", 8) != 0)
+        transferred != 8 || std::memcmp(readback, "write!!!", 8) != 0)
         return Fail("remaining FATX mount stopped when sibling unmounted");
     XboxFsClose(secondFatxFile);
     if (FATX_UnregisterFilesystemProvider(fatxMount2) != 0)
