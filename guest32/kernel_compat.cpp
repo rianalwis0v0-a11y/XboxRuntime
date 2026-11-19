@@ -2246,6 +2246,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je io_set_completion
         cmp eax, 188
         je nt_create_directory_object
+        cmp eax, 201
+        je nt_open_directory_object
         cmp eax, 246
         je ob_reference_object_by_handle
         cmp eax, 248
@@ -2842,6 +2844,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     io_query_volume_information: jmp K_IoQueryVolumeInformation
     io_set_completion: jmp K_IoSetIoCompletion
     nt_create_directory_object: jmp K_NtCreateDirectoryObject
+    nt_open_directory_object: jmp K_NtOpenDirectoryObject
     nt_create_io_completion: jmp K_NtCreateIoCompletion
     nt_query_io_completion: jmp K_NtQueryIoCompletion
     nt_remove_io_completion: jmp K_NtRemoveIoCompletion
