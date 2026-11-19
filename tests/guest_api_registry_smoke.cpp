@@ -7,13 +7,14 @@
 
 int main() {
     static_assert(sizeof(void*) == 4, "registry test must run as x86");
-    assert(XboxGuestApiCount() == 29u);
+    assert(XboxGuestApiCount() == 33u);
     assert(XboxGuestApiLookup(nullptr) == 0u);
     assert(XboxGuestApiLookup("") == 0u);
     assert(XboxGuestApiLookup("XNetDefinitelyNotAnApi") == 0u);
 
     const char* names[] = {
         "XNetStartup", "XNetCleanup", "XNetDnsLookup", "XNetDnsRelease",
+        "XNetRandom", "XNetCreateKey", "XNetRegisterKey", "XNetUnregisterKey",
         "XNetInAddrToString", "XNetServerToInAddr", "XNetInAddrToServer",
         "XNetGetEthernetLinkStatus", "XNetGetTitleXnAddr",
         "XSocketCreate", "XSocketClose", "XSocketBind", "XSocketConnect",
