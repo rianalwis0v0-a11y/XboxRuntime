@@ -222,15 +222,20 @@ extern "C" int __cdecl XboxNetStartup() {
     return XboxNetStartupWithData(MAKEWORD(2, 2), nullptr);
 }
 
-extern "C" void __cdecl XboxNetCleanup() {
+extern "C" int __cdecl XboxNetCleanup() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (!g_startUsers || --g_startUsers) return;
+    if (!g_startUsers) {
+        WSASetLastError(WSANOTINITIALISED);
+        return SOCKET_ERROR;
+    }
+    if (--g_startUsers) return 0;
     // Active operations hold SocketLease references. Clearing the registry
     // removes guest-visible handles; each native socket closes after its last
     // in-flight operation releases its lease.
     g_sockets.clear();
-    WSACleanup();
+    const int result = WSACleanup();
     std::memset(&g_wsaData, 0, sizeof(g_wsaData));
+    return result;
 }
 
 extern "C" int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* output) {
