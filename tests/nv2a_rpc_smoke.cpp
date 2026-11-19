@@ -60,7 +60,7 @@ DWORD WINAPI RpcServer(void* raw) {
 }
 }
 
-int main() {
+int RunNv2aRpcSmoke() {
  wchar_t pipeName[128]{};
  swprintf_s(pipeName,L"\\\\.\\pipe\\XboxRuntimeNv2aRpcSmoke-%lu-%llu",GetCurrentProcessId(),GetTickCount64());
  ServerState state{};
