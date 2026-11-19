@@ -6,6 +6,7 @@
 #include "kernel_thread_exports.h"
 #include "kernel_object_manager.h"
 #include "kernel_object_reference.h"
+#include "kernel_time.h"
 #include "fatx_provider.h"
 #include <vector>
 
@@ -104,6 +105,9 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
     void*, ULONG, ULONG);
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 extern "C" void KernelDispatch();
+extern "C" __declspec(naked) LONG __stdcall DispatchNtSetSystemTime(LARGE_INTEGER*, LARGE_INTEGER*) {
+    __asm { push 228 jmp KernelDispatch }
+}
 extern "C" __declspec(naked) LONG __stdcall DispatchObReferenceObjectByHandle(HANDLE, void*, void**) {
     __asm { push 246 jmp KernelDispatch }
 }
@@ -443,6 +447,23 @@ int main() {
     K_HalDisableSystemInterrupt(5);
     if (XboxKernelIsSystemInterruptEnabled(5) != FALSE)
         return Fail(38, "mask system interrupt");
+
+    // NtSetSystemTime must alter only the title clock, never the host Windows clock.
+    XboxKernelResetSystemTime();
+    LARGE_INTEGER guestTimeBefore{}, requestedGuestTime{}, previousGuestTime{}, guestTimeAfter{};
+    K_KeQuerySystemTime(&guestTimeBefore);
+    requestedGuestTime.QuadPart = guestTimeBefore.QuadPart + 300000000LL;
+    if (DispatchNtSetSystemTime(&requestedGuestTime, &previousGuestTime) != 0)
+        return Fail(53, "NtSetSystemTime ordinal dispatch");
+    K_KeQuerySystemTime(&guestTimeAfter);
+    if (previousGuestTime.QuadPart < guestTimeBefore.QuadPart - 10000000LL ||
+        guestTimeAfter.QuadPart < requestedGuestTime.QuadPart ||
+        guestTimeAfter.QuadPart > requestedGuestTime.QuadPart + 10000000LL)
+        return Fail(54, "NtSetSystemTime virtual clock values");
+    requestedGuestTime.QuadPart = -1;
+    if (DispatchNtSetSystemTime(&requestedGuestTime, nullptr) != static_cast<LONG>(0xC000000Du))
+        return Fail(55, "NtSetSystemTime rejects negative absolute time");
+    XboxKernelResetSystemTime();
 
     // Exercise the four object-reference ordinals through the real import dispatcher.
     int objectPayload = 0;
