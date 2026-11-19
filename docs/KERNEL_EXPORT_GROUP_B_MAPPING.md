@@ -5,7 +5,7 @@ Base: `work/kernel-execution-backend` at `6076f0a144df82340d4d943b62b84e3dba199b
 
 ## Status
 
-All 57 Group B ordinals have explicit `KernelDispatch` entries. Four object-reference exports now have real guest-ABI handlers and x86 dispatch smoke coverage; the other 53 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
+All 57 Group B ordinals have explicit `KernelDispatch` entries. Five exports now have real guest-ABI handlers and x86 dispatch smoke coverage (four object-reference APIs plus `NtSetSystemTime`); the other 52 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
 
 No signatures, structure layouts, host behavior, or calling conventions are asserted by this mapping-only change. Each API must be implemented in a follow-up with pinned-NXDK provenance, x86 guest-call tests, and appropriate host tests before its status can be upgraded.
 
@@ -19,7 +19,7 @@ No signatures, structure layouts, host behavior, or calling conventions are asse
 | 208 | `NtQueryDirectoryObject` | Explicit fail-fast route; behavior unsupported |
 | 215 | `NtQuerySymbolicLinkObject` | Explicit fail-fast route; behavior unsupported |
 | 220 | `NtReadFileScatter` | Explicit fail-fast route; behavior unsupported |
-| 228 | `NtSetSystemTime` | Explicit fail-fast route; behavior unsupported |
+| 228 | `NtSetSystemTime` | Implemented through title-local virtual clock offset; x86 ordinal-dispatch tested; host Windows clock remains unchanged |
 | 232 | `NtUserIoApcDispatcher` | Explicit fail-fast route; behavior unsupported |
 | 237 | `NtWriteFileGather` | Explicit fail-fast route; behavior unsupported |
 | 239 | `ObCreateObject` | Explicit fail-fast route; behavior unsupported |
