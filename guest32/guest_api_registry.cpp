@@ -20,6 +20,17 @@ struct Entry {
 };
 #define GUEST_API(symbol) { #symbol, GuestAddress(&symbol) }
 const Entry kGuestApis[] = {
+    GUEST_API(XWSAStartup),
+    GUEST_API(XWSACleanup),
+    GUEST_API(XSocketWSAGetLastError),
+    GUEST_API(XWSASetLastError),
+    GUEST_API(XWSACreateEvent),
+    GUEST_API(XWSACloseEvent),
+    GUEST_API(XWSASetEvent),
+    GUEST_API(XWSAResetEvent),
+    GUEST_API(XWSAWaitForMultipleEvents),
+    GUEST_API(XWSAFDIsSet),
+    GUEST_API(XWSAEventSelect),
     GUEST_API(XNetStartup),
     GUEST_API(XNetCleanup),
     GUEST_API(XNetDnsLookup),
