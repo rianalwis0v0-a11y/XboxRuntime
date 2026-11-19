@@ -7,7 +7,7 @@
 
 int main() {
     static_assert(sizeof(void*) == 4, "registry test must run as x86");
-    assert(XboxGuestApiCount() == 48u);
+    assert(XboxGuestApiCount() == 63u);
     assert(XboxGuestApiLookup(nullptr) == 0u);
     assert(XboxGuestApiLookup("") == 0u);
     assert(XboxGuestApiLookup("XNetDefinitelyNotAnApi") == 0u);
@@ -17,10 +17,15 @@ int main() {
         "XWSAStartup", "XWSACleanup", "XSocketWSAGetLastError", "XWSASetLastError",
         "XWSACreateEvent", "XWSACloseEvent", "XWSASetEvent", "XWSAResetEvent",
         "XWSAWaitForMultipleEvents", "XWSAFDIsSet", "XWSAEventSelect",
+        "XSocketWSACreateEvent", "XSocketWSACloseEvent", "XSocketWSASetEvent",
+        "XSocketWSAResetEvent", "XSocketWSAWaitForMultipleEvents",
+        "XSocketWSAFDIsSet", "XSocketWSAEventSelect", "XSocketWSASetLastError",
         "XNetRandom", "XNetCreateKey", "XNetRegisterKey", "XNetUnregisterKey",
         "XNetInAddrToString", "XNetServerToInAddr", "XNetInAddrToServer",
         "XNetGetEthernetLinkStatus", "XNetGetTitleXnAddr",
-        "XSocketCreate", "XSocketClose", "XSocketSelect", "XSocketGetLastError", "XSocketSetLastError", "XSocketBind", "XSocketConnect",
+        "XSocketCreate", "XCreateSocket", "XSocketWSAGetOverlappedResult",
+        "XSocketWSACancelOverlappedIO", "XSocketWSARecv", "XSocketWSARecvFrom",
+        "XSocketWSASend", "XSocketWSASendTo", "XSocketClose", "XSocketSelect", "XSocketGetLastError", "XSocketSetLastError", "XSocketBind", "XSocketConnect",
         "XSocketListen", "XSocketAccept", "XSocketShutdown",
         "XSocketIOCTLSocket", "XSocketSetSockOpt", "XSocketGetSockOpt",
         "XSocketGetSockName", "XSocketGetPeerName", "XSocketSend",
