@@ -31,6 +31,7 @@
 #include "kernel_io_exports.h"
 #include "kernel_directory_objects.h"
 #include "kernel_object_manager.h"
+#include "kernel_object_reference.h"
 #include "kernel_filesystem_bridge.h"
 #include "kernel_time.h"
 #include "guest_api_registry.h"
@@ -2245,6 +2246,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je io_set_completion
         cmp eax, 188
         je nt_create_directory_object
+        cmp eax, 246
+        je ob_reference_object_by_handle
+        cmp eax, 248
+        je ob_reference_object_by_pointer
+        cmp eax, 250
+        je obf_dereference_object
+        cmp eax, 251
+        je obf_reference_object
         cmp eax, 191
         je nt_create_io_completion
         cmp eax, 212
@@ -3034,6 +3043,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    ob_reference_object_by_handle: jmp K_ObReferenceObjectByHandle
+    ob_reference_object_by_pointer: jmp K_ObReferenceObjectByPointer
+    obf_dereference_object: jmp K_ObfDereferenceObject
+    obf_reference_object: jmp K_ObfReferenceObject
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
