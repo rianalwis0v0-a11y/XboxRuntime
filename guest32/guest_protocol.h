@@ -49,9 +49,11 @@ struct XboxGuestExitReply {
     std::uint32_t faultAddress;
     std::uint32_t faultProtection;
     std::uint32_t faultState;
+    std::uint32_t eax, ebx, ecx, edx;
+    std::uint32_t esi, edi, ebp, esp;
 };
 
 static_assert(sizeof(XboxGuestHello) == 20, "guest hello wire size");
 static_assert(sizeof(XboxGuestCommandMessage) == 40, "guest command wire size");
 static_assert(sizeof(XboxGuestCommandReply) == 12, "guest reply wire size");
-static_assert(sizeof(XboxGuestExitReply) == 40, "guest exit reply wire size");
+static_assert(sizeof(XboxGuestExitReply) == 72, "guest exit reply wire size");
