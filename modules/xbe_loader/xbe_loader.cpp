@@ -23,6 +23,12 @@ HANDLE rpcThread=nullptr;
 bool ExactRead(HANDLE h,void*p,DWORD n);
 bool ExactWrite(HANDLE h,const void*p,DWORD n);
 DWORD WINAPI ServeGpuRpc(void*) {
+ /* A malformed request or a broken host service must unblock the guest.
+  * Disconnect on every exit path, including validation/allocation failures. */
+ struct DisconnectOnExit {
+  HANDLE pipe;
+  ~DisconnectOnExit(){if(pipe&&pipe!=INVALID_HANDLE_VALUE)DisconnectNamedPipe(pipe);}
+ } disconnect{g.pipe};
  HMODULE gpu=GetModuleHandleW(L"nv2a.dll");
  using ReadFn=uint64_t (__cdecl*)(uint32_t,unsigned int);
  using WriteFn=int (__cdecl*)(uint32_t,uint64_t,unsigned int);
@@ -91,18 +97,20 @@ bool ExactWrite(HANDLE h,const void*p,DWORD n){DWORD d=0;while(d<n){DWORD sent=0
 void StopGuest(){
  /* Zero is the explicit XBE launch-release command. Never send it while
   * unloading a guest that has not been approved for execution. */
- if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
-  if(!releaseSent){uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);}
-  CloseHandle(g.pipe);
+ if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE&&!releaseSent){
+  uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);
  }
- if(g.process&&WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT){
-  TerminateProcess(g.process,0);
-  WaitForSingleObject(g.process,1000);
- }
+ /* Stop and join the synchronous pipe worker before closing its handle.
+  * This prevents the worker from racing a recycled HANDLE during teardown. */
  if(rpcThread){
   CancelSynchronousIo(rpcThread);
   WaitForSingleObject(rpcThread,INFINITE);
   CloseHandle(rpcThread);rpcThread=nullptr;
+ }
+ if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE)CloseHandle(g.pipe);
+ if(g.process&&WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT){
+  TerminateProcess(g.process,0);
+  WaitForSingleObject(g.process,1000);
  }
  if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};releaseSent=false;
 }
