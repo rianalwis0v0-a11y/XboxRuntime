@@ -319,6 +319,19 @@ extern "C" SOCKET WINAPI XSocketCreate(int af, int type, int protocol) {
     return SocketHandleFailure(WSAESOCKTNOSUPPORT);
 }
 
+extern "C" int WINAPI XSocketSelect(int, fd_set* readSet, fd_set* writeSet,
+    fd_set* exceptSet, const timeval* timeout) {
+    return XboxNetSocketSelect(readSet, writeSet, exceptSet, timeout);
+}
+
+extern "C" int WINAPI XSocketGetLastError() {
+    return WSAGetLastError();
+}
+
+extern "C" void WINAPI XSocketSetLastError(int error) {
+    WSASetLastError(error);
+}
+
 extern "C" int WINAPI XSocketClose(SOCKET socket) {
     if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
     return XboxNetSocketClose(static_cast<uint32_t>(socket)) == 0 ? 0 : SOCKET_ERROR;
