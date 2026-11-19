@@ -32,6 +32,7 @@ struct SocketLease {
 std::unordered_map<uint32_t, std::shared_ptr<SocketState>> g_sockets;
 uint32_t g_nextHandle = 1;
 unsigned g_startUsers = 0;
+WSADATA g_wsaData{};
 
 SocketLease FindSocket(uint32_t token) {
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -196,17 +197,29 @@ bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address
 }
 }
 
-extern "C" int __cdecl XboxNetStartup() {
+extern "C" int __cdecl XboxNetStartupWithData(WORD requestedVersion, WSADATA* output) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_startUsers) { ++g_startUsers; return 0; }
-    WSADATA data{};
-    if (WSAStartup(MAKEWORD(2, 2), &data) != 0) return -1;
-    if (LOBYTE(data.wVersion) != 2 || HIBYTE(data.wVersion) != 2) {
-        WSACleanup();
-        return -1;
+    if (requestedVersion != MAKEWORD(2, 2)) return WSAVERNOTSUPPORTED;
+    if (g_startUsers) {
+        ++g_startUsers;
+        if (output) *output = g_wsaData;
+        return 0;
     }
+    WSADATA data{};
+    const int startupResult = WSAStartup(requestedVersion, &data);
+    if (startupResult != 0) return startupResult;
+    if (data.wVersion != requestedVersion) {
+        WSACleanup();
+        return WSAVERNOTSUPPORTED;
+    }
+    g_wsaData = data;
     g_startUsers = 1;
+    if (output) *output = g_wsaData;
     return 0;
+}
+
+extern "C" int __cdecl XboxNetStartup() {
+    return XboxNetStartupWithData(MAKEWORD(2, 2), nullptr);
 }
 
 extern "C" void __cdecl XboxNetCleanup() {
@@ -217,6 +230,7 @@ extern "C" void __cdecl XboxNetCleanup() {
     // in-flight operation releases its lease.
     g_sockets.clear();
     WSACleanup();
+    std::memset(&g_wsaData, 0, sizeof(g_wsaData));
 }
 
 extern "C" int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* output) {
@@ -497,6 +511,15 @@ extern "C" int __cdecl XboxNetSocketSelect(
     if (writeSet) translateOutput(writeSet, &nativeWrite);
     if (exceptSet) translateOutput(exceptSet, &nativeExcept);
     return ready;
+}
+
+extern "C" int __cdecl XboxNetSocketEventSelect(
+    uint32_t handle, WSAEVENT eventHandle, long networkEvents) {
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if (!eventHandle) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
+    return WSAEventSelect(socket, eventHandle, networkEvents);
 }
 
 extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
