@@ -28,6 +28,10 @@ uint64_t XboxKernelGpuReadRegister(uint32_t offset, uint32_t accessSize, int* ok
 int XboxKernelGpuWriteRegister(uint32_t offset, uint64_t value, uint32_t accessSize);
 int XboxKernelGpuSubmitMethod(uint32_t subchannel, uint32_t method, uint32_t parameter);
 int XboxKernelGpuFlush(void);
+int XboxKernelGpuReadVRAM(uint32_t offset, void* destination, uint32_t length);
+int XboxKernelGpuWriteVRAM(uint32_t offset, const void* source, uint32_t length);
+int XboxKernelGpuReadRAMIN(uint32_t offset, void* destination, uint32_t length);
+int XboxKernelGpuWriteRAMIN(uint32_t offset, const void* source, uint32_t length);
 #ifdef __cplusplus
 }
 #endif
