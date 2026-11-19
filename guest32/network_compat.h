@@ -6,6 +6,7 @@
 // raw Winsock SOCKET values. All functions use the x86 guest calling ABI.
 extern "C" {
 int __cdecl XboxNetStartup();
+int __cdecl XboxNetStartupWithData(WORD requestedVersion, WSADATA* output);
 void __cdecl XboxNetCleanup();
 int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* addressNetworkOrder);
 uint32_t __cdecl XboxNetSocketCreate(int type); // 1 = stream/TCP, 2 = datagram/UDP
@@ -28,5 +29,6 @@ int32_t __cdecl XboxNetSocketReceiveFrom(uint32_t handle, void* data, uint32_t c
 int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled);
 int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds);
 int __cdecl XboxNetSocketSelect(fd_set* readSet, fd_set* writeSet, fd_set* exceptSet, const timeval* timeout);
+int __cdecl XboxNetSocketEventSelect(uint32_t handle, WSAEVENT eventHandle, long networkEvents);
 int __cdecl XboxNetSocketClose(uint32_t handle);
 }
