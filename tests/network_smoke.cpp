@@ -108,10 +108,7 @@ int main() {
         peerInAddr.s_addr != htonl(INADDR_LOOPBACK) ||
         XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != 0 ||
         std::memcmp(&roundTripXnAddr, &peerXnAddr, sizeof(peerXnAddr)) != 0 ||
-        std::memcmp(&roundTripKeyId, &mappingKeyId, sizeof(mappingKeyId)) != 0 ||
-        XNetUnregisterInAddr(peerInAddr) != 0 ||
-        XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != WSAEINVAL ||
-        XNetUnregisterKey(&mappingKeyId) != 0) {
+        std::memcmp(&roundTripKeyId, &mappingKeyId, sizeof(mappingKeyId)) != 0) {
         XNetCleanup();
         return 41;
     }
@@ -181,8 +178,10 @@ int main() {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 8;
     }
     const char payload[] = "insignia-xnet-smoke";
+    sockaddr_in mappedTarget = local;
+    mappedTarget.sin_addr = peerInAddr;
     if (XSocketSendTo(sender, payload, sizeof(payload), 0,
-            reinterpret_cast<sockaddr*>(&local), sizeof(local)) != sizeof(payload)) {
+            reinterpret_cast<sockaddr*>(&mappedTarget), sizeof(mappedTarget)) != sizeof(payload)) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 9;
     }
     if (XWSAWaitForMultipleEvents(1, &udpEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0) {
@@ -195,6 +194,11 @@ int main() {
         reinterpret_cast<sockaddr*>(&peer), &peerLength);
     if (bytes != sizeof(payload) || std::memcmp(received, payload, sizeof(payload)) != 0) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 10;
+    }
+    if (XNetUnregisterInAddr(peerInAddr) != 0 ||
+        XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != WSAEINVAL ||
+        XNetUnregisterKey(&mappingKeyId) != 0) {
+        XWSACloseEvent(udpEvent); XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 42;
     }
     XWSACloseEvent(udpEvent);
     XSocketClose(receiver);
