@@ -22,6 +22,8 @@ struct XNetStartupParams {
     BYTE cfgQosSrvMaxSimultaneousResponses;
     BYTE cfgQosPairWaitTimeInSeconds;
 };
+struct XNKID { BYTE ab[8]; };
+struct XNKEY { BYTE ab[16]; };
 struct XNADDR {
     IN_ADDR ina;
     IN_ADDR inaOnline;
@@ -37,6 +39,8 @@ struct XNDNS {
 #pragma pack(pop)
 
 static_assert(sizeof(XNetStartupParams) == 13, "XNetStartupParams ABI size");
+static_assert(sizeof(XNKID) == 8, "XNKID ABI size");
+static_assert(sizeof(XNKEY) == 16, "XNKEY ABI size");
 static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
 static_assert(sizeof(XNDNS) == 40, "XNDNS ABI size");
 
@@ -45,6 +49,10 @@ int WINAPI XNetStartup(const XNetStartupParams* params);
 int WINAPI XNetCleanup();
 int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** result);
 int WINAPI XNetDnsRelease(XNDNS* result);
+int WINAPI XNetRandom(BYTE* buffer, UINT length);
+int WINAPI XNetCreateKey(XNKID* keyId, XNKEY* key);
+int WINAPI XNetRegisterKey(const XNKID* keyId, const XNKEY* key);
+int WINAPI XNetUnregisterKey(const XNKID* keyId);
 int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity);
 int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output);
 int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
