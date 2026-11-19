@@ -93,6 +93,23 @@ int main() {
         return 23;
     }
 
+    XNADDR localTitleAddress{};
+    DWORD localTitleFlags = XNetGetTitleXnAddr(&localTitleAddress);
+    DWORD localPlatform = 0;
+    XNADDR debugAddress{};
+    WORD systemLinkPort = 0;
+    if (!localTitleFlags ||
+        XNetGetXnAddrPlatform(&localTitleAddress, &localPlatform) != 0 ||
+        localPlatform != 0x00000002u ||
+        XNetGetDebugXnAddr(&debugAddress) != 0x00000001u ||
+        XNetGetBroadcastVersionStatus(FALSE) != 0 ||
+        XNetGetSystemLinkPort(&systemLinkPort) != 0 || systemLinkPort != 3074 ||
+        XNetSetSystemLinkPort(3075) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP) {
+        XNetCleanup();
+        return 43;
+    }
+
     XNKID mappingKeyId{};
     XNKEY mappingKey{};
     XNADDR peerXnAddr{};
@@ -106,6 +123,7 @@ int main() {
         XNetRegisterKey(&mappingKeyId, &mappingKey) != 0 ||
         XNetXnAddrToInAddr(&peerXnAddr, &mappingKeyId, &peerInAddr) != 0 ||
         peerInAddr.s_addr != htonl(INADDR_LOOPBACK) ||
+        XNetTsAddrToInAddr(&peerXnAddr, 1, &mappingKeyId, &peerInAddr) != 0 ||
         XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != 0 ||
         std::memcmp(&roundTripXnAddr, &peerXnAddr, sizeof(peerXnAddr)) != 0 ||
         std::memcmp(&roundTripKeyId, &mappingKeyId, sizeof(mappingKeyId)) != 0) {
