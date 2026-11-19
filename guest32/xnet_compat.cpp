@@ -239,16 +239,19 @@ extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capa
     return 0;
 }
 
-extern "C" int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD, IN_ADDR* output) {
+extern "C" int WINAPI XNetServerToInAddr(IN_ADDR, DWORD, IN_ADDR* output) {
     if (!output) return WSAEFAULT;
-    *output = address;
-    return 0;
+    // Service-ID address translation requires the Xbox/Insignia service map.
+    // Returning the input address here would falsely claim that mapping worked.
+    WSASetLastError(WSAEOPNOTSUPP);
+    return WSAEOPNOTSUPP;
 }
 
-extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
+extern "C" int WINAPI XNetInAddrToServer(IN_ADDR, IN_ADDR* output) {
     if (!output) return WSAEFAULT;
-    *output = address;
-    return 0;
+    // The inverse service-ID map is not implemented; fail closed.
+    WSASetLastError(WSAEOPNOTSUPP);
+    return WSAEOPNOTSUPP;
 }
 
 namespace {
