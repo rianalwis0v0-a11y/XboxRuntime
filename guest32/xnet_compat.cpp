@@ -220,11 +220,10 @@ extern "C" int WINAPI XNetUnregisterKey(const XNKID* keyId) {
 
 extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
     if (!buffer || capacity <= 0) return WSAEFAULT;
-    const char* text = inet_ntoa(address);
-    if (!text) return WSAEINVAL;
-    const size_t length = std::strlen(text);
-    if (length + 1 > static_cast<size_t>(capacity)) return WSAEFAULT;
-    std::memcpy(buffer, text, length + 1);
+    // InetNtop writes directly to the caller's buffer and is thread-safe,
+    // unlike inet_ntoa's shared static storage.
+    if (!InetNtopA(AF_INET, &address, buffer, static_cast<size_t>(capacity)))
+        return WSAGetLastError();
     return 0;
 }
 
