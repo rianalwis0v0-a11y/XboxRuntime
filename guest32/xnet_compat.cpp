@@ -404,7 +404,7 @@ extern "C" void WINAPI XSocketSetLastError(int error) {
 
 extern "C" SOCKET WINAPI XCreateSocket(int af, int type, int protocol) { return XSocketCreate(af, type, protocol); }
 extern "C" BOOL WINAPI XSocketWSAGetOverlappedResult(SOCKET socket, LPWSAOVERLAPPED ov, LPDWORD transferred, BOOL wait, LPDWORD flags) {
-    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    if (socket == INVALID_SOCKET || socket == 0) { WSASetLastError(WSAENOTSOCK); return FALSE; }
     return XboxNetSocketWSAGetOverlappedResult(static_cast<uint32_t>(socket), ov, transferred, wait, flags);
 }
 extern "C" int WINAPI XSocketWSACancelOverlappedIO(SOCKET socket) {
