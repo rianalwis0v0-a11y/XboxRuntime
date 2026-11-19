@@ -21,7 +21,13 @@ DWORD WINAPI XboxKernelStartXbe(void* context);
 
 /* Kernel-facing NV2A service facade. These operations cross the guest/host
  * process boundary through the versioned RPC transport. */
+#ifdef __cplusplus
+extern "C" {
+#endif
 uint64_t XboxKernelGpuReadRegister(uint32_t offset, uint32_t accessSize, int* ok);
 int XboxKernelGpuWriteRegister(uint32_t offset, uint64_t value, uint32_t accessSize);
 int XboxKernelGpuSubmitMethod(uint32_t subchannel, uint32_t method, uint32_t parameter);
 int XboxKernelGpuFlush(void);
+#ifdef __cplusplus
+}
+#endif
