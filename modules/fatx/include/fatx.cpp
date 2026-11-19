@@ -11,15 +11,20 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <algorithm>
+#include <mutex>
 #include <limits>
 
 static bool g_initialized = false;
+static std::mutex g_lifecycleMutex;
+static unsigned long g_startReferences = 0;
 
 struct FatxVolume {
     HANDLE file = INVALID_HANDLE_VALUE;
     ULONGLONG base = 0;
     ULONGLONG length = 0;
+    bool writable = true;
 
     DWORD sectorsPerCluster = 0;
     DWORD clusterSize = 0;
@@ -68,11 +73,17 @@ static bool AddOverflow(
     return false;
 }
 
-static ULONGLONG AlignUp(
+static bool AlignUp(
     ULONGLONG value,
-    ULONGLONG alignment)
+    ULONGLONG alignment,
+    ULONGLONG* result)
 {
-    return (value + alignment - 1) & ~(alignment - 1);
+    if (!result || alignment == 0 ||
+        (alignment & (alignment - 1)) != 0 ||
+        value > UINT64_MAX - (alignment - 1))
+        return false;
+    *result = (value + alignment - 1) & ~(alignment - 1);
+    return true;
 }
 
 static bool ReadAt(
@@ -140,6 +151,27 @@ static bool ReadAt(
     return ok;
 }
 
+static bool WriteAt(FatxVolume* v, ULONGLONG offset, const void* buffer, DWORD length)
+{
+    if (!v || !v->writable || (!buffer && length)) return false;
+    ULONGLONG end = 0, absolute = 0;
+    if (AddOverflow(offset, length, &end) || end > v->length ||
+        AddOverflow(v->base, offset, &absolute) || absolute > INT64_MAX) return false;
+    AcquireSRWLockExclusive(&v->lock);
+    LARGE_INTEGER position{}; position.QuadPart = static_cast<LONGLONG>(absolute);
+    bool ok = SetFilePointerEx(v->file, position, nullptr, FILE_BEGIN) != FALSE;
+    const BYTE* source = static_cast<const BYTE*>(buffer);
+    DWORD remaining = length;
+    while (ok && remaining) {
+        DWORD amount = (std::min<DWORD>)(remaining, 1024 * 1024), written = 0;
+        if (!WriteFile(v->file, source, amount, &written, nullptr) || written != amount) { ok = false; break; }
+        source += written; remaining -= written;
+    }
+    if (ok && length && !FlushFileBuffers(v->file)) ok = false;
+    ReleaseSRWLockExclusive(&v->lock);
+    return ok;
+}
+
 static ULONGLONG ClusterOffset(
     const FatxVolume* v,
     DWORD cluster)
@@ -183,8 +215,8 @@ static int NextCluster(
 
     uint32_t endMarker =
         v->entrySize == 2
-        ? 0xFFF8
-        : 0xFFFFFFF8;
+        ? 0xFFFF
+        : 0xFFFFFFFF;
 
     uint32_t badMarker =
         v->entrySize == 2
@@ -196,7 +228,7 @@ static int NextCluster(
         ? 0xFFF0
         : 0xFFFFFFF0;
 
-    if (value >= endMarker)
+    if (value == endMarker)
     {
         *end = true;
         *next = 0;
@@ -222,7 +254,7 @@ static int ReadDirectory(
     if (!ValidCluster(v, firstCluster))
         return FATX_CORRUPT;
 
-    std::vector<DWORD> visited;
+    std::unordered_set<DWORD> visited;
     std::vector<BYTE> clusterData(v->clusterSize);
 
     DWORD current = firstCluster;
@@ -231,13 +263,8 @@ static int ReadDirectory(
          count < v->clusterCount;
          ++count)
     {
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
+        if (!visited.insert(current).second)
             return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         if (!ReadAt(
             v,
@@ -276,9 +303,15 @@ static int ReadDirectory(
                 if (character == 0 || character == 0xFF)
                     break;
 
-                item.name.push_back(
-                    static_cast<wchar_t>(character)
-                );
+                wchar_t decoded = static_cast<wchar_t>(character);
+                if (character >= 0x80)
+                {
+                    const char encoded = static_cast<char>(character);
+                    if (MultiByteToWideChar(
+                        437, 0, &encoded, 1, &decoded, 1) != 1)
+                        return FATX_CORRUPT;
+                }
+                item.name.push_back(decoded);
             }
 
             if (!item.name.empty())
@@ -417,31 +450,42 @@ static int ResolvePath(
     return FATX_OK;
 }
 
-extern "C" int __cdecl ModuleStart()
+extern "C" int __cdecl FATX_ModuleStart()
 {
-    g_initialized = true;
-
-    OutputDebugStringW(
-        L"[XboxRuntime:FATX] FATX filesystem module ready\n"
-    );
-
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+    if (g_startReferences++ == 0) {
+        g_initialized = true;
+        OutputDebugStringW(L"[XboxRuntime:FATX] FATX filesystem module ready\n");
+    }
     return FATX_OK;
 }
 
-extern "C" void __cdecl ModuleStop()
+extern "C" void __cdecl FATX_ModuleStop()
 {
-    g_initialized = false;
-
-    OutputDebugStringW(
-        L"[XboxRuntime:FATX] FATX filesystem module stopped\n"
-    );
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+    if (g_startReferences == 0) return;
+    if (--g_startReferences == 0) {
+        g_initialized = false;
+        OutputDebugStringW(L"[XboxRuntime:FATX] FATX filesystem module stopped\n");
+    }
 }
 
-extern "C" int __cdecl FATX_OpenVolumeW(
-    LPCWSTR devicePath,
-    ULONGLONG partitionOffset,
-    ULONGLONG partitionLength,
-    FATX_VOLUME* output)
+// The host module loader uses the common ModuleStart/ModuleStop ABI.
+// Provider mounts hold their own FATX_ModuleStart reference independently.
+#ifndef XBOX_FS_PROVIDER_TEST
+extern "C" __declspec(dllexport) int __cdecl ModuleStart()
+{
+    return FATX_ModuleStart() == FATX_OK ? 0 : 1;
+}
+extern "C" __declspec(dllexport) void __cdecl ModuleStop()
+{
+    FATX_ModuleStop();
+}
+#endif
+
+static int OpenVolumeWInternal(
+    LPCWSTR devicePath, ULONGLONG partitionOffset,
+    ULONGLONG partitionLength, FATX_VOLUME* output, bool writable)
 {
     if (!g_initialized || !devicePath || !output)
         return FATX_INVALID_ARGUMENT;
@@ -450,7 +494,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     HANDLE file = CreateFileW(
         devicePath,
-        GENERIC_READ,
+        GENERIC_READ | (writable ? GENERIC_WRITE : 0),
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr,
         OPEN_EXISTING,
@@ -466,7 +510,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     LARGE_INTEGER fileSize{};
 
     if (GetFileSizeEx(file, &fileSize) &&
-        fileSize.QuadPart >= 0)
+        fileSize.QuadPart > 0)
     {
         availableLength =
             static_cast<ULONGLONG>(fileSize.QuadPart);
@@ -522,6 +566,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     }
 
     v->file = file;
+    v->writable = writable;
     v->base = partitionOffset;
     v->length = partitionLength;
 
@@ -540,7 +585,7 @@ extern "C" int __cdecl FATX_OpenVolumeW(
 
     DWORD spc = v->sectorsPerCluster;
 
-    if (spc < 8 || spc > 128 ||
+    if (spc == 0 || spc > 1024 ||
         (spc & (spc - 1)) != 0)
     {
         delete v;
@@ -564,10 +609,15 @@ extern "C" int __cdecl FATX_OpenVolumeW(
         return FATX_INVALID_VOLUME;
     }
 
-    v->fatSize = AlignUp(
+    if (!AlignUp(
         maxClusters * v->entrySize,
-        0x1000
-    );
+        0x1000,
+        &v->fatSize))
+    {
+        delete v;
+        CloseHandle(file);
+        return FATX_INVALID_VOLUME;
+    }
 
     if (v->fatSize > partitionLength - 0x1000)
     {
@@ -598,6 +648,18 @@ extern "C" int __cdecl FATX_OpenVolumeW(
     );
 
     return FATX_OK;
+}
+
+extern "C" int __cdecl FATX_OpenVolumeW(
+    LPCWSTR path, ULONGLONG offset, ULONGLONG length, FATX_VOLUME* volume)
+{
+    return OpenVolumeWInternal(path, offset, length, volume, true);
+}
+
+extern "C" int __cdecl FATX_OpenVolumeReadOnlyW(
+    LPCWSTR path, ULONGLONG offset, ULONGLONG length, FATX_VOLUME* volume)
+{
+    return OpenVolumeWInternal(path, offset, length, volume, false);
 }
 
 extern "C" void __cdecl FATX_CloseVolume(
@@ -751,17 +813,12 @@ extern "C" int __cdecl FATX_ReadFileW(
     if (entry.size && !ValidCluster(v, current))
         return FATX_CORRUPT;
 
-    std::vector<DWORD> visited;
+    std::unordered_set<DWORD> visited;
 
     for (ULONGLONG i = 0; i < skip; ++i)
     {
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
+        if (!visited.insert(current).second)
             return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         DWORD next = 0;
         bool end = false;
@@ -781,16 +838,9 @@ extern "C" int __cdecl FATX_ReadFileW(
     while (remaining)
     {
         if (!ValidCluster(v, current) ||
-            visited.size() >= v->clusterCount)
+            visited.size() >= v->clusterCount ||
+            !visited.insert(current).second)
             return FATX_CORRUPT;
-
-        if (std::find(
-            visited.begin(),
-            visited.end(),
-            current) != visited.end())
-            return FATX_CORRUPT;
-
-        visited.push_back(current);
 
         DWORD amount = static_cast<DWORD>(
             std::min<ULONGLONG>(
@@ -838,5 +888,72 @@ extern "C" int __cdecl FATX_ReadFileW(
         current = next;
     }
 
+    return FATX_OK;
+}
+
+extern "C" int __cdecl FATX_WriteFileW(
+    FATX_VOLUME handle, LPCWSTR path, ULONGLONG offset,
+    const void* buffer, DWORD bytesToWrite, DWORD* bytesWritten)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path || !bytesWritten || (!buffer && bytesToWrite))
+        return FATX_INVALID_ARGUMENT;
+    *bytesWritten = 0;
+    FatxDirEntry entry; bool root = false;
+    int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK) return status;
+    if (root || (entry.attributes & FATX_ATTRIBUTE_DIRECTORY)) return FATX_IS_DIRECTORY;
+    if (entry.attributes & FATX_ATTRIBUTE_READONLY) return FATX_INVALID_ARGUMENT;
+    if (offset > entry.size || bytesToWrite > entry.size - offset) return FATX_INVALID_ARGUMENT;
+    if (!bytesToWrite) return FATX_OK;
+    ULONGLONG skip = offset / v->clusterSize;
+    DWORD inCluster = static_cast<DWORD>(offset % v->clusterSize);
+    DWORD current = entry.firstCluster;
+    if (!ValidCluster(v, current)) return FATX_CORRUPT;
+    std::unordered_set<DWORD> visited;
+    for (ULONGLONG i = 0; i < skip; ++i) {
+        if (!visited.insert(current).second) return FATX_CORRUPT;
+        DWORD next = 0; bool end = false;
+        status = NextCluster(v, current, &next, &end);
+        if (status != FATX_OK || end) return FATX_CORRUPT;
+        current = next;
+    }
+    const BYTE* source = static_cast<const BYTE*>(buffer);
+    DWORD remaining = bytesToWrite;
+    while (remaining) {
+        if (!ValidCluster(v, current) || !visited.insert(current).second) return FATX_CORRUPT;
+        DWORD amount = (std::min<DWORD>)(remaining, v->clusterSize - inCluster);
+        ULONGLONG position = 0;
+        if (AddOverflow(ClusterOffset(v, current), inCluster, &position)) return FATX_CORRUPT;
+        if (!WriteAt(v, position, source, amount)) return FATX_IO_ERROR;
+        source += amount; remaining -= amount; *bytesWritten += amount; inCluster = 0;
+        if (remaining) {
+            DWORD next = 0; bool end = false;
+            status = NextCluster(v, current, &next, &end);
+            if (status != FATX_OK || end) return FATX_CORRUPT;
+            current = next;
+        }
+    }
+    return FATX_OK;
+}
+
+extern "C" int __cdecl FATX_GetFileInfoW(FATX_VOLUME handle, LPCWSTR path, FATX_ENTRY* output)
+{
+    FatxVolume* v = static_cast<FatxVolume*>(handle);
+    if (!g_initialized || !v || !path || !output) return FATX_INVALID_ARGUMENT;
+    FatxDirEntry entry; bool root = false;
+    const int status = ResolvePath(v, path, &entry, &root);
+    if (status != FATX_OK) return status;
+    std::memset(output, 0, sizeof(*output));
+    if (root) {
+        output->attributes = FATX_ATTRIBUTE_DIRECTORY;
+        output->firstCluster = v->rootCluster;
+        return FATX_OK;
+    }
+    const size_t count = (std::min<size_t>)(entry.name.size(), 42);
+    std::wmemcpy(output->name, entry.name.c_str(), count);
+    output->attributes = entry.attributes;
+    output->firstCluster = entry.firstCluster;
+    output->size = entry.size;
     return FATX_OK;
 }
