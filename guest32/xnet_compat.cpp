@@ -10,6 +10,7 @@
 #include <vector>
 #include <iphlpapi.h>
 #include <new>
+#include <thread>
 #include "xnet_compat.h"
 #include "network_compat.h"
 
@@ -74,31 +75,73 @@ extern "C" int WINAPI XNetCleanup() {
     return 0;
 }
 
+namespace {
+void ReleaseXNetWorkerReference() {
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (g_xnetUsers && --g_xnetUsers == 0) {
+        XboxNetCleanup();
+        for (auto& entry : g_registeredKeys)
+            SecureZeroMemory(&entry, sizeof(entry));
+        g_registeredKeys.clear();
+        std::memset(&g_startupParams, 0, sizeof(g_startupParams));
+        Log(L"XNet cleanup completed after outstanding DNS work.");
+    }
+}
+}
+
 extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** output) {
     if (!hostname || !*hostname || !output) return WSAEINVAL;
     *output = nullptr;
+
+    // The caller owns the returned XNDNS and must keep its pointer valid until
+    // the completion event is signaled. Allocate it before queuing the worker.
+    XNDNS* result = static_cast<XNDNS*>(
+        HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(XNDNS)));
+    if (!result) return WSAENOBUFS;
+    result->iStatus = WSAEINPROGRESS;
+    *output = result;
+
+    std::string hostCopy;
+    try {
+        hostCopy.assign(hostname);
+    } catch (...) {
+        *output = nullptr;
+        HeapFree(GetProcessHeap(), 0, result);
+        return WSAENOBUFS;
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_xnetMutex);
-        if (!g_xnetUsers) return WSANOTINITIALISED;
+        if (!g_xnetUsers) {
+            *output = nullptr;
+            HeapFree(GetProcessHeap(), 0, result);
+            return WSANOTINITIALISED;
+        }
+        // Keep Winsock initialized even if the title calls XNetCleanup while
+        // this asynchronous lookup is still in flight.
+        ++g_xnetUsers;
     }
 
-    XNDNS* result = static_cast<XNDNS*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(XNDNS)));
-    if (!result) return WSAENOBUFS;
-
-    uint32_t address = 0;
-    if (XboxNetResolveIPv4(hostname, &address) == 0) {
-        result->iStatus = 0;
-        result->cina = 1;
-        result->aina[0].s_addr = address;
-    } else {
-        result->iStatus = WSAHOST_NOT_FOUND;
-        result->cina = 0;
-    }
-    *output = result;
-    if (eventHandle && !WSASetEvent(eventHandle)) {
-        HeapFree(GetProcessHeap(), 0, result);
+    try {
+        std::thread([result, hostCopy = std::move(hostCopy), eventHandle]() {
+            uint32_t address = 0;
+            if (XboxNetResolveIPv4(hostCopy.c_str(), &address) == 0) {
+                result->iStatus = 0;
+                result->cina = 1;
+                result->aina[0].s_addr = address;
+            } else {
+                result->iStatus = WSAHOST_NOT_FOUND;
+                result->cina = 0;
+            }
+            // Signal only after all result fields are published.
+            if (eventHandle) WSASetEvent(eventHandle);
+            ReleaseXNetWorkerReference();
+        }).detach();
+    } catch (...) {
+        ReleaseXNetWorkerReference();
         *output = nullptr;
-        return WSAGetLastError();
+        HeapFree(GetProcessHeap(), 0, result);
+        return WSAENOBUFS;
     }
     return 0;
 }
