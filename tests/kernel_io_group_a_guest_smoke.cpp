@@ -108,13 +108,22 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 extern "C" void KernelDispatch();
 extern "C" __declspec(naked) void __stdcall DispatchXcSHAInit(std::uint8_t*) {
-    __asm { push 335 jmp KernelDispatch }
+    __asm {
+        push 335
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) void __stdcall DispatchXcSHAUpdate(std::uint8_t*, std::uint8_t*, std::uint32_t) {
-    __asm { push 336 jmp KernelDispatch }
+    __asm {
+        push 336
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) void __stdcall DispatchXcSHAFinal(std::uint8_t*, std::uint8_t*) {
-    __asm { push 337 jmp KernelDispatch }
+    __asm {
+        push 337
+        jmp KernelDispatch
+    }
 }
 extern "C" void __stdcall K_KeQuerySystemTimeNative(LARGE_INTEGER*);
 extern "C" __declspec(naked) LONG __stdcall DispatchNtOpenDirectoryObject(HANDLE*, ULONG, void*) {
