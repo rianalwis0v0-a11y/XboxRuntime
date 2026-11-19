@@ -39,7 +39,7 @@ extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
         return 0;
     }
     if (XboxNetStartup() != 0)
-        return WSANETDOWN;
+        return WSAENETDOWN;
 
     std::memset(&g_startupParams, 0, sizeof(g_startupParams));
     if (params) std::memcpy(&g_startupParams, params, sizeof(g_startupParams));
