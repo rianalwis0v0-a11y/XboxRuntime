@@ -25,6 +25,31 @@
 #include "kernel_compat.h"
 
 extern "C" void KernelDispatch();
+extern "C" uint64_t XboxKernelGpuReadRegister(uint32_t offset,uint32_t accessSize,int* ok) {
+    return XboxGuestNV2AReadRegister(offset,accessSize,ok);
+}
+extern "C" int XboxKernelGpuWriteRegister(uint32_t offset,uint64_t value,uint32_t accessSize) {
+    return XboxGuestNV2AWriteRegister(offset,value,accessSize);
+}
+extern "C" int XboxKernelGpuSubmitMethod(uint32_t subchannel,uint32_t method,uint32_t parameter) {
+    return XboxGuestNV2ASubmitMethod(subchannel,method,parameter);
+}
+extern "C" int XboxKernelGpuFlush(void) {
+    return XboxGuestNV2AFlush();
+}
+extern "C" int XboxKernelGpuReadVRAM(uint32_t offset,void* destination,uint32_t length) {
+    return XboxGuestNV2AReadVRAM(offset,destination,length);
+}
+extern "C" int XboxKernelGpuWriteVRAM(uint32_t offset,const void* source,uint32_t length) {
+    return XboxGuestNV2AWriteVRAM(offset,source,length);
+}
+extern "C" int XboxKernelGpuReadRAMIN(uint32_t offset,void* destination,uint32_t length) {
+    return XboxGuestNV2AReadRAMIN(offset,destination,length);
+}
+extern "C" int XboxKernelGpuWriteRAMIN(uint32_t offset,const void* source,uint32_t length) {
+    return XboxGuestNV2AWriteRAMIN(offset,source,length);
+}
+
 namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;

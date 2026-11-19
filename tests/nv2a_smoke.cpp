@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+int RunNv2aRpcSmoke();
+
 using StartFn = int (__cdecl*)();
 using StopFn = void (__cdecl*)();
 using ReadFn = uint64_t (__cdecl*)(uint32_t, unsigned int);
@@ -72,6 +74,7 @@ static FARPROC Need(HMODULE module, const char* name) {
 }
 
 int main() {
+    if (RunNv2aRpcSmoke() != 0) return 1;
     std::vector<wchar_t> path(32768);
     DWORD n = GetModuleFileNameW(nullptr, path.data(), DWORD(path.size()));
     if (!n || n >= path.size()) {

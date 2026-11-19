@@ -4,6 +4,7 @@
 #include <string>
 #include <cwchar>
 #include <vector>
+#include "nv2a_rpc_protocol.h"
 
 namespace {
 constexpr uint32_t kReplyMagic=0x47584258;
@@ -18,17 +19,99 @@ struct Guest {
 } g;
 bool started=false;
 bool releaseSent=false;
+HANDLE rpcThread=nullptr;
+bool ExactRead(HANDLE h,void*p,DWORD n);
+bool ExactWrite(HANDLE h,const void*p,DWORD n);
+DWORD WINAPI ServeGpuRpc(void*) {
+ /* A malformed request or a broken host service must unblock the guest.
+  * Disconnect on every exit path, including validation/allocation failures. */
+ struct DisconnectOnExit {
+  HANDLE pipe;
+  ~DisconnectOnExit(){if(pipe&&pipe!=INVALID_HANDLE_VALUE)DisconnectNamedPipe(pipe);}
+ } disconnect{g.pipe};
+ HMODULE gpu=GetModuleHandleW(L"nv2a.dll");
+ using ReadFn=uint64_t (__cdecl*)(uint32_t,unsigned int);
+ using WriteFn=int (__cdecl*)(uint32_t,uint64_t,unsigned int);
+ using SubmitFn=int (__cdecl*)(uint32_t,uint32_t,uint32_t);
+ using FlushFn=void (__cdecl*)();
+ using MemoryReadFn=int (__cdecl*)(uint32_t,void*,uint32_t);
+ using MemoryWriteFn=int (__cdecl*)(uint32_t,const void*,uint32_t);
+ auto read=reinterpret_cast<ReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadRegister"):nullptr);
+ auto write=reinterpret_cast<WriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteRegister"):nullptr);
+ auto submit=reinterpret_cast<SubmitFn>(gpu?GetProcAddress(gpu,"XboxNV2A_SubmitMethod"):nullptr);
+ auto flush=reinterpret_cast<FlushFn>(gpu?GetProcAddress(gpu,"XboxNV2A_Flush"):nullptr);
+ auto readVram=reinterpret_cast<MemoryReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadVRAM"):nullptr);
+ auto writeVram=reinterpret_cast<MemoryWriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteVRAM"):nullptr);
+ auto readRamin=reinterpret_cast<MemoryReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadRAMIN"):nullptr);
+ auto writeRamin=reinterpret_cast<MemoryWriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteRAMIN"):nullptr);
+ while(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
+  XboxNV2ARpcRequest q{}; if(!ExactRead(g.pipe,&q,sizeof(q)))break;
+  if(q.magic!=XBOX_NV2A_RPC_MAGIC||q.version!=XBOX_NV2A_RPC_VERSION)break;
+  XboxNV2ARpcResponse a{XBOX_NV2A_RPC_MAGIC,XBOX_NV2A_RPC_VERSION,q.request_id,1,0};
+  std::vector<uint8_t> transfer;
+  bool sendTransfer=false;
+  switch(q.opcode){
+  case XBOX_NV2A_RPC_READ_REGISTER:
+   if(q.payload_size!=0)return 0;
+   if(read&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
+  case XBOX_NV2A_RPC_WRITE_REGISTER:
+   if(q.payload_size!=0)return 0;
+   if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)==0?0u:1u;}break;
+  case XBOX_NV2A_RPC_SUBMIT_METHOD:
+   if(q.payload_size!=0)return 0;
+   if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)==0?0u:1u;break;
+  case XBOX_NV2A_RPC_FLUSH:
+   if(q.payload_size!=0)return 0;
+   if(flush){flush();a.status=0;}break;
+  case XBOX_NV2A_RPC_READ_VRAM:
+  case XBOX_NV2A_RPC_READ_RAMIN: {
+   if(q.payload_size!=0)return 0;
+   if(q.arg1>XBOX_NV2A_RPC_MAX_TRANSFER)break;
+   try{transfer.resize(q.arg1);}catch(...){break;}
+   MemoryReadFn fn=q.opcode==XBOX_NV2A_RPC_READ_VRAM?readVram:readRamin;
+   if(fn&&(q.arg1==0||fn(q.arg0,transfer.data(),q.arg1)==0)){a.status=0;a.value=q.arg1;sendTransfer=true;}
+   break;
+  }
+  case XBOX_NV2A_RPC_WRITE_VRAM:
+  case XBOX_NV2A_RPC_WRITE_RAMIN: {
+   if(q.payload_size>XBOX_NV2A_RPC_MAX_TRANSFER)return 0;
+   try{transfer.resize(q.payload_size);}catch(...){return 0;}
+   if(q.payload_size&&!ExactRead(g.pipe,transfer.data(),q.payload_size))return 0;
+   if(q.payload_size!=q.arg1)break;
+   MemoryWriteFn fn=q.opcode==XBOX_NV2A_RPC_WRITE_VRAM?writeVram:writeRamin;
+   if(fn&&(q.arg1==0||fn(q.arg0,transfer.data(),q.arg1)==0))a.status=0;
+   break;
+  }
+  default:
+   if(q.payload_size!=0)return 0;
+   break;
+  }
+  if(!ExactWrite(g.pipe,&a,sizeof(a)))break;
+  if(sendTransfer&&q.arg1&&!ExactWrite(g.pipe,transfer.data(),q.arg1))break;
+ }
+ return 0;
+}
 std::wstring Quote(const std::wstring&s){std::wstring q=L"\"";for(wchar_t c:s){if(c==L'\"')q+=L'\\';q+=c;}q+=L'\"';return q;}
 bool ExactRead(HANDLE h,void*p,DWORD n){DWORD d=0;while(d<n){DWORD got=0;if(!ReadFile(h,static_cast<char*>(p)+d,n-d,&got,nullptr)||!got)return false;d+=got;}return true;}
 bool ExactWrite(HANDLE h,const void*p,DWORD n){DWORD d=0;while(d<n){DWORD sent=0;if(!WriteFile(h,static_cast<const char*>(p)+d,n-d,&sent,nullptr)||!sent)return false;d+=sent;}return true;}
 void StopGuest(){
  /* Zero is the explicit XBE launch-release command. Never send it while
   * unloading a guest that has not been approved for execution. */
- if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
-  if(!releaseSent){uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);}
-  CloseHandle(g.pipe);
+ if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE&&!releaseSent){
+  uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);
  }
- if(g.process){if(WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT)TerminateProcess(g.process,0);WaitForSingleObject(g.process,1000);}
+ /* Stop and join the synchronous pipe worker before closing its handle.
+  * This prevents the worker from racing a recycled HANDLE during teardown. */
+ if(rpcThread){
+  CancelSynchronousIo(rpcThread);
+  WaitForSingleObject(rpcThread,INFINITE);
+  CloseHandle(rpcThread);rpcThread=nullptr;
+ }
+ if(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE)CloseHandle(g.pipe);
+ if(g.process&&WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT){
+  TerminateProcess(g.process,0);
+  WaitForSingleObject(g.process,1000);
+ }
  if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};releaseSent=false;
 }
 std::wstring EepromPath() {
@@ -82,6 +165,8 @@ int StartGuest(const wchar_t*xbe){
  const uint8_t releaseCommand=0;
  if(!ExactWrite(pipe,&releaseCommand,1)){StopGuest();return XBE_E_PIPE;}
  releaseSent=true;
+ rpcThread=CreateThread(nullptr,0,ServeGpuRpc,nullptr,0,nullptr);
+ if(!rpcThread){StopGuest();return XBE_E_PIPE;}
  OutputDebugStringW(L"[XbeLoader] XBE mapped and explicitly released in dedicated native x86 guest process.\\n");
  return XBE_E_GUEST_STARTED;
 }
