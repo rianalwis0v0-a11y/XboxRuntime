@@ -335,6 +335,11 @@ extern "C" int WINAPI XNetUnregisterInAddr(IN_ADDR address) {
     return WSAEINVAL;
 }
 
+extern "C" int WINAPI XNetTsAddrToInAddr(const TSADDR* address, DWORD serviceId, const XNKID* keyId, IN_ADDR* output) {
+    if (!address || !keyId || !output || !serviceId) { WSASetLastError(WSAEINVAL); return WSAEINVAL; }
+    return XNetXnAddrToInAddr(address, keyId, output);
+}
+
 extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
     if (!buffer || capacity <= 0) return WSAEFAULT;
     // InetNtop writes directly to the caller's buffer and is thread-safe,
@@ -407,6 +412,42 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
     if (adapter->FirstGatewayAddress) flags |= 0x00000020u;
     if (adapter->FirstDnsServerAddress) flags |= 0x00000040u;
     return flags;
+}
+
+extern "C" DWORD WINAPI XNetGetDebugXnAddr(XNADDR* output) {
+    if (output) SecureZeroMemory(output, sizeof(*output));
+    // The host process has no separate Xbox debug-network adapter.
+    return 0x00000001u; // XNET_GET_XNADDR_NONE
+}
+
+extern "C" int WINAPI XNetGetXnAddrPlatform(const XNADDR* address, DWORD* platform) {
+    if (!address || !platform) { WSASetLastError(WSAEFAULT); return WSAEFAULT; }
+    XNADDR local{};
+    if (!XNetGetTitleXnAddr(&local)) { WSASetLastError(WSAENETDOWN); return WSAENETDOWN; }
+    if (address->ina.s_addr == local.ina.s_addr &&
+        std::memcmp(address->abEnet, local.abEnet, sizeof(local.abEnet)) == 0) {
+        *platform = 0x00000002u; // XNET_XNADDR_PLATFORM_WINPC
+        return 0;
+    }
+    WSASetLastError(WSAEOPNOTSUPP);
+    return WSAEOPNOTSUPP;
+}
+
+extern "C" DWORD WINAPI XNetGetBroadcastVersionStatus(BOOL) {
+    // No incompatible broadcast versions have been observed by this backend.
+    return 0;
+}
+
+extern "C" int WINAPI XNetGetSystemLinkPort(WORD* port) {
+    if (!port) { WSASetLastError(WSAEFAULT); return WSAEFAULT; }
+    *port = 3074;
+    return 0;
+}
+
+extern "C" int WINAPI XNetSetSystemLinkPort(WORD) {
+    // Port reservation is not implemented; never claim a port was secured.
+    WSASetLastError(WSAEOPNOTSUPP);
+    return WSAEOPNOTSUPP;
 }
 
 
