@@ -47,6 +47,19 @@ static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
 static_assert(sizeof(XNDNS) == 40, "XNDNS ABI size");
 
 extern "C" {
+int WINAPI XWSAStartup(WORD requestedVersion, LPWSADATA output);
+int WINAPI XWSACleanup();
+int WINAPI XSocketWSAGetLastError();
+void WINAPI XWSASetLastError(int error);
+WSAEVENT WINAPI XWSACreateEvent();
+BOOL WINAPI XWSACloseEvent(WSAEVENT eventHandle);
+BOOL WINAPI XWSASetEvent(WSAEVENT eventHandle);
+BOOL WINAPI XWSAResetEvent(WSAEVENT eventHandle);
+DWORD WINAPI XWSAWaitForMultipleEvents(DWORD count, const WSAEVENT* events,
+    BOOL waitAll, DWORD timeout, BOOL alertable);
+BOOL WINAPI XWSAFDIsSet(SOCKET socket, fd_set* set);
+int WINAPI XWSAEventSelect(SOCKET socket, WSAEVENT eventHandle, long networkEvents);
+
 int WINAPI XNetStartup(const XNetStartupParams* params);
 int WINAPI XNetCleanup();
 int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** result);
