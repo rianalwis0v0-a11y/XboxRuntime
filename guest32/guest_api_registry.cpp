@@ -4,7 +4,6 @@
 #include <cstring>
 #include <cstdint>
 #include <iterator>
-#include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <string>
@@ -25,6 +24,10 @@ const Entry kGuestApis[] = {
     GUEST_API(XNetCleanup),
     GUEST_API(XNetDnsLookup),
     GUEST_API(XNetDnsRelease),
+    GUEST_API(XNetRandom),
+    GUEST_API(XNetCreateKey),
+    GUEST_API(XNetRegisterKey),
+    GUEST_API(XNetUnregisterKey),
     GUEST_API(XNetInAddrToString),
     GUEST_API(XNetServerToInAddr),
     GUEST_API(XNetInAddrToServer),
