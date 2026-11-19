@@ -7,7 +7,7 @@
 
 int main() {
     static_assert(sizeof(void*) == 4, "registry test must run as x86");
-    assert(XboxGuestApiCount() == 66u);
+    assert(XboxGuestApiCount() == 72u);
     assert(XboxGuestApiLookup(nullptr) == 0u);
     assert(XboxGuestApiLookup("") == 0u);
     assert(XboxGuestApiLookup("XNetDefinitelyNotAnApi") == 0u);
@@ -22,6 +22,8 @@ int main() {
         "XSocketWSAFDIsSet", "XSocketWSAEventSelect", "XSocketWSASetLastError",
         "XNetRandom", "XNetCreateKey", "XNetRegisterKey", "XNetUnregisterKey",
         "XNetXnAddrToInAddr", "XNetInAddrToXnAddr", "XNetUnregisterInAddr",
+        "XNetTsAddrToInAddr", "XNetGetDebugXnAddr", "XNetGetXnAddrPlatform",
+        "XNetGetBroadcastVersionStatus", "XNetGetSystemLinkPort", "XNetSetSystemLinkPort",
         "XNetInAddrToString", "XNetServerToInAddr", "XNetInAddrToServer",
         "XNetGetEthernetLinkStatus", "XNetGetTitleXnAddr",
         "XSocketCreate", "XCreateSocket", "XSocketWSAGetOverlappedResult",
