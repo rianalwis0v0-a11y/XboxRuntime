@@ -14,3 +14,7 @@ void XboxKernelFlushEeprom();
 void XboxKernelSetTitlePath(const wchar_t* path);
 bool XboxKernelResolveImports(const XboxKernelState& image);
 DWORD WINAPI XboxKernelStartXbe(void* context);
+
+// Guest-process GPU service surface. Kernel compatibility implementations use
+// these routines rather than dereferencing host-process pointers or MMIO aliases.
+#include "nv2a_guest_rpc.h"
