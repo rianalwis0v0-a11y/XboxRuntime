@@ -3177,9 +3177,11 @@ bool XboxKernelProtectImage() {
             uint64_t(section.virtualAddress) + section.virtualSize >
                 uint64_t(g_base) + g_size)
             return false;
-        DWORD protection = (section.flags & 4u)
-            ? ((section.flags & 1u) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ)
-            : ((section.flags & 1u) ? PAGE_READWRITE : PAGE_READONLY);
+        // The original Xbox Pentium III has no NX bit: writable title pages
+        // are executable too. Preserve write permission from XBE flag 0, but
+        // do not translate a missing SECTION_EXECUTABLE bit into host DEP.
+        DWORD protection = (section.flags & 1u)
+            ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ;
         const uint64_t first = uint64_t(section.virtualAddress) & ~uint64_t(0xFFFu);
         const uint64_t last = (uint64_t(section.virtualAddress) +
             section.virtualSize + 0xFFFu) & ~uint64_t(0xFFFu);
@@ -3195,8 +3197,10 @@ bool XboxKernelProtectImage() {
             }
         }
     }
+    // The Xbox CPU also permits instruction fetches from the read-only
+    // header mapping; Windows DEP must not impose an NX restriction here.
     DWORD oldProtection = 0;
-    if (!VirtualProtect(g_image, g_headerSize, PAGE_READONLY, &oldProtection)) {
+    if (!VirtualProtect(g_image, g_headerSize, PAGE_EXECUTE_READ, &oldProtection)) {
         SetLastError(GetLastError() | 0x00020000u);
         return false;
     }
