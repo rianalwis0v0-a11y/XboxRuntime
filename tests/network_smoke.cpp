@@ -72,6 +72,13 @@ int main() {
         return 27;
     }
 
+    if (XSocketInet_Addr("127.0.0.1") != htonl(INADDR_LOOPBACK) ||
+        XSocketInet_Addr("not-an-ip") != INADDR_NONE ||
+        WSAGetLastError() != WSAEINVAL) {
+        XNetCleanup();
+        return 33;
+    }
+
     char addressText[16]{};
     IN_ADDR loopbackAddress{};
     loopbackAddress.s_addr = htonl(INADDR_LOOPBACK);
