@@ -5,6 +5,10 @@
 #include "xnet_compat.h"
 
 int main() {
+    if (XWSACleanup() != SOCKET_ERROR ||
+        WSAGetLastError() != WSANOTINITIALISED)
+        return 34;
+
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
     params.cfgKeyRegMax = 1;
