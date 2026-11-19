@@ -18,3 +18,10 @@ DWORD WINAPI XboxKernelStartXbe(void* context);
 // Guest-process GPU service surface. Kernel compatibility implementations use
 // these routines rather than dereferencing host-process pointers or MMIO aliases.
 #include "nv2a_guest_rpc.h"
+
+/* Kernel-facing NV2A service facade. These operations cross the guest/host
+ * process boundary through the versioned RPC transport. */
+uint64_t XboxKernelGpuReadRegister(uint32_t offset, uint32_t accessSize, int* ok);
+int XboxKernelGpuWriteRegister(uint32_t offset, uint64_t value, uint32_t accessSize);
+int XboxKernelGpuSubmitMethod(uint32_t subchannel, uint32_t method, uint32_t parameter);
+int XboxKernelGpuFlush(void);
