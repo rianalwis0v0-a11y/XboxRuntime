@@ -53,3 +53,16 @@ addresses, and invalid arguments set explicit Winsock errors.
 
 The TCP smoke test now checks listener readability through `XSocketSelect`
 before accepting the client, and verifies the XSocket last-error accessors.
+
+
+## Explicit Insignia resolver configuration and unsupported mappings
+
+The transport does not hard-code an Insignia DNS server. An optional resolver
+address can be supplied through `XBOX_RUNTIME_INSIGNIA_DNS_IPV4`. If the
+variable is absent or invalid, hostname resolution uses the Windows-configured
+resolver. This allows a local Insignia DNS responder to be selected explicitly
+without changing the host's global DNS settings.
+
+`XNetServerToInAddr` and `XNetInAddrToServer` currently return
+`WSAEOPNOTSUPP`: the service-ID address translation table is not implemented.
+They deliberately do not return the input address as a fake successful mapping.
