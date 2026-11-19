@@ -3,7 +3,16 @@
 Branch: `work/kernel-combined-clean-import`
 Catalogue: `tools/kernel_exports.json` (371 exports)
 Inputs: Group A status ledger and Group B mapping ledger.
-Scope: the 90 exports currently marked partial or explicitly unsupported. This is a host-backend design map, **not** a claim that these APIs are implemented.
+Scope: 84 exports remain partial or explicitly unsupported after six Group B exports were implemented and wired into the guest dispatcher. This is a host-backend design map, **not** a claim that these APIs are implemented.
+
+
+## Implemented since the initial mapping
+
+- `NtOpenDirectoryObject` (201): named-directory lookup and duplicated typed guest handles.
+- `NtSetSystemTime` (228): title-local virtual clock offset; host Windows clock is unchanged.
+- `ObReferenceObjectByHandle` (246), `ObReferenceObjectByPointer` (248), `ObfDereferenceObject` (250), and `ObfReferenceObject` (251): shared object-manager references and destruction lifecycle.
+
+These have guest ordinal-dispatch smoke tests; limitations remain documented in the Group B ledger and object-reference implementation notes.
 
 ## Mapping rules
 
@@ -51,7 +60,7 @@ Scope: the 90 exports currently marked partial or explicitly unsupported. This i
 | 181 | MmQueryStatistics | unsupported | Report runtime-owned Xbox pool/page/object counters using a verified guest MM_STATISTICS layout; do not return host process statistics as if they were Xbox values. |
 | 183 | MmUnmapIoSpace | unsupported | Release a mapping created by the runtime MMIO registry, validating base/length and mapping ownership. |
 
-## Group B — 57 explicitly unsupported exports
+## Group B — 51 explicitly unsupported exports (six implemented exports excluded)
 
 | Ordinal | Xbox export | Closest host mapping / implementation direction |
 |---:|---|---|
