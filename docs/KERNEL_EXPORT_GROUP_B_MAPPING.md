@@ -5,7 +5,7 @@ Base: `work/kernel-execution-backend` at `6076f0a144df82340d4d943b62b84e3dba199b
 
 ## Status
 
-All 57 Group B ordinals below now have explicit entries in `KernelDispatch` and route to the existing `K_Unsupported(ordinal)` fail-fast handler. This is **dispatch mapping only**. It does not claim that the Xbox API behavior is implemented or ABI-compatible. The handler raises a non-continuable unsupported-instruction exception rather than returning fake success.
+All 57 Group B ordinals have explicit `KernelDispatch` entries. Four object-reference exports now have real guest-ABI handlers and x86 dispatch smoke coverage; the other 53 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
 
 No signatures, structure layouts, host behavior, or calling conventions are asserted by this mapping-only change. Each API must be implemented in a follow-up with pinned-NXDK provenance, x86 guest-call tests, and appropriate host tests before its status can be upgraded.
 
@@ -27,11 +27,11 @@ No signatures, structure layouts, host behavior, or calling conventions are asse
 | 242 | `ObMakeTemporaryObject` | Explicit fail-fast route; behavior unsupported |
 | 243 | `ObOpenObjectByName` | Explicit fail-fast route; behavior unsupported |
 | 244 | `ObOpenObjectByPointer` | Explicit fail-fast route; behavior unsupported |
-| 246 | `ObReferenceObjectByHandle` | Explicit fail-fast route; behavior unsupported |
+| 246 | `ObReferenceObjectByHandle` | Implemented for shared-manager handles when `ObjectType == NULL`; x86 ordinal-dispatch tested; type descriptors/access checks remain unsupported |
 | 247 | `ObReferenceObjectByName` | Explicit fail-fast route; behavior unsupported |
-| 248 | `ObReferenceObjectByPointer` | Explicit fail-fast route; behavior unsupported |
-| 250 | `ObfDereferenceObject` | Explicit fail-fast route; behavior unsupported |
-| 251 | `ObfReferenceObject` | Explicit fail-fast route; behavior unsupported |
+| 248 | `ObReferenceObjectByPointer` | Implemented for shared-manager object bodies when `ObjectType == NULL`; x86 ordinal-dispatch tested; desired-access/access-mode checks remain unsupported |
+| 250 | `ObfDereferenceObject` | Implemented for shared-manager object bodies; final reference invokes registered destructor; x86 FASTCALL ordinal-dispatch tested |
+| 251 | `ObfReferenceObject` | Implemented for shared-manager object bodies; x86 FASTCALL ordinal-dispatch tested |
 | 252 | `PhyGetLinkState` | Explicit fail-fast route; behavior unsupported |
 | 253 | `PhyInitialize` | Explicit fail-fast route; behavior unsupported |
 | 255 | `PsCreateSystemThreadEx` | Explicit fail-fast route; behavior unsupported |
@@ -84,4 +84,4 @@ No signatures, structure layouts, host behavior, or calling conventions are asse
 - The I/O completion, file/device I/O, symbolic-link, and synchronization APIs already being worked on by Developers 3 and 4 must be coordinated rather than duplicated.
 - Kernel object manager exports must use the shared guest object-handle manager from Developer 2.
 - Thread/APC exports require the execution owner's approved thread identity and per-thread TLS lifecycle contract.
-- This branch does not change the XBE loader or execution backend and does not fix the independent real-XBE fault at `0x10018DC0`.
+- The four object-reference handlers are implemented in `kernel_object_reference.cpp` and routed by `KernelDispatch`; their current limitations are recorded in `docs/KERNEL_OBJECT_REFERENCE.md`. This does not fix the independent real-XBE fault at `0x10018DC0`.
