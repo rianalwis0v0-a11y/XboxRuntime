@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstring>
 #include "kernel_thread_exports.h"
+#include "kernel_object_manager.h"
+#include "kernel_object_reference.h"
 #include "fatx_provider.h"
 #include <vector>
 
@@ -101,6 +103,19 @@ extern "C" LONG __stdcall K_NtWriteFile(HANDLE, HANDLE, void*, void*,
 extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
     void*, ULONG, ULONG);
 extern "C" LONG __stdcall K_NtClose(HANDLE);
+extern "C" void KernelDispatch();
+extern "C" __declspec(naked) LONG __stdcall DispatchObReferenceObjectByHandle(HANDLE, void*, void**) {
+    __asm { push 246 jmp KernelDispatch }
+}
+extern "C" __declspec(naked) LONG __stdcall DispatchObReferenceObjectByPointer(void*, ULONG, void*, ULONG) {
+    __asm { push 248 jmp KernelDispatch }
+}
+extern "C" __declspec(naked) void __fastcall DispatchObfReferenceObject(void*) {
+    __asm { push 251 jmp KernelDispatch }
+}
+extern "C" __declspec(naked) void __fastcall DispatchObfDereferenceObject(void*) {
+    __asm { push 250 jmp KernelDispatch }
+}
 
 namespace {
 int Fail(int code, const char* message);
@@ -203,6 +218,8 @@ int Fail(int code, const char* message) { std::fprintf(stderr, "FAIL %d: %s\n", 
 volatile LONG g_deviceDeleteCalls = 0;
 volatile LONG g_startIoCalls = 0;
 volatile LONG g_dismountCalls = 0;
+volatile LONG g_objectDestroyed = 0;
+void DestroyDispatchTestObject(void*) { InterlockedIncrement(&g_objectDestroyed); }
 void* g_lastStartedIrp = nullptr;
 void __stdcall StartIoCallback(GuestDeviceObject*, void* irp) {
     g_lastStartedIrp = irp;
@@ -426,6 +443,28 @@ int main() {
     K_HalDisableSystemInterrupt(5);
     if (XboxKernelIsSystemInterruptEnabled(5) != FALSE)
         return Fail(38, "mask system interrupt");
+
+    // Exercise the four object-reference ordinals through the real import dispatcher.
+    int objectPayload = 0;
+    HANDLE objectHandle = XboxKernelCreateObjectHandle(
+        &objectPayload, XboxKernelObjectType::Event, DestroyDispatchTestObject);
+    if (!objectHandle) return Fail(48, "create object-reference dispatch fixture");
+    void* referencedObject = nullptr;
+    if (DispatchObReferenceObjectByHandle(objectHandle, nullptr, &referencedObject) != 0 ||
+        referencedObject != &objectPayload)
+        return Fail(49, "ObReferenceObjectByHandle dispatch");
+    DispatchObfReferenceObject(referencedObject);
+    DispatchObfDereferenceObject(referencedObject);
+    DispatchObfDereferenceObject(referencedObject);
+    if (DispatchObReferenceObjectByPointer(referencedObject, 0, nullptr, 0) != 0)
+        return Fail(50, "ObReferenceObjectByPointer dispatch");
+    DispatchObfDereferenceObject(referencedObject);
+    referencedObject = reinterpret_cast<void*>(1);
+    if (DispatchObReferenceObjectByHandle(reinterpret_cast<HANDLE>(1), nullptr,
+            &referencedObject) != static_cast<LONG>(0xC0000008u) || referencedObject != nullptr)
+        return Fail(51, "invalid object handle status/output");
+    if (!XboxKernelCloseObjectHandle(objectHandle) || g_objectDestroyed != 1)
+        return Fail(52, "object reference lifetime/close");
 
     const int filesystemStatus = TestFilesystemNtDispatch();
     if (filesystemStatus) return filesystemStatus;
