@@ -115,6 +115,7 @@ int main() {
     XNKEY mappingKey{};
     XNADDR peerXnAddr{};
     peerXnAddr.ina.s_addr = htonl(INADDR_LOOPBACK);
+    peerXnAddr.inaOnline.s_addr = htonl(INADDR_LOOPBACK);
     peerXnAddr.abEnet[0] = 0x02;
     peerXnAddr.abEnet[5] = 0x42;
     IN_ADDR peerInAddr{};
