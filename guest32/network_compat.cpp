@@ -59,7 +59,6 @@ uint32_t StoreSocket(SOCKET socket) {
 }
 // Insignia's documented primary DNS resolver. Query it directly so an ISP
 // DNS proxy cannot silently return the retired Xbox Live addresses.
-constexpr const char* kInsigniaDnsIPv4 = "46.101.64.175";
 volatile LONG g_dnsQueryId = 0;
 
 bool SkipDnsName(const uint8_t* packet, size_t length, size_t& offset) {
@@ -111,10 +110,20 @@ bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
     DWORD timeout = 1800;
     setsockopt(dns, SOL_SOCKET, SO_RCVTIMEO,
         reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    // An Insignia-aware resolver is opt-in and explicitly configured by the
+    // runtime. Never bake a service endpoint into the transport. If unset or
+    // invalid, Resolve() falls back to the Windows-configured DNS resolver.
+    char resolverAddress[64]{};
+    const DWORD resolverLength = GetEnvironmentVariableA(
+        "XBOX_RUNTIME_INSIGNIA_DNS_IPV4", resolverAddress,
+        static_cast<DWORD>(sizeof(resolverAddress)));
+    if (!resolverLength || resolverLength >= sizeof(resolverAddress))
+        return false;
     sockaddr_in server{};
     server.sin_family = AF_INET;
     server.sin_port = htons(53);
-    InetPtonA(AF_INET, kInsigniaDnsIPv4, &server.sin_addr);
+    if (InetPtonA(AF_INET, resolverAddress, &server.sin_addr) != 1)
+        return false;
     const int sent = sendto(dns, reinterpret_cast<const char*>(query),
         static_cast<int>(out), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
     uint8_t response[2048]{};
