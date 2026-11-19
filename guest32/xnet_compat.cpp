@@ -396,11 +396,11 @@ extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
 }
 
 extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
-    if (!output) return 0;
+    if (!output) return XNET_GET_XNADDR_NONE;
     std::memset(output, 0, sizeof(*output));
     std::vector<BYTE> storage;
     auto* adapter = FindUsableIPv4Adapter(storage);
-    if (!adapter) return 0;
+    if (!adapter) return XNET_GET_XNADDR_NONE;
     for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
         if (unicast->Address.lpSockaddr && unicast->Address.lpSockaddr->sa_family == AF_INET) {
             const auto* ip = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
@@ -408,16 +408,17 @@ extern "C" DWORD WINAPI XNetGetTitleXnAddr(XNADDR* output) {
         }
     }
     if (adapter->PhysicalAddressLength >= sizeof(output->abEnet)) std::memcpy(output->abEnet, adapter->PhysicalAddress, sizeof(output->abEnet));
-    DWORD flags = adapter->Dhcpv4Enabled ? 0x00000002u : 0x00000001u;
-    if (adapter->FirstGatewayAddress) flags |= 0x00000020u;
-    if (adapter->FirstDnsServerAddress) flags |= 0x00000040u;
+    DWORD flags = XNET_GET_XNADDR_ETHERNET |
+        (adapter->Dhcpv4Enabled ? XNET_GET_XNADDR_DHCP : XNET_GET_XNADDR_STATIC);
+    if (adapter->FirstGatewayAddress) flags |= XNET_GET_XNADDR_GATEWAY;
+    if (adapter->FirstDnsServerAddress) flags |= XNET_GET_XNADDR_DNS;
     return flags;
 }
 
 extern "C" DWORD WINAPI XNetGetDebugXnAddr(XNADDR* output) {
     if (output) SecureZeroMemory(output, sizeof(*output));
     // The host process has no separate Xbox debug-network adapter.
-    return 0x00000001u; // XNET_GET_XNADDR_NONE
+    return XNET_GET_XNADDR_NONE;
 }
 
 extern "C" int WINAPI XNetGetXnAddrPlatform(const XNADDR* address, DWORD* platform) {
@@ -426,7 +427,7 @@ extern "C" int WINAPI XNetGetXnAddrPlatform(const XNADDR* address, DWORD* platfo
     if (!XNetGetTitleXnAddr(&local)) { WSASetLastError(WSAENETDOWN); return WSAENETDOWN; }
     if (address->ina.s_addr == local.ina.s_addr &&
         std::memcmp(address->abEnet, local.abEnet, sizeof(local.abEnet)) == 0) {
-        *platform = 0x00000002u; // XNET_XNADDR_PLATFORM_WINPC
+        *platform = XNET_XNADDR_PLATFORM_WINPC;
         return 0;
     }
     WSASetLastError(WSAEOPNOTSUPP);
