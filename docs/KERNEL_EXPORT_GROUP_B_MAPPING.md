@@ -5,7 +5,7 @@ Base: `work/kernel-execution-backend` at `6076f0a144df82340d4d943b62b84e3dba199b
 
 ## Status
 
-All 57 Group B ordinals have explicit `KernelDispatch` entries. Five exports now have real guest-ABI handlers and x86 dispatch smoke coverage (four object-reference APIs plus `NtSetSystemTime`); the other 52 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
+All 57 Group B ordinals have explicit `KernelDispatch` entries. Six exports now have real guest-ABI handlers and x86 dispatch smoke coverage (four object-reference APIs, `NtSetSystemTime`, and `NtOpenDirectoryObject`); the other 51 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
 
 No signatures, structure layouts, host behavior, or calling conventions are asserted by this mapping-only change. Each API must be implemented in a follow-up with pinned-NXDK provenance, x86 guest-call tests, and appropriate host tests before its status can be upgraded.
 
@@ -13,7 +13,7 @@ No signatures, structure layouts, host behavior, or calling conventions are asse
 
 | Ordinal | Export | Status |
 |---:|---|---|
-| 201 | `NtOpenDirectoryObject` | Explicit fail-fast route; behavior unsupported |
+| 201 | `NtOpenDirectoryObject` | Implemented for named directories in the shared object namespace; duplicates typed guest handles; x86 ordinal-dispatch tested; access checks/root-relative lookup remain unsupported |
 | 203 | `NtOpenSymbolicLinkObject` | Explicit fail-fast route; behavior unsupported |
 | 206 | `NtQueueApcThread` | Explicit fail-fast route; behavior unsupported |
 | 208 | `NtQueryDirectoryObject` | Explicit fail-fast route; behavior unsupported |
