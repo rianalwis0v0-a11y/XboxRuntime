@@ -46,16 +46,21 @@ DWORD WINAPI ServeGpuRpc(void*) {
   bool sendTransfer=false;
   switch(q.opcode){
   case XBOX_NV2A_RPC_READ_REGISTER:
-   if(q.payload_size==0&&read&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
+   if(q.payload_size!=0)return 0;
+   if(read&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
   case XBOX_NV2A_RPC_WRITE_REGISTER:
-   if(q.payload_size==0&&write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)==0?0u:1u;}break;
+   if(q.payload_size!=0)return 0;
+   if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)==0?0u:1u;}break;
   case XBOX_NV2A_RPC_SUBMIT_METHOD:
-   if(q.payload_size==0&&submit)a.status=submit(q.arg0,q.arg1,q.arg2)==0?0u:1u;break;
+   if(q.payload_size!=0)return 0;
+   if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)==0?0u:1u;break;
   case XBOX_NV2A_RPC_FLUSH:
-   if(q.payload_size==0&&flush){flush();a.status=0;}break;
+   if(q.payload_size!=0)return 0;
+   if(flush){flush();a.status=0;}break;
   case XBOX_NV2A_RPC_READ_VRAM:
   case XBOX_NV2A_RPC_READ_RAMIN: {
-   if(q.payload_size!=0||q.arg1>XBOX_NV2A_RPC_MAX_TRANSFER)break;
+   if(q.payload_size!=0)return 0;
+   if(q.arg1>XBOX_NV2A_RPC_MAX_TRANSFER)break;
    try{transfer.resize(q.arg1);}catch(...){break;}
    MemoryReadFn fn=q.opcode==XBOX_NV2A_RPC_READ_VRAM?readVram:readRamin;
    if(fn&&(q.arg1==0||fn(q.arg0,transfer.data(),q.arg1)==0)){a.status=0;a.value=q.arg1;sendTransfer=true;}
@@ -63,9 +68,10 @@ DWORD WINAPI ServeGpuRpc(void*) {
   }
   case XBOX_NV2A_RPC_WRITE_VRAM:
   case XBOX_NV2A_RPC_WRITE_RAMIN: {
-   if(q.payload_size!=q.arg1||q.payload_size>XBOX_NV2A_RPC_MAX_TRANSFER)break;
-   try{transfer.resize(q.payload_size);}catch(...){break;}
+   if(q.payload_size>XBOX_NV2A_RPC_MAX_TRANSFER)return 0;
+   try{transfer.resize(q.payload_size);}catch(...){return 0;}
    if(q.payload_size&&!ExactRead(g.pipe,transfer.data(),q.payload_size))return 0;
+   if(q.payload_size!=q.arg1)break;
    MemoryWriteFn fn=q.opcode==XBOX_NV2A_RPC_WRITE_VRAM?writeVram:writeRamin;
    if(fn&&(q.arg1==0||fn(q.arg0,transfer.data(),q.arg1)==0))a.status=0;
    break;
