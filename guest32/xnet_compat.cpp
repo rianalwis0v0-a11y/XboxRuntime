@@ -529,6 +529,19 @@ extern "C" int WINAPI XSocketRecvFrom(SOCKET socket, char* buffer, int length, i
     return result;
 }
 
+extern "C" u_long WINAPI XSocketInet_Addr(const char* text) {
+    if (!text) {
+        WSASetLastError(WSAEFAULT);
+        return INADDR_NONE;
+    }
+    IN_ADDR address{};
+    if (InetPtonA(AF_INET, text, &address) != 1) {
+        WSASetLastError(WSAEINVAL);
+        return INADDR_NONE;
+    }
+    return address.s_addr;
+}
+
 extern "C" u_long WINAPI XSocketHTONL(u_long value) { return htonl(value); }
 extern "C" u_long WINAPI XSocketNTOHL(u_long value) { return ntohl(value); }
 extern "C" u_short WINAPI XSocketHTONS(u_short value) { return htons(value); }
