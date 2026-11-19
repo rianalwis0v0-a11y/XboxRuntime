@@ -65,6 +65,13 @@ int main() {
         XNetCleanup();
         return 14;
     }
+    if (XSocketSend(static_cast<SOCKET>(0xFFFFFFFEu), "x", 1, 0) != SOCKET_ERROR ||
+        WSAGetLastError() != WSAENOTSOCK ||
+        XSocketCreate(AF_INET, SOCK_RAW, IPPROTO_RAW) != INVALID_SOCKET ||
+        WSAGetLastError() != WSAESOCKTNOSUPPORT) {
+        XNetCleanup();
+        return 24;
+    }
     const uint32_t tcp = XboxNetSocketCreate(1);
     const uint32_t udp = XboxNetSocketCreate(2);
     if (!tcp || !udp || tcp == udp) {
