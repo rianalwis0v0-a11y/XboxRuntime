@@ -157,7 +157,12 @@ extern "C" LONG __stdcall K_NtOpenDirectoryObject(
     } catch (...) {
         return kStatusInsufficientResources;
     }
-    const std::string lookupName = FoldDirectoryName(name);
+    std::string lookupName;
+    try {
+        lookupName = FoldDirectoryName(name);
+    } catch (...) {
+        return kStatusInsufficientResources;
+    }
     if (lookupName.empty()) return kStatusInvalidParameter;
     HANDLE opened = nullptr;
     {
