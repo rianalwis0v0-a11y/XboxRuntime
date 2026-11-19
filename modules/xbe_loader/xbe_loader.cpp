@@ -58,8 +58,15 @@ void StopGuest(){
   if(!releaseSent){uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);}
   CloseHandle(g.pipe);
  }
- if(rpcThread){WaitForSingleObject(rpcThread,1500);CloseHandle(rpcThread);rpcThread=nullptr;}
- if(g.process){if(WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT)TerminateProcess(g.process,0);WaitForSingleObject(g.process,1000);}
+ if(g.process&&WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT){
+  TerminateProcess(g.process,0);
+  WaitForSingleObject(g.process,1000);
+ }
+ if(rpcThread){
+  CancelSynchronousIo(rpcThread);
+  WaitForSingleObject(rpcThread,INFINITE);
+  CloseHandle(rpcThread);rpcThread=nullptr;
+ }
  if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};releaseSent=false;
 }
 std::wstring EepromPath() {
