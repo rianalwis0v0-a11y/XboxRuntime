@@ -312,7 +312,7 @@ extern "C" SOCKET WINAPI XSocketCreate(int af, int type, int protocol) {
         const uint32_t handle = XboxNetSocketCreate(2);
         return handle ? static_cast<SOCKET>(handle) : INVALID_SOCKET;
     }
-    return INVALID_SOCKET;
+    return SocketHandleFailure(WSAESOCKTNOSUPPORT);
 }
 
 extern "C" int WINAPI XSocketClose(SOCKET socket) {
@@ -330,8 +330,10 @@ extern "C" int WINAPI XSocketBind(SOCKET socket, const sockaddr* address, int ad
 }
 
 extern "C" int WINAPI XSocketConnect(SOCKET socket, const sockaddr* address, int addressLength) {
-    if (socket == INVALID_SOCKET || !address || addressLength < static_cast<int>(sizeof(sockaddr_in)) ||
-        address->sa_family != AF_INET) return SOCKET_ERROR;
+    if (socket == INVALID_SOCKET) return SocketFailure(WSAENOTSOCK);
+    if (!address) return SocketFailure(WSAEFAULT);
+    if (addressLength < static_cast<int>(sizeof(sockaddr_in))) return SocketFailure(WSAEINVAL);
+    if (address->sa_family != AF_INET) return SocketFailure(WSAEAFNOSUPPORT);
     return XboxNetSocketConnectAddress(static_cast<uint32_t>(socket), address,
         static_cast<uint32_t>(addressLength));
 }
@@ -343,6 +345,8 @@ extern "C" int WINAPI XSocketListen(SOCKET socket, int backlog) {
 
 extern "C" SOCKET WINAPI XSocketAccept(SOCKET socket, sockaddr* address, int* addressLength) {
     if (socket == INVALID_SOCKET) return SocketHandleFailure(WSAENOTSOCK);
+    if ((address && !addressLength) || (!address && addressLength)) return SocketHandleFailure(WSAEFAULT);
+    if (addressLength && *addressLength < static_cast<int>(sizeof(sockaddr_in))) return SocketHandleFailure(WSAEINVAL);
     uint32_t length = addressLength && *addressLength > 0
         ? static_cast<uint32_t>(*addressLength) : 0;
     const uint32_t accepted = XboxNetSocketAccept(static_cast<uint32_t>(socket),
@@ -353,7 +357,7 @@ extern "C" SOCKET WINAPI XSocketAccept(SOCKET socket, sockaddr* address, int* ad
 }
 
 extern "C" int WINAPI XSocketShutdown(SOCKET socket, int how) {
-    if (socket == INVALID_SOCKET) return SOCKET_ERROR;
+    if (socket == INVALID_SOCKET) return SocketFailure(WSAENOTSOCK);
     return XboxNetSocketShutdown(static_cast<uint32_t>(socket), how);
 }
 
@@ -388,8 +392,9 @@ extern "C" int WINAPI XSocketGetSockName(SOCKET socket, sockaddr* address, int* 
 }
 
 extern "C" int WINAPI XSocketGetPeerName(SOCKET socket, sockaddr* address, int* addressLength) {
-    if (socket == INVALID_SOCKET || !address || !addressLength || *addressLength < static_cast<int>(sizeof(sockaddr_in)))
-        return SOCKET_ERROR;
+    if (socket == INVALID_SOCKET) return SocketFailure(WSAENOTSOCK);
+    if (!address || !addressLength) return SocketFailure(WSAEFAULT);
+    if (*addressLength < static_cast<int>(sizeof(sockaddr_in))) return SocketFailure(WSAEINVAL);
     uint32_t length = static_cast<uint32_t>(*addressLength);
     const int result = XboxNetSocketGetPeerName(static_cast<uint32_t>(socket), address, &length);
     if (result == 0) *addressLength = static_cast<int>(length);
@@ -404,7 +409,9 @@ extern "C" int WINAPI XSocketSend(SOCKET socket, const char* buffer, int length,
 }
 
 extern "C" int WINAPI XSocketRecv(SOCKET socket, char* buffer, int length, int flags) {
-    if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
+    if (socket == INVALID_SOCKET) return SocketFailure(WSAENOTSOCK);
+    if (length < 0) return SocketFailure(WSAEINVAL);
+    if (!buffer && length) return SocketFailure(WSAEFAULT);
     return XboxNetSocketReceive(static_cast<uint32_t>(socket), buffer, static_cast<uint32_t>(length), flags);
 }
 
@@ -422,7 +429,11 @@ extern "C" int WINAPI XSocketSendTo(SOCKET socket, const char* buffer, int lengt
 
 extern "C" int WINAPI XSocketRecvFrom(SOCKET socket, char* buffer, int length, int flags,
     sockaddr* from, int* fromLength) {
-    if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
+    if (socket == INVALID_SOCKET) return SocketFailure(WSAENOTSOCK);
+    if (length < 0) return SocketFailure(WSAEINVAL);
+    if (!buffer && length) return SocketFailure(WSAEFAULT);
+    if (from && !fromLength) return SocketFailure(WSAEFAULT);
+    if (from && *fromLength < static_cast<int>(sizeof(sockaddr_in))) return SocketFailure(WSAEINVAL);
     uint32_t address = 0;
     uint16_t port = 0;
     const int result = XboxNetSocketReceiveFrom(static_cast<uint32_t>(socket), buffer,
