@@ -55,6 +55,10 @@ The TCP smoke test now checks listener readability through `XSocketSelect`
 before accepting the client, and verifies the XSocket last-error accessors.
 
 
+## Overlapped socket I/O
+
+The XSocket layer exposes `XSocketWSARecv`, `XSocketWSARecvFrom`, `XSocketWSASend`, `XSocketWSASendTo`, `XSocketWSAGetOverlappedResult`, and `XSocketWSACancelOverlappedIO`. The wrappers preserve scatter/gather buffers, completion events, and completion-routine parameters while translating guest socket tokens to leased native sockets. Cancellation requests all outstanding I/O on the selected native socket. Original `XSocketWSA*` event helpers and `XCreateSocket` are registered under their XBE import names. The x86 smoke test covers overlapped TCP and UDP completion, including peer-address output.
+
 ## Explicit Insignia resolver configuration and unsupported mappings
 
 The transport does not hard-code an Insignia DNS server. An optional resolver
