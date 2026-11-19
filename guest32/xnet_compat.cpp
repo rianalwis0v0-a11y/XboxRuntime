@@ -328,8 +328,7 @@ extern "C" int WINAPI XWSAStartup(WORD requestedVersion, LPWSADATA output) {
 }
 
 extern "C" int WINAPI XWSACleanup() {
-    XboxNetCleanup();
-    return 0;
+    return XboxNetCleanup();
 }
 
 extern "C" int WINAPI XSocketWSAGetLastError() {
