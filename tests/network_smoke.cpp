@@ -106,7 +106,45 @@ int main() {
     }
     XSocketClose(receiver);
     XSocketClose(sender);
+
+    // Exercise the TCP listen/connect/accept/send/receive path on loopback.
+    const SOCKET listener = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const SOCKET client = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET || client == INVALID_SOCKET) {
+        if (listener != INVALID_SOCKET) XSocketClose(listener);
+        if (client != INVALID_SOCKET) XSocketClose(client);
+        XNetCleanup();
+        return 15;
+    }
+    sockaddr_in listenAddress{};
+    listenAddress.sin_family = AF_INET;
+    listenAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (XSocketBind(listener, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0 ||
+        XSocketListen(listener, 4) != 0) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 16;
+    }
+    int listenLength = sizeof(listenAddress);
+    if (XSocketGetSockName(listener, reinterpret_cast<sockaddr*>(&listenAddress), &listenLength) != 0 ||
+        XSocketConnect(client, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 17;
+    }
+    const SOCKET accepted = XSocketAccept(listener, nullptr, nullptr);
+    if (accepted == INVALID_SOCKET) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 18;
+    }
+    const char tcpPayload[] = "xnet-tcp-loopback";
+    if (XSocketSend(client, tcpPayload, sizeof(tcpPayload), 0) != sizeof(tcpPayload)) {
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 19;
+    }
+    char tcpReceived[64]{};
+    if (XSocketRecv(accepted, tcpReceived, sizeof(tcpReceived), 0) != sizeof(tcpPayload) ||
+        std::memcmp(tcpReceived, tcpPayload, sizeof(tcpPayload)) != 0) {
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 20;
+    }
+    XSocketClose(accepted);
+    XSocketClose(listener);
+    XSocketClose(client);
     XNetCleanup();
-    std::puts("network_smoke: XNet startup/DNS event, XSocket UDP loopback, TCP/UDP token lifecycle passed");
+    std::puts("network_smoke: async DNS, TCP/UDP loopback, key lifecycle, and socket error checks passed");
     return 0;
 }
