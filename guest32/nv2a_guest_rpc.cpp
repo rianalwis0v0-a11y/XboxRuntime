@@ -2,13 +2,9 @@
 #include <windows.h>
 #include <cstdint>
 #include "nv2a_guest_rpc.h"
+#include "nv2a_rpc_protocol.h"
 
 namespace {
-#pragma pack(push,1)
-struct Request { uint32_t magic,version,opcode,payloadSize,requestId,arg0,arg1,arg2,arg3; };
-struct Response { uint32_t magic,version,requestId,status; uint64_t value; };
-#pragma pack(pop)
-constexpr uint32_t kMagic=0x43525047u; // GPRC
 HANDLE g_pipe=nullptr;
 volatile LONG g_lock=0;
 uint32_t g_nextId=1;
@@ -25,9 +21,9 @@ bool ExactWrite(const void* data,DWORD bytes) {
 bool Call(uint32_t op,uint32_t a0,uint32_t a1,uint32_t a2,uint32_t a3,uint64_t* value) {
  if(!g_pipe||g_pipe==INVALID_HANDLE_VALUE)return false;
  while(InterlockedCompareExchange(&g_lock,1,0)!=0)SwitchToThread();
- Request q{kMagic,1,op,0,g_nextId++,a0,a1,a2,a3};
- Response r{};
- const bool ok=ExactWrite(&q,sizeof(q))&&ExactRead(&r,sizeof(r))&&r.magic==kMagic&&r.version==1&&r.requestId==q.requestId&&r.status==0;
+ XboxNV2ARpcRequest q{XBOX_NV2A_RPC_MAGIC,XBOX_NV2A_RPC_VERSION,op,0,g_nextId++,a0,a1,a2,a3};
+ XboxNV2ARpcResponse r{};
+ const bool ok=ExactWrite(&q,sizeof(q))&&ExactRead(&r,sizeof(r))&&r.magic==XBOX_NV2A_RPC_MAGIC&&r.version==XBOX_NV2A_RPC_VERSION&&r.request_id==q.request_id&&r.status==0;
  InterlockedExchange(&g_lock,0);
  if(ok&&value)*value=r.value;
  return ok;
