@@ -107,22 +107,40 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 extern "C" void KernelDispatch();
 extern "C" __declspec(naked) LONG __stdcall DispatchNtOpenDirectoryObject(HANDLE*, ULONG, void*) {
-    __asm { push 201 jmp KernelDispatch }
+    __asm {
+        push 201
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) LONG __stdcall DispatchNtSetSystemTime(LARGE_INTEGER*, LARGE_INTEGER*) {
-    __asm { push 228 jmp KernelDispatch }
+    __asm {
+        push 228
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) LONG __stdcall DispatchObReferenceObjectByHandle(HANDLE, void*, void**) {
-    __asm { push 246 jmp KernelDispatch }
+    __asm {
+        push 246
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) LONG __stdcall DispatchObReferenceObjectByPointer(void*, ULONG, void*, ULONG) {
-    __asm { push 248 jmp KernelDispatch }
+    __asm {
+        push 248
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) void __fastcall DispatchObfReferenceObject(void*) {
-    __asm { push 251 jmp KernelDispatch }
+    __asm {
+        push 251
+        jmp KernelDispatch
+    }
 }
 extern "C" __declspec(naked) void __fastcall DispatchObfDereferenceObject(void*) {
-    __asm { push 250 jmp KernelDispatch }
+    __asm {
+        push 250
+        jmp KernelDispatch
+    }
 }
 
 namespace {
