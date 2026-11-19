@@ -214,10 +214,10 @@ extern "C" int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* ou
 }
 
 extern "C" uint32_t __cdecl XboxNetSocketCreate(int type) {
-    if (type != 1 && type != 2) return 0;
+    if (type != 1 && type != 2) { WSASetLastError(WSAESOCKTNOSUPPORT); return 0; }
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (!g_startUsers) return 0;
+        if (!g_startUsers) { WSASetLastError(WSANOTINITIALISED); return 0; }
     }
     SOCKET socket = ::socket(AF_INET, type == 1 ? SOCK_STREAM : SOCK_DGRAM,
         type == 1 ? IPPROTO_TCP : IPPROTO_UDP);
@@ -225,13 +225,14 @@ extern "C" uint32_t __cdecl XboxNetSocketCreate(int type) {
 }
 
 extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostname, uint16_t port) {
+    if (!hostname || !*hostname) { WSASetLastError(WSAEFAULT); return -1; }
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
     if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
     sockaddr_in address{};
     int type = 0, size = sizeof(type);
-    if (getsockopt(socket, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &size) == SOCKET_ERROR ||
-        !Resolve(hostname, port, type, address)) return -1;
+    if (getsockopt(socket, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &size) == SOCKET_ERROR) return -1;
+    if (!Resolve(hostname, port, type, address)) { WSASetLastError(WSAHOST_NOT_FOUND); return -1; }
     return ::connect(socket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 ? 0 : -1;
 }
 
@@ -319,7 +320,8 @@ extern "C" int __cdecl XboxNetSocketListen(uint32_t handle, int backlog) {
 extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddress, uint32_t* addressLength) {
     SocketLease listenerLease = FindSocket(handle);
     SOCKET listener = listenerLease;
-    if (listener == INVALID_SOCKET) return 0;
+    if (listener == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return 0; }
+    if (rawAddress && !addressLength) { WSASetLastError(WSAEFAULT); return 0; }
     sockaddr_in peer{};
     int peerLength = sizeof(peer);
     SOCKET accepted = ::accept(listener,
@@ -329,6 +331,7 @@ extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddres
     if (rawAddress && addressLength) {
         if (*addressLength < sizeof(peer)) {
             closesocket(accepted);
+            WSASetLastError(WSAEINVAL);
             return 0;
         }
         std::memcpy(rawAddress, &peer, sizeof(peer));
