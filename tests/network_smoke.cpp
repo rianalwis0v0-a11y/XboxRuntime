@@ -44,6 +44,16 @@ int main() {
     XNetDnsRelease(dns);
     WSACloseEvent(dnsEvent);
 
+    IN_ADDR unmappedAddress{}, mappedAddress{};
+    unmappedAddress.s_addr = htonl(INADDR_LOOPBACK);
+    if (XNetServerToInAddr(unmappedAddress, 1, &mappedAddress) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP ||
+        XNetInAddrToServer(unmappedAddress, &mappedAddress) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP) {
+        XNetCleanup();
+        return 27;
+    }
+
     char addressText[16]{};
     IN_ADDR loopbackAddress{};
     loopbackAddress.s_addr = htonl(INADDR_LOOPBACK);
