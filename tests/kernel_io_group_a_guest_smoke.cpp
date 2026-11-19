@@ -7,6 +7,7 @@
 #include "kernel_object_manager.h"
 #include "kernel_object_reference.h"
 #include "kernel_time.h"
+#include "kernel_crypto.h"
 #include "kernel_directory_objects.h"
 #include "fatx_provider.h"
 #include <vector>
@@ -106,6 +107,15 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
     void*, ULONG, ULONG);
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 extern "C" void KernelDispatch();
+extern "C" __declspec(naked) void __stdcall DispatchXcSHAInit(std::uint8_t*) {
+    __asm { push 335 jmp KernelDispatch }
+}
+extern "C" __declspec(naked) void __stdcall DispatchXcSHAUpdate(std::uint8_t*, std::uint8_t*, std::uint32_t) {
+    __asm { push 336 jmp KernelDispatch }
+}
+extern "C" __declspec(naked) void __stdcall DispatchXcSHAFinal(std::uint8_t*, std::uint8_t*) {
+    __asm { push 337 jmp KernelDispatch }
+}
 extern "C" void __stdcall K_KeQuerySystemTimeNative(LARGE_INTEGER*);
 extern "C" __declspec(naked) LONG __stdcall DispatchNtOpenDirectoryObject(HANDLE*, ULONG, void*) {
     __asm {
@@ -533,6 +543,20 @@ int main() {
         return Fail(51, "invalid object handle status/output");
     if (!XboxKernelCloseObjectHandle(objectHandle) || g_objectDestroyed != 1)
         return Fail(52, "object reference lifetime/close");
+
+    // SHA-1 is exercised through the same ordinal thunk path used by XBE imports.
+    std::uint8_t shaContext[116]{};
+    std::uint8_t shaDigest[20]{};
+    std::uint8_t shaInput[] = {'a', 'b', 'c'};
+    DispatchXcSHAInit(shaContext);
+    DispatchXcSHAUpdate(shaContext, shaInput, sizeof(shaInput));
+    DispatchXcSHAFinal(shaContext, shaDigest);
+    const std::uint8_t expectedSha[20] = {
+        0xA9,0x99,0x3E,0x36,0x47,0x06,0x81,0x6A,0xBA,0x3E,
+        0x25,0x71,0x78,0x50,0xC2,0x6C,0x9C,0xD0,0xD8,0x9D
+    };
+    if (std::memcmp(shaDigest, expectedSha, sizeof(expectedSha)) != 0)
+        return Fail(60, "XcSHAInit/Update/Final ordinal dispatch");
 
     const int filesystemStatus = TestFilesystemNtDispatch();
     if (filesystemStatus) return filesystemStatus;
