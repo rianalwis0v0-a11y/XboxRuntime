@@ -166,6 +166,7 @@ int wmain(int argc,wchar_t**argv){
  /* Do not execute guest code until the controller has received the launch
   * reply and explicitly releases the XBE. */
  if(ok&&released&&r.status==OK){
+  XboxGuestNV2ASetPipe(pipe);
   xbeThread=CreateThread(nullptr,0,XboxKernelStartXbe,nullptr,0,nullptr);
   if(!xbeThread)ok=false;
  }
@@ -175,6 +176,7 @@ int wmain(int argc,wchar_t**argv){
   std::memcpy(&report,reinterpret_cast<const void*>(uintptr_t(reportVa)),sizeof(report));
   if(report.magic==0x54535258u)WriteExact(pipe,&report,sizeof(report));
  }
+ XboxGuestNV2ASetPipe(nullptr);
  XboxKernelFlushEeprom();
  Release();CloseHandle(pipe);return ok?0:4;
 }
