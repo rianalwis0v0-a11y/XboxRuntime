@@ -93,6 +93,29 @@ int main() {
         return 23;
     }
 
+    XNKID mappingKeyId{};
+    XNKEY mappingKey{};
+    XNADDR peerXnAddr{};
+    peerXnAddr.ina.s_addr = htonl(INADDR_LOOPBACK);
+    peerXnAddr.abEnet[0] = 0x02;
+    peerXnAddr.abEnet[5] = 0x42;
+    IN_ADDR peerInAddr{};
+    XNADDR roundTripXnAddr{};
+    XNKID roundTripKeyId{};
+    if (XNetCreateKey(&mappingKeyId, &mappingKey) != 0 ||
+        XNetRegisterKey(&mappingKeyId, &mappingKey) != 0 ||
+        XNetXnAddrToInAddr(&peerXnAddr, &mappingKeyId, &peerInAddr) != 0 ||
+        peerInAddr.s_addr != htonl(INADDR_LOOPBACK) ||
+        XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != 0 ||
+        std::memcmp(&roundTripXnAddr, &peerXnAddr, sizeof(peerXnAddr)) != 0 ||
+        std::memcmp(&roundTripKeyId, &mappingKeyId, sizeof(mappingKeyId)) != 0 ||
+        XNetUnregisterInAddr(peerInAddr) != 0 ||
+        XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != WSAEINVAL ||
+        XNetUnregisterKey(&mappingKeyId) != 0) {
+        XNetCleanup();
+        return 41;
+    }
+
     uint32_t loopback = 0;
     if (XboxNetResolveIPv4("localhost", &loopback) != 0 || loopback == 0) {
         XNetCleanup();
