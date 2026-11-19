@@ -186,7 +186,7 @@ target_include_directories(kernel_io_group_a_guest_smoke PRIVATE
 target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
-target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi)
+target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi bcrypt)
 add_test(NAME kernel_io_group_a_guest_smoke COMMAND kernel_io_group_a_guest_smoke)
 
 # Exercise real FATX and XDVDFS providers through the shared kernel bridge.
