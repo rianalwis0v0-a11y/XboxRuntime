@@ -380,6 +380,14 @@ extern "C" int WINAPI XWSAEventSelect(SOCKET socket, WSAEVENT eventHandle,
     return XboxNetSocketEventSelect(static_cast<uint32_t>(socket),
         eventHandle, networkEvents);
 }
+extern "C" WSAEVENT WINAPI XSocketWSACreateEvent() { return XWSACreateEvent(); }
+extern "C" BOOL WINAPI XSocketWSACloseEvent(WSAEVENT e) { return XWSACloseEvent(e); }
+extern "C" BOOL WINAPI XSocketWSASetEvent(WSAEVENT e) { return XWSASetEvent(e); }
+extern "C" BOOL WINAPI XSocketWSAResetEvent(WSAEVENT e) { return XWSAResetEvent(e); }
+extern "C" DWORD WINAPI XSocketWSAWaitForMultipleEvents(DWORD n, const WSAEVENT* e, BOOL all, DWORD ms, BOOL alertable) { return XWSAWaitForMultipleEvents(n,e,all,ms,alertable); }
+extern "C" BOOL WINAPI XSocketWSAFDIsSet(SOCKET s, fd_set* set) { return XWSAFDIsSet(s,set); }
+extern "C" int WINAPI XSocketWSAEventSelect(SOCKET s, WSAEVENT e, long events) { return XWSAEventSelect(s,e,events); }
+extern "C" void WINAPI XSocketWSASetLastError(int error) { XWSASetLastError(error); }
 
 extern "C" int WINAPI XSocketSelect(int, fd_set* readSet, fd_set* writeSet,
     fd_set* exceptSet, const timeval* timeout) {
@@ -392,6 +400,32 @@ extern "C" int WINAPI XSocketGetLastError() {
 
 extern "C" void WINAPI XSocketSetLastError(int error) {
     WSASetLastError(error);
+}
+
+extern "C" SOCKET WINAPI XCreateSocket(int af, int type, int protocol) { return XSocketCreate(af, type, protocol); }
+extern "C" BOOL WINAPI XSocketWSAGetOverlappedResult(SOCKET socket, LPWSAOVERLAPPED ov, LPDWORD transferred, BOOL wait, LPDWORD flags) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    return XboxNetSocketWSAGetOverlappedResult(static_cast<uint32_t>(socket), ov, transferred, wait, flags);
+}
+extern "C" int WINAPI XSocketWSACancelOverlappedIO(SOCKET socket) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    return XboxNetSocketWSACancelOverlappedIO(static_cast<uint32_t>(socket));
+}
+extern "C" int WINAPI XSocketWSARecv(SOCKET socket, LPWSABUF b, DWORD n, LPDWORD bytes, LPDWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    return XboxNetSocketWSARecv(static_cast<uint32_t>(socket), b, n, bytes, flags, ov, cb);
+}
+extern "C" int WINAPI XSocketWSARecvFrom(SOCKET socket, LPWSABUF b, DWORD n, LPDWORD bytes, LPDWORD flags, sockaddr* from, LPINT fromLen, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    return XboxNetSocketWSARecvFrom(static_cast<uint32_t>(socket), b, n, bytes, flags, from, fromLen, ov, cb);
+}
+extern "C" int WINAPI XSocketWSASend(SOCKET socket, LPWSABUF b, DWORD n, LPDWORD bytes, DWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    return XboxNetSocketWSASend(static_cast<uint32_t>(socket), b, n, bytes, flags, ov, cb);
+}
+extern "C" int WINAPI XSocketWSASendTo(SOCKET socket, LPWSABUF b, DWORD n, LPDWORD bytes, DWORD flags, const sockaddr* to, int toLen, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    return XboxNetSocketWSASendTo(static_cast<uint32_t>(socket), b, n, bytes, flags, to, toLen, ov, cb);
 }
 
 extern "C" int WINAPI XSocketClose(SOCKET socket) {
