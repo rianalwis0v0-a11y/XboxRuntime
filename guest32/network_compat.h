@@ -30,5 +30,11 @@ int __cdecl XboxNetSocketSetNonBlocking(uint32_t handle, int enabled);
 int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t milliseconds);
 int __cdecl XboxNetSocketSelect(fd_set* readSet, fd_set* writeSet, fd_set* exceptSet, const timeval* timeout);
 int __cdecl XboxNetSocketEventSelect(uint32_t handle, WSAEVENT eventHandle, long networkEvents);
+int __cdecl XboxNetSocketWSARecv(uint32_t handle, LPWSABUF buffers, DWORD count, LPDWORD bytes, LPDWORD flags, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+int __cdecl XboxNetSocketWSARecvFrom(uint32_t handle, LPWSABUF buffers, DWORD count, LPDWORD bytes, LPDWORD flags, sockaddr* from, LPINT fromLength, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+int __cdecl XboxNetSocketWSASend(uint32_t handle, LPWSABUF buffers, DWORD count, LPDWORD bytes, DWORD flags, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+int __cdecl XboxNetSocketWSASendTo(uint32_t handle, LPWSABUF buffers, DWORD count, LPDWORD bytes, DWORD flags, const sockaddr* to, int toLength, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+BOOL __cdecl XboxNetSocketWSAGetOverlappedResult(uint32_t handle, LPWSAOVERLAPPED overlapped, LPDWORD transferred, BOOL wait, LPDWORD flags);
+int __cdecl XboxNetSocketWSACancelOverlappedIO(uint32_t handle);
 int __cdecl XboxNetSocketClose(uint32_t handle);
 }
