@@ -34,6 +34,7 @@
 #include "kernel_object_reference.h"
 #include "kernel_filesystem_bridge.h"
 #include "kernel_time.h"
+#include "kernel_crypto.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -2266,6 +2267,22 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_set_io_completion
         cmp eax, 228
         je nt_set_system_time
+        cmp eax, 335
+        je xc_sha_init
+        cmp eax, 336
+        je xc_sha_update
+        cmp eax, 337
+        je xc_sha_final
+        cmp eax, 338
+        je xc_rc4_key
+        cmp eax, 339
+        je xc_rc4_crypt
+        cmp eax, 340
+        je xc_hmac
+        cmp eax, 346
+        je xc_des_key_parity
+        cmp eax, 350
+        je xc_crypt_service
         cmp eax, 59
         je io_allocate_irp
         cmp eax, 60
@@ -3049,6 +3066,14 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
     nt_set_system_time: jmp K_NtSetSystemTime
+    xc_sha_init: jmp K_XcSHAInit
+    xc_sha_update: jmp K_XcSHAUpdate
+    xc_sha_final: jmp K_XcSHAFinal
+    xc_rc4_key: jmp K_XcRC4Key
+    xc_rc4_crypt: jmp K_XcRC4Crypt
+    xc_hmac: jmp K_XcHMAC
+    xc_des_key_parity: jmp K_XcDESKeyParity
+    xc_crypt_service: jmp K_XcCryptService
     ob_reference_object_by_handle: jmp K_ObReferenceObjectByHandle
     ob_reference_object_by_pointer: jmp K_ObReferenceObjectByPointer
     obf_dereference_object: jmp K_ObfDereferenceObject
