@@ -55,6 +55,10 @@ The TCP smoke test now checks listener readability through `XSocketSelect`
 before accepting the client, and verifies the XSocket last-error accessors.
 
 
+## XNADDR address translation
+
+`XNetXnAddrToInAddr`, `XNetInAddrToXnAddr`, and `XNetUnregisterInAddr` now maintain a session-key-aware address map. The host backend returns a usable IPv4 address, preferring the peer's LAN address when it is on a local subnet and otherwise using `inaOnline` when available. Reverse lookup restores the original 36-byte `XNADDR` and optional `XNKID`; unregistering a key removes mappings tied to that key. This is an emulator host-address bridge, not the original console's synthetic `0.x.y.z` address space or encrypted IPsec transport.
+
 ## Overlapped socket I/O
 
 The XSocket layer exposes `XSocketWSARecv`, `XSocketWSARecvFrom`, `XSocketWSASend`, `XSocketWSASendTo`, `XSocketWSAGetOverlappedResult`, and `XSocketWSACancelOverlappedIO`. The wrappers preserve scatter/gather buffers, completion events, and completion-routine parameters while translating guest socket tokens to leased native sockets. Cancellation requests all outstanding I/O on the selected native socket. Original `XSocketWSA*` event helpers and `XCreateSocket` are registered under their XBE import names. The x86 smoke test covers overlapped TCP and UDP completion, including peer-address output.
