@@ -65,6 +65,9 @@ DWORD WINAPI XNetGetTitleXnAddr(XNADDR* address);
 extern "C" {
 SOCKET WINAPI XSocketCreate(int af, int type, int protocol);
 int WINAPI XSocketClose(SOCKET socket);
+int WINAPI XSocketSelect(int nfds, fd_set* readSet, fd_set* writeSet, fd_set* exceptSet, const timeval* timeout);
+int WINAPI XSocketGetLastError();
+void WINAPI XSocketSetLastError(int error);
 int WINAPI XSocketBind(SOCKET socket, const struct sockaddr* address, int addressLength);
 int WINAPI XSocketConnect(SOCKET socket, const struct sockaddr* address, int addressLength);
 int WINAPI XSocketListen(SOCKET socket, int backlog);
