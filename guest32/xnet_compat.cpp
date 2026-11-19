@@ -36,6 +36,31 @@ struct RegisteredKey {
     XNKEY key;
 };
 std::vector<RegisteredKey> g_registeredKeys;
+struct AddressMapping { IN_ADDR address; XNADDR xnaddr; XNKID keyId; bool hasKeyId; };
+std::vector<AddressMapping> g_addressMappings;
+
+bool IsIPv4OnLocalSubnet(IN_ADDR candidate) {
+    if (candidate.s_addr == htonl(INADDR_LOOPBACK)) return true;
+    ULONG bytes = 0;
+    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST,
+            nullptr, nullptr, &bytes) != ERROR_BUFFER_OVERFLOW || !bytes) return false;
+    std::vector<BYTE> storage;
+    try { storage.resize(bytes); } catch (...) { return false; }
+    auto* first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
+    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST,
+            nullptr, first, &bytes) != NO_ERROR) return false;
+    for (auto* adapter = first; adapter; adapter = adapter->Next) {
+        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
+            if (!unicast->Address.lpSockaddr || unicast->Address.lpSockaddr->sa_family != AF_INET) continue;
+            const auto* local = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
+            const ULONG prefix = unicast->OnLinkPrefixLength;
+            const ULONG mask = prefix == 0 ? 0 : htonl(0xFFFFFFFFu << (32 - prefix));
+            if ((local->sin_addr.s_addr & mask) == (candidate.s_addr & mask)) return true;
+        }
+    }
+    return false;
+}
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -82,6 +107,7 @@ extern "C" int WINAPI XNetCleanup() {
         for (auto& entry : g_registeredKeys)
             SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
+        g_addressMappings.clear();
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup complete.");
     }
@@ -224,9 +250,86 @@ extern "C" int WINAPI XNetUnregisterKey(const XNKID* keyId) {
         if (std::memcmp(it->id.ab, keyId->ab, sizeof(keyId->ab)) == 0) {
             SecureZeroMemory(&*it, sizeof(*it));
             g_registeredKeys.erase(it);
+            for (auto mapIt = g_addressMappings.begin(); mapIt != g_addressMappings.end();) {
+                if (mapIt->hasKeyId && std::memcmp(mapIt->keyId.ab, keyId->ab, sizeof(keyId->ab)) == 0)
+                    mapIt = g_addressMappings.erase(mapIt);
+                else ++mapIt;
+            }
             return 0;
         }
     }
+    return WSAEINVAL;
+}
+
+extern "C" int WINAPI XNetXnAddrToInAddr(const XNADDR* address, const XNKID* keyId, IN_ADDR* output) {
+    if (!address || !output) { WSASetLastError(WSAEFAULT); return WSAEFAULT; }
+    IN_ADDR selected = address->ina;
+    if (selected.s_addr == 0 || !IsIPv4OnLocalSubnet(selected)) {
+        if (address->inaOnline.s_addr) selected = address->inaOnline;
+    }
+    if (selected.s_addr == 0 || selected.s_addr == htonl(INADDR_ANY)) {
+        WSASetLastError(WSAEINVAL); return WSAEINVAL;
+    }
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) { WSASetLastError(WSANOTINITIALISED); return WSANOTINITIALISED; }
+    if (keyId) {
+        bool registered = false;
+        for (const auto& entry : g_registeredKeys)
+            if (std::memcmp(entry.id.ab, keyId->ab, sizeof(keyId->ab)) == 0) { registered = true; break; }
+        if (!registered) { WSASetLastError(WSAEINVAL); return WSAEINVAL; }
+    }
+    for (auto& mapping : g_addressMappings) {
+        if (mapping.address.s_addr == selected.s_addr) {
+            mapping.xnaddr = *address;
+            mapping.hasKeyId = keyId != nullptr;
+            if (keyId) mapping.keyId = *keyId;
+            *output = selected;
+            return 0;
+        }
+    }
+    try {
+        AddressMapping mapping{};
+        mapping.address = selected;
+        mapping.xnaddr = *address;
+        mapping.hasKeyId = keyId != nullptr;
+        if (keyId) mapping.keyId = *keyId;
+        g_addressMappings.push_back(mapping);
+    } catch (...) {
+        WSASetLastError(WSAENOBUFS); return WSAENOBUFS;
+    }
+    *output = selected;
+    return 0;
+}
+
+extern "C" int WINAPI XNetInAddrToXnAddr(IN_ADDR address, XNADDR* output, XNKID* keyId) {
+    if (!output) { WSASetLastError(WSAEFAULT); return WSAEFAULT; }
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) { WSASetLastError(WSANOTINITIALISED); return WSANOTINITIALISED; }
+    for (const auto& mapping : g_addressMappings) {
+        if (mapping.address.s_addr == address.s_addr) {
+            *output = mapping.xnaddr;
+            if (keyId) {
+                if (mapping.hasKeyId) *keyId = mapping.keyId;
+                else SecureZeroMemory(keyId, sizeof(*keyId));
+            }
+            return 0;
+        }
+    }
+    WSASetLastError(WSAEINVAL);
+    return WSAEINVAL;
+}
+
+extern "C" int WINAPI XNetUnregisterInAddr(IN_ADDR address) {
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) { WSASetLastError(WSANOTINITIALISED); return WSANOTINITIALISED; }
+    for (auto it = g_addressMappings.begin(); it != g_addressMappings.end(); ++it) {
+        if (it->address.s_addr == address.s_addr) {
+            SecureZeroMemory(&*it, sizeof(*it));
+            g_addressMappings.erase(it);
+            return 0;
+        }
+    }
+    WSASetLastError(WSAEINVAL);
     return WSAEINVAL;
 }
 
