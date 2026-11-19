@@ -221,6 +221,77 @@ int main() {
         std::memcmp(tcpReceived, tcpPayload, sizeof(tcpPayload)) != 0) {
         XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 20;
     }
+    WSAEVENT recvEvent = XSocketWSACreateEvent();
+    WSAEVENT sendEvent = XSocketWSACreateEvent();
+    WSAOVERLAPPED recvOv{};
+    WSAOVERLAPPED sendOv{};
+    recvOv.hEvent = recvEvent;
+    sendOv.hEvent = sendEvent;
+    char asyncBuffer[64]{};
+    WSABUF recvBuf{static_cast<ULONG>(sizeof(asyncBuffer)), asyncBuffer};
+    WSABUF sendBuf{static_cast<ULONG>(sizeof(tcpPayload)), const_cast<char*>(tcpPayload)};
+    DWORD asyncFlags = 0, asyncReceived = 0, asyncSent = 0;
+    if (!recvEvent || !sendEvent ||
+        XSocketWSARecv(accepted, &recvBuf, 1, nullptr, &asyncFlags, &recvOv, nullptr) != SOCKET_ERROR ||
+        XSocketWSAGetLastError() != WSA_IO_PENDING ||
+        XSocketWSASend(client, &sendBuf, 1, &asyncSent, 0, &sendOv, nullptr) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &recvEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XSocketWSAGetOverlappedResult(accepted, &recvOv, &asyncReceived, FALSE, &asyncFlags) ||
+        asyncReceived != sizeof(tcpPayload) ||
+        std::memcmp(asyncBuffer, tcpPayload, sizeof(tcpPayload)) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &sendEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XSocketWSAGetOverlappedResult(client, &sendOv, &asyncSent, FALSE, &asyncFlags) ||
+        asyncSent != sizeof(tcpPayload)) {
+        if (recvEvent) XSocketWSACloseEvent(recvEvent);
+        if (sendEvent) XSocketWSACloseEvent(sendEvent);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 34;
+    }
+    XSocketWSACloseEvent(recvEvent);
+    XSocketWSACloseEvent(sendEvent);
+
+    const SOCKET udpReceiver = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    const SOCKET udpSender = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    WSAEVENT udpEvent = XSocketWSACreateEvent();
+    sockaddr_in udpAddress{};
+    udpAddress.sin_family = AF_INET;
+    udpAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (udpReceiver == INVALID_SOCKET || udpSender == INVALID_SOCKET || !udpEvent ||
+        XSocketBind(udpReceiver, reinterpret_cast<sockaddr*>(&udpAddress), sizeof(udpAddress)) != 0) {
+        if (udpEvent) XSocketWSACloseEvent(udpEvent);
+        if (udpReceiver != INVALID_SOCKET) XSocketClose(udpReceiver);
+        if (udpSender != INVALID_SOCKET) XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 35;
+    }
+    int udpAddressLength = sizeof(udpAddress);
+    if (XSocketGetSockName(udpReceiver, reinterpret_cast<sockaddr*>(&udpAddress), &udpAddressLength) != 0) {
+        XSocketWSACloseEvent(udpEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 36;
+    }
+    WSAOVERLAPPED udpOv{};
+    udpOv.hEvent = udpEvent;
+    char udpBuffer[64]{};
+    WSABUF udpRecvBuf{static_cast<ULONG>(sizeof(udpBuffer)), udpBuffer};
+    sockaddr_in udpPeer{};
+    int udpPeerLength = sizeof(udpPeer);
+    DWORD udpFlags = 0, udpReceived = 0, udpSent = 0;
+    const char udpPayload[] = "xnet-overlapped-udp";
+    WSABUF udpSendBuf{static_cast<ULONG>(sizeof(udpPayload)), const_cast<char*>(udpPayload)};
+    if (XSocketWSARecvFrom(udpReceiver, &udpRecvBuf, 1, nullptr, &udpFlags,
+            reinterpret_cast<sockaddr*>(&udpPeer), &udpPeerLength, &udpOv, nullptr) != SOCKET_ERROR ||
+        XSocketWSAGetLastError() != WSA_IO_PENDING ||
+        XSocketWSASendTo(udpSender, &udpSendBuf, 1, &udpSent, 0,
+            reinterpret_cast<sockaddr*>(&udpAddress), sizeof(udpAddress), nullptr, nullptr) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &udpEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XSocketWSAGetOverlappedResult(udpReceiver, &udpOv, &udpReceived, FALSE, &udpFlags) ||
+        udpReceived != sizeof(udpPayload) ||
+        std::memcmp(udpBuffer, udpPayload, sizeof(udpPayload)) != 0 ||
+        udpPeer.sin_family != AF_INET || udpPeer.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+        XSocketWSACloseEvent(udpEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 37;
+    }
+    XSocketWSACloseEvent(udpEvent);
+    XSocketClose(udpReceiver);
+    XSocketClose(udpSender);
     XSocketClose(accepted);
     XSocketClose(listener);
     XSocketClose(client);
