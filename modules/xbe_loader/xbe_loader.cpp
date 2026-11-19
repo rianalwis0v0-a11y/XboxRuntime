@@ -24,6 +24,8 @@ struct GpuRpcRequest { uint32_t magic,version,opcode,payloadSize,requestId,arg0,
 struct GpuRpcResponse { uint32_t magic,version,requestId,status; uint64_t value; };
 #pragma pack(pop)
 constexpr uint32_t kGpuRpcMagic=0x43525047u; // GPRC
+bool ExactRead(HANDLE h,void*p,DWORD n);
+bool ExactWrite(HANDLE h,const void*p,DWORD n);
 DWORD WINAPI ServeGpuRpc(void*) {
  HMODULE gpu=GetModuleHandleW(L"nv2a.dll");
  using ReadFn=uint64_t (__cdecl*)(uint32_t,unsigned int);
@@ -60,6 +62,7 @@ void StopGuest(){
   if(!releaseSent){uint8_t abortCommand=1;ExactWrite(g.pipe,&abortCommand,1);}
   CloseHandle(g.pipe);
  }
+ if(rpcThread){WaitForSingleObject(rpcThread,1500);CloseHandle(rpcThread);rpcThread=nullptr;}
  if(g.process){if(WaitForSingleObject(g.process,1500)==WAIT_TIMEOUT)TerminateProcess(g.process,0);WaitForSingleObject(g.process,1000);}
  if(g.thread)CloseHandle(g.thread);if(g.process)CloseHandle(g.process);g={};releaseSent=false;
 }
@@ -114,6 +117,8 @@ int StartGuest(const wchar_t*xbe){
  const uint8_t releaseCommand=0;
  if(!ExactWrite(pipe,&releaseCommand,1)){StopGuest();return XBE_E_PIPE;}
  releaseSent=true;
+ rpcThread=CreateThread(nullptr,0,ServeGpuRpc,nullptr,0,nullptr);
+ if(!rpcThread){StopGuest();return XBE_E_PIPE;}
  OutputDebugStringW(L"[XbeLoader] XBE mapped and explicitly released in dedicated native x86 guest process.\\n");
  return XBE_E_GUEST_STARTED;
 }
