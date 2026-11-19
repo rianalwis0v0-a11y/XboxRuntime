@@ -18,6 +18,38 @@ struct Guest {
 } g;
 bool started=false;
 bool releaseSent=false;
+HANDLE rpcThread=nullptr;
+#pragma pack(push,1)
+struct GpuRpcRequest { uint32_t magic,version,opcode,payloadSize,requestId,arg0,arg1,arg2,arg3; };
+struct GpuRpcResponse { uint32_t magic,version,requestId,status; uint64_t value; };
+#pragma pack(pop)
+constexpr uint32_t kGpuRpcMagic=0x43525047u; // GPRC
+DWORD WINAPI ServeGpuRpc(void*) {
+ HMODULE gpu=GetModuleHandleW(L"nv2a.dll");
+ using ReadFn=uint64_t (__cdecl*)(uint32_t,unsigned int);
+ using WriteFn=int (__cdecl*)(uint32_t,uint64_t,unsigned int);
+ using SubmitFn=int (__cdecl*)(uint32_t,uint32_t,uint32_t);
+ using FlushFn=void (__cdecl*)();
+ auto read=reinterpret_cast<ReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadRegister"):nullptr);
+ auto write=reinterpret_cast<WriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteRegister"):nullptr);
+ auto submit=reinterpret_cast<SubmitFn>(gpu?GetProcAddress(gpu,"XboxNV2A_SubmitMethod"):nullptr);
+ auto flush=reinterpret_cast<FlushFn>(gpu?GetProcAddress(gpu,"XboxNV2A_Flush"):nullptr);
+ while(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
+  GpuRpcRequest q{}; if(!ExactRead(g.pipe,&q,sizeof(q)))break;
+  GpuRpcResponse a{kGpuRpcMagic,1,q.requestId,1,0};
+  if(q.magic==kGpuRpcMagic&&q.version==1&&q.payloadSize==0){
+   switch(q.opcode){
+   case 1: if(read&&q.arg1<=4&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
+   case 2: if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)?0u:1u;}break;
+   case 3: if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)?0u:1u;break;
+   case 4: if(flush){flush();a.status=0;}break;
+   default: break;
+   }
+  }
+  if(!ExactWrite(g.pipe,&a,sizeof(a)))break;
+ }
+ return 0;
+}
 std::wstring Quote(const std::wstring&s){std::wstring q=L"\"";for(wchar_t c:s){if(c==L'\"')q+=L'\\';q+=c;}q+=L'\"';return q;}
 bool ExactRead(HANDLE h,void*p,DWORD n){DWORD d=0;while(d<n){DWORD got=0;if(!ReadFile(h,static_cast<char*>(p)+d,n-d,&got,nullptr)||!got)return false;d+=got;}return true;}
 bool ExactWrite(HANDLE h,const void*p,DWORD n){DWORD d=0;while(d<n){DWORD sent=0;if(!WriteFile(h,static_cast<const char*>(p)+d,n-d,&sent,nullptr)||!sent)return false;d+=sent;}return true;}
