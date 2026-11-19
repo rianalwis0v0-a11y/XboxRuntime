@@ -7,7 +7,28 @@
 int main() {
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
+    params.cfgKeyRegMax = 1;
     if (XNetStartup(&params) != 0) return 1;
+
+    BYTE randomBytes[32]{};
+    if (XNetRandom(nullptr, sizeof(randomBytes)) != WSAEFAULT ||
+        XNetRandom(randomBytes, sizeof(randomBytes)) != 0)
+        return 11;
+    bool randomHasData = false;
+    for (BYTE value : randomBytes) randomHasData = randomHasData || value != 0;
+    if (!randomHasData) return 12;
+
+    XNKID firstId{}, secondId{};
+    XNKEY firstKey{}, secondKey{};
+    if (XNetCreateKey(&firstId, &firstKey) != 0 ||
+        XNetCreateKey(&secondId, &secondKey) != 0 ||
+        (firstId.ab[0] & 0xF0u) != 0 ||
+        XNetRegisterKey(&firstId, &firstKey) != 0 ||
+        XNetRegisterKey(&firstId, &firstKey) != WSAEALREADY ||
+        XNetRegisterKey(&secondId, &secondKey) != WSAENOMORE ||
+        XNetUnregisterKey(&firstId) != 0 ||
+        XNetUnregisterKey(&firstId) != WSAEINVAL)
+        return 13;
 
     WSAEVENT dnsEvent = WSACreateEvent();
     XNDNS* dns = nullptr;
