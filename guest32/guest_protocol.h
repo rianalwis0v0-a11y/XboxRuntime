@@ -2,7 +2,7 @@
 #include <cstdint>
 
 constexpr std::uint32_t XBOX_GUEST_PROTOCOL_MAGIC = 0x47584258u;
-constexpr std::uint32_t XBOX_GUEST_PROTOCOL_VERSION = 2u;
+constexpr std::uint32_t XBOX_GUEST_PROTOCOL_VERSION = 3u;
 
 enum XboxGuestCommand : std::uint32_t {
     XboxGuestResolveImports = 1u,
