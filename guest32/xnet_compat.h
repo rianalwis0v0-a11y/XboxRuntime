@@ -59,6 +59,14 @@ DWORD WINAPI XWSAWaitForMultipleEvents(DWORD count, const WSAEVENT* events,
     BOOL waitAll, DWORD timeout, BOOL alertable);
 BOOL WINAPI XWSAFDIsSet(SOCKET socket, fd_set* set);
 int WINAPI XWSAEventSelect(SOCKET socket, WSAEVENT eventHandle, long networkEvents);
+WSAEVENT WINAPI XSocketWSACreateEvent();
+BOOL WINAPI XSocketWSACloseEvent(WSAEVENT eventHandle);
+BOOL WINAPI XSocketWSASetEvent(WSAEVENT eventHandle);
+BOOL WINAPI XSocketWSAResetEvent(WSAEVENT eventHandle);
+DWORD WINAPI XSocketWSAWaitForMultipleEvents(DWORD count, const WSAEVENT* events, BOOL waitAll, DWORD timeout, BOOL alertable);
+BOOL WINAPI XSocketWSAFDIsSet(SOCKET socket, fd_set* set);
+int WINAPI XSocketWSAEventSelect(SOCKET socket, WSAEVENT eventHandle, long networkEvents);
+void WINAPI XSocketWSASetLastError(int error);
 
 int WINAPI XNetStartup(const XNetStartupParams* params);
 int WINAPI XNetCleanup();
@@ -77,6 +85,13 @@ DWORD WINAPI XNetGetTitleXnAddr(XNADDR* address);
 
 extern "C" {
 SOCKET WINAPI XSocketCreate(int af, int type, int protocol);
+SOCKET WINAPI XCreateSocket(int af, int type, int protocol);
+BOOL WINAPI XSocketWSAGetOverlappedResult(SOCKET socket, LPWSAOVERLAPPED overlapped, LPDWORD transferred, BOOL wait, LPDWORD flags);
+int WINAPI XSocketWSACancelOverlappedIO(SOCKET socket);
+int WINAPI XSocketWSARecv(SOCKET socket, LPWSABUF buffers, DWORD count, LPDWORD bytes, LPDWORD flags, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+int WINAPI XSocketWSARecvFrom(SOCKET socket, LPWSABUF buffers, DWORD count, LPDWORD bytes, LPDWORD flags, sockaddr* from, LPINT fromLength, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+int WINAPI XSocketWSASend(SOCKET socket, LPWSABUF buffers, DWORD count, LPDWORD bytes, DWORD flags, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
+int WINAPI XSocketWSASendTo(SOCKET socket, LPWSABUF buffers, DWORD count, LPDWORD bytes, DWORD flags, const sockaddr* to, int toLength, LPWSAOVERLAPPED overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE completion);
 int WINAPI XSocketClose(SOCKET socket);
 int WINAPI XSocketSelect(int nfds, fd_set* readSet, fd_set* writeSet, fd_set* exceptSet, const timeval* timeout);
 int WINAPI XSocketGetLastError();
