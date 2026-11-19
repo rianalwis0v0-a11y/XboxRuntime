@@ -28,23 +28,54 @@ DWORD WINAPI ServeGpuRpc(void*) {
  using WriteFn=int (__cdecl*)(uint32_t,uint64_t,unsigned int);
  using SubmitFn=int (__cdecl*)(uint32_t,uint32_t,uint32_t);
  using FlushFn=void (__cdecl*)();
+ using MemoryReadFn=int (__cdecl*)(uint32_t,void*,uint32_t);
+ using MemoryWriteFn=int (__cdecl*)(uint32_t,const void*,uint32_t);
  auto read=reinterpret_cast<ReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadRegister"):nullptr);
  auto write=reinterpret_cast<WriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteRegister"):nullptr);
  auto submit=reinterpret_cast<SubmitFn>(gpu?GetProcAddress(gpu,"XboxNV2A_SubmitMethod"):nullptr);
  auto flush=reinterpret_cast<FlushFn>(gpu?GetProcAddress(gpu,"XboxNV2A_Flush"):nullptr);
+ auto readVram=reinterpret_cast<MemoryReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadVRAM"):nullptr);
+ auto writeVram=reinterpret_cast<MemoryWriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteVRAM"):nullptr);
+ auto readRamin=reinterpret_cast<MemoryReadFn>(gpu?GetProcAddress(gpu,"XboxNV2A_ReadRAMIN"):nullptr);
+ auto writeRamin=reinterpret_cast<MemoryWriteFn>(gpu?GetProcAddress(gpu,"XboxNV2A_WriteRAMIN"):nullptr);
  while(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
   XboxNV2ARpcRequest q{}; if(!ExactRead(g.pipe,&q,sizeof(q)))break;
+  if(q.magic!=XBOX_NV2A_RPC_MAGIC||q.version!=XBOX_NV2A_RPC_VERSION)break;
   XboxNV2ARpcResponse a{XBOX_NV2A_RPC_MAGIC,XBOX_NV2A_RPC_VERSION,q.request_id,1,0};
-  if(q.magic==XBOX_NV2A_RPC_MAGIC&&q.version==XBOX_NV2A_RPC_VERSION&&q.payload_size==0){
-   switch(q.opcode){
-   case XBOX_NV2A_RPC_READ_REGISTER: if(read&&q.arg1<=4&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
-   case XBOX_NV2A_RPC_WRITE_REGISTER: if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)==0?0u:1u;}break;
-   case XBOX_NV2A_RPC_SUBMIT_METHOD: if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)==0?0u:1u;break;
-   case XBOX_NV2A_RPC_FLUSH: if(flush){flush();a.status=0;}break;
-   default: break;
-   }
+  std::vector<uint8_t> transfer;
+  bool sendTransfer=false;
+  switch(q.opcode){
+  case XBOX_NV2A_RPC_READ_REGISTER:
+   if(q.payload_size==0&&read&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
+  case XBOX_NV2A_RPC_WRITE_REGISTER:
+   if(q.payload_size==0&&write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)==0?0u:1u;}break;
+  case XBOX_NV2A_RPC_SUBMIT_METHOD:
+   if(q.payload_size==0&&submit)a.status=submit(q.arg0,q.arg1,q.arg2)==0?0u:1u;break;
+  case XBOX_NV2A_RPC_FLUSH:
+   if(q.payload_size==0&&flush){flush();a.status=0;}break;
+  case XBOX_NV2A_RPC_READ_VRAM:
+  case XBOX_NV2A_RPC_READ_RAMIN: {
+   if(q.payload_size!=0||q.arg1>XBOX_NV2A_RPC_MAX_TRANSFER)break;
+   try{transfer.resize(q.arg1);}catch(...){break;}
+   MemoryReadFn fn=q.opcode==XBOX_NV2A_RPC_READ_VRAM?readVram:readRamin;
+   if(fn&&(q.arg1==0||fn(q.arg0,transfer.data(),q.arg1)==0)){a.status=0;a.value=q.arg1;sendTransfer=true;}
+   break;
+  }
+  case XBOX_NV2A_RPC_WRITE_VRAM:
+  case XBOX_NV2A_RPC_WRITE_RAMIN: {
+   if(q.payload_size!=q.arg1||q.payload_size>XBOX_NV2A_RPC_MAX_TRANSFER)break;
+   try{transfer.resize(q.payload_size);}catch(...){break;}
+   if(q.payload_size&&!ExactRead(g.pipe,transfer.data(),q.payload_size))return 0;
+   MemoryWriteFn fn=q.opcode==XBOX_NV2A_RPC_WRITE_VRAM?writeVram:writeRamin;
+   if(fn&&(q.arg1==0||fn(q.arg0,transfer.data(),q.arg1)==0))a.status=0;
+   break;
+  }
+  default:
+   if(q.payload_size!=0)return 0;
+   break;
   }
   if(!ExactWrite(g.pipe,&a,sizeof(a)))break;
+  if(sendTransfer&&q.arg1&&!ExactWrite(g.pipe,transfer.data(),q.arg1))break;
  }
  return 0;
 }
