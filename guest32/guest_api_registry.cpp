@@ -63,6 +63,7 @@ const Entry kGuestApis[] = {
     GUEST_API(XSocketRecv),
     GUEST_API(XSocketSendTo),
     GUEST_API(XSocketRecvFrom),
+    GUEST_API(XSocketInet_Addr),
     GUEST_API(XSocketHTONL),
     GUEST_API(XSocketNTOHL),
     GUEST_API(XSocketHTONS),
