@@ -12,3 +12,5 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
   RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out"
   LIBRARY_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
 endforeach()
+
+target_include_directories(xbe_loader PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../guest32")
