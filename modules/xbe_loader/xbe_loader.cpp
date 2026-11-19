@@ -38,8 +38,8 @@ DWORD WINAPI ServeGpuRpc(void*) {
   if(q.magic==XBOX_NV2A_RPC_MAGIC&&q.version==XBOX_NV2A_RPC_VERSION&&q.payload_size==0){
    switch(q.opcode){
    case XBOX_NV2A_RPC_READ_REGISTER: if(read&&q.arg1<=4&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
-   case XBOX_NV2A_RPC_WRITE_REGISTER: if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)?0u:1u;}break;
-   case XBOX_NV2A_RPC_SUBMIT_METHOD: if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)?0u:1u;break;
+   case XBOX_NV2A_RPC_WRITE_REGISTER: if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)==0?0u:1u;}break;
+   case XBOX_NV2A_RPC_SUBMIT_METHOD: if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)==0?0u:1u;break;
    case XBOX_NV2A_RPC_FLUSH: if(flush){flush();a.status=0;}break;
    default: break;
    }
