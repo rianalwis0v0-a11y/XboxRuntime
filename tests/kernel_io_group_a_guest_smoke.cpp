@@ -514,6 +514,26 @@ int main() {
             static_cast<LONG>(0xC0000034u) || openedDirectory != nullptr)
         return Fail(59, "NtOpenDirectoryObject missing-name status");
 
+    // NtCreateDirectoryObject must validate every guest pointer before reading it.
+    if (K_NtCreateDirectoryObject(reinterpret_cast<HANDLE*>(1),
+            &directoryAttributes) != static_cast<LONG>(0xC0000005u))
+        return Fail(61, "NtCreateDirectoryObject invalid output pointer");
+    HANDLE invalidDirectoryOutput = reinterpret_cast<HANDLE>(1);
+    if (K_NtCreateDirectoryObject(&invalidDirectoryOutput,
+            reinterpret_cast<void*>(1)) != static_cast<LONG>(0xC0000005u) ||
+        invalidDirectoryOutput != nullptr)
+        return Fail(62, "NtCreateDirectoryObject invalid attributes pointer/output");
+    GuestAnsiString malformedDirectoryName = directoryName;
+    malformedDirectoryName.Length = 8;
+    malformedDirectoryName.MaximumLength = 4;
+    GuestObjectAttributes malformedDirectoryAttributes{};
+    malformedDirectoryAttributes.ObjectName = &malformedDirectoryName;
+    HANDLE malformedDirectoryOutput = reinterpret_cast<HANDLE>(1);
+    if (K_NtCreateDirectoryObject(&malformedDirectoryOutput,
+            &malformedDirectoryAttributes) != static_cast<LONG>(0xC000000Du) ||
+        malformedDirectoryOutput != nullptr)
+        return Fail(63, "NtCreateDirectoryObject rejects malformed string lengths");
+
     // NtSetSystemTime must alter only the title clock, never the host Windows clock.
     XboxKernelResetSystemTime();
     LARGE_INTEGER guestTimeBefore{}, requestedGuestTime{}, previousGuestTime{}, guestTimeAfter{};
