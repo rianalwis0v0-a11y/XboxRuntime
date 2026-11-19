@@ -390,9 +390,13 @@ extern "C" int __cdecl XboxKernelWaitForGuestExit(
     std::uint32_t timeoutMilliseconds, std::uint32_t* exitCode,
     std::uint32_t* tlsIndexCleared, std::uint32_t* exceptionInstruction,
     std::uint32_t* accessType, std::uint32_t* faultAddress,
-    std::uint32_t* faultProtection, std::uint32_t* faultState) {
+    std::uint32_t* faultProtection, std::uint32_t* faultState,
+    std::uint32_t* eax, std::uint32_t* ebx, std::uint32_t* ecx,
+    std::uint32_t* edx, std::uint32_t* esi, std::uint32_t* edi,
+    std::uint32_t* ebp, std::uint32_t* esp) {
     if (!exitCode || !tlsIndexCleared || !exceptionInstruction ||
-        !accessType || !faultAddress || !faultProtection || !faultState)
+        !accessType || !faultAddress || !faultProtection || !faultState ||
+        !eax || !ebx || !ecx || !edx || !esi || !edi || !ebp || !esp)
         return ERROR_INVALID_PARAMETER;
     std::lock_guard<std::mutex> lock(g_mutex);
     BackendContext& context = g_context;
@@ -418,6 +422,8 @@ extern "C" int __cdecl XboxKernelWaitForGuestExit(
     *faultAddress = reply.faultAddress;
     *faultProtection = reply.faultProtection;
     *faultState = reply.faultState;
+    *eax = reply.eax; *ebx = reply.ebx; *ecx = reply.ecx; *edx = reply.edx;
+    *esi = reply.esi; *edi = reply.edi; *ebp = reply.ebp; *esp = reply.esp;
     context.started = false;
     return ERROR_SUCCESS;
 }
