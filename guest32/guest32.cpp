@@ -23,6 +23,7 @@
 #include <vector>
 #include <algorithm>
 #include "kernel_compat.h"
+#include "nv2a_guest_rpc.h"
 
 namespace {
 constexpr uint32_t kHeaderMin=0x178, kSectionSize=56;
