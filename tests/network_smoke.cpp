@@ -72,6 +72,11 @@ int main() {
         XNetCleanup();
         return 24;
     }
+    XSocketSetLastError(WSAEINTR);
+    if (XSocketGetLastError() != WSAEINTR) {
+        XNetCleanup();
+        return 25;
+    }
     const uint32_t tcp = XboxNetSocketCreate(1);
     const uint32_t udp = XboxNetSocketCreate(2);
     if (!tcp || !udp || tcp == udp) {
@@ -144,6 +149,15 @@ int main() {
     if (XSocketGetSockName(listener, reinterpret_cast<sockaddr*>(&listenAddress), &listenLength) != 0 ||
         XSocketConnect(client, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0) {
         XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 17;
+    }
+    fd_set readable{};
+    FD_ZERO(&readable);
+    FD_SET(listener, &readable);
+    timeval selectTimeout{};
+    selectTimeout.tv_sec = 2;
+    const int selected = XSocketSelect(0, &readable, nullptr, nullptr, &selectTimeout);
+    if (selected != 1 || !FD_ISSET(listener, &readable)) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 26;
     }
     const SOCKET accepted = XSocketAccept(listener, nullptr, nullptr);
     if (accepted == INVALID_SOCKET) {
