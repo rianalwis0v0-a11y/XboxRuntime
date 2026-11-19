@@ -7,6 +7,7 @@
 #include "kernel_object_manager.h"
 #include "kernel_object_reference.h"
 #include "kernel_time.h"
+#include "kernel_directory_objects.h"
 #include "fatx_provider.h"
 #include <vector>
 
@@ -105,6 +106,9 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
     void*, ULONG, ULONG);
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 extern "C" void KernelDispatch();
+extern "C" __declspec(naked) LONG __stdcall DispatchNtOpenDirectoryObject(HANDLE*, ULONG, void*) {
+    __asm { push 201 jmp KernelDispatch }
+}
 extern "C" __declspec(naked) LONG __stdcall DispatchNtSetSystemTime(LARGE_INTEGER*, LARGE_INTEGER*) {
     __asm { push 228 jmp KernelDispatch }
 }
@@ -447,6 +451,30 @@ int main() {
     K_HalDisableSystemInterrupt(5);
     if (XboxKernelIsSystemInterruptEnabled(5) != FALSE)
         return Fail(38, "mask system interrupt");
+
+    // Named directory handles share object identity and survive closing the original handle.
+    char directoryPath[] = "\\BaseNamedObjects\\XboxRuntimeDispatchSmoke";
+    GuestAnsiString directoryName{};
+    directoryName.Length = static_cast<USHORT>(std::strlen(directoryPath));
+    directoryName.MaximumLength = directoryName.Length;
+    directoryName.Buffer = directoryPath;
+    GuestObjectAttributes directoryAttributes{};
+    directoryAttributes.ObjectName = &directoryName;
+    HANDLE createdDirectory = nullptr;
+    if (K_NtCreateDirectoryObject(&createdDirectory, &directoryAttributes) != 0 || !createdDirectory)
+        return Fail(56, "NtCreateDirectoryObject fixture");
+    HANDLE openedDirectory = nullptr;
+    if (DispatchNtOpenDirectoryObject(&openedDirectory, 0, &directoryAttributes) != 0 ||
+        !openedDirectory || openedDirectory == createdDirectory)
+        return Fail(57, "NtOpenDirectoryObject ordinal dispatch");
+    if (!XboxKernelCloseObjectHandle(createdDirectory) ||
+        !XboxKernelIsObjectHandle(openedDirectory) ||
+        !XboxKernelCloseObjectHandle(openedDirectory))
+        return Fail(58, "directory handle reference lifetime");
+    openedDirectory = reinterpret_cast<HANDLE>(1);
+    if (DispatchNtOpenDirectoryObject(&openedDirectory, 0, &directoryAttributes) !=
+            static_cast<LONG>(0xC0000034u) || openedDirectory != nullptr)
+        return Fail(59, "NtOpenDirectoryObject missing-name status");
 
     // NtSetSystemTime must alter only the title clock, never the host Windows clock.
     XboxKernelResetSystemTime();
