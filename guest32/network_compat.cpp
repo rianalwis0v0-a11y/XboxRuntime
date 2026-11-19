@@ -58,8 +58,7 @@ uint32_t StoreSocket(SOCKET socket) {
     closesocket(socket);
     return 0;
 }
-// Insignia's documented primary DNS resolver. Query it directly so an ISP
-// DNS proxy cannot silently return the retired Xbox Live addresses.
+// Optional Insignia DNS endpoint is configured explicitly by the runtime.
 volatile LONG g_dnsQueryId = 0;
 
 bool SkipDnsName(const uint8_t* packet, size_t length, size_t& offset) {
@@ -118,13 +117,11 @@ bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
     const DWORD resolverLength = GetEnvironmentVariableA(
         "XBOX_RUNTIME_INSIGNIA_DNS_IPV4", resolverAddress,
         static_cast<DWORD>(sizeof(resolverAddress)));
-    if (!resolverLength || resolverLength >= sizeof(resolverAddress))
-        return false;
+    if (!resolverLength || resolverLength >= sizeof(resolverAddress)) { closesocket(dns); return false; }
     sockaddr_in server{};
     server.sin_family = AF_INET;
     server.sin_port = htons(53);
-    if (InetPtonA(AF_INET, resolverAddress, &server.sin_addr) != 1)
-        return false;
+    if (InetPtonA(AF_INET, resolverAddress, &server.sin_addr) != 1) { closesocket(dns); return false; }
     const int sent = sendto(dns, reinterpret_cast<const char*>(query),
         static_cast<int>(out), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
     uint8_t response[2048]{};
@@ -525,6 +522,46 @@ extern "C" int __cdecl XboxNetSocketEventSelect(
     if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
     if (!eventHandle) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
     return WSAEventSelect(socket, eventHandle, networkEvents);
+}
+
+extern "C" int __cdecl XboxNetSocketWSARecv(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, LPDWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    return WSARecv(s,b,n,bytes,flags,ov,cb);
+}
+extern "C" int __cdecl XboxNetSocketWSARecvFrom(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, LPDWORD flags, sockaddr* from, LPINT fromLen, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if ((from && !fromLen) || (!from && fromLen)) { WSASetLastError(WSAEFAULT); return SOCKET_ERROR; }
+    return WSARecvFrom(s,b,n,bytes,flags,from,fromLen,ov,cb);
+}
+extern "C" int __cdecl XboxNetSocketWSASend(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, DWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    return WSASend(s,b,n,bytes,flags,ov,cb);
+}
+extern "C" int __cdecl XboxNetSocketWSASendTo(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, DWORD flags, const sockaddr* to, int toLen, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if (!to) { WSASetLastError(WSAEFAULT); return SOCKET_ERROR; }
+    if (toLen < static_cast<int>(sizeof(sockaddr_in))) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
+    if (to->sa_family != AF_INET) { WSASetLastError(WSAEAFNOSUPPORT); return SOCKET_ERROR; }
+    return WSASendTo(s,b,n,bytes,flags,to,toLen,ov,cb);
+}
+extern "C" BOOL __cdecl XboxNetSocketWSAGetOverlappedResult(uint32_t h, LPWSAOVERLAPPED ov, LPDWORD transferred, BOOL wait, LPDWORD flags) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return FALSE; }
+    if (!ov || !transferred || !flags) { WSASetLastError(WSAEFAULT); return FALSE; }
+    return WSAGetOverlappedResult(s,ov,transferred,wait,flags);
+}
+extern "C" int __cdecl XboxNetSocketWSACancelOverlappedIO(uint32_t h) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if (CancelIoEx(reinterpret_cast<HANDLE>(s),nullptr)) return 0;
+    DWORD e=GetLastError();
+    if (e==ERROR_NOT_FOUND) return 0;
+    WSASetLastError(e==ERROR_INVALID_HANDLE ? WSAENOTSOCK : WSAEINVAL);
+    return SOCKET_ERROR;
 }
 
 extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
