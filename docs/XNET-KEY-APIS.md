@@ -66,3 +66,21 @@ without changing the host's global DNS settings.
 `XNetServerToInAddr` and `XNetInAddrToServer` currently return
 `WSAEOPNOTSUPP`: the service-ID address translation table is not implemented.
 They deliberately do not return the input address as a fake successful mapping.
+
+
+## WSA startup, events, and event-driven sockets
+
+The guest now exposes the documented XWSA startup/cleanup and event helper
+surface: `XWSAStartup`, `XWSACleanup`, `XWSACreateEvent`,
+`XWSACloseEvent`, `XWSASetEvent`, `XWSAResetEvent`, and
+`XWSAWaitForMultipleEvents`. Startup references share the transport's
+Winsock lifetime counter, so XNet and XWSA startup/cleanup can be nested
+without prematurely shutting Winsock down.
+
+`XWSAFDIsSet` checks guest socket tokens rather than host SOCKET values.
+`XWSAEventSelect` resolves a guest token to a leased native socket before
+calling Winsock's event-selection API; native event selection's nonblocking
+socket behavior is preserved.
+
+The networking smoke test verifies WSA 2.2 startup, event create/set/wait/
+reset/close, UDP FD_READ event signaling, and guest-token readiness checks.
