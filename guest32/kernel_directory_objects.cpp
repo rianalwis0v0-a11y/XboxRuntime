@@ -83,24 +83,46 @@ void DestroyDirectoryObject(void* raw) {
 
 extern "C" LONG __stdcall K_NtCreateDirectoryObject(
     HANDLE* directoryHandle, void* rawAttributes) {
-    if (!directoryHandle || !rawAttributes) return LONG(0xC000000Du);
-    *directoryHandle = nullptr;
-    const auto* attributes =
-        static_cast<const GuestObjectAttributesDirectory*>(rawAttributes);
-    if (attributes->RootDirectory) return LONG(0xC00000BBu);
+    constexpr LONG kStatusAccessViolation = static_cast<LONG>(0xC0000005u);
+    constexpr LONG kStatusInvalidParameter = static_cast<LONG>(0xC000000Du);
+    constexpr LONG kStatusInsufficientResources = static_cast<LONG>(0xC000009Au);
+
+    if (!GuestSpanAccessible(directoryHandle, sizeof(*directoryHandle), true))
+        return kStatusAccessViolation;
+    const HANDLE empty = nullptr;
+    std::memcpy(directoryHandle, &empty, sizeof(empty));
+    if (!GuestSpanAccessible(rawAttributes, sizeof(GuestObjectAttributesDirectory), false))
+        return kStatusAccessViolation;
+
+    GuestObjectAttributesDirectory attributes{};
+    std::memcpy(&attributes, rawAttributes, sizeof(attributes));
+    if (attributes.RootDirectory) return LONG(0xC00000BBu);
+
+    std::string name;
+    if (attributes.ObjectName) {
+        if (!GuestSpanAccessible(attributes.ObjectName,
+                                 sizeof(GuestAnsiStringDirectory), false))
+            return kStatusAccessViolation;
+        GuestAnsiStringDirectory objectName{};
+        std::memcpy(&objectName, attributes.ObjectName, sizeof(objectName));
+        if (objectName.Length > objectName.MaximumLength ||
+            objectName.Length > 0x1000 ||
+            (objectName.Length &&
+             !GuestSpanAccessible(objectName.Buffer, objectName.Length, false)))
+            return kStatusInvalidParameter;
+        if (objectName.Length) {
+            try {
+                name.assign(objectName.Buffer, objectName.Length);
+            } catch (...) {
+                return kStatusInsufficientResources;
+            }
+        }
+    }
+
     GuestDirectoryObject* object = nullptr;
     try {
-        std::string name;
-        if (attributes->ObjectName) {
-            const auto* objectName = attributes->ObjectName;
-            if ((objectName->Length && !objectName->Buffer) ||
-                objectName->Length > objectName->MaximumLength)
-                return LONG(0xC000000Du);
-            if (objectName->Length)
-                name.assign(objectName->Buffer, objectName->Length);
-        }
         object = new (std::nothrow) GuestDirectoryObject{};
-        if (!object) return LONG(0xC0000017u);
+        if (!object) return kStatusInsufficientResources;
         object->name = std::move(name);
         object->lookupName = FoldDirectoryName(object->name);
         if (!object->lookupName.empty()) {
@@ -115,15 +137,15 @@ extern "C" LONG __stdcall K_NtCreateDirectoryObject(
             object, XboxKernelObjectType::Directory, DestroyDirectoryObject);
         if (!handle) {
             DestroyDirectoryObject(object);
-            return LONG(0xC0000017u);
+            return kStatusInsufficientResources;
         }
         object->handle = handle;
-        *directoryHandle = handle;
+        std::memcpy(directoryHandle, &handle, sizeof(handle));
         object = nullptr; // ownership transferred to the object manager
         return 0;
     } catch (...) {
         if (object) DestroyDirectoryObject(object);
-        return LONG(0xC0000017u);
+        return kStatusInsufficientResources;
     }
 }
 
