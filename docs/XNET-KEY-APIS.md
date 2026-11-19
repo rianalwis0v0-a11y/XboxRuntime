@@ -84,3 +84,11 @@ socket behavior is preserved.
 
 The networking smoke test verifies WSA 2.2 startup, event create/set/wait/
 reset/close, UDP FD_READ event signaling, and guest-token readiness checks.
+
+
+## IPv4 literal helper
+
+`XSocketInet_Addr` parses dotted-decimal IPv4 literals into network-byte-order
+addresses. Null input returns `INADDR_NONE` with `WSAEFAULT`; malformed
+literals return `INADDR_NONE` with `WSAEINVAL`. Hostname resolution remains
+the responsibility of the asynchronous XNet DNS path.
