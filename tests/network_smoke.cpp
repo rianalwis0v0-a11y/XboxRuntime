@@ -10,6 +10,24 @@ int main() {
     params.cfgKeyRegMax = 1;
     if (XNetStartup(&params) != 0) return 1;
 
+    WSADATA startupData{};
+    if (XWSAStartup(MAKEWORD(2, 2), &startupData) != 0 ||
+        startupData.wVersion != MAKEWORD(2, 2)) {
+        XNetCleanup();
+        return 28;
+    }
+    WSAEVENT eventProbe = XWSACreateEvent();
+    if (!eventProbe || !XWSASetEvent(eventProbe) ||
+        XWSAWaitForMultipleEvents(1, &eventProbe, TRUE, 0, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XWSAResetEvent(eventProbe) ||
+        XWSAWaitForMultipleEvents(1, &eventProbe, TRUE, 0, FALSE) != WSA_WAIT_TIMEOUT ||
+        !XWSACloseEvent(eventProbe)) {
+        if (eventProbe) XWSACloseEvent(eventProbe);
+        XWSACleanup();
+        XNetCleanup();
+        return 29;
+    }
+
     BYTE randomBytes[32]{};
     if (XNetRandom(nullptr, sizeof(randomBytes)) != WSAEFAULT ||
         XNetRandom(randomBytes, sizeof(randomBytes)) != 0)
@@ -109,6 +127,11 @@ int main() {
         return 5;
     }
     DWORD timeout = 2000;
+    WSAEVENT udpEvent = XWSACreateEvent();
+    if (!udpEvent || XWSAEventSelect(receiver, udpEvent, FD_READ) != 0) {
+        if (udpEvent) XWSACloseEvent(udpEvent);
+        XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 30;
+    }
     if (XSocketSetSockOpt(receiver, SOL_SOCKET, SO_RCVTIMEO,
             reinterpret_cast<const char*>(&timeout), sizeof(timeout)) != 0) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 6;
@@ -128,6 +151,9 @@ int main() {
             reinterpret_cast<sockaddr*>(&local), sizeof(local)) != sizeof(payload)) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 9;
     }
+    if (XWSAWaitForMultipleEvents(1, &udpEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0) {
+        XWSACloseEvent(udpEvent); XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 31;
+    }
     char received[64]{};
     sockaddr_in peer{};
     int peerLength = sizeof(peer);
@@ -136,6 +162,7 @@ int main() {
     if (bytes != sizeof(payload) || std::memcmp(received, payload, sizeof(payload)) != 0) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 10;
     }
+    XWSACloseEvent(udpEvent);
     XSocketClose(receiver);
     XSocketClose(sender);
 
@@ -166,7 +193,8 @@ int main() {
     timeval selectTimeout{};
     selectTimeout.tv_sec = 2;
     const int selected = XSocketSelect(0, &readable, nullptr, nullptr, &selectTimeout);
-    if (selected != 1 || !FD_ISSET(listener, &readable)) {
+    if (selected != 1 || !FD_ISSET(listener, &readable) ||
+        !XWSAFDIsSet(listener, &readable)) {
         XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 26;
     }
     const SOCKET accepted = XSocketAccept(listener, nullptr, nullptr);
@@ -185,6 +213,11 @@ int main() {
     XSocketClose(accepted);
     XSocketClose(listener);
     XSocketClose(client);
+
+    if (XWSACleanup() != 0) {
+        XNetCleanup();
+        return 32;
+    }
 
     // Final cleanup must not tear Winsock down while a DNS worker is active.
     WSAEVENT cleanupDnsEvent = WSACreateEvent();
