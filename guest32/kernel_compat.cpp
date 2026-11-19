@@ -2262,6 +2262,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_remove_io_completion
         cmp eax, 227
         je nt_set_io_completion
+        cmp eax, 228
+        je nt_set_system_time
         cmp eax, 59
         je io_allocate_irp
         cmp eax, 60
@@ -3043,6 +3045,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    nt_set_system_time: jmp K_NtSetSystemTime
     ob_reference_object_by_handle: jmp K_ObReferenceObjectByHandle
     ob_reference_object_by_pointer: jmp K_ObReferenceObjectByPointer
     obf_dereference_object: jmp K_ObfDereferenceObject
