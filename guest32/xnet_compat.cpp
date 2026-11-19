@@ -11,6 +11,7 @@
 #include <iphlpapi.h>
 #include <new>
 #include <thread>
+#include <string>
 #include "xnet_compat.h"
 #include "network_compat.h"
 
