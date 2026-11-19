@@ -172,7 +172,7 @@ add_test(NAME kernel_directory_object_guest_smoke COMMAND kernel_directory_objec
 add_executable(kernel_io_group_a_guest_smoke
   ../tests/kernel_io_group_a_guest_smoke.cpp
   kernel_compat.cpp kernel_filesystem_bridge.cpp kernel_system.cpp kernel_time.cpp kernel_nvsettings.cpp kernel_memory.cpp
-  kernel_object_manager.cpp kernel_thread_exports.cpp kernel_io_completion.cpp
+  kernel_object_manager.cpp kernel_object_reference.cpp kernel_thread_exports.cpp kernel_io_completion.cpp
   kernel_io_exports.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
   ../modules/fatx/include/fatx.cpp ../modules/fatx/fatx_provider.cpp
   ../modules/xdvdfs/xdvdfs.cpp ../modules/xdvdfs/xdvdfs_provider.cpp
