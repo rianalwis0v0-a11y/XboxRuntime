@@ -57,7 +57,7 @@ before accepting the client, and verifies the XSocket last-error accessors.
 
 ## Additional address and status exports
 
-`XNetTsAddrToInAddr` reuses the address translation path for title-server addresses when a nonzero service ID and registered key are supplied. `XNetGetXnAddrPlatform` identifies this runtime's own host address as Windows PC and returns `WSAEOPNOTSUPP` for peers whose platform cannot be determined. `XNetGetDebugXnAddr` reports no separate debug adapter, `XNetGetBroadcastVersionStatus` reports no observed version mismatch, and `XNetGetSystemLinkPort` reports the default 3074 port. `XNetSetSystemLinkPort` deliberately returns `WSAEOPNOTSUPP` until the backend can reserve the port with the required cross-platform privilege checks.
+`XNetTsAddrToInAddr` translates the advertised `inaOnline` address for title-server addresses when a nonzero service ID and registered key are supplied. `XNetGetXnAddrPlatform` identifies this runtime's own host address as Windows PC and returns `WSAEOPNOTSUPP` for peers whose platform cannot be determined. `XNetGetDebugXnAddr` reports no separate debug adapter, `XNetGetBroadcastVersionStatus` reports no observed version mismatch, and `XNetGetSystemLinkPort` reports the default 3074 port. `XNetSetSystemLinkPort` deliberately returns `WSAEOPNOTSUPP` until the backend can reserve the port with the required cross-platform privilege checks.
 
 ## XNADDR address translation
 
