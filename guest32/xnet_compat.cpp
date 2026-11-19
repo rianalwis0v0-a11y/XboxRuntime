@@ -55,6 +55,7 @@ bool IsIPv4OnLocalSubnet(IN_ADDR candidate) {
             if (!unicast->Address.lpSockaddr || unicast->Address.lpSockaddr->sa_family != AF_INET) continue;
             const auto* local = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
             const ULONG prefix = unicast->OnLinkPrefixLength;
+            if (prefix > 32) continue;
             const ULONG mask = prefix == 0 ? 0 : htonl(0xFFFFFFFFu << (32 - prefix));
             if ((local->sin_addr.s_addr & mask) == (candidate.s_addr & mask)) return true;
         }
@@ -122,6 +123,7 @@ void ReleaseXNetWorkerReference() {
         for (auto& entry : g_registeredKeys)
             SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
+        g_addressMappings.clear();
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup completed after outstanding DNS work.");
     }
