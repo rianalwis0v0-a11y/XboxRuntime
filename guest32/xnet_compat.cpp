@@ -322,6 +322,66 @@ extern "C" SOCKET WINAPI XSocketCreate(int af, int type, int protocol) {
     return SocketHandleFailure(WSAESOCKTNOSUPPORT);
 }
 
+extern "C" int WINAPI XWSAStartup(WORD requestedVersion, LPWSADATA output) {
+    if (!output) return WSAEFAULT;
+    return XboxNetStartupWithData(requestedVersion, output);
+}
+
+extern "C" int WINAPI XWSACleanup() {
+    XboxNetCleanup();
+    return 0;
+}
+
+extern "C" int WINAPI XSocketWSAGetLastError() {
+    return WSAGetLastError();
+}
+
+extern "C" void WINAPI XWSASetLastError(int error) {
+    WSASetLastError(error);
+}
+
+extern "C" WSAEVENT WINAPI XWSACreateEvent() {
+    return WSACreateEvent();
+}
+
+extern "C" BOOL WINAPI XWSACloseEvent(WSAEVENT eventHandle) {
+    if (!eventHandle) { WSASetLastError(WSAEINVAL); return FALSE; }
+    return WSACloseEvent(eventHandle);
+}
+
+extern "C" BOOL WINAPI XWSASetEvent(WSAEVENT eventHandle) {
+    if (!eventHandle) { WSASetLastError(WSAEINVAL); return FALSE; }
+    return WSASetEvent(eventHandle);
+}
+
+extern "C" BOOL WINAPI XWSAResetEvent(WSAEVENT eventHandle) {
+    if (!eventHandle) { WSASetLastError(WSAEINVAL); return FALSE; }
+    return WSAResetEvent(eventHandle);
+}
+
+extern "C" DWORD WINAPI XWSAWaitForMultipleEvents(DWORD count,
+    const WSAEVENT* events, BOOL waitAll, DWORD timeout, BOOL alertable) {
+    if (!count || !events) { WSASetLastError(WSAEINVAL); return WSA_WAIT_FAILED; }
+    return WSAWaitForMultipleEvents(count, events, waitAll, timeout, alertable);
+}
+
+extern "C" BOOL WINAPI XWSAFDIsSet(SOCKET socket, fd_set* set) {
+    if (!set) { WSASetLastError(WSAEFAULT); return FALSE; }
+    if (set->fd_count > FD_SETSIZE) { WSASetLastError(WSAEINVAL); return FALSE; }
+    for (u_int i = 0; i < set->fd_count; ++i) {
+        if (set->fd_array[i] == socket) return TRUE;
+    }
+    return FALSE;
+}
+
+extern "C" int WINAPI XWSAEventSelect(SOCKET socket, WSAEVENT eventHandle,
+    long networkEvents) {
+    if (socket == INVALID_SOCKET || socket == 0) return SocketFailure(WSAENOTSOCK);
+    if (!eventHandle) return SocketFailure(WSAEINVAL);
+    return XboxNetSocketEventSelect(static_cast<uint32_t>(socket),
+        eventHandle, networkEvents);
+}
+
 extern "C" int WINAPI XSocketSelect(int, fd_set* readSet, fd_set* writeSet,
     fd_set* exceptSet, const timeval* timeout) {
     return XboxNetSocketSelect(readSet, writeSet, exceptSet, timeout);
