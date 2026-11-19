@@ -144,7 +144,26 @@ int main() {
     XSocketClose(accepted);
     XSocketClose(listener);
     XSocketClose(client);
+
+    // Final cleanup must not tear Winsock down while a DNS worker is active.
+    WSAEVENT cleanupDnsEvent = WSACreateEvent();
+    XNDNS* cleanupDns = nullptr;
+    if (!cleanupDnsEvent || XNetDnsLookup("localhost", cleanupDnsEvent, &cleanupDns) != 0 ||
+        !cleanupDns) {
+        if (cleanupDns) XNetDnsRelease(cleanupDns);
+        if (cleanupDnsEvent) WSACloseEvent(cleanupDnsEvent);
+        XNetCleanup();
+        return 21;
+    }
     XNetCleanup();
+    if (WSAWaitForMultipleEvents(1, &cleanupDnsEvent, TRUE, 5000, FALSE) != WSA_WAIT_EVENT_0 ||
+        cleanupDns->iStatus != 0 || cleanupDns->cina == 0) {
+        XNetDnsRelease(cleanupDns);
+        WSACloseEvent(cleanupDnsEvent);
+        return 22;
+    }
+    XNetDnsRelease(cleanupDns);
+    WSACloseEvent(cleanupDnsEvent);
     std::puts("network_smoke: async DNS, TCP/UDP loopback, key lifecycle, and socket error checks passed");
     return 0;
 }
