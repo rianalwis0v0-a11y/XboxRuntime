@@ -95,6 +95,7 @@ int WINAPI XSocketSend(SOCKET socket, const char* buffer, int length, int flags)
 int WINAPI XSocketRecv(SOCKET socket, char* buffer, int length, int flags);
 int WINAPI XSocketSendTo(SOCKET socket, const char* buffer, int length, int flags, const struct sockaddr* to, int toLength);
 int WINAPI XSocketRecvFrom(SOCKET socket, char* buffer, int length, int flags, struct sockaddr* from, int* fromLength);
+u_long WINAPI XSocketInet_Addr(const char* address);
 u_long WINAPI XSocketHTONL(u_long value);
 u_long WINAPI XSocketNTOHL(u_long value);
 u_short WINAPI XSocketHTONS(u_short value);
