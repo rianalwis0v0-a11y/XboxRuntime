@@ -337,7 +337,34 @@ extern "C" int WINAPI XNetUnregisterInAddr(IN_ADDR address) {
 
 extern "C" int WINAPI XNetTsAddrToInAddr(const TSADDR* address, DWORD serviceId, const XNKID* keyId, IN_ADDR* output) {
     if (!address || !keyId || !output || !serviceId) { WSASetLastError(WSAEINVAL); return WSAEINVAL; }
-    return XNetXnAddrToInAddr(address, keyId, output);
+    if (!address->inaOnline.s_addr) { WSASetLastError(WSAEINVAL); return WSAEINVAL; }
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) { WSASetLastError(WSANOTINITIALISED); return WSANOTINITIALISED; }
+    bool registered = false;
+    for (const auto& entry : g_registeredKeys)
+        if (std::memcmp(entry.id.ab, keyId->ab, sizeof(keyId->ab)) == 0) { registered = true; break; }
+    if (!registered) { WSASetLastError(WSAEINVAL); return WSAEINVAL; }
+    for (auto& mapping : g_addressMappings) {
+        if (mapping.address.s_addr == address->inaOnline.s_addr) {
+            mapping.xnaddr = *address;
+            mapping.keyId = *keyId;
+            mapping.hasKeyId = true;
+            *output = address->inaOnline;
+            return 0;
+        }
+    }
+    try {
+        AddressMapping mapping{};
+        mapping.address = address->inaOnline;
+        mapping.xnaddr = *address;
+        mapping.keyId = *keyId;
+        mapping.hasKeyId = true;
+        g_addressMappings.push_back(mapping);
+    } catch (...) {
+        WSASetLastError(WSAENOBUFS); return WSAENOBUFS;
+    }
+    *output = address->inaOnline;
+    return 0;
 }
 
 extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
