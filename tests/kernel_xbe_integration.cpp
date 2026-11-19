@@ -14,7 +14,7 @@ using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
 using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
-using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
+using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
@@ -225,9 +225,12 @@ int wmain(int argc, wchar_t** argv) {
         std::uint32_t faultAddress = 0;
         std::uint32_t faultProtection = 0;
         std::uint32_t faultState = 0;
+        std::uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
+        std::uint32_t esi = 0, edi = 0, ebp = 0, esp = 0;
         const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
             &exceptionInstruction, &accessType, &faultAddress,
-            &faultProtection, &faultState);
+            &faultProtection, &faultState, &eax, &ebx, &ecx, &edx,
+            &esi, &edi, &ebp, &esp);
         if (exceptionInstruction) {
             for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
                 const auto& section = image.sections[i];
@@ -268,6 +271,9 @@ int wmain(int argc, wchar_t** argv) {
                     "faultProtect=0x%08X faultState=0x%08X\n",
                     waitResult, exitCode, tlsCleared, exceptionInstruction,
                     accessType, faultAddress, faultProtection, faultState);
+        std::printf("Guest x86 registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X "
+                    "ESI=%08X EDI=%08X EBP=%08X ESP=%08X\n",
+                    eax, ebx, ecx, edx, esi, edi, ebp, esp);
         if (waitResult != ERROR_SUCCESS || exitCode != ERROR_SUCCESS ||
             tlsCleared != 1) {
             std::fprintf(stderr, "FAIL: guest did not return cleanly or TLS cleanup failed "
