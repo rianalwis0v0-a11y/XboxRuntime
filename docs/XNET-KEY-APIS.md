@@ -16,3 +16,23 @@ This is local key generation and registration bookkeeping only. It does **not** 
 ## Tests
 
 The x86 `network_smoke` test checks random-buffer validation, key creation, system-link identifier type, duplicate registration rejection, configured table limits, and unregistration. The guest API registry smoke test checks that all four names resolve through the XBE named-import registry.
+
+
+## Asynchronous DNS and socket error behavior
+
+`XNetDnsLookup` now returns an allocated result immediately with
+`iStatus = WSAEINPROGRESS`, resolves on a worker thread, publishes the final
+status/address list, and signals the supplied WSA event after publishing.
+The worker holds an internal XNet/Winsock lifetime reference, so a title may
+call `XNetCleanup` while a lookup is outstanding without shutting Winsock
+down underneath the resolver. The title must wait for the event before reading
+or releasing the returned `XNDNS` object.
+
+The guest socket bridge now sets Winsock last-error values for invalid/stale
+guest tokens, invalid buffers and lengths, unsupported socket types, and
+unresolvable host names. Native Winsock failures retain their native error
+codes.
+
+The networking smoke test covers asynchronous localhost DNS completion,
+TCP loopback listen/connect/accept/stream I/O, UDP loopback datagrams, stale
+socket token errors, key registration lifecycle, and guest import registration.
