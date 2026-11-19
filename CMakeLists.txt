@@ -37,7 +37,7 @@ target_compile_definitions(fatx_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME fatx_smoke COMMAND fatx_smoke)
 
 # Exercise the borrowed NV2A core through the exported XboxRuntime module ABI.
-add_executable(nv2a_smoke tests/nv2a_smoke.cpp guest32/nv2a_guest_rpc.cpp)
+add_executable(nv2a_smoke tests/nv2a_smoke.cpp tests/nv2a_rpc_smoke.cpp guest32/nv2a_guest_rpc.cpp)
 target_include_directories(nv2a_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/guest32")
 target_compile_features(nv2a_smoke PRIVATE cxx_std_17)
 target_compile_definitions(nv2a_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
