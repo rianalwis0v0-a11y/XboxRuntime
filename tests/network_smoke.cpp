@@ -98,10 +98,11 @@ int main() {
     DWORD localPlatform = 0;
     XNADDR debugAddress{};
     WORD systemLinkPort = 0;
-    if (!localTitleFlags ||
+    if (!(localTitleFlags & XNET_GET_XNADDR_ETHERNET) ||
+        !(localTitleFlags & (XNET_GET_XNADDR_STATIC | XNET_GET_XNADDR_DHCP)) ||
         XNetGetXnAddrPlatform(&localTitleAddress, &localPlatform) != 0 ||
-        localPlatform != 0x00000002u ||
-        XNetGetDebugXnAddr(&debugAddress) != 0x00000001u ||
+        localPlatform != XNET_XNADDR_PLATFORM_WINPC ||
+        XNetGetDebugXnAddr(&debugAddress) != XNET_GET_XNADDR_NONE ||
         XNetGetBroadcastVersionStatus(FALSE) != 0 ||
         XNetGetSystemLinkPort(&systemLinkPort) != 0 || systemLinkPort != 3074 ||
         XNetSetSystemLinkPort(3075) != WSAEOPNOTSUPP ||
