@@ -289,6 +289,25 @@ int main() {
         XSocketWSACloseEvent(udpEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
         XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 37;
     }
+    // Verify explicit cancellation completes a pending overlapped receive.
+    WSAResetEvent(udpEvent);
+    WSAOVERLAPPED cancelOv{};
+    cancelOv.hEvent = udpEvent;
+    char cancelBuffer[8]{};
+    WSABUF cancelBuf{static_cast<ULONG>(sizeof(cancelBuffer)), cancelBuffer};
+    sockaddr_in cancelPeer{};
+    int cancelPeerLength = sizeof(cancelPeer);
+    DWORD cancelFlags = 0, cancelBytes = 0;
+    if (XSocketWSARecvFrom(udpReceiver, &cancelBuf, 1, nullptr, &cancelFlags,
+            reinterpret_cast<sockaddr*>(&cancelPeer), &cancelPeerLength, &cancelOv, nullptr) != SOCKET_ERROR ||
+        XSocketWSAGetLastError() != WSA_IO_PENDING ||
+        XSocketWSACancelOverlappedIO(udpReceiver) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &udpEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        XSocketWSAGetOverlappedResult(udpReceiver, &cancelOv, &cancelBytes, FALSE, &cancelFlags) != FALSE ||
+        XSocketWSAGetLastError() != WSA_OPERATION_ABORTED) {
+        XSocketWSACloseEvent(udpEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 38;
+    }
     XSocketWSACloseEvent(udpEvent);
     XSocketClose(udpReceiver);
     XSocketClose(udpSender);
