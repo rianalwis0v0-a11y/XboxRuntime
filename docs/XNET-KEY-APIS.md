@@ -55,6 +55,10 @@ The TCP smoke test now checks listener readability through `XSocketSelect`
 before accepting the client, and verifies the XSocket last-error accessors.
 
 
+## Additional address and status exports
+
+`XNetTsAddrToInAddr` reuses the address translation path for title-server addresses when a nonzero service ID and registered key are supplied. `XNetGetXnAddrPlatform` identifies this runtime's own host address as Windows PC and returns `WSAEOPNOTSUPP` for peers whose platform cannot be determined. `XNetGetDebugXnAddr` reports no separate debug adapter, `XNetGetBroadcastVersionStatus` reports no observed version mismatch, and `XNetGetSystemLinkPort` reports the default 3074 port. `XNetSetSystemLinkPort` deliberately returns `WSAEOPNOTSUPP` until the backend can reserve the port with the required cross-platform privilege checks.
+
 ## XNADDR address translation
 
 `XNetXnAddrToInAddr`, `XNetInAddrToXnAddr`, and `XNetUnregisterInAddr` now maintain a session-key-aware address map. The host backend returns a usable IPv4 address, preferring the peer's LAN address when it is on a local subnet and otherwise using `inaOnline` when available. Reverse lookup restores the original 36-byte `XNADDR` and optional `XNKID`; unregistering a key removes mappings tied to that key. This is an emulator host-address bridge, not the original console's synthetic `0.x.y.z` address space or encrypted IPsec transport.
