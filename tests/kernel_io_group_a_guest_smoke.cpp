@@ -106,6 +106,7 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE, GuestIoStatusBlock*,
     void*, ULONG, ULONG);
 extern "C" LONG __stdcall K_NtClose(HANDLE);
 extern "C" void KernelDispatch();
+extern "C" void __stdcall K_KeQuerySystemTimeNative(LARGE_INTEGER*);
 extern "C" __declspec(naked) LONG __stdcall DispatchNtOpenDirectoryObject(HANDLE*, ULONG, void*) {
     __asm {
         push 201
@@ -497,11 +498,11 @@ int main() {
     // NtSetSystemTime must alter only the title clock, never the host Windows clock.
     XboxKernelResetSystemTime();
     LARGE_INTEGER guestTimeBefore{}, requestedGuestTime{}, previousGuestTime{}, guestTimeAfter{};
-    K_KeQuerySystemTime(&guestTimeBefore);
+    K_KeQuerySystemTimeNative(&guestTimeBefore);
     requestedGuestTime.QuadPart = guestTimeBefore.QuadPart + 300000000LL;
     if (DispatchNtSetSystemTime(&requestedGuestTime, &previousGuestTime) != 0)
         return Fail(53, "NtSetSystemTime ordinal dispatch");
-    K_KeQuerySystemTime(&guestTimeAfter);
+    K_KeQuerySystemTimeNative(&guestTimeAfter);
     if (previousGuestTime.QuadPart < guestTimeBefore.QuadPart - 10000000LL ||
         guestTimeAfter.QuadPart < requestedGuestTime.QuadPart ||
         guestTimeAfter.QuadPart > requestedGuestTime.QuadPart + 10000000LL)
