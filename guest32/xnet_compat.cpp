@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <bcrypt.h>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -16,6 +17,11 @@ namespace {
 std::mutex g_xnetMutex;
 unsigned g_xnetUsers = 0;
 XNetStartupParams g_startupParams{};
+struct RegisteredKey {
+    XNKID id;
+    XNKEY key;
+};
+std::vector<RegisteredKey> g_registeredKeys;
 
 void Log(const wchar_t* message) {
     OutputDebugStringW(L"[XboxRuntime:XNet] ");
@@ -33,7 +39,7 @@ extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
         return 0;
     }
     if (XboxNetStartup() != 0)
-        return WSAENETDOWN;
+        return WSANETDOWN;
 
     std::memset(&g_startupParams, 0, sizeof(g_startupParams));
     if (params) std::memcpy(&g_startupParams, params, sizeof(g_startupParams));
@@ -59,6 +65,9 @@ extern "C" int WINAPI XNetCleanup() {
     if (!g_xnetUsers) return 0;
     if (--g_xnetUsers == 0) {
         XboxNetCleanup();
+        for (auto& entry : g_registeredKeys)
+            SecureZeroMemory(&entry, sizeof(entry));
+        g_registeredKeys.clear();
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup complete.");
     }
@@ -86,13 +95,83 @@ extern "C" int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, 
         result->cina = 0;
     }
     *output = result;
-    if (eventHandle) WSASetEvent(eventHandle);
+    if (eventHandle && !WSASetEvent(eventHandle)) {
+        HeapFree(GetProcessHeap(), 0, result);
+        *output = nullptr;
+        return WSAGetLastError();
+    }
     return 0;
 }
 
 extern "C" int WINAPI XNetDnsRelease(XNDNS* result) {
     if (result) HeapFree(GetProcessHeap(), 0, result);
     return 0;
+}
+
+extern "C" int WINAPI XNetRandom(BYTE* buffer, UINT length) {
+    if (!buffer && length) return WSAEFAULT;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    if (!length) return 0;
+    return BCRYPT_SUCCESS(BCryptGenRandom(nullptr, buffer, length,
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ? 0 : WSAENOBUFS;
+}
+
+extern "C" int WINAPI XNetCreateKey(XNKID* keyId, XNKEY* key) {
+    if (!keyId || !key) return WSAEFAULT;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    SecureZeroMemory(keyId, sizeof(*keyId));
+    SecureZeroMemory(key, sizeof(*key));
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, keyId->ab, sizeof(keyId->ab),
+            BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ||
+        !BCRYPT_SUCCESS(BCryptGenRandom(nullptr, key->ab, sizeof(key->ab),
+            BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+        SecureZeroMemory(keyId, sizeof(*keyId));
+        SecureZeroMemory(key, sizeof(*key));
+        return WSAENOBUFS;
+    }
+    // XNetCreateKey creates a system-link key identifier. Online key types
+    // require the separate XNet security/identity handshake and are not faked.
+    keyId->ab[0] &= 0x0Fu;
+    return 0;
+}
+
+extern "C" int WINAPI XNetRegisterKey(const XNKID* keyId, const XNKEY* key) {
+    if (!keyId || !key) return WSAEFAULT;
+    if ((keyId->ab[0] & 0xF0u) != 0) return WSAEINVAL;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    for (const auto& entry : g_registeredKeys) {
+        if (std::memcmp(entry.id.ab, keyId->ab, sizeof(keyId->ab)) == 0)
+            return WSAEALREADY;
+    }
+    const size_t limit = g_startupParams.cfgKeyRegMax
+        ? g_startupParams.cfgKeyRegMax : 8;
+    if (g_registeredKeys.size() >= limit) return WSAENOMORE;
+    try {
+        RegisteredKey entry{};
+        entry.id = *keyId;
+        entry.key = *key;
+        g_registeredKeys.push_back(entry);
+    } catch (...) {
+        return WSAENOBUFS;
+    }
+    return 0;
+}
+
+extern "C" int WINAPI XNetUnregisterKey(const XNKID* keyId) {
+    if (!keyId) return WSAEFAULT;
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return WSANOTINITIALISED;
+    for (auto it = g_registeredKeys.begin(); it != g_registeredKeys.end(); ++it) {
+        if (std::memcmp(it->id.ab, keyId->ab, sizeof(keyId->ab)) == 0) {
+            SecureZeroMemory(&*it, sizeof(*it));
+            g_registeredKeys.erase(it);
+            return 0;
+        }
+    }
+    return WSAEINVAL;
 }
 
 extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity) {
@@ -260,7 +339,6 @@ extern "C" int WINAPI XSocketGetPeerName(SOCKET socket, sockaddr* address, int* 
 
 extern "C" int WINAPI XSocketSend(SOCKET socket, const char* buffer, int length, int flags) {
     if (socket == INVALID_SOCKET || length < 0 || (!buffer && length)) return SOCKET_ERROR;
-    (void)flags;
     return XboxNetSocketSend(static_cast<uint32_t>(socket), buffer, static_cast<uint32_t>(length), flags);
 }
 
