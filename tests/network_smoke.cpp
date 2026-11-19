@@ -44,6 +44,16 @@ int main() {
     XNetDnsRelease(dns);
     WSACloseEvent(dnsEvent);
 
+    char addressText[16]{};
+    IN_ADDR loopbackAddress{};
+    loopbackAddress.s_addr = htonl(INADDR_LOOPBACK);
+    if (XNetInAddrToString(loopbackAddress, addressText, sizeof(addressText)) != 0 ||
+        std::strcmp(addressText, "127.0.0.1") != 0 ||
+        XNetInAddrToString(loopbackAddress, addressText, 2) == 0) {
+        XNetCleanup();
+        return 23;
+    }
+
     uint32_t loopback = 0;
     if (XboxNetResolveIPv4("localhost", &loopback) != 0 || loopback == 0) {
         XNetCleanup();
