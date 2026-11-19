@@ -5,7 +5,7 @@ Base: `work/kernel-execution-backend` at `6076f0a144df82340d4d943b62b84e3dba199b
 
 ## Status
 
-All 57 Group B ordinals have explicit `KernelDispatch` entries. Six exports now have real guest-ABI handlers and x86 dispatch smoke coverage (four object-reference APIs, `NtSetSystemTime`, and `NtOpenDirectoryObject`); the other 51 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
+All 57 Group B ordinals have explicit `KernelDispatch` entries. Fourteen exports now have real guest-ABI handlers and x86 dispatch smoke coverage (four object-reference APIs, `NtSetSystemTime`, `NtOpenDirectoryObject`, and eight crypto exports); the other 43 still route to `K_Unsupported(ordinal)` and remain behaviorally unsupported. A dispatch entry alone is not implementation.
 
 No signatures, structure layouts, host behavior, or calling conventions are asserted by this mapping-only change. Each API must be implemented in a follow-up with pinned-NXDK provenance, x86 guest-call tests, and appropriate host tests before its status can be upgraded.
 
@@ -45,22 +45,22 @@ No signatures, structure layouts, host behavior, or calling conventions are asse
 | 332 | `WRITE_PORT_BUFFER_UCHAR` | Explicit fail-fast route; behavior unsupported |
 | 333 | `WRITE_PORT_BUFFER_USHORT` | Explicit fail-fast route; behavior unsupported |
 | 334 | `WRITE_PORT_BUFFER_ULONG` | Explicit fail-fast route; behavior unsupported |
-| 335 | `XcSHAInit` | Explicit fail-fast route; behavior unsupported |
-| 336 | `XcSHAUpdate` | Explicit fail-fast route; behavior unsupported |
-| 337 | `XcSHAFinal` | Explicit fail-fast route; behavior unsupported |
-| 338 | `XcRC4Key` | Explicit fail-fast route; behavior unsupported |
-| 339 | `XcRC4Crypt` | Explicit fail-fast route; behavior unsupported |
-| 340 | `XcHMAC` | Explicit fail-fast route; behavior unsupported |
+| 335 | `XcSHAInit` | Implemented SHA-1 context initialization; x86 implementation test plus ordinal-dispatch coverage |
+| 336 | `XcSHAUpdate` | Implemented streaming SHA-1 update; x86 implementation test plus ordinal-dispatch coverage |
+| 337 | `XcSHAFinal` | Implemented SHA-1 finalization and context zeroization; x86 implementation test plus ordinal-dispatch coverage |
+| 338 | `XcRC4Key` | Implemented RC4 key scheduling; x86 known-answer test |
+| 339 | `XcRC4Crypt` | Implemented stateful RC4 transformation; x86 known-answer test |
+| 340 | `XcHMAC` | Implemented HMAC-SHA1; x86 RFC 2202 known-answer test |
 | 341 | `XcPKEncPublic` | Explicit fail-fast route; behavior unsupported |
 | 342 | `XcPKDecPrivate` | Explicit fail-fast route; behavior unsupported |
 | 343 | `XcPKGetKeyLen` | Explicit fail-fast route; behavior unsupported |
 | 344 | `XcVerifyPKCS1Signature` | Explicit fail-fast route; behavior unsupported |
 | 345 | `XcModExp` | Explicit fail-fast route; behavior unsupported |
-| 346 | `XcDESKeyParity` | Explicit fail-fast route; behavior unsupported |
+| 346 | `XcDESKeyParity` | Implemented odd-parity adjustment for DES key bytes; x86 parity test |
 | 347 | `XcKeyTable` | Explicit fail-fast route; behavior unsupported |
 | 348 | `XcBlockCrypt` | Explicit fail-fast route; behavior unsupported |
 | 349 | `XcBlockCryptCBC` | Explicit fail-fast route; behavior unsupported |
-| 350 | `XcCryptService` | Explicit fail-fast route; behavior unsupported |
+| 350 | `XcCryptService` | Implemented compatibility no-op contract (returns zero without mutating arguments); x86 test; not a full cryptographic service |
 | 351 | `XcUpdateCrypto` | Explicit fail-fast route; behavior unsupported |
 | 359 | `IoMarkIrpMustComplete` | Explicit fail-fast route; behavior unsupported |
 | 365 | `HalEnableSecureTrayEject` | Explicit fail-fast route; behavior unsupported |
