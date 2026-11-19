@@ -206,9 +206,9 @@ extern "C" void __cdecl XboxNetCleanup() {
 }
 
 extern "C" int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* output) {
-    if (!hostname || !output) return -1;
+    if (!hostname || !output) { WSASetLastError(WSAEFAULT); return -1; }
     sockaddr_in address{};
-    if (!Resolve(hostname, 0, SOCK_DGRAM, address)) return -1;
+    if (!Resolve(hostname, 0, SOCK_DGRAM, address)) { WSASetLastError(WSAHOST_NOT_FOUND); return -1; }
     *output = address.sin_addr.s_addr;
     return 0;
 }
@@ -227,7 +227,7 @@ extern "C" uint32_t __cdecl XboxNetSocketCreate(int type) {
 extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostname, uint16_t port) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
     sockaddr_in address{};
     int type = 0, size = sizeof(type);
     if (getsockopt(socket, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &size) == SOCKET_ERROR ||
@@ -238,7 +238,9 @@ extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostnam
 extern "C" int __cdecl XboxNetSocketConnectAddress(uint32_t handle, const void* rawAddress, uint32_t length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || !rawAddress || length < sizeof(sockaddr_in)) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!rawAddress) { WSASetLastError(WSAEFAULT); return -1; }
+    if (length < sizeof(sockaddr_in)) { WSASetLastError(WSAEINVAL); return -1; }
     return ::connect(socket, static_cast<const sockaddr*>(rawAddress), static_cast<int>(length));
 }
 
@@ -259,7 +261,9 @@ extern "C" int __cdecl XboxNetSocketShutdown(uint32_t handle, int how) {
 extern "C" int __cdecl XboxNetSocketGetName(uint32_t handle, void* rawAddress, uint32_t* length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || !rawAddress || !length || *length < sizeof(sockaddr_in)) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!rawAddress || !length) { WSASetLastError(WSAEFAULT); return -1; }
+    if (*length < sizeof(sockaddr_in)) { WSASetLastError(WSAEINVAL); return -1; }
     int nativeLength = sizeof(sockaddr_in);
     const int result = getsockname(socket, static_cast<sockaddr*>(rawAddress), &nativeLength);
     if (result == 0) *length = static_cast<uint32_t>(nativeLength);
@@ -279,14 +283,17 @@ extern "C" int __cdecl XboxNetSocketGetPeerName(uint32_t handle, void* rawAddres
 extern "C" int __cdecl XboxNetSocketSetOption(uint32_t handle, int level, int option, const char* value, int length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || (!value && length) || length < 0) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!value && length) { WSASetLastError(WSAEFAULT); return -1; }
+    if (length < 0) { WSASetLastError(WSAEINVAL); return -1; }
     return setsockopt(socket, level, option, value, length);
 }
 
 extern "C" int __cdecl XboxNetSocketGetOption(uint32_t handle, int level, int option, char* value, int* length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || !value || !length) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!value || !length) { WSASetLastError(WSAEFAULT); return -1; }
     return getsockopt(socket, level, option, value, length);
 }
 
@@ -304,7 +311,8 @@ extern "C" int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port) {
 extern "C" int __cdecl XboxNetSocketListen(uint32_t handle, int backlog) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || backlog < 0) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (backlog < 0) { WSASetLastError(WSAEINVAL); return -1; }
     return ::listen(socket, backlog) == 0 ? 0 : -1;
 }
 
@@ -332,14 +340,18 @@ extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddres
 extern "C" int32_t __cdecl XboxNetSocketSend(uint32_t handle, const void* data, uint32_t length, int flags) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!data && length) { WSASetLastError(WSAEFAULT); return -1; }
+    if (length > INT_MAX) { WSASetLastError(WSAEMSGSIZE); return -1; }
     return ::send(socket, static_cast<const char*>(data), static_cast<int>(length), flags);
 }
 
 extern "C" int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capacity, int flags) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!data && capacity) { WSASetLastError(WSAEFAULT); return -1; }
+    if (capacity > INT_MAX) { WSASetLastError(WSAEMSGSIZE); return -1; }
     return ::recv(socket, static_cast<char*>(data), static_cast<int>(capacity), flags);
 }
 
@@ -392,7 +404,7 @@ extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t millise
 extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
     std::lock_guard<std::mutex> lock(g_mutex);
     auto it = g_sockets.find(handle);
-    if (it == g_sockets.end()) return -1;
+    if (it == g_sockets.end()) { WSASetLastError(WSAENOTSOCK); return -1; }
     // Erasing the registry entry invalidates the guest handle immediately.
     // In-flight operations keep a shared lease until they safely complete.
     g_sockets.erase(it);
