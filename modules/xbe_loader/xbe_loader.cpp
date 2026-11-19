@@ -4,6 +4,7 @@
 #include <string>
 #include <cwchar>
 #include <vector>
+#include "nv2a_rpc_protocol.h"
 
 namespace {
 constexpr uint32_t kReplyMagic=0x47584258;
@@ -19,11 +20,6 @@ struct Guest {
 bool started=false;
 bool releaseSent=false;
 HANDLE rpcThread=nullptr;
-#pragma pack(push,1)
-struct GpuRpcRequest { uint32_t magic,version,opcode,payloadSize,requestId,arg0,arg1,arg2,arg3; };
-struct GpuRpcResponse { uint32_t magic,version,requestId,status; uint64_t value; };
-#pragma pack(pop)
-constexpr uint32_t kGpuRpcMagic=0x43525047u; // GPRC
 bool ExactRead(HANDLE h,void*p,DWORD n);
 bool ExactWrite(HANDLE h,const void*p,DWORD n);
 DWORD WINAPI ServeGpuRpc(void*) {
@@ -37,14 +33,14 @@ DWORD WINAPI ServeGpuRpc(void*) {
  auto submit=reinterpret_cast<SubmitFn>(gpu?GetProcAddress(gpu,"XboxNV2A_SubmitMethod"):nullptr);
  auto flush=reinterpret_cast<FlushFn>(gpu?GetProcAddress(gpu,"XboxNV2A_Flush"):nullptr);
  while(g.pipe&&g.pipe!=INVALID_HANDLE_VALUE){
-  GpuRpcRequest q{}; if(!ExactRead(g.pipe,&q,sizeof(q)))break;
-  GpuRpcResponse a{kGpuRpcMagic,1,q.requestId,1,0};
-  if(q.magic==kGpuRpcMagic&&q.version==1&&q.payloadSize==0){
+  XboxNV2ARpcRequest q{}; if(!ExactRead(g.pipe,&q,sizeof(q)))break;
+  XboxNV2ARpcResponse a{XBOX_NV2A_RPC_MAGIC,XBOX_NV2A_RPC_VERSION,q.request_id,1,0};
+  if(q.magic==XBOX_NV2A_RPC_MAGIC&&q.version==XBOX_NV2A_RPC_VERSION&&q.payload_size==0){
    switch(q.opcode){
-   case 1: if(read&&q.arg1<=4&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
-   case 2: if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)?0u:1u;}break;
-   case 3: if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)?0u:1u;break;
-   case 4: if(flush){flush();a.status=0;}break;
+   case XBOX_NV2A_RPC_READ_REGISTER: if(read&&q.arg1<=4&&(q.arg1==1||q.arg1==2||q.arg1==4)){a.value=read(q.arg0,q.arg1);a.status=0;}break;
+   case XBOX_NV2A_RPC_WRITE_REGISTER: if(write&&(q.arg3==1||q.arg3==2||q.arg3==4)){uint64_t v=(uint64_t(q.arg2)<<32)|q.arg1;a.status=write(q.arg0,v,q.arg3)?0u:1u;}break;
+   case XBOX_NV2A_RPC_SUBMIT_METHOD: if(submit)a.status=submit(q.arg0,q.arg1,q.arg2)?0u:1u;break;
+   case XBOX_NV2A_RPC_FLUSH: if(flush){flush();a.status=0;}break;
    default: break;
    }
   }
