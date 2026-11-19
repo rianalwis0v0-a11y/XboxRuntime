@@ -36,3 +36,20 @@ codes.
 The networking smoke test covers asynchronous localhost DNS completion,
 TCP loopback listen/connect/accept/stream I/O, UDP loopback datagrams, stale
 socket token errors, key registration lifecycle, and guest import registration.
+
+
+## XSocket readiness and error APIs
+
+`XSocketSelect` accepts guest socket tokens in its input `fd_set` values.
+The bridge validates each token, leases its native socket for the duration of
+the wait, translates the sets to native Winsock handles, calls `select`, and
+translates the ready sets back to guest tokens. This prevents guest tokens from
+being mistaken for host socket values and prevents a concurrent close from
+destroying a socket during the wait.
+
+`XSocketGetLastError` and `XSocketSetLastError` expose the current thread's
+Winsock error state. Invalid handles, unsupported socket types, malformed
+addresses, and invalid arguments set explicit Winsock errors.
+
+The TCP smoke test now checks listener readability through `XSocketSelect`
+before accepting the client, and verifies the XSocket last-error accessors.
