@@ -33,6 +33,7 @@ struct XNADDR {
     BYTE abEnet[6];
     BYTE abOnline[20];
 };
+using TSADDR = XNADDR;
 struct XNDNS {
     INT iStatus;
     UINT cina;
@@ -79,11 +80,17 @@ int WINAPI XNetUnregisterKey(const XNKID* keyId);
 int WINAPI XNetXnAddrToInAddr(const XNADDR* address, const XNKID* keyId, IN_ADDR* output);
 int WINAPI XNetInAddrToXnAddr(IN_ADDR address, XNADDR* output, XNKID* keyId);
 int WINAPI XNetUnregisterInAddr(IN_ADDR address);
+int WINAPI XNetTsAddrToInAddr(const TSADDR* address, DWORD serviceId, const XNKID* keyId, IN_ADDR* output);
 int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capacity);
 int WINAPI XNetServerToInAddr(IN_ADDR address, DWORD serviceId, IN_ADDR* output);
 int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output);
 DWORD WINAPI XNetGetEthernetLinkStatus();
 DWORD WINAPI XNetGetTitleXnAddr(XNADDR* address);
+DWORD WINAPI XNetGetDebugXnAddr(XNADDR* address);
+int WINAPI XNetGetXnAddrPlatform(const XNADDR* address, DWORD* platform);
+DWORD WINAPI XNetGetBroadcastVersionStatus(BOOL reset);
+int WINAPI XNetGetSystemLinkPort(WORD* port);
+int WINAPI XNetSetSystemLinkPort(WORD port);
 }
 
 extern "C" {
