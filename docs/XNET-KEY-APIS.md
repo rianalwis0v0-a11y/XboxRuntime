@@ -28,6 +28,12 @@ call `XNetCleanup` while a lookup is outstanding without shutting Winsock
 down underneath the resolver. The title must wait for the event before reading
 or releasing the returned `XNDNS` object.
 
+The `cfgSockDefaultRecvBufsizeInK` and `cfgSockDefaultSendBufsizeInK`
+startup fields are now applied as native receive/send buffer defaults to every
+guest socket, including accepted TCP sockets. Zero values select the XNet
+16 KiB defaults. Socket creation fails rather than publishing a token if the
+host cannot apply either requested buffer option.
+
 The guest socket bridge now sets Winsock last-error values for invalid/stale
 guest tokens, invalid buffers and lengths, unsupported socket types, and
 unresolvable host names. Native Winsock failures retain their native error
