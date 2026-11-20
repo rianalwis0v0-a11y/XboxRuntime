@@ -126,3 +126,13 @@ request/probe/reply counters remain zero, and the authenticated Xbox QoS wire
 protocol is not implemented. `XNetQosLookup` and
 `XNetQosServiceLookup` therefore still return `WSAEOPNOTSUPP`; the runtime
 does not fabricate measurements or claim multiplayer QoS interoperability.
+
+
+## Ethernet link status
+
+`XNetGetEthernetLinkStatus` reports the active IPv4 adapter's current
+transmit-link speed as the XNet 10 Mbps or 100 Mbps class and marks wireless
+802.11 adapters. The host IP Helper API does not provide a reliable duplex
+mode field through this adapter structure, so the runtime deliberately does
+not invent the full-duplex or half-duplex bits. No usable active IPv4 adapter
+returns zero.
