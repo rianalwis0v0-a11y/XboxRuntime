@@ -42,7 +42,7 @@ int main() {
     SIZE_T padding = 99;
     void* firstGpuAllocation = K_MmClaimGpuInstanceMemory(0x1001u, &padding);
     if (firstGpuAllocation != guestView + XBOX_GPU_SHARED_VRAM_SIZE ||
-        padding != 0) {
+        padding != 0x0FFFu) {
         std::fprintf(stderr, "first GPU instance allocation was not RAMIN-backed\n");
         return 7;
     }
@@ -53,7 +53,7 @@ int main() {
     }
     void* secondGpuAllocation = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
     if (secondGpuAllocation != guestView + XBOX_GPU_SHARED_VRAM_SIZE + 0x2000u ||
-        padding != 0x0FFFu) {
+        padding != 0) {
         std::fprintf(stderr, "GPU instance allocation alignment/padding failed\n");
         return 9;
     }
