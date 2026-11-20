@@ -21,9 +21,10 @@
 namespace {
 std::mutex g_mutex;
 struct SocketState {
-    explicit SocketState(SOCKET value) : socket(value) {}
+    SocketState(SOCKET value, int socketType) : socket(value), type(socketType) {}
     ~SocketState() { if (socket != INVALID_SOCKET) closesocket(socket); }
     SOCKET socket;
+    int type;
 };
 struct SocketLease {
     std::shared_ptr<SocketState> state;
@@ -32,6 +33,8 @@ struct SocketLease {
 std::unordered_map<uint32_t, std::shared_ptr<SocketState>> g_sockets;
 uint32_t g_nextHandle = 1;
 unsigned g_startUsers = 0;
+unsigned g_maxDatagramSockets = 8;
+unsigned g_maxStreamSockets = 32;
 WSADATA g_wsaData{};
 
 SocketLease FindSocket(uint32_t token) {
@@ -41,13 +44,35 @@ SocketLease FindSocket(uint32_t token) {
 }
 uint32_t StoreSocket(SOCKET socket) {
     if (socket == INVALID_SOCKET) return 0;
+    int socketType = 0;
+    int socketTypeSize = sizeof(socketType);
+    if (getsockopt(socket, SOL_SOCKET, SO_TYPE,
+            reinterpret_cast<char*>(&socketType), &socketTypeSize) == SOCKET_ERROR) {
+        closesocket(socket);
+        return 0;
+    }
+    if (socketType != SOCK_STREAM && socketType != SOCK_DGRAM) {
+        closesocket(socket);
+        WSASetLastError(WSAESOCKTNOSUPPORT);
+        return 0;
+    }
     std::lock_guard<std::mutex> lock(g_mutex);
+    unsigned matchingSockets = 0;
+    for (const auto& entry : g_sockets)
+        if (entry.second->type == socketType) ++matchingSockets;
+    const unsigned limit = socketType == SOCK_DGRAM
+        ? g_maxDatagramSockets : g_maxStreamSockets;
+    if (matchingSockets >= limit) {
+        closesocket(socket);
+        WSASetLastError(WSAENOBUFS);
+        return 0;
+    }
     for (uint64_t tries = 0; tries < UINT32_MAX - 1ull; ++tries) {
         uint32_t candidate = g_nextHandle++;
         if (!candidate) candidate = g_nextHandle++;
         if (g_sockets.find(candidate) == g_sockets.end()) {
             try {
-                g_sockets.emplace(candidate, std::make_shared<SocketState>(socket));
+                g_sockets.emplace(candidate, std::make_shared<SocketState>(socket, socketType));
             } catch (...) {
                 closesocket(socket);
                 return 0;
@@ -192,6 +217,12 @@ bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address
     freeaddrinfo(result);
     return true;
 }
+}
+
+extern "C" void __cdecl XboxNetSetSocketLimits(unsigned maxDatagramSockets, unsigned maxStreamSockets) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_maxDatagramSockets = maxDatagramSockets;
+    g_maxStreamSockets = maxStreamSockets;
 }
 
 extern "C" int __cdecl XboxNetStartupWithData(WORD requestedVersion, WSADATA* output) {
