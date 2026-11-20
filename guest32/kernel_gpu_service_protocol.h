@@ -12,6 +12,10 @@
 #define XBOX_GPU_RPC_MAGIC 0x43525047u /* "GPRC" */
 #define XBOX_GPU_RPC_VERSION 1u
 #define XBOX_GPU_RPC_MAX_TRANSFER (64u * 1024u)
+/* Shared GPU-local memory layout used by the host provider and x86 guest. */
+#define XBOX_GPU_SHARED_VRAM_SIZE (64u * 1024u * 1024u)
+#define XBOX_GPU_SHARED_RAMIN_SIZE (1u * 1024u * 1024u)
+#define XBOX_GPU_SHARED_MEMORY_SIZE (XBOX_GPU_SHARED_VRAM_SIZE + XBOX_GPU_SHARED_RAMIN_SIZE)
 
 enum XboxGpuRpcOpcode {
     XboxGpuRpcPing = 0,
