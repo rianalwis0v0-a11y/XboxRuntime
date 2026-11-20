@@ -20,11 +20,11 @@ int wmain() {
     const auto slash = directory.find_last_of(L"\\/");
     if (slash == std::wstring::npos) return 2;
     directory.resize(slash);
-    const std::wstring providerPath = directory + L"\\nv2a.dll";
+    const std::wstring providerPath = directory + L"\nv2a.dll";
     HMODULE provider = LoadLibraryExW(providerPath.c_str(), nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!provider) {
-        std::fwprintf(stderr, L"could not load NV2A provider: %lu\\n", GetLastError());
+        std::fwprintf(stderr, L"could not load NV2A provider: %lu\n", GetLastError());
         return 3;
     }
 
@@ -72,7 +72,7 @@ int wmain() {
     stop();
     FreeLibrary(provider);
     if (!ok) {
-        std::fprintf(stderr, "NV2A provider did not use the shared VRAM/RAMIN view\\n");
+        std::fprintf(stderr, "NV2A provider did not use the shared VRAM/RAMIN view\n");
         return 6;
     }
     std::puts("kernel_gpu_provider_memory_smoke: PASS (provider uses shared VRAM/RAMIN)");
