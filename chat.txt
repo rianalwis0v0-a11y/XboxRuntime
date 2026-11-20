@@ -1109,3 +1109,31 @@ Known issues / next steps:
 2. Add real KernelDispatch ordinal-path coverage after confirming the guest-call smoke is green.
 3. Cross-process handles and named object-manager namespaces are outside this tranche and remain unsupported.
 4. Keep synchronization object changes with Developer 3 to avoid conflicting work on the shared kernel_compat.cpp file.
+
+
+[2026-11-20] [XboxNet networking session]
+Status: IN_PROGRESS — imported networking compatibility tranche; Windows CI has not run yet.
+Branch / commit: xboxnet / latest file commits begin at 30037e9 and 798b96e (subsequent commits add XNet compatibility, smoke test, standalone CMake project, and docs).
+Summary:
+- Audited the shared coordination log and the existing work/xbox-networking-integration branch before changing this branch.
+- Ported the existing 32-bit Winsock transport bridge and initial XNet/XSocket compatibility implementation into this branch rather than creating a duplicate transport stack.
+- Added a standalone Win32/MSVC CMake test project and a networking smoke test covering XNet startup, WSA wrappers, DNS completion, key registration, and TCP/UDP loopback socket behavior.
+- Added an XboxNet subsystem README and an Insignia acceptance plan. The documentation explicitly distinguishes transport/API smoke coverage from real XBE import integration and live Insignia sign-in.
+Files changed:
+- guest32/network_compat.h
+- guest32/network_compat.cpp
+- guest32/xnet_compat.h
+- guest32/xnet_compat.cpp
+- guest32/CMakeLists.txt
+- tests/network_smoke.cpp
+- modules/xboxnet/README.md
+- docs/INSIGNIA-ACCEPTANCE.md
+Build and tests:
+- Added the command sequence: cmake -S guest32 -B build/xboxnet -G "Visual Studio 17 2022" -A Win32; cmake --build build/xboxnet --config Release; ctest --test-dir build/xboxnet -C Release --output-on-failure.
+- Not run in this session: no Windows/MSVC runner was available through the current tool session. No passing build or runtime result is claimed.
+Known issues / next steps:
+1. Add/run Windows x86 CI and fix all compiler/test failures.
+2. Audit imported ABI definitions and behavior against pinned XDK/NXDK headers; retain unsupported return paths where online semantics are not implemented.
+3. Integrate these functions with the XBE loader's verified non-kernel import or interception strategy. Do not invent kernel ordinals for statically linked XNet routines.
+4. Make the Insignia-first DNS resolver configurable and validate it with real DNS and packet captures.
+5. A real supported title has not completed Insignia sign-in; Xbox Live compatibility is not yet established.
