@@ -19,6 +19,21 @@ int main() {
     params.cfgSockDefaultSendBufsizeInK = 32;
     if (XNetStartup(&params) != 0) return 1;
 
+    // Ethernet status must expose only documented flags. Link-speed classes
+    // are mutually exclusive, and wireless/speed details require an active link.
+    const DWORD ethernetStatus = XNetGetEthernetLinkStatus();
+    constexpr DWORD ethernetKnownFlags = XNET_ETHERNET_LINK_ACTIVE |
+        XNET_ETHERNET_LINK_100MBPS | XNET_ETHERNET_LINK_10MBPS |
+        XNET_ETHERNET_LINK_FULL_DUPLEX | XNET_ETHERNET_LINK_HALF_DUPLEX |
+        XNET_ETHERNET_LINK_WIRELESS;
+    if ((ethernetStatus & ~ethernetKnownFlags) ||
+        ((ethernetStatus & XNET_ETHERNET_LINK_100MBPS) &&
+         (ethernetStatus & XNET_ETHERNET_LINK_10MBPS)) ||
+        ((ethernetStatus & (XNET_ETHERNET_LINK_100MBPS |
+            XNET_ETHERNET_LINK_10MBPS | XNET_ETHERNET_LINK_WIRELESS)) &&
+         !(ethernetStatus & XNET_ETHERNET_LINK_ACTIVE)))
+        return 57;
+
     // A nested startup must not replace the first caller's quota configuration.
     XNetStartupParams nestedParams{};
     nestedParams.cfgSizeOfStruct = sizeof(nestedParams);
