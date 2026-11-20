@@ -141,12 +141,20 @@ int main() {
     XNetDnsRelease(dns);
     WSACloseEvent(dnsEvent);
 
-    IN_ADDR unmappedAddress{}, mappedAddress{};
-    unmappedAddress.s_addr = htonl(INADDR_LOOPBACK);
-    if (XNetServerToInAddr(unmappedAddress, 1, &mappedAddress) != WSAEOPNOTSUPP ||
-        WSAGetLastError() != WSAEOPNOTSUPP ||
-        XNetInAddrToServer(unmappedAddress, &mappedAddress) != WSAEOPNOTSUPP ||
-        WSAGetLastError() != WSAEOPNOTSUPP) {
+    // Server-address conversion is a byte-order compatibility shim; it
+    // must validate startup, service IDs, and null output pointers.
+    IN_ADDR serverAddress{}, mappedAddress{}, roundTripServerAddress{};
+    serverAddress.s_addr = 0x0100007Fu; // host-order 127.0.0.1
+    if (XNetServerToInAddr(serverAddress, 1, &mappedAddress) != 0 ||
+        mappedAddress.s_addr != htonl(serverAddress.s_addr) ||
+        XNetInAddrToServer(mappedAddress, &roundTripServerAddress) != 0 ||
+        roundTripServerAddress.s_addr != serverAddress.s_addr ||
+        XNetServerToInAddr(serverAddress, 0, &mappedAddress) != WSAEINVAL ||
+        WSAGetLastError() != WSAEINVAL ||
+        XNetServerToInAddr(serverAddress, 1, nullptr) != WSAEFAULT ||
+        WSAGetLastError() != WSAEFAULT ||
+        XNetInAddrToServer(mappedAddress, nullptr) != WSAEFAULT ||
+        WSAGetLastError() != WSAEFAULT) {
         XNetCleanup();
         return 27;
     }
