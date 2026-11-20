@@ -50,6 +50,18 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 add_test(NAME kernel_memory_host_tests COMMAND kernel_memory_host_tests)
 
+# Verify the NV2A provider attaches directly to the shared host/guest memory view.
+add_executable(kernel_gpu_provider_memory_smoke ../../tests/kernel_gpu_provider_memory_smoke.cpp)
+target_compile_features(kernel_gpu_provider_memory_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_gpu_provider_memory_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_gpu_provider_memory_smoke PRIVATE /W4 /permissive-)
+target_include_directories(kernel_gpu_provider_memory_smoke PRIVATE ../../guest32)
+set_target_properties(kernel_gpu_provider_memory_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out")
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+  set_target_properties(kernel_gpu_provider_memory_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out")
+endforeach()
+add_test(NAME kernel_gpu_provider_memory_smoke COMMAND kernel_gpu_provider_memory_smoke)
+
 
 # x64 host contract tests for the I/O/system providers and EEPROM settings APIs.
 add_executable(kernel_io_system_host_tests
