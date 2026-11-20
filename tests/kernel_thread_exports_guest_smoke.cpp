@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdio>
+#include <cstdint>
 #include "kernel_thread_exports.h"
 
 namespace {
@@ -61,8 +62,59 @@ int main() {
         return 6;
     }
 
+    std::uint32_t nv2aId = 0;
+    K_HalReadWritePCISpace(1, 0, 0x00, &nv2aId, sizeof(nv2aId), FALSE);
+    if (nv2aId != 0x02A010DEu) {
+        std::fprintf(stderr, "NV2A PCI vendor/device ID mismatch: 0x%08X\n", nv2aId);
+        return 7;
+    }
+    std::uint32_t hostBridgeId = 0;
+    K_HalReadWritePCISpace(0, 0, 0x00, &hostBridgeId, sizeof(hostBridgeId), FALSE);
+    if (hostBridgeId != 0x02A510DEu) {
+        std::fprintf(stderr, "Xbox host bridge PCI ID mismatch: 0x%08X\n", hostBridgeId);
+        return 8;
+    }
+    std::uint32_t absentId = 0;
+    K_HalReadWritePCISpace(1, 1, 0x00, &absentId, sizeof(absentId), FALSE);
+    if (absentId != 0xFFFFFFFFu) {
+        std::fprintf(stderr, "absent PCI function did not read as all ones\n");
+        return 9;
+    }
+    std::uint32_t bar0 = 0;
+    K_HalReadWritePCISpace(1, 0, 0x10, &bar0, sizeof(bar0), FALSE);
+    if (bar0 != 0xFD000000u) {
+        std::fprintf(stderr, "NV2A BAR0 mismatch: 0x%08X\n", bar0);
+        return 10;
+    }
+    std::uint32_t barProbe = 0xFFFFFFFFu;
+    K_HalReadWritePCISpace(1, 0, 0x10, &barProbe, sizeof(barProbe), TRUE);
+    barProbe = 0;
+    K_HalReadWritePCISpace(1, 0, 0x10, &barProbe, sizeof(barProbe), FALSE);
+    if (barProbe != 0xFF000000u) {
+        std::fprintf(stderr, "NV2A BAR0 size probe mismatch: 0x%08X\n", barProbe);
+        return 11;
+    }
+    bar0 = 0xFD000000u;
+    K_HalReadWritePCISpace(1, 0, 0x10, &bar0, sizeof(bar0), TRUE);
+    std::uint16_t command = 0;
+    K_HalReadWritePCISpace(1, 0, 0x04, &command, sizeof(command), FALSE);
+    if (command != 0x0007u) {
+        std::fprintf(stderr, "NV2A PCI command register initial value mismatch\n");
+        return 12;
+    }
+    command = 0x0003u;
+    K_HalReadWritePCISpace(1, 0, 0x04, &command, sizeof(command), TRUE);
+    command = 0;
+    K_HalReadWritePCISpace(1, 0, 0x04, &command, sizeof(command), FALSE);
+    if (command != 0x0003u) {
+        std::fprintf(stderr, "NV2A PCI command register write failed\n");
+        return 13;
+    }
+    command = 0x0007u;
+    K_HalReadWritePCISpace(1, 0, 0x04, &command, sizeof(command), TRUE);
+
     K_HalRequestSoftwareInterrupt(2);
     K_HalClearSoftwareInterrupt(2);
-    std::puts("kernel_thread_exports_guest_smoke: PASS (APC, alert, interrupt synchronization, software IRQ)");
+    std::puts("kernel_thread_exports_guest_smoke: PASS (APC, interrupt, NV2A PCI config, software IRQ)");
     return 0;
 }
