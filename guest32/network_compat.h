@@ -8,6 +8,7 @@ extern "C" {
 int __cdecl XboxNetStartup();
 int __cdecl XboxNetStartupWithData(WORD requestedVersion, WSADATA* output);
 int __cdecl XboxNetCleanup();
+void __cdecl XboxNetSetSocketLimits(unsigned maxDatagramSockets, unsigned maxStreamSockets);
 int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* addressNetworkOrder);
 uint32_t __cdecl XboxNetSocketCreate(int type); // 1 = stream/TCP, 2 = datagram/UDP
 int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostname, uint16_t port);
