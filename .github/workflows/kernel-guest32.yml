@@ -124,6 +124,18 @@ jobs:
           foreach ($name in $required) {
             if ($text -notmatch [regex]::Escape($name)) { throw "NV2A export missing: $name" }
           }
+      - name: Inspect NV2A provider runtime dependencies
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          $dumpbin = Get-ChildItem (Join-Path $vs "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -like "*Hostx64*x64*dumpbin.exe" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          & $dumpbin /dependents "build-nv2a/out/nv2a.dll"
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin dependency inspection failed" }
+          Get-Item "build-nv2a/out/nv2a.dll" | Format-List FullName,Length
+          Get-ChildItem "$env:windir/System32" -Filter "*d3dcompiler*.dll" | Select-Object FullName
       - name: Stage NV2A provider beside host kernel
         shell: pwsh
         run: Copy-Item "build-nv2a/out/nv2a.dll" "build-kernel-host/out/nv2a.dll" -Force
