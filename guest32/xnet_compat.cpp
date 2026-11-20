@@ -26,6 +26,10 @@ int SocketFailure(int error) {
     WSASetLastError(error);
     return SOCKET_ERROR;
 }
+int XNetFailure(int error) {
+    WSASetLastError(error);
+    return error;
+}
 SOCKET SocketHandleFailure(int error) {
     WSASetLastError(error);
     return INVALID_SOCKET;
@@ -528,11 +532,11 @@ extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capa
 }
 
 extern "C" int WINAPI XNetServerToInAddr(IN_ADDR serverAddress, DWORD serviceId, IN_ADDR* output) {
-    if (!output) return SocketFailure(WSAEFAULT);
-    if (!serverAddress.s_addr || !serviceId) return SocketFailure(WSAEINVAL);
+    if (!output) return XNetFailure(WSAEFAULT);
+    if (!serverAddress.s_addr || !serviceId) return XNetFailure(WSAEINVAL);
     {
         std::lock_guard<std::mutex> lock(g_xnetMutex);
-        if (!g_xnetUsers) return SocketFailure(WSANOTINITIALISED);
+        if (!g_xnetUsers) return XNetFailure(WSANOTINITIALISED);
     }
 
     // XNet's server-address form is a host-order IPv4 DWORD. Convert it to
@@ -543,11 +547,11 @@ extern "C" int WINAPI XNetServerToInAddr(IN_ADDR serverAddress, DWORD serviceId,
 }
 
 extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
-    if (!output) return SocketFailure(WSAEFAULT);
-    if (!address.s_addr) return SocketFailure(WSAEINVAL);
+    if (!output) return XNetFailure(WSAEFAULT);
+    if (!address.s_addr) return XNetFailure(WSAEINVAL);
     {
         std::lock_guard<std::mutex> lock(g_xnetMutex);
-        if (!g_xnetUsers) return SocketFailure(WSANOTINITIALISED);
+        if (!g_xnetUsers) return XNetFailure(WSANOTINITIALISED);
     }
 
     // Inverse of XNetServerToInAddr's host/network byte-order conversion.
