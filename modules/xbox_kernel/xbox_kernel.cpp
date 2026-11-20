@@ -214,7 +214,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
                 !GpuRangeFits(request.arg0, request.arg1))
                 return 0;
             try { transfer.resize(request.payload_size); }
-            catch (...) { response.status = ERROR_NOT_ENOUGH_MEMORY; break; }
+            catch (...) { return 0; }
             if (request.payload_size &&
                 !ReadExact(pipe, transfer.data(), request.payload_size))
                 return 0;
