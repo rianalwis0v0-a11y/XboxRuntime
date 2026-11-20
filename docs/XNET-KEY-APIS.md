@@ -113,3 +113,16 @@ reset/close, UDP FD_READ event signaling, and guest-token readiness checks.
 addresses. Null input returns `INADDR_NONE` with `WSAEFAULT`; malformed
 literals return `INADDR_NONE` with `WSAEINVAL`. Hostname resolution remains
 the responsibility of the asynchronous XNet DNS path.
+
+
+## QoS listener state
+
+`XNetQosListen` now implements the listener control-plane lifecycle:
+registered-key validation, enable/disable, bounded response-data storage,
+bandwidth-limit configuration, release, and per-listener statistics structure
+validation. Listener state is removed when its XNKID is unregistered or XNet
+shuts down. These settings are not yet connected to a network probe responder:
+request/probe/reply counters remain zero, and the authenticated Xbox QoS wire
+protocol is not implemented. `XNetQosLookup` and
+`XNetQosServiceLookup` therefore still return `WSAEOPNOTSUPP`; the runtime
+does not fabricate measurements or claim multiplayer QoS interoperability.
