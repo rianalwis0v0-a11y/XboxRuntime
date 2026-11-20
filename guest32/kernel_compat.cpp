@@ -38,8 +38,6 @@
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
-
-extern "C" void KernelDispatch();
 namespace {
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
