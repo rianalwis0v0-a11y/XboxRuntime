@@ -10,6 +10,7 @@
 #include <bcrypt.h>
 #include <cstdint>
 #include <algorithm>
+#include <iterator>
 #include <cstring>
 #include <mutex>
 #include <vector>
