@@ -123,6 +123,7 @@ void ReleaseXNetWorkerReference() {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
     if (g_xnetUsers && --g_xnetUsers == 0) {
         XboxNetCleanup();
+        XboxNetSetSocketLimits(8, 32);
         for (auto& entry : g_registeredKeys)
             SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
