@@ -119,9 +119,9 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     }
     using ProviderLifecycleFn = int (__cdecl*)();
     const auto providerStart = reinterpret_cast<ProviderLifecycleFn>(
-        provider ? GetProcAddress(provider, "ModuleStart") : nullptr);
+        providerStarted ? GetProcAddress(provider, "ModuleStart") : nullptr);
     const auto providerStop = reinterpret_cast<void (__cdecl*)()>(
-        provider ? GetProcAddress(provider, "ModuleStop") : nullptr);
+        providerStarted ? GetProcAddress(provider, "ModuleStop") : nullptr);
     if (provider && providerStart && providerStart() == 0) {
         providerStarted = true;
     } else if (provider) {
@@ -130,21 +130,21 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         Log(L"nv2a.dll not found beside xbox_kernel.dll; GPU RPC remains transport-only.");
     }
     const auto readRegister = reinterpret_cast<GpuReadRegisterFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_ReadRegister") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRegister") : nullptr);
     const auto writeRegister = reinterpret_cast<GpuWriteRegisterFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_WriteRegister") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteRegister") : nullptr);
     const auto submitMethod = reinterpret_cast<GpuSubmitMethodFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_SubmitMethod") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_SubmitMethod") : nullptr);
     const auto flush = reinterpret_cast<GpuFlushFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_Flush") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_Flush") : nullptr);
     const auto readVram = reinterpret_cast<GpuMemoryReadFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_ReadVRAM") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadVRAM") : nullptr);
     const auto writeVram = reinterpret_cast<GpuMemoryWriteFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_WriteVRAM") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteVRAM") : nullptr);
     const auto readRamin = reinterpret_cast<GpuMemoryReadFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
     const auto writeRamin = reinterpret_cast<GpuMemoryWriteFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
 
     for (;;) {
         XboxGpuRpcRequest request{};
@@ -162,12 +162,12 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
 
         switch (request.opcode) {
         case XboxGpuRpcPing:
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             response.status = ERROR_SUCCESS;
             response.value = XBOX_GPU_RPC_VERSION;
             break;
         case XboxGpuRpcReadRegister:
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             if ((request.arg1 != 1 && request.arg1 != 2 && request.arg1 != 4) ||
                 !GpuRangeFits(request.arg0, request.arg1)) {
                 response.status = ERROR_INVALID_PARAMETER;
@@ -177,7 +177,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             }
             break;
         case XboxGpuRpcWriteRegister: {
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             if ((request.arg3 != 1 && request.arg3 != 2 && request.arg3 != 4) ||
                 !GpuRangeFits(request.arg0, request.arg3)) {
                 response.status = ERROR_INVALID_PARAMETER;
@@ -191,13 +191,13 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         }
         case XboxGpuRpcSubmitMethod:
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             if (submitMethod)
                 response.status = submitMethod(request.arg0, request.arg1, request.arg2) == 0
                     ? ERROR_SUCCESS : ERROR_GEN_FAILURE;
             break;
         case XboxGpuRpcFlush:
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             if (flush) {
                 flush();
                 response.status = ERROR_SUCCESS;
@@ -205,7 +205,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         case XboxGpuRpcReadVram:
         case XboxGpuRpcReadRamin: {
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             if (request.arg1 > XBOX_GPU_RPC_MAX_TRANSFER ||
                 !GpuRangeFits(request.arg0, request.arg1)) {
                 response.status = ERROR_INVALID_PARAMETER;
@@ -232,12 +232,12 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             if (request.payload_size > XBOX_GPU_RPC_MAX_TRANSFER ||
                 request.payload_size != request.arg1 ||
                 !GpuRangeFits(request.arg0, request.arg1))
-                return 0;
+                goto cleanup;
             try { transfer.resize(request.payload_size); }
-            catch (...) { return 0; }
+            catch (...) { goto cleanup; }
             if (request.payload_size &&
                 !ReadExact(pipe, transfer.data(), request.payload_size))
-                return 0;
+                goto cleanup;
             const auto writeMemory = request.opcode == XboxGpuRpcWriteVram
                 ? writeVram : writeRamin;
             if (writeMemory && (request.arg1 == 0 ||
@@ -251,7 +251,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         }
         default:
-            if (request.payload_size != 0) return 0;
+            if (request.payload_size != 0) goto cleanup;
             response.status = ERROR_NOT_SUPPORTED;
             break;
         }
@@ -260,9 +260,10 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         if (sendReadPayload && !WriteExact(pipe, transfer.data(), request.arg1))
             break;
     }
+cleanup:
     if (providerStarted && providerStop) providerStop();
     if (provider) FreeLibrary(provider);
-    return 0;
+    goto cleanup;
 }
 
 void StopGpuService(BackendContext& context) {
