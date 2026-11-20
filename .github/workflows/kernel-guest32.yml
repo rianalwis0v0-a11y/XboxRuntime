@@ -145,10 +145,14 @@ jobs:
           $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
           $vs = & $vswhere -latest -products "*" -property installationPath
           if (!$vs) { throw "Visual Studio installation not found" }
-          $crt = Get-ChildItem (Join-Path $vs "VC/Redist/MSVC") -Filter "vcruntime140.dll" -Recurse |
-            Where-Object { $_.FullName -match "\\x64\\Microsoft\\.VC.*\\vcruntime140\\.dll$" } |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (!$crt) { throw "x64 VCRUNTIME140.dll not found in Visual Studio redist" }
+          # Prefer the x64 runtime installed in Windows System32 on hosted runners.
+          $crt = Get-Item "$env:windir/System32/vcruntime140.dll" -ErrorAction SilentlyContinue
+          if (!$crt) {
+            $crt = Get-ChildItem (Join-Path $vs "VC") -Filter "vcruntime140.dll" -Recurse |
+              Where-Object { $_.FullName -match "[\\\\/]x64[\\\\/]" } |
+              Select-Object -First 1
+          }
+          if (!$crt) { throw "x64 VCRUNTIME140.dll not found in Windows or Visual Studio" }
           Copy-Item $crt.FullName "build-kernel-host/out/vcruntime140.dll" -Force
 
       - name: Configure main runtime module
