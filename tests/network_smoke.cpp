@@ -29,8 +29,32 @@ int main() {
         XboxNetSocketClose(quotaTcpA) != 0 ||
         XboxNetSocketClose(quotaTcpB) != 0)
         return 45;
-    // Restore generous limits for the remaining transport integration tests.
-    XboxNetSetSocketLimits(8, 32);
+    // A zeroed startup structure must select the documented safe defaults.
+    if (XNetCleanup() != 0) return 46;
+    XNetStartupParams defaults{};
+    defaults.cfgSizeOfStruct = sizeof(defaults);
+    if (XNetStartup(&defaults) != 0) return 47;
+    uint32_t defaultUdp[8]{};
+    uint32_t defaultTcp[32]{};
+    bool defaultsOk = true;
+    for (auto& socket : defaultUdp) {
+        socket = XboxNetSocketCreate(2);
+        if (!socket) { defaultsOk = false; break; }
+    }
+    if (defaultsOk && (XboxNetSocketCreate(2) != 0 ||
+        WSAGetLastError() != WSAENOBUFS)) defaultsOk = false;
+    for (auto& socket : defaultUdp) if (socket) XboxNetSocketClose(socket);
+    if (defaultsOk) {
+        for (auto& socket : defaultTcp) {
+            socket = XboxNetSocketCreate(1);
+            if (!socket) { defaultsOk = false; break; }
+        }
+    }
+    if (defaultsOk && (XboxNetSocketCreate(1) != 0 ||
+        WSAGetLastError() != WSAENOBUFS)) defaultsOk = false;
+    for (auto& socket : defaultTcp) if (socket) XboxNetSocketClose(socket);
+    if (XNetCleanup() != 0 || !defaultsOk || XNetStartup(&params) != 0)
+        return 48;
 
     WSADATA startupData{};
     if (XWSAStartup(MAKEWORD(2, 2), &startupData) != 0 ||
