@@ -12,7 +12,25 @@ int main() {
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
     params.cfgKeyRegMax = 1;
+    params.cfgSockMaxDgramSockets = 1;
+    params.cfgSockMaxStreamSockets = 2;
     if (XNetStartup(&params) != 0) return 1;
+
+    // XNetStartupParams socket quotas apply to all guest sockets, including accepts.
+    const uint32_t quotaUdp = XboxNetSocketCreate(2);
+    if (!quotaUdp || XboxNetSocketCreate(2) != 0 ||
+        WSAGetLastError() != WSAENOBUFS ||
+        XboxNetSocketClose(quotaUdp) != 0)
+        return 44;
+    const uint32_t quotaTcpA = XboxNetSocketCreate(1);
+    const uint32_t quotaTcpB = XboxNetSocketCreate(1);
+    if (!quotaTcpA || !quotaTcpB || XboxNetSocketCreate(1) != 0 ||
+        WSAGetLastError() != WSAENOBUFS ||
+        XboxNetSocketClose(quotaTcpA) != 0 ||
+        XboxNetSocketClose(quotaTcpB) != 0)
+        return 45;
+    // Restore generous limits for the remaining transport integration tests.
+    XboxNetSetSocketLimits(8, 32);
 
     WSADATA startupData{};
     if (XWSAStartup(MAKEWORD(2, 2), &startupData) != 0 ||
