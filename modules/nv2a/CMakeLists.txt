@@ -12,6 +12,7 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../third_party/xboxrecomp"
 add_library(nv2a MODULE
     nv2a_bridge.c
     nv2a_vertex_shader.c
+    nv2a.def
 )
 target_include_directories(nv2a PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/nv2a"
