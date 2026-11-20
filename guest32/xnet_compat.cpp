@@ -429,19 +429,32 @@ extern "C" int WINAPI XNetInAddrToString(IN_ADDR address, char* buffer, int capa
     return 0;
 }
 
-extern "C" int WINAPI XNetServerToInAddr(IN_ADDR, DWORD, IN_ADDR* output) {
-    if (!output) return WSAEFAULT;
-    // Service-ID address translation requires the Xbox/Insignia service map.
-    // Returning the input address here would falsely claim that mapping worked.
-    WSASetLastError(WSAEOPNOTSUPP);
-    return WSAEOPNOTSUPP;
+extern "C" int WINAPI XNetServerToInAddr(IN_ADDR serverAddress, DWORD serviceId, IN_ADDR* output) {
+    if (!output) return SocketFailure(WSAEFAULT);
+    if (!serverAddress.s_addr || !serviceId) return SocketFailure(WSAEINVAL);
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        if (!g_xnetUsers) return SocketFailure(WSANOTINITIALISED);
+    }
+
+    // XNet's server-address form is a host-order IPv4 DWORD. Convert it to
+    // the network-byte-order IN_ADDR consumed by Winsock. This compatibility
+    // conversion does not discover or authenticate an Insignia service.
+    output->s_addr = htonl(serverAddress.s_addr);
+    return 0;
 }
 
-extern "C" int WINAPI XNetInAddrToServer(IN_ADDR, IN_ADDR* output) {
-    if (!output) return WSAEFAULT;
-    // The inverse service-ID map is not implemented; fail closed.
-    WSASetLastError(WSAEOPNOTSUPP);
-    return WSAEOPNOTSUPP;
+extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
+    if (!output) return SocketFailure(WSAEFAULT);
+    if (!address.s_addr) return SocketFailure(WSAEINVAL);
+    {
+        std::lock_guard<std::mutex> lock(g_xnetMutex);
+        if (!g_xnetUsers) return SocketFailure(WSANOTINITIALISED);
+    }
+
+    // Inverse of XNetServerToInAddr's host/network byte-order conversion.
+    output->s_addr = htonl(address.s_addr);
+    return 0;
 }
 
 namespace {
