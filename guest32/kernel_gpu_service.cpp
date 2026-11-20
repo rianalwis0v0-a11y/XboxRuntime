@@ -132,3 +132,32 @@ BOOL XboxKernelGpuReadRamin(uint32_t offset, void* destination, uint32_t length)
 BOOL XboxKernelGpuWriteRamin(uint32_t offset, const void* source, uint32_t length) {
     return CallBuffer(XboxGpuRpcWriteRamin, offset, const_cast<void*>(source), length, true) ? TRUE : FALSE;
 }
+
+extern "C" uint64_t XboxKernelGpuReadRegisterValue(
+    uint32_t offset, uint32_t width, int* succeeded) {
+    uint64_t value = 0;
+    const BOOL ok = XboxKernelGpuReadRegister(offset, width, &value);
+    if (succeeded) *succeeded = ok ? 1 : 0;
+    return ok ? value : 0;
+}
+extern "C" BOOL XboxKernelGpuWriteRegisterValue(
+    uint32_t offset, uint32_t width, uint64_t value) {
+    return XboxKernelGpuWriteRegister(offset, width, value);
+}
+extern "C" BOOL XboxKernelGpuSubmitMethodValue(
+    uint32_t subchannel, uint32_t method, uint32_t parameter) {
+    return XboxKernelGpuSubmitMethod(subchannel, method, parameter);
+}
+extern "C" BOOL XboxKernelGpuFlushValue(void) {
+    return XboxKernelGpuFlush();
+}
+extern "C" BOOL XboxKernelGpuReadLocalMemory(
+    BOOL ramin, uint32_t offset, void* destination, uint32_t length) {
+    return ramin ? XboxKernelGpuReadRamin(offset, destination, length)
+                 : XboxKernelGpuReadVram(offset, destination, length);
+}
+extern "C" BOOL XboxKernelGpuWriteLocalMemory(
+    BOOL ramin, uint32_t offset, const void* source, uint32_t length) {
+    return ramin ? XboxKernelGpuWriteRamin(offset, source, length)
+                 : XboxKernelGpuWriteVram(offset, source, length);
+}
