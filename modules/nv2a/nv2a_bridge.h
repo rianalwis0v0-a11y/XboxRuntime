@@ -14,6 +14,7 @@ extern "C" {
 
 // Standard XboxRuntime module lifecycle.
 __declspec(dllexport) int __cdecl ModuleStart(void);
+__declspec(dllexport) int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize);
 __declspec(dllexport) void __cdecl ModuleStop(void);
 
 // NV2A register offsets are relative to the 0xFD000000 MMIO aperture.
