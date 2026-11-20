@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include "kernel_gpu_mmio.h"
-#include "kernel_compat.h"
+#include "kernel_gpu_service.h"
 
 namespace {
 constexpr uint32_t kNv2aMmioBase = 0xFD000000u;
