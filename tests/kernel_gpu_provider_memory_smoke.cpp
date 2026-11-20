@@ -20,7 +20,7 @@ int wmain() {
     const auto slash = directory.find_last_of(L"\\/");
     if (slash == std::wstring::npos) return 2;
     directory.resize(slash);
-    const std::wstring providerPath = directory + L"\nv2a.dll";
+    const std::wstring providerPath = directory + L"\\nv2a.dll";
     HMODULE provider = LoadLibraryExW(providerPath.c_str(), nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!provider) {
