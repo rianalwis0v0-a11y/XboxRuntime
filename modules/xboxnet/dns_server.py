@@ -135,7 +135,8 @@ class DNSService:
         self.ttl = config["ttl"]
         self.zone_url = config.get("zone_url")
         self.refresh_seconds = config.get("refresh_seconds", 300)
-        self._local_records = dict(config["records"])\n        self._records = dict(self._local_records)
+        self._local_records = dict(config["records"])
+        self._records = dict(self._local_records)
         self._lock = threading.RLock()
         if self.zone_url:
             self.refresh_zones()
