@@ -2,10 +2,6 @@
 #include <windows.h>
 #include <cstdint>
 
-// Shared host/guest NV2A memory mapping. The mapping is owned by guest32.cpp.
-BOOL __stdcall XboxKernelGpuMemoryInitialize(void* view, SIZE_T bytes);
-void __stdcall XboxKernelGpuMemoryShutdown(void);
-
 // Pure 32-bit guest-address range normalizer shared by the guest implementation
 // and x64 host-side tests. Returns false for zero-sized or overflowing ranges.
 bool XboxKernelNormalizeGuestRange32(std::uint32_t base, std::uint32_t size,
@@ -13,6 +9,10 @@ bool XboxKernelNormalizeGuestRange32(std::uint32_t base, std::uint32_t size,
                                      std::uint32_t* alignedSize);
 
 extern "C" {
+// Shared host/guest NV2A memory mapping. The mapping is owned by guest32.cpp.
+BOOL __stdcall XboxKernelGpuMemoryInitialize(void* view, SIZE_T bytes);
+void __stdcall XboxKernelGpuMemoryShutdown(void);
+
 LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR zeroBits,
                                          SIZE_T* regionSize, ULONG allocationType,
                                          ULONG protect);
