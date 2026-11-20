@@ -96,7 +96,7 @@ jobs:
         run: cmake -S modules/xbox_kernel -B build-kernel-host -A x64
 
       - name: Build host kernel backend
-        run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke kernel_memory_host_tests kernel_io_system_host_tests kernel_nvsettings_host_tests
+        run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke kernel_memory_host_tests kernel_gpu_provider_memory_smoke kernel_io_system_host_tests kernel_nvsettings_host_tests
 
       - name: Configure NV2A provider
         run: cmake -S modules/nv2a -B build-nv2a -A x64
@@ -144,7 +144,7 @@ jobs:
         run: Copy-Item "build-guest32/out/xbe_guest32.exe" "build-kernel-host/out/xbe_guest32.exe" -Force
 
       - name: Run shared-memory guest execution smoke test
-        run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R "kernel_guest_backend_smoke|kernel_memory_host_tests|kernel_io_system_host_tests|kernel_nvsettings_host_tests"
+        run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R "kernel_guest_backend_smoke|kernel_memory_host_tests|kernel_gpu_provider_memory_smoke|kernel_io_system_host_tests|kernel_nvsettings_host_tests"
 
       - name: Build x64 XBE loader DLL for joint integration
         shell: cmd
