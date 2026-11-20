@@ -68,6 +68,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Check out completed XBE loader implementation
         uses: actions/checkout@v4
@@ -95,6 +97,16 @@ jobs:
 
       - name: Build host kernel backend
         run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke kernel_memory_host_tests kernel_io_system_host_tests kernel_nvsettings_host_tests
+
+      - name: Configure NV2A provider
+        run: cmake -S modules/nv2a -B build-nv2a -A x64
+
+      - name: Build NV2A provider
+        run: cmake --build build-nv2a --config Release --target nv2a
+
+      - name: Stage NV2A provider beside host kernel
+        shell: pwsh
+        run: Copy-Item "build-nv2a/out/nv2a.dll" "build-kernel-host/out/nv2a.dll" -Force
 
       - name: Configure main runtime module
         run: cmake -S main -B build-main -A x64
