@@ -135,7 +135,7 @@ class DNSService:
         self.ttl = config["ttl"]
         self.zone_url = config.get("zone_url")
         self.refresh_seconds = config.get("refresh_seconds", 300)
-        self._records = dict(config["records"])
+        self._local_records = dict(config["records"])\n        self._records = dict(self._local_records)
         self._lock = threading.RLock()
         if self.zone_url:
             self.refresh_zones()
@@ -205,7 +205,7 @@ class DNSService:
 
         # This is a mapping DNS server, not a general-purpose open resolver.
         # Unmapped names return NOERROR/NODATA, matching insigniaDNS behavior.
-        response_flags = 0x8000 | 0x0400 | (flags & 0x0100) | 0x0080
+        response_flags = 0x8000 | 0x0400 | (flags & 0x0100)
         return HEADER.pack(ident, response_flags, 1, len(answers), 0, 0) + question + b"".join(answers)
 
 
