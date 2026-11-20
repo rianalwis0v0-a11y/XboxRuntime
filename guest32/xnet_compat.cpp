@@ -306,7 +306,7 @@ extern "C" int WINAPI XNetQosLookup(UINT countXnAddr,
     (void)bitsPerSecond; (void)flags; (void)eventHandle;
     if (!result) return SocketFailure(WSAEFAULT);
     *result = nullptr;
-    return QosUnavailable();
+    return SocketFailure(WSAEOPNOTSUPP);
 }
 
 extern "C" int WINAPI XNetQosServiceLookup(DWORD flags,
@@ -314,7 +314,7 @@ extern "C" int WINAPI XNetQosServiceLookup(DWORD flags,
     (void)flags; (void)eventHandle;
     if (!result) return SocketFailure(WSAEFAULT);
     *result = nullptr;
-    return QosUnavailable();
+    return SocketFailure(WSAEOPNOTSUPP);
 }
 
 extern "C" int WINAPI XNetQosRelease(XNQOS* result) {
