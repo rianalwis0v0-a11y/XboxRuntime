@@ -570,7 +570,7 @@ int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize)
             g_gpu_memory = (uint8_t*)VirtualAlloc(NULL, XBOX_GPU_MEMORY_SIZE,
                 MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             if (!g_gpu_memory) {
-                OutputDebugStringW(L"[XboxRuntime:NV2A] VRAM/RAMIN allocation failed.\\n");
+                OutputDebugStringW(L"[XboxRuntime:NV2A] VRAM/RAMIN allocation failed.\n");
                 return 1;
             }
         }
@@ -581,7 +581,7 @@ int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize)
             if (!sharedMemory)
                 VirtualFree(g_gpu_memory, 0, MEM_RELEASE);
             g_gpu_memory = g_vram = g_ramin = NULL;
-            OutputDebugStringW(L"[XboxRuntime:NV2A] nv2a_init_standalone failed.\\n");
+            OutputDebugStringW(L"[XboxRuntime:NV2A] nv2a_init_standalone failed.\n");
             return 2;
         }
     } else if (sharedMemory && g_gpu_memory != (uint8_t*)sharedMemory) {
@@ -622,7 +622,7 @@ int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize)
     pgraph_d3d11_init();
 
     g_started = 1;
-    OutputDebugStringW(L"[XboxRuntime:NV2A] NV2A + PGRAPH translator ready.\\n");
+    OutputDebugStringW(L"[XboxRuntime:NV2A] NV2A + PGRAPH translator ready.\n");
     return 0;
 }
 
