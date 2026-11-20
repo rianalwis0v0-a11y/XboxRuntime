@@ -96,11 +96,16 @@ int main() {
     SIZE_T padding = 99;
     if (K_MmClaimGpuInstanceMemory(0x1000, &padding) != nullptr || padding != 0)
         return Fail("GPU instance memory must fail without a GPU memory backend", 0xC0000001L);
-    if (K_MmMapIoSpace(0xFD000000u, 0x1000, PAGE_READWRITE) != nullptr)
-        return Fail("MMIO must fail without a chipset backend", 0xC0000001L);
+    void* gpuRegisters = K_MmMapIoSpace(0xFD000000u, 0x1000, PAGE_READWRITE);
+    if (gpuRegisters != reinterpret_cast<void*>(0xFD000000u))
+        return Fail("NV2A MMIO aperture mapping", 0xC0000001L);
+    if (K_MmUnmapIoSpace(gpuRegisters, 0x1000) != gpuRegisters)
+        return Fail("NV2A MMIO aperture unmapping", 0xC0000001L);
+    if (K_MmMapIoSpace(0xFE800000u, 0x1000, PAGE_READWRITE) != nullptr)
+        return Fail("reject non-NV2A physical MMIO", 0xC0000001L);
     if (K_MmQueryStatistics(nullptr) != static_cast<LONG>(0xC00000BBu))
         return Fail("MmQueryStatistics explicit unsupported status", 0xC0000001L);
 
-    std::puts("kernel_memory_guest_smoke: PASS (x86 ABI, VM + Group A stack/residency exports)");
+    std::puts("kernel_memory_guest_smoke: PASS (x86 ABI, VM + Group A stack/residency + NV2A MMIO aperture)");
     return 0;
 }
