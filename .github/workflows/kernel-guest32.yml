@@ -139,6 +139,17 @@ jobs:
       - name: Stage NV2A provider beside host kernel
         shell: pwsh
         run: Copy-Item "build-nv2a/out/nv2a.dll" "build-kernel-host/out/nv2a.dll" -Force
+      - name: Stage NV2A Visual C++ runtime dependency
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          if (!$vs) { throw "Visual Studio installation not found" }
+          $crt = Get-ChildItem (Join-Path $vs "VC/Redist/MSVC") -Filter "vcruntime140.dll" -Recurse |
+            Where-Object { $_.FullName -match "\\x64\\Microsoft\\.VC.*\\vcruntime140\\.dll$" } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$crt) { throw "x64 VCRUNTIME140.dll not found in Visual Studio redist" }
+          Copy-Item $crt.FullName "build-kernel-host/out/vcruntime140.dll" -Force
 
       - name: Configure main runtime module
         run: cmake -S main -B build-main -A x64
@@ -198,6 +209,7 @@ jobs:
           New-Item -ItemType Directory -Force integration | Out-Null
           Copy-Item build-kernel-host/out/xbox_kernel.dll integration/
           Copy-Item build-kernel-host/out/nv2a.dll integration/
+          Copy-Item build-kernel-host/out/vcruntime140.dll integration/
           Copy-Item build-guest32/out/xbe_guest32.exe integration/
           Copy-Item xbe_loader.dll integration/
           Copy-Item kernel_xbe_integration.exe integration/
