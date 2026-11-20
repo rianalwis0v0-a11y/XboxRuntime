@@ -165,6 +165,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force integration | Out-Null
           Copy-Item build-kernel-host/out/xbox_kernel.dll integration/
+          Copy-Item build-kernel-host/out/nv2a.dll integration/
           Copy-Item build-guest32/out/xbe_guest32.exe integration/
           Copy-Item xbe_loader.dll integration/
           Copy-Item kernel_xbe_integration.exe integration/
