@@ -35,6 +35,8 @@ uint32_t g_nextHandle = 1;
 unsigned g_startUsers = 0;
 unsigned g_maxDatagramSockets = 8;
 unsigned g_maxStreamSockets = 32;
+unsigned g_defaultReceiveBufferBytes = 16 * 1024;
+unsigned g_defaultSendBufferBytes = 16 * 1024;
 WSADATA g_wsaData{};
 
 SocketLease FindSocket(uint32_t token) {
@@ -57,6 +59,18 @@ uint32_t StoreSocket(SOCKET socket) {
         return 0;
     }
     std::lock_guard<std::mutex> lock(g_mutex);
+    // Apply the XNetStartupParams defaults to every guest socket, including
+    // accepted TCP sockets. A failed option must not publish a half-configured
+    // socket token.
+    if (setsockopt(socket, SOL_SOCKET, SO_RCVBUF,
+            reinterpret_cast<const char*>(&g_defaultReceiveBufferBytes),
+            sizeof(g_defaultReceiveBufferBytes)) == SOCKET_ERROR ||
+        setsockopt(socket, SOL_SOCKET, SO_SNDBUF,
+            reinterpret_cast<const char*>(&g_defaultSendBufferBytes),
+            sizeof(g_defaultSendBufferBytes)) == SOCKET_ERROR) {
+        closesocket(socket);
+        return 0;
+    }
     // Socket creation and accept can race the final Winsock cleanup. Recheck
     // the startup reference while holding the same lock used by cleanup so a
     // late native socket can never be published after the transport shuts down.
@@ -231,6 +245,15 @@ extern "C" void __cdecl XboxNetSetSocketLimits(unsigned maxDatagramSockets, unsi
     std::lock_guard<std::mutex> lock(g_mutex);
     g_maxDatagramSockets = maxDatagramSockets;
     g_maxStreamSockets = maxStreamSockets;
+}
+
+extern "C" void __cdecl XboxNetSetSocketDefaults(unsigned receiveBufferKilobytes,
+    unsigned sendBufferKilobytes) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    // XNetStartupParams stores these sizes in KiB. Zero values are normalized
+    // by XNetStartup before this function is called.
+    g_defaultReceiveBufferBytes = receiveBufferKilobytes * 1024u;
+    g_defaultSendBufferBytes = sendBufferKilobytes * 1024u;
 }
 
 extern "C" int __cdecl XboxNetStartupWithData(WORD requestedVersion, WSADATA* output) {
