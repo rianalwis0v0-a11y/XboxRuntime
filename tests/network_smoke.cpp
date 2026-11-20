@@ -183,9 +183,16 @@ int main() {
     XNKID qosKey{};
     XNKEY qosSessionKey{};
     if (XNetCreateKey(&qosKey, &qosSessionKey) != 0 ||
-        XNetRegisterKey(&qosKey, &qosSessionKey) != 0 ||
-        XNetQosListen(&qosKey, nullptr, 0, 0, XNET_QOS_LISTEN_ENABLE) != 0)
+        XNetRegisterKey(&qosKey, &qosSessionKey) != 0)
         return 52;
+    BYTE qosData[] = {0x51, 0x4F, 0x53, 0x21};
+    BYTE oversizedQosData[257]{};
+    if (XNetQosListen(&qosKey, oversizedQosData, sizeof(oversizedQosData),
+            0, XNET_QOS_LISTEN_ENABLE | XNET_QOS_LISTEN_SET_DATA) != WSAEMSGSIZE ||
+        XNetQosListen(&qosKey, qosData, sizeof(qosData), 64000,
+            XNET_QOS_LISTEN_ENABLE | XNET_QOS_LISTEN_SET_DATA |
+            XNET_QOS_LISTEN_SET_BITSPERSEC) != 0)
+        return 56;
     XNQOSLISTENSTATS qosStats{};
     qosStats.dwSizeOfStruct = sizeof(qosStats);
     if (XNetQosGetListenStats(&qosKey, &qosStats) != 0 ||
