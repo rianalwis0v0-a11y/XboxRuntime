@@ -133,7 +133,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     } else if (provider) {
         Log(L"NV2A provider could not attach to the shared GPU memory section.");
     } else {
-        Log(L"nv2a.dll not found beside xbox_kernel.dll; GPU RPC remains transport-only.");
+        Log(L"nv2a.dll not found beside xbox_kernel.dll.");
     }
     const auto readRegister = reinterpret_cast<GpuReadRegisterFn>(
         providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRegister") : nullptr);
@@ -151,6 +151,13 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
     const auto writeRamin = reinterpret_cast<GpuMemoryWriteFn>(
         providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
+    const bool providerReady = providerStarted && readRegister && writeRegister &&
+        submitMethod && flush && readVram && writeVram && readRamin && writeRamin;
+    if (providerStarted && !providerReady) {
+        Log(L"NV2A provider is missing one or more required C ABI exports.");
+        if (providerStop) providerStop();
+        providerStarted = false;
+    }
 
     for (;;) {
         XboxGpuRpcRequest request{};
@@ -169,8 +176,8 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         switch (request.opcode) {
         case XboxGpuRpcPing:
             if (request.payload_size != 0) goto cleanup;
-            response.status = ERROR_SUCCESS;
-            response.value = XBOX_GPU_RPC_VERSION;
+            response.status = providerReady ? ERROR_SUCCESS : ERROR_MOD_NOT_FOUND;
+            response.value = providerReady ? XBOX_GPU_RPC_VERSION : 0;
             break;
         case XboxGpuRpcReadRegister:
             if (request.payload_size != 0) goto cleanup;
