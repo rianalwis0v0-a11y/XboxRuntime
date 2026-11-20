@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "kernel_memory.h"
+#include "../guest32/kernel_gpu_service_protocol.h"
 
 namespace {
 int Fail(const char* what, LONG status) {
@@ -96,6 +97,39 @@ int main() {
     SIZE_T padding = 99;
     if (K_MmClaimGpuInstanceMemory(0x1000, &padding) != nullptr || padding != 0)
         return Fail("GPU instance memory must fail without a GPU memory backend", 0xC0000001L);
+    auto* sharedGpuMemory = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, XBOX_GPU_SHARED_MEMORY_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+    if (!sharedGpuMemory)
+        return Fail("shared GPU memory test allocation", 0xC0000017L);
+    if (!XboxKernelGpuMemoryInitialize(sharedGpuMemory, XBOX_GPU_SHARED_MEMORY_SIZE)) {
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("initialize shared GPU memory", 0xC0000001L);
+    }
+    void* firstGpuClaim = K_MmClaimGpuInstanceMemory(0x1001u, &padding);
+    if (firstGpuClaim != sharedGpuMemory + XBOX_GPU_SHARED_VRAM_SIZE ||
+        padding != 0x0FFFu) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("first shared RAMIN claim", 0xC0000001L);
+    }
+    void* secondGpuClaim = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
+    if (secondGpuClaim != sharedGpuMemory + XBOX_GPU_SHARED_VRAM_SIZE + 0x2000u ||
+        padding != 0) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("second shared RAMIN claim", 0xC0000001L);
+    }
+    if (K_MmClaimGpuInstanceMemory(XBOX_GPU_SHARED_RAMIN_SIZE, nullptr) != nullptr) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("reject RAMIN exhaustion", 0xC0000001L);
+    }
+    XboxKernelGpuMemoryShutdown();
+    if (K_MmClaimGpuInstanceMemory(0x100u, nullptr) != nullptr) {
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("reject GPU claim after shutdown", 0xC0000001L);
+    }
+    VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
     void* gpuRegisters = K_MmMapIoSpace(0xFD000000u, 0x1000, PAGE_READWRITE);
     if (gpuRegisters != reinterpret_cast<void*>(0xFD000000u))
         return Fail("NV2A MMIO aperture mapping", 0xC0000001L);
