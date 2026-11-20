@@ -108,7 +108,27 @@ bool GpuRangeFits(uint32_t offset, uint32_t length) {
 
 DWORD WINAPI GpuServiceWorker(void* parameter) {
     HANDLE pipe = static_cast<HANDLE>(parameter);
-    HMODULE provider = GetModuleHandleW(L"nv2a.dll");
+    std::wstring moduleDirectory;
+    std::wstring providerPath;
+    HMODULE provider = nullptr;
+    bool providerStarted = false;
+    if (ModuleDirectory(moduleDirectory)) {
+        providerPath = moduleDirectory + L"\\nv2a.dll";
+        provider = LoadLibraryExW(providerPath.c_str(), nullptr,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    }
+    using ProviderLifecycleFn = int (__cdecl*)();
+    const auto providerStart = reinterpret_cast<ProviderLifecycleFn>(
+        provider ? GetProcAddress(provider, "ModuleStart") : nullptr);
+    const auto providerStop = reinterpret_cast<void (__cdecl*)()>(
+        provider ? GetProcAddress(provider, "ModuleStop") : nullptr);
+    if (provider && providerStart && providerStart() == 0) {
+        providerStarted = true;
+    } else if (provider) {
+        Log(L"NV2A provider loaded but ModuleStart failed or was missing.");
+    } else {
+        Log(L"nv2a.dll not found beside xbox_kernel.dll; GPU RPC remains transport-only.");
+    }
     const auto readRegister = reinterpret_cast<GpuReadRegisterFn>(
         provider ? GetProcAddress(provider, "XboxNV2A_ReadRegister") : nullptr);
     const auto writeRegister = reinterpret_cast<GpuWriteRegisterFn>(
@@ -240,6 +260,8 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         if (sendReadPayload && !WriteExact(pipe, transfer.data(), request.arg1))
             break;
     }
+    if (providerStarted && providerStop) providerStop();
+    if (provider) FreeLibrary(provider);
     return 0;
 }
 
