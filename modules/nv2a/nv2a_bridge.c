@@ -550,27 +550,42 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
 
 int __cdecl ModuleStart(void)
 {
-    if (g_started)
-        return 0;
+    return ModuleStartWithMemory(NULL, 0);
+}
 
-    // NV2A state is a process-wide singleton without a destroy API.
-    // Reuse its original backing allocation after ModuleStop.
+int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize)
+{
+    if (g_started)
+        return sharedMemory && g_gpu_memory != (uint8_t*)sharedMemory ? 3 : 0;
+
+    // The combined kernel maps one named section into both the host and x86
+    // guest. The provider must use that exact backing store: a private VRAM
+    // allocation would make guest CPU writes invisible to NV2A DMA/PGRAPH.
     if (!g_gpu) {
-        g_gpu_memory = (uint8_t*)VirtualAlloc(NULL, XBOX_GPU_MEMORY_SIZE,
-            MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-        if (!g_gpu_memory) {
-            OutputDebugStringW(L"[XboxRuntime:NV2A] VRAM/RAMIN allocation failed.\n");
-            return 1;
+        if (sharedMemory) {
+            if (sharedMemorySize < XBOX_GPU_MEMORY_SIZE)
+                return 1;
+            g_gpu_memory = (uint8_t*)sharedMemory;
+        } else {
+            g_gpu_memory = (uint8_t*)VirtualAlloc(NULL, XBOX_GPU_MEMORY_SIZE,
+                MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            if (!g_gpu_memory) {
+                OutputDebugStringW(L"[XboxRuntime:NV2A] VRAM/RAMIN allocation failed.\\n");
+                return 1;
+            }
         }
         g_vram = g_gpu_memory;
         g_ramin = g_gpu_memory + XBOX_VRAM_SIZE;
         g_gpu = nv2a_init_standalone(g_vram, XBOX_VRAM_SIZE, g_ramin, XBOX_RAMIN_SIZE);
         if (!g_gpu) {
-            VirtualFree(g_gpu_memory, 0, MEM_RELEASE);
+            if (!sharedMemory)
+                VirtualFree(g_gpu_memory, 0, MEM_RELEASE);
             g_gpu_memory = g_vram = g_ramin = NULL;
-            OutputDebugStringW(L"[XboxRuntime:NV2A] nv2a_init_standalone failed.\n");
+            OutputDebugStringW(L"[XboxRuntime:NV2A] nv2a_init_standalone failed.\\n");
             return 2;
         }
+    } else if (sharedMemory && g_gpu_memory != (uint8_t*)sharedMemory) {
+        return 3;
     }
 
     /* PFIFO channel bindings belong to the bridge lifecycle. */
@@ -607,7 +622,7 @@ int __cdecl ModuleStart(void)
     pgraph_d3d11_init();
 
     g_started = 1;
-    OutputDebugStringW(L"[XboxRuntime:NV2A] NV2A + PGRAPH translator ready.\n");
+    OutputDebugStringW(L"[XboxRuntime:NV2A] NV2A + PGRAPH translator ready.\\n");
     return 0;
 }
 
