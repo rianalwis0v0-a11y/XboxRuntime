@@ -566,9 +566,18 @@ extern "C" DWORD WINAPI XNetGetEthernetLinkStatus() {
     std::vector<BYTE> storage;
     auto* adapter = FindUsableIPv4Adapter(storage);
     if (!adapter) return 0;
-    DWORD status = 0x00000001u;
-    if (adapter->TransmitLinkSpeed >= 100000000ull) status |= 0x00000002u;
-    if (adapter->IfType == IF_TYPE_IEEE80211) status |= 0x00000020u;
+
+    // XNet reports the negotiated link class, not the adapter's maximum
+    // advertised capability. IP Helper exposes the current transmit speed
+    // in bits per second; it does not expose a reliable duplex-mode field.
+    const ULONG64 linkSpeed = adapter->TransmitLinkSpeed;
+    DWORD status = XNET_ETHERNET_LINK_ACTIVE;
+    if (linkSpeed >= 100000000ull)
+        status |= XNET_ETHERNET_LINK_100MBPS;
+    else if (linkSpeed >= 10000000ull)
+        status |= XNET_ETHERNET_LINK_10MBPS;
+    if (adapter->IfType == IF_TYPE_IEEE80211)
+        status |= XNET_ETHERNET_LINK_WIRELESS;
     return status;
 }
 
