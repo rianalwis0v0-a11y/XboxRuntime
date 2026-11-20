@@ -104,6 +104,26 @@ jobs:
       - name: Build NV2A provider
         run: cmake --build build-nv2a --config Release --target nv2a
 
+      - name: Verify NV2A provider ABI exports
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          if (!$vs) { throw "Visual Studio installation not found" }
+          $dumpbin = Get-ChildItem (Join-Path $vs "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -like "*Hostx64*x64*dumpbin.exe" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$dumpbin) { throw "MSVC dumpbin.exe not found" }
+          $exports = & $dumpbin /exports "build-nv2a/out/nv2a.dll"
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed for NV2A provider" }
+          $required = @("ModuleStartWithMemory", "ModuleStop", "XboxNV2A_ReadRegister",
+            "XboxNV2A_WriteRegister", "XboxNV2A_SubmitMethod", "XboxNV2A_Flush",
+            "XboxNV2A_ReadVRAM", "XboxNV2A_WriteVRAM", "XboxNV2A_ReadRAMIN",
+            "XboxNV2A_WriteRAMIN")
+          $text = $exports -join "`n"
+          foreach ($name in $required) {
+            if ($text -notmatch [regex]::Escape($name)) { throw "NV2A export missing: $name" }
+          }
       - name: Stage NV2A provider beside host kernel
         shell: pwsh
         run: Copy-Item "build-nv2a/out/nv2a.dll" "build-kernel-host/out/nv2a.dll" -Force
