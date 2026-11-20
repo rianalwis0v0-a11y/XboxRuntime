@@ -3,6 +3,7 @@
 
 #include "../xbe_loader/xbe_backend_api.h"
 #include "../../guest32/guest_protocol.h"
+#include "../../guest32/kernel_gpu_service_protocol.h"
 
 #include <atomic>
 #include <cstdint>
@@ -15,9 +16,12 @@ struct BackendContext {
     HANDLE mapping = nullptr;
     std::uint8_t* hostView = nullptr;
     HANDLE pipe = INVALID_HANDLE_VALUE;
+    HANDLE gpuPipe = INVALID_HANDLE_VALUE;
+    HANDLE gpuThread = nullptr;
     PROCESS_INFORMATION process{};
     std::wstring mappingName;
     std::wstring pipeName;
+    std::wstring gpuPipeName;
     std::wstring titlePath;
     std::uint32_t base = 0;
     std::uint32_t size = 0;
@@ -91,7 +95,165 @@ bool RuntimeEepromPath(std::wstring& path) {
         return false;
     return true;
 }
+using GpuReadRegisterFn = uint64_t (__cdecl*)(uint32_t, unsigned int);
+using GpuWriteRegisterFn = int (__cdecl*)(uint32_t, uint64_t, unsigned int);
+using GpuSubmitMethodFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t);
+using GpuFlushFn = void (__cdecl*)();
+using GpuMemoryReadFn = int (__cdecl*)(uint32_t, void*, uint32_t);
+using GpuMemoryWriteFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
+
+DWORD WINAPI GpuServiceWorker(void* parameter) {
+    HANDLE pipe = static_cast<HANDLE>(parameter);
+    HMODULE provider = GetModuleHandleW(L"nv2a.dll");
+    const auto readRegister = reinterpret_cast<GpuReadRegisterFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_ReadRegister") : nullptr);
+    const auto writeRegister = reinterpret_cast<GpuWriteRegisterFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_WriteRegister") : nullptr);
+    const auto submitMethod = reinterpret_cast<GpuSubmitMethodFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_SubmitMethod") : nullptr);
+    const auto flush = reinterpret_cast<GpuFlushFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_Flush") : nullptr);
+    const auto readVram = reinterpret_cast<GpuMemoryReadFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_ReadVRAM") : nullptr);
+    const auto writeVram = reinterpret_cast<GpuMemoryWriteFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_WriteVRAM") : nullptr);
+    const auto readRamin = reinterpret_cast<GpuMemoryReadFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
+    const auto writeRamin = reinterpret_cast<GpuMemoryWriteFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
+
+    for (;;) {
+        XboxGpuRpcRequest request{};
+        if (!ReadExact(pipe, &request, sizeof(request))) break;
+        if (request.magic != XBOX_GPU_RPC_MAGIC ||
+            request.version != XBOX_GPU_RPC_VERSION)
+            break;
+
+        XboxGpuRpcResponse response{
+            XBOX_GPU_RPC_MAGIC, XBOX_GPU_RPC_VERSION,
+            request.request_id, ERROR_NOT_SUPPORTED, 0
+        };
+        std::vector<uint8_t> transfer;
+        bool sendReadPayload = false;
+
+        switch (request.opcode) {
+        case XboxGpuRpcPing:
+            if (request.payload_size != 0) break;
+            response.status = ERROR_SUCCESS;
+            response.value = XBOX_GPU_RPC_VERSION;
+            break;
+        case XboxGpuRpcReadRegister:
+            if (request.payload_size != 0) break;
+            if (readRegister && (request.arg1 == 1 || request.arg1 == 2 ||
+                                 request.arg1 == 4)) {
+                response.value = readRegister(request.arg0, request.arg1);
+                response.status = ERROR_SUCCESS;
+            } else if (request.arg1 != 1 && request.arg1 != 2 &&
+                       request.arg1 != 4) {
+                response.status = ERROR_INVALID_PARAMETER;
+            }
+            break;
+        case XboxGpuRpcWriteRegister: {
+            if (request.payload_size != 0) break;
+            if (request.arg3 != 1 && request.arg3 != 2 && request.arg3 != 4) {
+                response.status = ERROR_INVALID_PARAMETER;
+                break;
+            }
+            if (writeRegister) {
+                const uint64_t value = (uint64_t(request.arg2) << 32) | request.arg1;
+                response.status = writeRegister(request.arg0, value, request.arg3) == 0
+                    ? ERROR_SUCCESS : ERROR_GEN_FAILURE;
+            }
+            break;
+        }
+        case XboxGpuRpcSubmitMethod:
+            if (request.payload_size != 0) break;
+            if (submitMethod)
+                response.status = submitMethod(request.arg0, request.arg1, request.arg2) == 0
+                    ? ERROR_SUCCESS : ERROR_GEN_FAILURE;
+            break;
+        case XboxGpuRpcFlush:
+            if (request.payload_size != 0) break;
+            if (flush) {
+                flush();
+                response.status = ERROR_SUCCESS;
+            }
+            break;
+        case XboxGpuRpcReadVram:
+        case XboxGpuRpcReadRamin: {
+            if (request.payload_size != 0) break;
+            if (request.arg1 > XBOX_GPU_RPC_MAX_TRANSFER) {
+                response.status = ERROR_INVALID_PARAMETER;
+                break;
+            }
+            try { transfer.resize(request.arg1); }
+            catch (...) { response.status = ERROR_NOT_ENOUGH_MEMORY; break; }
+            const auto readMemory = request.opcode == XboxGpuRpcReadVram
+                ? readVram : readRamin;
+            if (readMemory && (request.arg1 == 0 ||
+                               readMemory(request.arg0, transfer.data(), request.arg1) == 0)) {
+                response.status = ERROR_SUCCESS;
+                response.value = request.arg1;
+                sendReadPayload = request.arg1 != 0;
+            } else if (!readMemory) {
+                response.status = ERROR_NOT_SUPPORTED;
+            } else {
+                response.status = ERROR_GEN_FAILURE;
+            }
+            break;
+        }
+        case XboxGpuRpcWriteVram:
+        case XboxGpuRpcWriteRamin: {
+            if (request.payload_size > XBOX_GPU_RPC_MAX_TRANSFER ||
+                request.payload_size != request.arg1)
+                break;
+            try { transfer.resize(request.payload_size); }
+            catch (...) { response.status = ERROR_NOT_ENOUGH_MEMORY; break; }
+            if (request.payload_size &&
+                !ReadExact(pipe, transfer.data(), request.payload_size))
+                return 0;
+            const auto writeMemory = request.opcode == XboxGpuRpcWriteVram
+                ? writeVram : writeRamin;
+            if (writeMemory && (request.arg1 == 0 ||
+                writeMemory(request.arg0, transfer.data(), request.arg1) == 0)) {
+                response.status = ERROR_SUCCESS;
+            } else if (!writeMemory) {
+                response.status = ERROR_NOT_SUPPORTED;
+            } else {
+                response.status = ERROR_GEN_FAILURE;
+            }
+            break;
+        }
+        default:
+            if (request.payload_size != 0) return 0;
+            response.status = ERROR_NOT_SUPPORTED;
+            break;
+        }
+
+        if (!WriteExact(pipe, &response, sizeof(response))) break;
+        if (sendReadPayload && !WriteExact(pipe, transfer.data(), request.arg1))
+            break;
+    }
+    return 0;
+}
+
+void StopGpuService(BackendContext& context) {
+    if (context.gpuThread) {
+        CancelSynchronousIo(context.gpuThread);
+        WaitForSingleObject(context.gpuThread, INFINITE);
+        CloseHandle(context.gpuThread);
+        context.gpuThread = nullptr;
+    }
+    if (context.gpuPipe != INVALID_HANDLE_VALUE) {
+        DisconnectNamedPipe(context.gpuPipe);
+        CloseHandle(context.gpuPipe);
+        context.gpuPipe = INVALID_HANDLE_VALUE;
+    }
+}
+
 void ResetContextHandles(BackendContext& context) {
+    StopGpuService(context);
+    StopGpuService(context);
     if (context.pipe != INVALID_HANDLE_VALUE) {
         CloseHandle(context.pipe);
         context.pipe = INVALID_HANDLE_VALUE;
@@ -114,6 +276,7 @@ void ResetContextHandles(BackendContext& context) {
     }
     context.mappingName.clear();
     context.pipeName.clear();
+    context.gpuPipeName.clear();
     context.titlePath.clear();
     context.base = context.size = 0;
     context.importsResolved = false;
@@ -174,6 +337,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
                                 L"_" + std::to_wstring(sequence);
     context.mappingName = L"Local\\XboxRuntime_XBE_" + suffix;
     context.pipeName = L"\\\\.\\pipe\\XboxRuntime_XBE_" + suffix;
+    context.gpuPipeName = L"\\\\.\\pipe\\XboxRuntime_GPU_" + suffix;
     context.base = guestBase;
     context.size = imageSize;
 
@@ -209,6 +373,18 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         return 5;
     }
 
+    context.gpuPipe = CreateNamedPipeW(context.gpuPipeName.c_str(),
+        PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+        1, XBOX_GPU_RPC_MAX_TRANSFER + sizeof(XboxGpuRpcRequest),
+        XBOX_GPU_RPC_MAX_TRANSFER + sizeof(XboxGpuRpcResponse), 5000, nullptr);
+    if (context.gpuPipe == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 5;
+        context.lastReserveWin32Error = error;
+        ResetContextHandles(context);
+        return 5;
+    }
+
     std::wstring directory;
     std::wstring eeprom;
     if (!ModuleDirectory(directory) || !RuntimeEepromPath(eeprom)) {
@@ -229,6 +405,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     }
     std::wstring command = Quote(guestExe) +
         L" --pipe " + Quote(context.pipeName) +
+        L" --gpu-pipe " + Quote(context.gpuPipeName) +
         L" --mapping " + Quote(context.mappingName) +
         L" --base " + Quote(std::to_wstring(guestBase)) +
         L" --size " + Quote(std::to_wstring(imageSize)) +
@@ -313,6 +490,66 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         StopGuestProcessLocked(context);
         ResetContextHandles(context);
         return 9;
+    }
+
+    // The GPU RPC channel is independent of the lifecycle/control pipe.
+    DWORD gpuMode = PIPE_READMODE_BYTE | PIPE_NOWAIT;
+    if (!SetNamedPipeHandleState(context.gpuPipe, &gpuMode, nullptr, nullptr)) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 11;
+        context.lastReserveWin32Error = error;
+        StopGuestProcessLocked(context);
+        ResetContextHandles(context);
+        return 11;
+    }
+    const ULONGLONG gpuConnectDeadline = GetTickCount64() + 10000ull;
+    bool gpuConnected = false;
+    for (;;) {
+        if (ConnectNamedPipe(context.gpuPipe, nullptr)) {
+            gpuConnected = true;
+            break;
+        }
+        const DWORD connectError = GetLastError();
+        if (connectError == ERROR_PIPE_CONNECTED) {
+            gpuConnected = true;
+            break;
+        }
+        if (connectError != ERROR_PIPE_LISTENING && connectError != ERROR_NO_DATA) {
+            context.lastReserveResult = 11;
+            context.lastReserveWin32Error = connectError;
+            StopGuestProcessLocked(context);
+            ResetContextHandles(context);
+            return 11;
+        }
+        if (WaitForSingleObject(context.process.hProcess, 0) == WAIT_OBJECT_0 ||
+            GetTickCount64() >= gpuConnectDeadline) {
+            context.lastReserveResult = 11;
+            context.lastReserveWin32Error = ERROR_TIMEOUT;
+            StopGuestProcessLocked(context);
+            ResetContextHandles(context);
+            return 11;
+        }
+        Sleep(10);
+    }
+    gpuMode = PIPE_READMODE_BYTE | PIPE_WAIT;
+    if (!gpuConnected ||
+        !SetNamedPipeHandleState(context.gpuPipe, &gpuMode, nullptr, nullptr)) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 11;
+        context.lastReserveWin32Error = error;
+        StopGuestProcessLocked(context);
+        ResetContextHandles(context);
+        return 11;
+    }
+    context.gpuThread = CreateThread(nullptr, 0, GpuServiceWorker,
+        context.gpuPipe, 0, nullptr);
+    if (!context.gpuThread) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 11;
+        context.lastReserveWin32Error = error;
+        StopGuestProcessLocked(context);
+        ResetContextHandles(context);
+        return 11;
     }
 
     XboxGuestHello hello{};
