@@ -62,7 +62,7 @@ def read_name(packet: bytes, offset: int) -> tuple[str, int]:
             raise DNSFormatError("DNS name too long")
         cursor += length
 
-    return ".".join(labels).lower(), (next_offset if next_offset is not None else cursor + 1)
+    return ".".join(labels).lower(), (next_offset if next_offset is not None else cursor)
 
 
 def encode_name(name: str) -> bytes:
