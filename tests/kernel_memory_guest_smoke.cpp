@@ -124,6 +124,24 @@ int main() {
         VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
         return Fail("reject RAMIN exhaustion", 0xC0000001L);
     }
+    void* mappedVram = K_MmMapIoSpace(0xF0001000u, 0x1000u, PAGE_READWRITE);
+    if (mappedVram != sharedGpuMemory + 0x1000u) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("map shared NV2A VRAM aperture", 0xC0000001L);
+    }
+    static_cast<std::uint8_t*>(mappedVram)[0] = 0x6Bu;
+    if (sharedGpuMemory[0x1000u] != 0x6Bu ||
+        K_MmUnmapIoSpace(mappedVram, 0x1000u) != mappedVram) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("shared VRAM alias/unmap", 0xC0000001L);
+    }
+    if (K_MmMapIoSpace(0xF4000000u, 0x1000u, PAGE_READWRITE) != nullptr) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("reject VRAM aperture beyond backed memory", 0xC0000001L);
+    }
     XboxKernelGpuMemoryShutdown();
     if (K_MmClaimGpuInstanceMemory(0x100u, nullptr) != nullptr) {
         VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
