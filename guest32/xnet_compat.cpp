@@ -51,14 +51,28 @@ std::vector<AddressMapping> g_addressMappings;
 
 bool IsIPv4OnLocalSubnet(IN_ADDR candidate) {
     if (candidate.s_addr == htonl(INADDR_LOOPBACK)) return true;
+    constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST;
     ULONG bytes = 0;
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST,
-            nullptr, nullptr, &bytes) != ERROR_BUFFER_OVERFLOW || !bytes) return false;
+    ULONG result = GetAdaptersAddresses(AF_INET, flags, nullptr, nullptr, &bytes);
+    if (result != ERROR_BUFFER_OVERFLOW || !bytes) return false;
+
     std::vector<BYTE> storage;
-    try { storage.resize(bytes); } catch (...) { return false; }
-    auto* first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST,
-            nullptr, first, &bytes) != NO_ERROR) return false;
+    PIP_ADAPTER_ADDRESSES first = nullptr;
+    // Adapter changes can invalidate the size returned by the initial query.
+    // Retry only buffer-growth races; fail closed on all other IP Helper errors.
+    for (unsigned attempt = 0; attempt != 3; ++attempt) {
+        try {
+            storage.resize(bytes);
+        } catch (...) {
+            return false;
+        }
+        first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
+        result = GetAdaptersAddresses(AF_INET, flags, nullptr, first, &bytes);
+        if (result == NO_ERROR) break;
+        if (result != ERROR_BUFFER_OVERFLOW || !bytes) return false;
+        first = nullptr;
+    }
+    if (!first) return false;
     for (auto* adapter = first; adapter; adapter = adapter->Next) {
         if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
         for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
