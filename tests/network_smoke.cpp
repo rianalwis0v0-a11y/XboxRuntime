@@ -16,6 +16,14 @@ int main() {
     params.cfgSockMaxStreamSockets = 2;
     if (XNetStartup(&params) != 0) return 1;
 
+    // A nested startup must not replace the first caller's quota configuration.
+    XNetStartupParams nestedParams{};
+    nestedParams.cfgSizeOfStruct = sizeof(nestedParams);
+    nestedParams.cfgSockMaxDgramSockets = 8;
+    nestedParams.cfgSockMaxStreamSockets = 32;
+    if (XNetStartup(&nestedParams) != 0 || XNetCleanup() != 0)
+        return 51;
+
     // XNetStartupParams socket quotas apply to all guest sockets, including accepts.
     const uint32_t quotaUdp = XboxNetSocketCreate(2);
     if (!quotaUdp || XboxNetSocketCreate(2) != 0 ||
