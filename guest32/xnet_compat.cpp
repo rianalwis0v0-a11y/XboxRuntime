@@ -196,6 +196,55 @@ extern "C" int WINAPI XNetDnsRelease(XNDNS* result) {
     return 0;
 }
 
+namespace {
+int QosUnavailable() {
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    return SocketFailure(g_xnetUsers ? WSAEOPNOTSUPP : WSANOTINITIALISED);
+}
+}
+
+extern "C" int WINAPI XNetQosListen(const XNKID* keyId, const BYTE* data,
+    UINT dataSize, DWORD bitsPerSecond, DWORD flags) {
+    (void)keyId; (void)data; (void)dataSize; (void)bitsPerSecond; (void)flags;
+    // QoS listener sockets and their authenticated reply protocol are not
+    // implemented yet. Report that explicitly rather than claiming a listener exists.
+    return QosUnavailable();
+}
+
+extern "C" int WINAPI XNetQosLookup(UINT countXnAddr,
+    const XNADDR* xnAddrs[], const XNKID* keyIds[], const XNKEY* keys[],
+    UINT countInAddr, const IN_ADDR inAddrs[], const DWORD serviceIds[],
+    UINT probes, DWORD bitsPerSecond, DWORD flags, WSAEVENT eventHandle,
+    XNQOS** result) {
+    (void)countXnAddr; (void)xnAddrs; (void)keyIds; (void)keys;
+    (void)countInAddr; (void)inAddrs; (void)serviceIds; (void)probes;
+    (void)bitsPerSecond; (void)flags; (void)eventHandle;
+    if (!result) return SocketFailure(WSAEFAULT);
+    *result = nullptr;
+    return QosUnavailable();
+}
+
+extern "C" int WINAPI XNetQosServiceLookup(DWORD flags,
+    WSAEVENT eventHandle, XNQOS** result) {
+    (void)flags; (void)eventHandle;
+    if (!result) return SocketFailure(WSAEFAULT);
+    *result = nullptr;
+    return QosUnavailable();
+}
+
+extern "C" int WINAPI XNetQosRelease(XNQOS* result) {
+    if (!result) return SocketFailure(WSAEFAULT);
+    // No current QoS operation allocates XNQOS results; never free memory that
+    // may belong to a title or another subsystem.
+    return SocketFailure(WSAEOPNOTSUPP);
+}
+
+extern "C" int WINAPI XNetQosGetListenStats(const XNKID* keyId,
+    XNQOSLISTENSTATS* stats) {
+    if (!keyId || !stats) return SocketFailure(WSAEFAULT);
+    return QosUnavailable();
+}
+
 extern "C" int WINAPI XNetRandom(BYTE* buffer, UINT length) {
     if (!buffer && length) return WSAEFAULT;
     std::lock_guard<std::mutex> lock(g_xnetMutex);
