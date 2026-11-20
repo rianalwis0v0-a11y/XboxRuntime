@@ -21,7 +21,7 @@ target_include_directories(xbe_guest32 PRIVATE
 target_compile_features(xbe_guest32 PRIVATE cxx_std_17)
 target_compile_definitions(xbe_guest32 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(xbe_guest32 PRIVATE /W4 /permissive-)
-target_link_libraries(xbe_guest32 PRIVATE ws2_32 iphlpapi)
+target_link_libraries(xbe_guest32 PRIVATE ws2_32 iphlpapi bcrypt)
 target_link_options(xbe_guest32 PRIVATE /BASE:0x70000000 /DYNAMICBASE:NO)
 target_link_options(xbe_guest32 PRIVATE /LARGEADDRESSAWARE)
 set_target_properties(xbe_guest32 PROPERTIES OUTPUT_NAME "xbe_guest32"
@@ -42,7 +42,7 @@ target_include_directories(network_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(network_smoke PRIVATE cxx_std_17)
 target_compile_definitions(network_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(network_smoke PRIVATE /W4 /permissive-)
-target_link_libraries(network_smoke PRIVATE ws2_32 iphlpapi)
+target_link_libraries(network_smoke PRIVATE ws2_32 iphlpapi bcrypt)
 add_test(NAME network_smoke COMMAND network_smoke)
 
 # Verify the name-based API registry returns callable x86 XNet/XSocket entries.
@@ -56,7 +56,7 @@ target_include_directories(guest_api_registry_smoke PRIVATE "${CMAKE_CURRENT_SOU
 target_compile_features(guest_api_registry_smoke PRIVATE cxx_std_17)
 target_compile_definitions(guest_api_registry_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(guest_api_registry_smoke PRIVATE /W4 /permissive-)
-target_link_libraries(guest_api_registry_smoke PRIVATE ws2_32 iphlpapi)
+target_link_libraries(guest_api_registry_smoke PRIVATE ws2_32 iphlpapi bcrypt)
 add_test(NAME guest_api_registry_smoke COMMAND guest_api_registry_smoke)
 
 # Execute the x86 guest-facing memory/object entry points with their real stdcall ABI.
@@ -186,7 +186,7 @@ target_include_directories(kernel_io_group_a_guest_smoke PRIVATE
 target_compile_features(kernel_io_group_a_guest_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_io_group_a_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX XBOX_KERNEL_COMPAT_HAS_KEQUERYSYSTEMTIME XBOX_FS_PROVIDER_TEST)
 target_compile_options(kernel_io_group_a_guest_smoke PRIVATE /W4 /permissive-)
-target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi)
+target_link_libraries(kernel_io_group_a_guest_smoke PRIVATE ws2_32 iphlpapi bcrypt)
 add_test(NAME kernel_io_group_a_guest_smoke COMMAND kernel_io_group_a_guest_smoke)
 
 # Exercise real FATX and XDVDFS providers through the shared kernel bridge.

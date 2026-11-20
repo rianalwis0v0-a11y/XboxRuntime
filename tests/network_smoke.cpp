@@ -5,15 +5,101 @@
 #include "xnet_compat.h"
 
 int main() {
+    if (XWSACleanup() != SOCKET_ERROR ||
+        WSAGetLastError() != WSANOTINITIALISED)
+        return 34;
+
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
+    params.cfgKeyRegMax = 1;
+    params.cfgSockMaxDgramSockets = 1;
+    params.cfgSockMaxStreamSockets = 2;
     if (XNetStartup(&params) != 0) return 1;
+
+    // XNetStartupParams socket quotas apply to all guest sockets, including accepts.
+    const uint32_t quotaUdp = XboxNetSocketCreate(2);
+    if (!quotaUdp || XboxNetSocketCreate(2) != 0 ||
+        WSAGetLastError() != WSAENOBUFS ||
+        XboxNetSocketClose(quotaUdp) != 0)
+        return 44;
+    const uint32_t quotaTcpA = XboxNetSocketCreate(1);
+    const uint32_t quotaTcpB = XboxNetSocketCreate(1);
+    if (!quotaTcpA || !quotaTcpB || XboxNetSocketCreate(1) != 0 ||
+        WSAGetLastError() != WSAENOBUFS ||
+        XboxNetSocketClose(quotaTcpA) != 0 ||
+        XboxNetSocketClose(quotaTcpB) != 0)
+        return 45;
+    // A zeroed startup structure must select the documented safe defaults.
+    if (XNetCleanup() != 0) return 46;
+    XNetStartupParams defaults{};
+    defaults.cfgSizeOfStruct = sizeof(defaults);
+    if (XNetStartup(&defaults) != 0) return 47;
+    uint32_t defaultUdp[8]{};
+    uint32_t defaultTcp[32]{};
+    bool defaultsOk = true;
+    for (auto& socket : defaultUdp) {
+        socket = XboxNetSocketCreate(2);
+        if (!socket) { defaultsOk = false; break; }
+    }
+    if (defaultsOk && (XboxNetSocketCreate(2) != 0 ||
+        WSAGetLastError() != WSAENOBUFS)) defaultsOk = false;
+    for (auto& socket : defaultUdp) if (socket) XboxNetSocketClose(socket);
+    if (defaultsOk) {
+        for (auto& socket : defaultTcp) {
+            socket = XboxNetSocketCreate(1);
+            if (!socket) { defaultsOk = false; break; }
+        }
+    }
+    if (defaultsOk && (XboxNetSocketCreate(1) != 0 ||
+        WSAGetLastError() != WSAENOBUFS)) defaultsOk = false;
+    for (auto& socket : defaultTcp) if (socket) XboxNetSocketClose(socket);
+    if (XNetCleanup() != 0 || !defaultsOk || XNetStartup(&params) != 0)
+        return 48;
+
+    WSADATA startupData{};
+    if (XWSAStartup(MAKEWORD(2, 2), &startupData) != 0 ||
+        startupData.wVersion != MAKEWORD(2, 2)) {
+        XNetCleanup();
+        return 28;
+    }
+    WSAEVENT eventProbe = XWSACreateEvent();
+    if (!eventProbe || !XWSASetEvent(eventProbe) ||
+        XWSAWaitForMultipleEvents(1, &eventProbe, TRUE, 0, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XWSAResetEvent(eventProbe) ||
+        XWSAWaitForMultipleEvents(1, &eventProbe, TRUE, 0, FALSE) != WSA_WAIT_TIMEOUT ||
+        !XWSACloseEvent(eventProbe)) {
+        if (eventProbe) XWSACloseEvent(eventProbe);
+        XWSACleanup();
+        XNetCleanup();
+        return 29;
+    }
+
+    BYTE randomBytes[32]{};
+    if (XNetRandom(nullptr, sizeof(randomBytes)) != WSAEFAULT ||
+        XNetRandom(randomBytes, sizeof(randomBytes)) != 0)
+        return 11;
+    bool randomHasData = false;
+    for (BYTE value : randomBytes) randomHasData = randomHasData || value != 0;
+    if (!randomHasData) return 12;
+
+    XNKID firstId{}, secondId{};
+    XNKEY firstKey{}, secondKey{};
+    if (XNetCreateKey(&firstId, &firstKey) != 0 ||
+        XNetCreateKey(&secondId, &secondKey) != 0 ||
+        (firstId.ab[0] & 0xF0u) != 0 ||
+        XNetRegisterKey(&firstId, &firstKey) != 0 ||
+        XNetRegisterKey(&firstId, &firstKey) != WSAEALREADY ||
+        XNetRegisterKey(&secondId, &secondKey) != WSAENOMORE ||
+        XNetUnregisterKey(&firstId) != 0 ||
+        XNetUnregisterKey(&firstId) != WSAEINVAL)
+        return 13;
 
     WSAEVENT dnsEvent = WSACreateEvent();
     XNDNS* dns = nullptr;
     if (!dnsEvent || XNetDnsLookup("localhost", dnsEvent, &dns) != 0 ||
-        !dns || dns->iStatus != 0 || dns->cina == 0 ||
-        WSAWaitForMultipleEvents(1, &dnsEvent, TRUE, 0, FALSE) != WSA_WAIT_EVENT_0) {
+        !dns || dns->iStatus != WSAEINPROGRESS ||
+        WSAWaitForMultipleEvents(1, &dnsEvent, TRUE, 5000, FALSE) != WSA_WAIT_EVENT_0 ||
+        dns->iStatus != 0 || dns->cina == 0) {
         if (dns) XNetDnsRelease(dns);
         if (dnsEvent) WSACloseEvent(dnsEvent);
         XNetCleanup();
@@ -22,10 +108,95 @@ int main() {
     XNetDnsRelease(dns);
     WSACloseEvent(dnsEvent);
 
+    IN_ADDR unmappedAddress{}, mappedAddress{};
+    unmappedAddress.s_addr = htonl(INADDR_LOOPBACK);
+    if (XNetServerToInAddr(unmappedAddress, 1, &mappedAddress) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP ||
+        XNetInAddrToServer(unmappedAddress, &mappedAddress) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP) {
+        XNetCleanup();
+        return 27;
+    }
+
+    if (XSocketInet_Addr("127.0.0.1") != htonl(INADDR_LOOPBACK) ||
+        XSocketInet_Addr("not-an-ip") != INADDR_NONE ||
+        WSAGetLastError() != WSAEINVAL) {
+        XNetCleanup();
+        return 33;
+    }
+
+    char addressText[16]{};
+    IN_ADDR loopbackAddress{};
+    loopbackAddress.s_addr = htonl(INADDR_LOOPBACK);
+    if (XNetInAddrToString(loopbackAddress, addressText, sizeof(addressText)) != 0 ||
+        std::strcmp(addressText, "127.0.0.1") != 0 ||
+        XNetInAddrToString(loopbackAddress, addressText, 2) == 0) {
+        XNetCleanup();
+        return 23;
+    }
+
+    XNADDR localTitleAddress{};
+    DWORD localTitleFlags = XNetGetTitleXnAddr(&localTitleAddress);
+    DWORD localPlatform = 0;
+    XNADDR debugAddress{};
+    WORD systemLinkPort = 0;
+    if (!(localTitleFlags & XNET_GET_XNADDR_ETHERNET) ||
+        !(localTitleFlags & (XNET_GET_XNADDR_STATIC | XNET_GET_XNADDR_DHCP)) ||
+        XNetGetXnAddrPlatform(&localTitleAddress, &localPlatform) != 0 ||
+        localPlatform != XNET_XNADDR_PLATFORM_WINPC ||
+        XNetGetDebugXnAddr(&debugAddress) != XNET_GET_XNADDR_NONE ||
+        XNetGetBroadcastVersionStatus(FALSE) != 0 ||
+        XNetGetSystemLinkPort(&systemLinkPort) != 0 || systemLinkPort != 3074 ||
+        XNetSetSystemLinkPort(3075) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP) {
+        XNetCleanup();
+        return 43;
+    }
+
+    XNKID mappingKeyId{};
+    XNKEY mappingKey{};
+    XNADDR peerXnAddr{};
+    peerXnAddr.ina.s_addr = htonl(INADDR_LOOPBACK);
+    peerXnAddr.inaOnline.s_addr = htonl(INADDR_LOOPBACK);
+    peerXnAddr.abEnet[0] = 0x02;
+    peerXnAddr.abEnet[5] = 0x42;
+    IN_ADDR peerInAddr{};
+    XNADDR roundTripXnAddr{};
+    XNKID roundTripKeyId{};
+    if (XNetCreateKey(&mappingKeyId, &mappingKey) != 0 ||
+        XNetRegisterKey(&mappingKeyId, &mappingKey) != 0 ||
+        XNetXnAddrToInAddr(&peerXnAddr, &mappingKeyId, &peerInAddr) != 0 ||
+        peerInAddr.s_addr != htonl(INADDR_LOOPBACK) ||
+        XNetTsAddrToInAddr(&peerXnAddr, 1, &mappingKeyId, &peerInAddr) != 0 ||
+        XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != 0 ||
+        std::memcmp(&roundTripXnAddr, &peerXnAddr, sizeof(peerXnAddr)) != 0 ||
+        std::memcmp(&roundTripKeyId, &mappingKeyId, sizeof(mappingKeyId)) != 0) {
+        XNetCleanup();
+        return 41;
+    }
+
     uint32_t loopback = 0;
     if (XboxNetResolveIPv4("localhost", &loopback) != 0 || loopback == 0) {
         XNetCleanup();
         return 2;
+    }
+    // Invalid guest tokens must report a useful Winsock error, not just -1.
+    if (XboxNetSocketSend(0xFFFFFFFFu, "x", 1, 0) != SOCKET_ERROR ||
+        WSAGetLastError() != WSAENOTSOCK) {
+        XNetCleanup();
+        return 14;
+    }
+    if (XSocketSend(static_cast<SOCKET>(0xFFFFFFFEu), "x", 1, 0) != SOCKET_ERROR ||
+        WSAGetLastError() != WSAENOTSOCK ||
+        XSocketCreate(AF_INET, SOCK_RAW, IPPROTO_RAW) != INVALID_SOCKET ||
+        WSAGetLastError() != WSAESOCKTNOSUPPORT) {
+        XNetCleanup();
+        return 24;
+    }
+    XSocketSetLastError(WSAEINTR);
+    if (XSocketGetLastError() != WSAEINTR) {
+        XNetCleanup();
+        return 25;
     }
     const uint32_t tcp = XboxNetSocketCreate(1);
     const uint32_t udp = XboxNetSocketCreate(2);
@@ -49,6 +220,11 @@ int main() {
         return 5;
     }
     DWORD timeout = 2000;
+    WSAEVENT udpEvent = XWSACreateEvent();
+    if (!udpEvent || XWSAEventSelect(receiver, udpEvent, FD_READ) != 0) {
+        if (udpEvent) XWSACloseEvent(udpEvent);
+        XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 30;
+    }
     if (XSocketSetSockOpt(receiver, SOL_SOCKET, SO_RCVTIMEO,
             reinterpret_cast<const char*>(&timeout), sizeof(timeout)) != 0) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 6;
@@ -64,9 +240,14 @@ int main() {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 8;
     }
     const char payload[] = "insignia-xnet-smoke";
+    sockaddr_in mappedTarget = local;
+    mappedTarget.sin_addr = peerInAddr;
     if (XSocketSendTo(sender, payload, sizeof(payload), 0,
-            reinterpret_cast<sockaddr*>(&local), sizeof(local)) != sizeof(payload)) {
+            reinterpret_cast<sockaddr*>(&mappedTarget), sizeof(mappedTarget)) != sizeof(payload)) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 9;
+    }
+    if (XWSAWaitForMultipleEvents(1, &udpEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0) {
+        XWSACloseEvent(udpEvent); XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 31;
     }
     char received[64]{};
     sockaddr_in peer{};
@@ -76,9 +257,177 @@ int main() {
     if (bytes != sizeof(payload) || std::memcmp(received, payload, sizeof(payload)) != 0) {
         XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 10;
     }
+    if (XNetUnregisterInAddr(peerInAddr) != 0 ||
+        XNetInAddrToXnAddr(peerInAddr, &roundTripXnAddr, &roundTripKeyId) != WSAEINVAL ||
+        XNetUnregisterKey(&mappingKeyId) != 0) {
+        XWSACloseEvent(udpEvent); XSocketClose(receiver); XSocketClose(sender); XNetCleanup(); return 42;
+    }
+    XWSACloseEvent(udpEvent);
     XSocketClose(receiver);
     XSocketClose(sender);
+
+    // Exercise the TCP listen/connect/accept/send/receive path on loopback.
+    const SOCKET listener = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const SOCKET client = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET || client == INVALID_SOCKET) {
+        if (listener != INVALID_SOCKET) XSocketClose(listener);
+        if (client != INVALID_SOCKET) XSocketClose(client);
+        XNetCleanup();
+        return 15;
+    }
+    sockaddr_in listenAddress{};
+    listenAddress.sin_family = AF_INET;
+    listenAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (XSocketBind(listener, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0 ||
+        XSocketListen(listener, 4) != 0) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 16;
+    }
+    int listenLength = sizeof(listenAddress);
+    if (XSocketGetSockName(listener, reinterpret_cast<sockaddr*>(&listenAddress), &listenLength) != 0 ||
+        XSocketConnect(client, reinterpret_cast<sockaddr*>(&listenAddress), sizeof(listenAddress)) != 0) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 17;
+    }
+    fd_set readable{};
+    FD_ZERO(&readable);
+    FD_SET(listener, &readable);
+    timeval selectTimeout{};
+    selectTimeout.tv_sec = 2;
+    const int selected = XSocketSelect(0, &readable, nullptr, nullptr, &selectTimeout);
+    if (selected != 1 || !FD_ISSET(listener, &readable) ||
+        !XWSAFDIsSet(listener, &readable)) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 26;
+    }
+    const SOCKET accepted = XSocketAccept(listener, nullptr, nullptr);
+    if (accepted == INVALID_SOCKET) {
+        XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 18;
+    }
+    const char tcpPayload[] = "xnet-tcp-loopback";
+    if (XSocketSend(client, tcpPayload, sizeof(tcpPayload), 0) != sizeof(tcpPayload)) {
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 19;
+    }
+    char tcpReceived[64]{};
+    if (XSocketRecv(accepted, tcpReceived, sizeof(tcpReceived), 0) != sizeof(tcpPayload) ||
+        std::memcmp(tcpReceived, tcpPayload, sizeof(tcpPayload)) != 0) {
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 20;
+    }
+    WSAEVENT recvEvent = XSocketWSACreateEvent();
+    WSAEVENT sendEvent = XSocketWSACreateEvent();
+    WSAOVERLAPPED recvOv{};
+    WSAOVERLAPPED sendOv{};
+    recvOv.hEvent = recvEvent;
+    sendOv.hEvent = sendEvent;
+    char asyncBuffer[64]{};
+    WSABUF recvBuf{static_cast<ULONG>(sizeof(asyncBuffer)), asyncBuffer};
+    WSABUF sendBuf{static_cast<ULONG>(sizeof(tcpPayload)), const_cast<char*>(tcpPayload)};
+    DWORD asyncFlags = 0, asyncReceived = 0, asyncSent = 0;
+    if (!recvEvent || !sendEvent ||
+        XSocketWSARecv(accepted, &recvBuf, 1, nullptr, &asyncFlags, &recvOv, nullptr) != SOCKET_ERROR ||
+        XSocketWSAGetLastError() != WSA_IO_PENDING ||
+        XSocketWSASend(client, &sendBuf, 1, &asyncSent, 0, &sendOv, nullptr) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &recvEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XSocketWSAGetOverlappedResult(accepted, &recvOv, &asyncReceived, FALSE, &asyncFlags) ||
+        asyncReceived != sizeof(tcpPayload) ||
+        std::memcmp(asyncBuffer, tcpPayload, sizeof(tcpPayload)) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &sendEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XSocketWSAGetOverlappedResult(client, &sendOv, &asyncSent, FALSE, &asyncFlags) ||
+        asyncSent != sizeof(tcpPayload)) {
+        if (recvEvent) XSocketWSACloseEvent(recvEvent);
+        if (sendEvent) XSocketWSACloseEvent(sendEvent);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 34;
+    }
+    XSocketWSACloseEvent(recvEvent);
+    XSocketWSACloseEvent(sendEvent);
+
+    const SOCKET udpReceiver = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    const SOCKET udpSender = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    WSAEVENT udpOverlappedEvent = XSocketWSACreateEvent();
+    sockaddr_in udpAddress{};
+    udpAddress.sin_family = AF_INET;
+    udpAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (udpReceiver == INVALID_SOCKET || udpSender == INVALID_SOCKET || !udpOverlappedEvent ||
+        XSocketBind(udpReceiver, reinterpret_cast<sockaddr*>(&udpAddress), sizeof(udpAddress)) != 0) {
+        if (udpOverlappedEvent) XSocketWSACloseEvent(udpOverlappedEvent);
+        if (udpReceiver != INVALID_SOCKET) XSocketClose(udpReceiver);
+        if (udpSender != INVALID_SOCKET) XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 35;
+    }
+    int udpAddressLength = sizeof(udpAddress);
+    if (XSocketGetSockName(udpReceiver, reinterpret_cast<sockaddr*>(&udpAddress), &udpAddressLength) != 0) {
+        XSocketWSACloseEvent(udpOverlappedEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 36;
+    }
+    WSAOVERLAPPED udpOv{};
+    udpOv.hEvent = udpOverlappedEvent;
+    char udpBuffer[64]{};
+    WSABUF udpRecvBuf{static_cast<ULONG>(sizeof(udpBuffer)), udpBuffer};
+    sockaddr_in udpPeer{};
+    int udpPeerLength = sizeof(udpPeer);
+    DWORD udpFlags = 0, udpReceived = 0, udpSent = 0;
+    const char udpPayload[] = "xnet-overlapped-udp";
+    WSABUF udpSendBuf{static_cast<ULONG>(sizeof(udpPayload)), const_cast<char*>(udpPayload)};
+    if (XSocketWSARecvFrom(udpReceiver, &udpRecvBuf, 1, nullptr, &udpFlags,
+            reinterpret_cast<sockaddr*>(&udpPeer), &udpPeerLength, &udpOv, nullptr) != SOCKET_ERROR ||
+        XSocketWSAGetLastError() != WSA_IO_PENDING ||
+        XSocketWSASendTo(udpSender, &udpSendBuf, 1, &udpSent, 0,
+            reinterpret_cast<sockaddr*>(&udpAddress), sizeof(udpAddress), nullptr, nullptr) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &udpOverlappedEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        !XSocketWSAGetOverlappedResult(udpReceiver, &udpOv, &udpReceived, FALSE, &udpFlags) ||
+        udpReceived != sizeof(udpPayload) ||
+        std::memcmp(udpBuffer, udpPayload, sizeof(udpPayload)) != 0 ||
+        udpPeer.sin_family != AF_INET || udpPeer.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+        XSocketWSACloseEvent(udpOverlappedEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 37;
+    }
+    // Verify explicit cancellation completes a pending overlapped receive.
+    WSAResetEvent(udpOverlappedEvent);
+    WSAOVERLAPPED cancelOv{};
+    cancelOv.hEvent = udpOverlappedEvent;
+    char cancelBuffer[8]{};
+    WSABUF cancelBuf{static_cast<ULONG>(sizeof(cancelBuffer)), cancelBuffer};
+    sockaddr_in cancelPeer{};
+    int cancelPeerLength = sizeof(cancelPeer);
+    DWORD cancelFlags = 0, cancelBytes = 0;
+    if (XSocketWSARecvFrom(udpReceiver, &cancelBuf, 1, nullptr, &cancelFlags,
+            reinterpret_cast<sockaddr*>(&cancelPeer), &cancelPeerLength, &cancelOv, nullptr) != SOCKET_ERROR ||
+        XSocketWSAGetLastError() != WSA_IO_PENDING ||
+        XSocketWSACancelOverlappedIO(udpReceiver) != 0 ||
+        XSocketWSAWaitForMultipleEvents(1, &udpOverlappedEvent, TRUE, 2000, FALSE) != WSA_WAIT_EVENT_0 ||
+        XSocketWSAGetOverlappedResult(udpReceiver, &cancelOv, &cancelBytes, FALSE, &cancelFlags) != FALSE ||
+        XSocketWSAGetLastError() != WSA_OPERATION_ABORTED) {
+        XSocketWSACloseEvent(udpOverlappedEvent); XSocketClose(udpReceiver); XSocketClose(udpSender);
+        XSocketClose(accepted); XSocketClose(listener); XSocketClose(client); XNetCleanup(); return 38;
+    }
+    XSocketWSACloseEvent(udpOverlappedEvent);
+    XSocketClose(udpReceiver);
+    XSocketClose(udpSender);
+    XSocketClose(accepted);
+    XSocketClose(listener);
+    XSocketClose(client);
+
+    if (XWSACleanup() != 0) {
+        XNetCleanup();
+        return 32;
+    }
+
+    // Final cleanup must not tear Winsock down while a DNS worker is active.
+    WSAEVENT cleanupDnsEvent = WSACreateEvent();
+    XNDNS* cleanupDns = nullptr;
+    if (!cleanupDnsEvent || XNetDnsLookup("localhost", cleanupDnsEvent, &cleanupDns) != 0 ||
+        !cleanupDns) {
+        if (cleanupDns) XNetDnsRelease(cleanupDns);
+        if (cleanupDnsEvent) WSACloseEvent(cleanupDnsEvent);
+        XNetCleanup();
+        return 21;
+    }
     XNetCleanup();
-    std::puts("network_smoke: XNet startup/DNS event, XSocket UDP loopback, TCP/UDP token lifecycle passed");
+    if (WSAWaitForMultipleEvents(1, &cleanupDnsEvent, TRUE, 5000, FALSE) != WSA_WAIT_EVENT_0 ||
+        cleanupDns->iStatus != 0 || cleanupDns->cina == 0) {
+        XNetDnsRelease(cleanupDns);
+        WSACloseEvent(cleanupDnsEvent);
+        return 22;
+    }
+    XNetDnsRelease(cleanupDns);
+    WSACloseEvent(cleanupDnsEvent);
+    std::puts("network_smoke: async DNS, TCP/UDP loopback, key lifecycle, and socket error checks passed");
     return 0;
 }

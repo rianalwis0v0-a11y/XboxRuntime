@@ -1,5 +1,9 @@
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -11,14 +15,16 @@
 #include <unordered_map>
 #include <string>
 #include <limits>
+#include <utility>
 #include "network_compat.h"
 
 namespace {
 std::mutex g_mutex;
 struct SocketState {
-    explicit SocketState(SOCKET value) : socket(value) {}
+    SocketState(SOCKET value, int socketType) : socket(value), type(socketType) {}
     ~SocketState() { if (socket != INVALID_SOCKET) closesocket(socket); }
     SOCKET socket;
+    int type;
 };
 struct SocketLease {
     std::shared_ptr<SocketState> state;
@@ -27,6 +33,9 @@ struct SocketLease {
 std::unordered_map<uint32_t, std::shared_ptr<SocketState>> g_sockets;
 uint32_t g_nextHandle = 1;
 unsigned g_startUsers = 0;
+unsigned g_maxDatagramSockets = 8;
+unsigned g_maxStreamSockets = 32;
+WSADATA g_wsaData{};
 
 SocketLease FindSocket(uint32_t token) {
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -35,13 +44,35 @@ SocketLease FindSocket(uint32_t token) {
 }
 uint32_t StoreSocket(SOCKET socket) {
     if (socket == INVALID_SOCKET) return 0;
+    int socketType = 0;
+    int socketTypeSize = sizeof(socketType);
+    if (getsockopt(socket, SOL_SOCKET, SO_TYPE,
+            reinterpret_cast<char*>(&socketType), &socketTypeSize) == SOCKET_ERROR) {
+        closesocket(socket);
+        return 0;
+    }
+    if (socketType != SOCK_STREAM && socketType != SOCK_DGRAM) {
+        closesocket(socket);
+        WSASetLastError(WSAESOCKTNOSUPPORT);
+        return 0;
+    }
     std::lock_guard<std::mutex> lock(g_mutex);
+    unsigned matchingSockets = 0;
+    for (const auto& entry : g_sockets)
+        if (entry.second->type == socketType) ++matchingSockets;
+    const unsigned limit = socketType == SOCK_DGRAM
+        ? g_maxDatagramSockets : g_maxStreamSockets;
+    if (matchingSockets >= limit) {
+        closesocket(socket);
+        WSASetLastError(WSAENOBUFS);
+        return 0;
+    }
     for (uint64_t tries = 0; tries < UINT32_MAX - 1ull; ++tries) {
         uint32_t candidate = g_nextHandle++;
         if (!candidate) candidate = g_nextHandle++;
         if (g_sockets.find(candidate) == g_sockets.end()) {
             try {
-                g_sockets.emplace(candidate, std::make_shared<SocketState>(socket));
+                g_sockets.emplace(candidate, std::make_shared<SocketState>(socket, socketType));
             } catch (...) {
                 closesocket(socket);
                 return 0;
@@ -52,9 +83,7 @@ uint32_t StoreSocket(SOCKET socket) {
     closesocket(socket);
     return 0;
 }
-// Insignia's documented primary DNS resolver. Query it directly so an ISP
-// DNS proxy cannot silently return the retired Xbox Live addresses.
-constexpr const char* kInsigniaDnsIPv4 = "46.101.64.175";
+// Optional Insignia DNS endpoint is configured explicitly by the runtime.
 volatile LONG g_dnsQueryId = 0;
 
 bool SkipDnsName(const uint8_t* packet, size_t length, size_t& offset) {
@@ -106,10 +135,18 @@ bool QueryInsigniaDnsA(const char* hostname, uint32_t& addressNetworkOrder) {
     DWORD timeout = 1800;
     setsockopt(dns, SOL_SOCKET, SO_RCVTIMEO,
         reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    // An Insignia-aware resolver is opt-in and explicitly configured by the
+    // runtime. Never bake a service endpoint into the transport. If unset or
+    // invalid, Resolve() falls back to the Windows-configured DNS resolver.
+    char resolverAddress[64]{};
+    const DWORD resolverLength = GetEnvironmentVariableA(
+        "XBOX_RUNTIME_INSIGNIA_DNS_IPV4", resolverAddress,
+        static_cast<DWORD>(sizeof(resolverAddress)));
+    if (!resolverLength || resolverLength >= sizeof(resolverAddress)) { closesocket(dns); return false; }
     sockaddr_in server{};
     server.sin_family = AF_INET;
     server.sin_port = htons(53);
-    InetPtonA(AF_INET, kInsigniaDnsIPv4, &server.sin_addr);
+    if (InetPtonA(AF_INET, resolverAddress, &server.sin_addr) != 1) { closesocket(dns); return false; }
     const int sent = sendto(dns, reinterpret_cast<const char*>(query),
         static_cast<int>(out), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
     uint8_t response[2048]{};
@@ -182,42 +219,66 @@ bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address
 }
 }
 
-extern "C" int __cdecl XboxNetStartup() {
+extern "C" void __cdecl XboxNetSetSocketLimits(unsigned maxDatagramSockets, unsigned maxStreamSockets) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_startUsers) { ++g_startUsers; return 0; }
-    WSADATA data{};
-    if (WSAStartup(MAKEWORD(2, 2), &data) != 0) return -1;
-    if (LOBYTE(data.wVersion) != 2 || HIBYTE(data.wVersion) != 2) {
-        WSACleanup();
-        return -1;
+    g_maxDatagramSockets = maxDatagramSockets;
+    g_maxStreamSockets = maxStreamSockets;
+}
+
+extern "C" int __cdecl XboxNetStartupWithData(WORD requestedVersion, WSADATA* output) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (requestedVersion != MAKEWORD(2, 2)) return WSAVERNOTSUPPORTED;
+    if (g_startUsers) {
+        ++g_startUsers;
+        if (output) *output = g_wsaData;
+        return 0;
     }
+    WSADATA data{};
+    const int startupResult = WSAStartup(requestedVersion, &data);
+    if (startupResult != 0) return startupResult;
+    if (data.wVersion != requestedVersion) {
+        WSACleanup();
+        return WSAVERNOTSUPPORTED;
+    }
+    g_wsaData = data;
     g_startUsers = 1;
+    if (output) *output = g_wsaData;
     return 0;
 }
 
-extern "C" void __cdecl XboxNetCleanup() {
+extern "C" int __cdecl XboxNetStartup() {
+    return XboxNetStartupWithData(MAKEWORD(2, 2), nullptr);
+}
+
+extern "C" int __cdecl XboxNetCleanup() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (!g_startUsers || --g_startUsers) return;
+    if (!g_startUsers) {
+        WSASetLastError(WSANOTINITIALISED);
+        return SOCKET_ERROR;
+    }
+    if (--g_startUsers) return 0;
     // Active operations hold SocketLease references. Clearing the registry
     // removes guest-visible handles; each native socket closes after its last
     // in-flight operation releases its lease.
     g_sockets.clear();
-    WSACleanup();
+    const int result = WSACleanup();
+    std::memset(&g_wsaData, 0, sizeof(g_wsaData));
+    return result;
 }
 
 extern "C" int32_t __cdecl XboxNetResolveIPv4(const char* hostname, uint32_t* output) {
-    if (!hostname || !output) return -1;
+    if (!hostname || !output) { WSASetLastError(WSAEFAULT); return -1; }
     sockaddr_in address{};
-    if (!Resolve(hostname, 0, SOCK_DGRAM, address)) return -1;
+    if (!Resolve(hostname, 0, SOCK_DGRAM, address)) { WSASetLastError(WSAHOST_NOT_FOUND); return -1; }
     *output = address.sin_addr.s_addr;
     return 0;
 }
 
 extern "C" uint32_t __cdecl XboxNetSocketCreate(int type) {
-    if (type != 1 && type != 2) return 0;
+    if (type != 1 && type != 2) { WSASetLastError(WSAESOCKTNOSUPPORT); return 0; }
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (!g_startUsers) return 0;
+        if (!g_startUsers) { WSASetLastError(WSANOTINITIALISED); return 0; }
     }
     SOCKET socket = ::socket(AF_INET, type == 1 ? SOCK_STREAM : SOCK_DGRAM,
         type == 1 ? IPPROTO_TCP : IPPROTO_UDP);
@@ -225,20 +286,23 @@ extern "C" uint32_t __cdecl XboxNetSocketCreate(int type) {
 }
 
 extern "C" int __cdecl XboxNetSocketConnect(uint32_t handle, const char* hostname, uint16_t port) {
+    if (!hostname || !*hostname) { WSASetLastError(WSAEFAULT); return -1; }
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
     sockaddr_in address{};
     int type = 0, size = sizeof(type);
-    if (getsockopt(socket, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &size) == SOCKET_ERROR ||
-        !Resolve(hostname, port, type, address)) return -1;
+    if (getsockopt(socket, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&type), &size) == SOCKET_ERROR) return -1;
+    if (!Resolve(hostname, port, type, address)) { WSASetLastError(WSAHOST_NOT_FOUND); return -1; }
     return ::connect(socket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 ? 0 : -1;
 }
 
 extern "C" int __cdecl XboxNetSocketConnectAddress(uint32_t handle, const void* rawAddress, uint32_t length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || !rawAddress || length < sizeof(sockaddr_in)) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!rawAddress) { WSASetLastError(WSAEFAULT); return -1; }
+    if (length < sizeof(sockaddr_in)) { WSASetLastError(WSAEINVAL); return -1; }
     return ::connect(socket, static_cast<const sockaddr*>(rawAddress), static_cast<int>(length));
 }
 
@@ -259,7 +323,9 @@ extern "C" int __cdecl XboxNetSocketShutdown(uint32_t handle, int how) {
 extern "C" int __cdecl XboxNetSocketGetName(uint32_t handle, void* rawAddress, uint32_t* length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || !rawAddress || !length || *length < sizeof(sockaddr_in)) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!rawAddress || !length) { WSASetLastError(WSAEFAULT); return -1; }
+    if (*length < sizeof(sockaddr_in)) { WSASetLastError(WSAEINVAL); return -1; }
     int nativeLength = sizeof(sockaddr_in);
     const int result = getsockname(socket, static_cast<sockaddr*>(rawAddress), &nativeLength);
     if (result == 0) *length = static_cast<uint32_t>(nativeLength);
@@ -279,14 +345,17 @@ extern "C" int __cdecl XboxNetSocketGetPeerName(uint32_t handle, void* rawAddres
 extern "C" int __cdecl XboxNetSocketSetOption(uint32_t handle, int level, int option, const char* value, int length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || (!value && length) || length < 0) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!value && length) { WSASetLastError(WSAEFAULT); return -1; }
+    if (length < 0) { WSASetLastError(WSAEINVAL); return -1; }
     return setsockopt(socket, level, option, value, length);
 }
 
 extern "C" int __cdecl XboxNetSocketGetOption(uint32_t handle, int level, int option, char* value, int* length) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || !value || !length) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!value || !length) { WSASetLastError(WSAEFAULT); return -1; }
     return getsockopt(socket, level, option, value, length);
 }
 
@@ -304,14 +373,16 @@ extern "C" int __cdecl XboxNetSocketBind(uint32_t handle, uint16_t port) {
 extern "C" int __cdecl XboxNetSocketListen(uint32_t handle, int backlog) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || backlog < 0) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (backlog < 0) { WSASetLastError(WSAEINVAL); return -1; }
     return ::listen(socket, backlog) == 0 ? 0 : -1;
 }
 
 extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddress, uint32_t* addressLength) {
     SocketLease listenerLease = FindSocket(handle);
     SOCKET listener = listenerLease;
-    if (listener == INVALID_SOCKET) return 0;
+    if (listener == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return 0; }
+    if (rawAddress && !addressLength) { WSASetLastError(WSAEFAULT); return 0; }
     sockaddr_in peer{};
     int peerLength = sizeof(peer);
     SOCKET accepted = ::accept(listener,
@@ -321,6 +392,7 @@ extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddres
     if (rawAddress && addressLength) {
         if (*addressLength < sizeof(peer)) {
             closesocket(accepted);
+            WSASetLastError(WSAEINVAL);
             return 0;
         }
         std::memcpy(rawAddress, &peer, sizeof(peer));
@@ -332,14 +404,18 @@ extern "C" uint32_t __cdecl XboxNetSocketAccept(uint32_t handle, void* rawAddres
 extern "C" int32_t __cdecl XboxNetSocketSend(uint32_t handle, const void* data, uint32_t length, int flags) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || (!data && length) || length > INT_MAX) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!data && length) { WSASetLastError(WSAEFAULT); return -1; }
+    if (length > INT_MAX) { WSASetLastError(WSAEMSGSIZE); return -1; }
     return ::send(socket, static_cast<const char*>(data), static_cast<int>(length), flags);
 }
 
 extern "C" int32_t __cdecl XboxNetSocketReceive(uint32_t handle, void* data, uint32_t capacity, int flags) {
     SocketLease socketLease = FindSocket(handle);
     SOCKET socket = socketLease;
-    if (socket == INVALID_SOCKET || (!data && capacity) || capacity > INT_MAX) return -1;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return -1; }
+    if (!data && capacity) { WSASetLastError(WSAEFAULT); return -1; }
+    if (capacity > INT_MAX) { WSASetLastError(WSAEMSGSIZE); return -1; }
     return ::recv(socket, static_cast<char*>(data), static_cast<int>(capacity), flags);
 }
 
@@ -389,10 +465,140 @@ extern "C" int __cdecl XboxNetSocketSetTimeout(uint32_t handle, uint32_t millise
         reinterpret_cast<const char*>(&timeout), sizeof(timeout)) == 0 ? 0 : -1;
 }
 
+extern "C" int __cdecl XboxNetSocketSelect(
+    fd_set* readSet, fd_set* writeSet, fd_set* exceptSet, const timeval* timeout) {
+    struct SelectedSocket {
+        uint32_t token;
+        SOCKET native;
+        SocketLease lease;
+    };
+    std::vector<SelectedSocket> leases;
+    fd_set nativeRead{}, nativeWrite{}, nativeExcept{};
+    FD_ZERO(&nativeRead);
+    FD_ZERO(&nativeWrite);
+    FD_ZERO(&nativeExcept);
+
+    if (timeout && (timeout->tv_sec < 0 || timeout->tv_usec < 0 ||
+                    timeout->tv_usec >= 1000000)) {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    auto translateInput = [&](fd_set* guest, fd_set* native) -> bool {
+        if (!guest) return true;
+        if (guest->fd_count > FD_SETSIZE) {
+            WSASetLastError(WSAEINVAL);
+            return false;
+        }
+        for (u_int i = 0; i < guest->fd_count; ++i) {
+            const uint32_t token = static_cast<uint32_t>(guest->fd_array[i]);
+            SocketLease lease = FindSocket(token);
+            SOCKET socket = lease;
+            if (socket == INVALID_SOCKET) {
+                WSASetLastError(WSAENOTSOCK);
+                return false;
+            }
+            if (native->fd_count >= FD_SETSIZE) {
+                WSASetLastError(WSAENOBUFS);
+                return false;
+            }
+            FD_SET(socket, native);
+            try {
+                leases.push_back({token, socket, std::move(lease)});
+            } catch (...) {
+                WSASetLastError(WSAENOBUFS);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    if (!translateInput(readSet, &nativeRead) ||
+        !translateInput(writeSet, &nativeWrite) ||
+        !translateInput(exceptSet, &nativeExcept))
+        return SOCKET_ERROR;
+
+    const int ready = ::select(0,
+        readSet ? &nativeRead : nullptr,
+        writeSet ? &nativeWrite : nullptr,
+        exceptSet ? &nativeExcept : nullptr,
+        const_cast<timeval*>(timeout));
+    if (ready == SOCKET_ERROR) return SOCKET_ERROR;
+
+    auto translateOutput = [&](fd_set* guest, const fd_set* native) {
+        if (!guest) return;
+        fd_set translated{};
+        FD_ZERO(&translated);
+        for (u_int i = 0; i < native->fd_count; ++i) {
+            const SOCKET readySocket = native->fd_array[i];
+            for (const auto& entry : leases) {
+                if (entry.native == readySocket) {
+                    FD_SET(static_cast<SOCKET>(entry.token), &translated);
+                    break;
+                }
+            }
+        }
+        *guest = translated;
+    };
+    if (readSet) translateOutput(readSet, &nativeRead);
+    if (writeSet) translateOutput(writeSet, &nativeWrite);
+    if (exceptSet) translateOutput(exceptSet, &nativeExcept);
+    return ready;
+}
+
+extern "C" int __cdecl XboxNetSocketEventSelect(
+    uint32_t handle, WSAEVENT eventHandle, long networkEvents) {
+    SocketLease socketLease = FindSocket(handle);
+    SOCKET socket = socketLease;
+    if (socket == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if (!eventHandle) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
+    return WSAEventSelect(socket, eventHandle, networkEvents);
+}
+
+extern "C" int __cdecl XboxNetSocketWSARecv(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, LPDWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    return WSARecv(s,b,n,bytes,flags,ov,cb);
+}
+extern "C" int __cdecl XboxNetSocketWSARecvFrom(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, LPDWORD flags, sockaddr* from, LPINT fromLen, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if ((from && !fromLen) || (!from && fromLen)) { WSASetLastError(WSAEFAULT); return SOCKET_ERROR; }
+    return WSARecvFrom(s,b,n,bytes,flags,from,fromLen,ov,cb);
+}
+extern "C" int __cdecl XboxNetSocketWSASend(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, DWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    return WSASend(s,b,n,bytes,flags,ov,cb);
+}
+extern "C" int __cdecl XboxNetSocketWSASendTo(uint32_t h, LPWSABUF b, DWORD n, LPDWORD bytes, DWORD flags, const sockaddr* to, int toLen, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE cb) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if (!to) { WSASetLastError(WSAEFAULT); return SOCKET_ERROR; }
+    if (toLen < static_cast<int>(sizeof(sockaddr_in))) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
+    if (to->sa_family != AF_INET) { WSASetLastError(WSAEAFNOSUPPORT); return SOCKET_ERROR; }
+    return WSASendTo(s,b,n,bytes,flags,to,toLen,ov,cb);
+}
+extern "C" BOOL __cdecl XboxNetSocketWSAGetOverlappedResult(uint32_t h, LPWSAOVERLAPPED ov, LPDWORD transferred, BOOL wait, LPDWORD flags) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return FALSE; }
+    if (!ov || !transferred || !flags) { WSASetLastError(WSAEFAULT); return FALSE; }
+    return WSAGetOverlappedResult(s,ov,transferred,wait,flags);
+}
+extern "C" int __cdecl XboxNetSocketWSACancelOverlappedIO(uint32_t h) {
+    SocketLease lease = FindSocket(h); SOCKET s = lease;
+    if (s == INVALID_SOCKET) { WSASetLastError(WSAENOTSOCK); return SOCKET_ERROR; }
+    if (CancelIoEx(reinterpret_cast<HANDLE>(s),nullptr)) return 0;
+    DWORD e=GetLastError();
+    if (e==ERROR_NOT_FOUND) return 0;
+    WSASetLastError(e==ERROR_INVALID_HANDLE ? WSAENOTSOCK : WSAEINVAL);
+    return SOCKET_ERROR;
+}
+
 extern "C" int __cdecl XboxNetSocketClose(uint32_t handle) {
     std::lock_guard<std::mutex> lock(g_mutex);
     auto it = g_sockets.find(handle);
-    if (it == g_sockets.end()) return -1;
+    if (it == g_sockets.end()) { WSASetLastError(WSAENOTSOCK); return -1; }
     // Erasing the registry entry invalidates the guest handle immediately.
     // In-flight operations keep a shared lease until they safely complete.
     g_sockets.erase(it);

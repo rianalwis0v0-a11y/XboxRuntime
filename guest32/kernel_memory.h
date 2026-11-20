@@ -13,6 +13,8 @@ bool XboxKernelNormalizeGuestRange32(std::uint32_t base, std::uint32_t size,
                                      std::uint32_t* alignedSize);
 
 extern "C" {
+BOOL __stdcall XboxKernelGpuMemoryInitialize(void* view, SIZE_T bytes);
+void __stdcall XboxKernelGpuMemoryShutdown(void);
 LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR zeroBits,
                                          SIZE_T* regionSize, ULONG allocationType,
                                          ULONG protect);

@@ -7,16 +7,28 @@
 
 int main() {
     static_assert(sizeof(void*) == 4, "registry test must run as x86");
-    assert(XboxGuestApiCount() == 29u);
+    assert(XboxGuestApiCount() == 72u);
     assert(XboxGuestApiLookup(nullptr) == 0u);
     assert(XboxGuestApiLookup("") == 0u);
     assert(XboxGuestApiLookup("XNetDefinitelyNotAnApi") == 0u);
 
     const char* names[] = {
         "XNetStartup", "XNetCleanup", "XNetDnsLookup", "XNetDnsRelease",
+        "XWSAStartup", "XWSACleanup", "XSocketWSAGetLastError", "XWSASetLastError",
+        "XWSACreateEvent", "XWSACloseEvent", "XWSASetEvent", "XWSAResetEvent",
+        "XWSAWaitForMultipleEvents", "XWSAFDIsSet", "XWSAEventSelect",
+        "XSocketWSACreateEvent", "XSocketWSACloseEvent", "XSocketWSASetEvent",
+        "XSocketWSAResetEvent", "XSocketWSAWaitForMultipleEvents",
+        "XSocketWSAFDIsSet", "XSocketWSAEventSelect", "XSocketWSASetLastError",
+        "XNetRandom", "XNetCreateKey", "XNetRegisterKey", "XNetUnregisterKey",
+        "XNetXnAddrToInAddr", "XNetInAddrToXnAddr", "XNetUnregisterInAddr",
+        "XNetTsAddrToInAddr", "XNetGetDebugXnAddr", "XNetGetXnAddrPlatform",
+        "XNetGetBroadcastVersionStatus", "XNetGetSystemLinkPort", "XNetSetSystemLinkPort",
         "XNetInAddrToString", "XNetServerToInAddr", "XNetInAddrToServer",
         "XNetGetEthernetLinkStatus", "XNetGetTitleXnAddr",
-        "XSocketCreate", "XSocketClose", "XSocketBind", "XSocketConnect",
+        "XSocketCreate", "XCreateSocket", "XSocketWSAGetOverlappedResult",
+        "XSocketWSACancelOverlappedIO", "XSocketWSARecv", "XSocketWSARecvFrom",
+        "XSocketWSASend", "XSocketWSASendTo", "XSocketClose", "XSocketSelect", "XSocketGetLastError", "XSocketSetLastError", "XSocketBind", "XSocketConnect",
         "XSocketListen", "XSocketAccept", "XSocketShutdown",
         "XSocketIOCTLSocket", "XSocketSetSockOpt", "XSocketGetSockOpt",
         "XSocketGetSockName", "XSocketGetPeerName", "XSocketSend",

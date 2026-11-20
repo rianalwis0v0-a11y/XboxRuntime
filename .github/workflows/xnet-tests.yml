@@ -1,0 +1,35 @@
+name: XNet guest networking tests
+
+on:
+  pull_request:
+    paths:
+      - "guest32/**"
+      - "tests/network_smoke.cpp"
+      - "tests/guest_api_registry_smoke.cpp"
+      - ".github/workflows/xnet-tests.yml"
+  push:
+    branches:
+      - work/xnet-key-management
+  workflow_dispatch:
+
+concurrency:
+  group: xnet-guest-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  xnet-guest:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure Win32 guest and tests
+        run: cmake -S guest32 -B build-xnet -A Win32
+
+      - name: Build guest runtime and XNet tests
+        run: cmake --build build-xnet --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke
+
+      - name: Run XNet transport and guest import tests
+        run: ctest --test-dir build-xnet -C Release --output-on-failure -R "^(network_smoke|guest_api_registry_smoke)$"
