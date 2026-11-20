@@ -429,6 +429,28 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         return 5;
     }
 
+    context.gpuMemoryMappingName = L"Local\\XboxRuntime_GPU_MEM_" + suffix;
+    context.gpuMemoryMapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr,
+        PAGE_READWRITE, 0, XBOX_GPU_SHARED_MEMORY_SIZE,
+        context.gpuMemoryMappingName.c_str());
+    if (!context.gpuMemoryMapping) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 5;
+        context.lastReserveWin32Error = error;
+        ResetContextHandles(context);
+        return 5;
+    }
+    context.hostGpuMemoryView = static_cast<std::uint8_t*>(MapViewOfFile(
+        context.gpuMemoryMapping, FILE_MAP_ALL_ACCESS, 0, 0,
+        XBOX_GPU_SHARED_MEMORY_SIZE));
+    if (!context.hostGpuMemoryView) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 5;
+        context.lastReserveWin32Error = error;
+        ResetContextHandles(context);
+        return 5;
+    }
+
     std::wstring directory;
     std::wstring eeprom;
     if (!ModuleDirectory(directory) || !RuntimeEepromPath(eeprom)) {
@@ -450,6 +472,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     std::wstring command = Quote(guestExe) +
         L" --pipe " + Quote(context.pipeName) +
         L" --gpu-pipe " + Quote(context.gpuPipeName) +
+        L" --gpu-memory " + Quote(context.gpuMemoryMappingName) +
         L" --mapping " + Quote(context.mappingName) +
         L" --base " + Quote(std::to_wstring(guestBase)) +
         L" --size " + Quote(std::to_wstring(imageSize)) +
