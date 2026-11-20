@@ -1,0 +1,9 @@
+{
+  "upstream": "1.1.1.1",
+  "ttl": 60,
+  "records": {
+    "test.xboxnet.local": {
+      "A": "192.0.2.10"
+    }
+  }
+}
