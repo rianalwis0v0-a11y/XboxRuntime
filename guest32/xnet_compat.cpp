@@ -97,6 +97,8 @@ extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     if (!g_startupParams.cfgQosPairWaitTimeInSeconds) g_startupParams.cfgQosPairWaitTimeInSeconds = 2;
     XboxNetSetSocketLimits(g_startupParams.cfgSockMaxDgramSockets,
         g_startupParams.cfgSockMaxStreamSockets);
+    XboxNetSetSocketDefaults(g_startupParams.cfgSockDefaultRecvBufsizeInK,
+        g_startupParams.cfgSockDefaultSendBufsizeInK);
     g_xnetUsers = 1;
     Log(L"XNet startup complete (transport backend initialized).");
     return 0;
