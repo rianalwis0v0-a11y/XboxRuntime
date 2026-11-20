@@ -151,6 +151,27 @@ int main() {
         return 27;
     }
 
+    // QoS entry points are registered but must report unsupported transport
+    // capabilities honestly; they must not fabricate a successful result.
+    XNKID qosKey{};
+    XNQOS* qosResult = reinterpret_cast<XNQOS*>(1);
+    XNQOSLISTENSTATS qosStats{};
+    XNQOS qosStorage{};
+    if (XNetQosListen(&qosKey, nullptr, 0, 0, XNET_QOS_LISTEN_ENABLE) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP ||
+        XNetQosLookup(0, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
+            0, 0, 0, nullptr, &qosResult) != WSAEOPNOTSUPP ||
+        qosResult != nullptr || WSAGetLastError() != WSAEOPNOTSUPP ||
+        XNetQosServiceLookup(0, nullptr, &qosResult) != WSAEOPNOTSUPP ||
+        qosResult != nullptr || WSAGetLastError() != WSAEOPNOTSUPP ||
+        XNetQosGetListenStats(&qosKey, &qosStats) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP ||
+        XNetQosRelease(&qosStorage) != WSAEOPNOTSUPP ||
+        WSAGetLastError() != WSAEOPNOTSUPP) {
+        XNetCleanup();
+        return 52;
+    }
+
     if (XSocketInet_Addr("127.0.0.1") != htonl(INADDR_LOOPBACK) ||
         XSocketInet_Addr("not-an-ip") != INADDR_NONE ||
         WSAGetLastError() != WSAEINVAL) {
