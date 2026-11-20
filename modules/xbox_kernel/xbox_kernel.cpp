@@ -304,6 +304,14 @@ void ResetContextHandles(BackendContext& context) {
         UnmapViewOfFile(context.hostView);
         context.hostView = nullptr;
     }
+    if (context.hostGpuMemoryView) {
+        UnmapViewOfFile(context.hostGpuMemoryView);
+        context.hostGpuMemoryView = nullptr;
+    }
+    if (context.gpuMemoryMapping) {
+        CloseHandle(context.gpuMemoryMapping);
+        context.gpuMemoryMapping = nullptr;
+    }
     if (context.mapping) {
         CloseHandle(context.mapping);
         context.mapping = nullptr;
@@ -311,6 +319,7 @@ void ResetContextHandles(BackendContext& context) {
     context.mappingName.clear();
     context.pipeName.clear();
     context.gpuPipeName.clear();
+    context.gpuMemoryMappingName.clear();
     context.titlePath.clear();
     context.base = context.size = 0;
     context.importsResolved = false;
