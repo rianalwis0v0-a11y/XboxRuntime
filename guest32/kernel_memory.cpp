@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
+#include "kernel_gpu_service_protocol.h"
 
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,10 @@ constexpr LONG kAccessDenied = static_cast<LONG>(0xC0000022u);
 constexpr LONG kUnsuccessful = static_cast<LONG>(0xC0000001u);
 constexpr std::uint64_t kGuestAddressLimit = 0x100000000ull;
 constexpr std::uint32_t kPageSize = 0x1000u;
+std::mutex g_gpuMemoryMutex;
+std::uint8_t* g_gpuMemoryView = nullptr;
+SIZE_T g_gpuMemoryBytes = 0;
+SIZE_T g_gpuInstanceNext = 0;
 
 LONG StatusFromWin32(DWORD error) noexcept {
     switch (error) {
@@ -51,6 +56,25 @@ bool CopyToGuest(void* destination, const void* source, SIZE_T bytes) noexcept {
     return WriteProcessMemory(GetCurrentProcess(), destination, source, bytes, &written) &&
            written == bytes;
 }
+}
+
+extern "C" BOOL __stdcall XboxKernelGpuMemoryInitialize(void* view, SIZE_T bytes) {
+    if (!view || bytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+        return FALSE;
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    if (g_gpuMemoryView && g_gpuMemoryView != view)
+        return FALSE;
+    g_gpuMemoryView = static_cast<std::uint8_t*>(view);
+    g_gpuMemoryBytes = bytes;
+    g_gpuInstanceNext = 0;
+    return TRUE;
+}
+
+extern "C" void __stdcall XboxKernelGpuMemoryShutdown(void) {
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    g_gpuMemoryView = nullptr;
+    g_gpuMemoryBytes = 0;
+    g_gpuInstanceNext = 0;
 }
 
 bool XboxKernelNormalizeGuestRange32(std::uint32_t base, std::uint32_t size,
@@ -331,9 +355,27 @@ extern "C" void __stdcall K_MmPersistContiguousMemory(
 // unsupported-import exception for void APIs) is safer than inventing MMIO.
 extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
     SIZE_T numberOfBytes, SIZE_T* numberOfPaddingBytes) {
-    (void)numberOfBytes;
     if (numberOfPaddingBytes) *numberOfPaddingBytes = 0;
-    return nullptr;
+    if (!numberOfBytes) return nullptr;
+
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    if (!g_gpuMemoryView || g_gpuMemoryBytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+        return nullptr;
+
+    const SIZE_T aligned = (g_gpuInstanceNext + kPageSize - 1u) &
+                           ~(static_cast<SIZE_T>(kPageSize) - 1u);
+    if (aligned < g_gpuInstanceNext ||
+        numberOfBytes > static_cast<SIZE_T>(XBOX_GPU_SHARED_RAMIN_SIZE) - aligned)
+        return nullptr;
+    const SIZE_T end = aligned + numberOfBytes;
+    const SIZE_T roundedEnd = (end + kPageSize - 1u) &
+                              ~(static_cast<SIZE_T>(kPageSize) - 1u);
+    if (roundedEnd < end || roundedEnd > XBOX_GPU_SHARED_RAMIN_SIZE)
+        return nullptr;
+
+    if (numberOfPaddingBytes) *numberOfPaddingBytes = aligned - g_gpuInstanceNext;
+    g_gpuInstanceNext = roundedEnd;
+    return g_gpuMemoryView + XBOX_GPU_SHARED_VRAM_SIZE + aligned;
 }
 extern "C" void* __stdcall K_MmMapIoSpace(
     ULONG_PTR physicalAddress, SIZE_T numberOfBytes, ULONG protect) {
