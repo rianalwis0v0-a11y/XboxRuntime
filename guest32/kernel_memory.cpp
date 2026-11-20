@@ -374,7 +374,7 @@ extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
     if (roundedEnd < end || roundedEnd > XBOX_GPU_SHARED_RAMIN_SIZE)
         return nullptr;
 
-    if (numberOfPaddingBytes) *numberOfPaddingBytes = aligned - g_gpuInstanceNext;
+    if (numberOfPaddingBytes) *numberOfPaddingBytes = roundedEnd - end;
     g_gpuInstanceNext = roundedEnd;
     return g_gpuMemoryView + XBOX_GPU_SHARED_VRAM_SIZE + aligned;
 }
