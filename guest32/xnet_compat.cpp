@@ -95,6 +95,8 @@ extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     if (!g_startupParams.cfgQosProbeRetries) g_startupParams.cfgQosProbeRetries = 3;
     if (!g_startupParams.cfgQosSrvMaxSimultaneousResponses) g_startupParams.cfgQosSrvMaxSimultaneousResponses = 8;
     if (!g_startupParams.cfgQosPairWaitTimeInSeconds) g_startupParams.cfgQosPairWaitTimeInSeconds = 2;
+    XboxNetSetSocketLimits(g_startupParams.cfgSockMaxDgramSockets,
+        g_startupParams.cfgSockMaxStreamSockets);
     g_xnetUsers = 1;
     Log(L"XNet startup complete (transport backend initialized).");
     return 0;
@@ -105,6 +107,7 @@ extern "C" int WINAPI XNetCleanup() {
     if (!g_xnetUsers) return 0;
     if (--g_xnetUsers == 0) {
         XboxNetCleanup();
+        XboxNetSetSocketLimits(8, 32);
         for (auto& entry : g_registeredKeys)
             SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
