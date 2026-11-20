@@ -119,9 +119,9 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     }
     using ProviderLifecycleFn = int (__cdecl*)();
     const auto providerStart = reinterpret_cast<ProviderLifecycleFn>(
-        providerStarted ? GetProcAddress(provider, "ModuleStart") : nullptr);
+        provider ? GetProcAddress(provider, "ModuleStart") : nullptr);
     const auto providerStop = reinterpret_cast<void (__cdecl*)()>(
-        providerStarted ? GetProcAddress(provider, "ModuleStop") : nullptr);
+        provider ? GetProcAddress(provider, "ModuleStop") : nullptr);
     if (provider && providerStart && providerStart() == 0) {
         providerStarted = true;
     } else if (provider) {
@@ -263,7 +263,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
 cleanup:
     if (providerStarted && providerStop) providerStop();
     if (provider) FreeLibrary(provider);
-    goto cleanup;
+    return 0;
 }
 
 void StopGpuService(BackendContext& context) {
