@@ -102,6 +102,10 @@ using GpuFlushFn = void (__cdecl*)();
 using GpuMemoryReadFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using GpuMemoryWriteFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
 
+bool GpuRangeFits(uint32_t offset, uint32_t length) {
+    return uint64_t(offset) + uint64_t(length) <= 0x100000000ull;
+}
+
 DWORD WINAPI GpuServiceWorker(void* parameter) {
     HANDLE pipe = static_cast<HANDLE>(parameter);
     HMODULE provider = GetModuleHandleW(L"nv2a.dll");
@@ -138,24 +142,24 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
 
         switch (request.opcode) {
         case XboxGpuRpcPing:
-            if (request.payload_size != 0) break;
+            if (request.payload_size != 0) return 0;
             response.status = ERROR_SUCCESS;
             response.value = XBOX_GPU_RPC_VERSION;
             break;
         case XboxGpuRpcReadRegister:
-            if (request.payload_size != 0) break;
-            if (readRegister && (request.arg1 == 1 || request.arg1 == 2 ||
-                                 request.arg1 == 4)) {
+            if (request.payload_size != 0) return 0;
+            if ((request.arg1 != 1 && request.arg1 != 2 && request.arg1 != 4) ||
+                !GpuRangeFits(request.arg0, request.arg1)) {
+                response.status = ERROR_INVALID_PARAMETER;
+            } else if (readRegister) {
                 response.value = readRegister(request.arg0, request.arg1);
                 response.status = ERROR_SUCCESS;
-            } else if (request.arg1 != 1 && request.arg1 != 2 &&
-                       request.arg1 != 4) {
-                response.status = ERROR_INVALID_PARAMETER;
             }
             break;
         case XboxGpuRpcWriteRegister: {
-            if (request.payload_size != 0) break;
-            if (request.arg3 != 1 && request.arg3 != 2 && request.arg3 != 4) {
+            if (request.payload_size != 0) return 0;
+            if ((request.arg3 != 1 && request.arg3 != 2 && request.arg3 != 4) ||
+                !GpuRangeFits(request.arg0, request.arg3)) {
                 response.status = ERROR_INVALID_PARAMETER;
                 break;
             }
@@ -167,13 +171,13 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         }
         case XboxGpuRpcSubmitMethod:
-            if (request.payload_size != 0) break;
+            if (request.payload_size != 0) return 0;
             if (submitMethod)
                 response.status = submitMethod(request.arg0, request.arg1, request.arg2) == 0
                     ? ERROR_SUCCESS : ERROR_GEN_FAILURE;
             break;
         case XboxGpuRpcFlush:
-            if (request.payload_size != 0) break;
+            if (request.payload_size != 0) return 0;
             if (flush) {
                 flush();
                 response.status = ERROR_SUCCESS;
@@ -181,8 +185,9 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         case XboxGpuRpcReadVram:
         case XboxGpuRpcReadRamin: {
-            if (request.payload_size != 0) break;
-            if (request.arg1 > XBOX_GPU_RPC_MAX_TRANSFER) {
+            if (request.payload_size != 0) return 0;
+            if (request.arg1 > XBOX_GPU_RPC_MAX_TRANSFER ||
+                !GpuRangeFits(request.arg0, request.arg1)) {
                 response.status = ERROR_INVALID_PARAMETER;
                 break;
             }
@@ -205,8 +210,9 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         case XboxGpuRpcWriteVram:
         case XboxGpuRpcWriteRamin: {
             if (request.payload_size > XBOX_GPU_RPC_MAX_TRANSFER ||
-                request.payload_size != request.arg1)
-                break;
+                request.payload_size != request.arg1 ||
+                !GpuRangeFits(request.arg0, request.arg1))
+                return 0;
             try { transfer.resize(request.payload_size); }
             catch (...) { response.status = ERROR_NOT_ENOUGH_MEMORY; break; }
             if (request.payload_size &&
