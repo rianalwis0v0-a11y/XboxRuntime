@@ -34,6 +34,35 @@ but cannot bypass CGNAT or create port forwarding.
 The example address is reserved for documentation and is not a live XboxNet
 endpoint. Do not configure an Xbox to use it as a production service.
 
+## HTTP status gateway
+
+`gateway.py` is the first server-side HTTP component. It is intentionally
+read-only and binds to loopback by default:
+
+```sh
+python3 gateway.py --bind 127.0.0.1 --port 8081
+```
+
+Available routes:
+
+- `GET /healthz` — process health.
+- `GET /v1/status` — XboxNet status and implementation boundaries.
+- `GET /v1/services` — service catalog.
+- Unknown paths return 404. POST requests return 501 because no XboxNet
+  protocol handlers or state-changing APIs have been implemented.
+
+The catalog lists authentication/domain, security gateway, profiles,
+friends/presence, title-specific matchmaking, and peer connectivity as
+`not_implemented`. These are architecture placeholders, not working Xbox Live
+services. The gateway does not accept console authentication or game traffic.
+Do not expose it publicly as an Xbox Live endpoint.
+
+Gateway tests are included in the existing Python test suite:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
 ## Architecture research
 
 See [docs/INSIGNIA-ARCHITECTURE-NOTES.md](../../docs/INSIGNIA-ARCHITECTURE-NOTES.md)
