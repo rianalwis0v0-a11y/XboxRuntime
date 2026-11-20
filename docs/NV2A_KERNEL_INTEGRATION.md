@@ -2,10 +2,13 @@
 
 Target branch: `work/kernel-combined-clean-import`
 
-This document separates **interfaces that already exist** from the GPU-facing
-interfaces that still need implementation. It is the handoff contract for the
-NV2A developer. It does not claim that GPU memory, MMIO, PCI, interrupts, or
-display integration are already working.
+This document separates **implemented plumbing** from **unfinished hardware
+semantics**. The combined branch now has a guest GPU RPC client, host worker,
+shared GPU-memory mapping, a bounded RAMIN instance allocator, an NV2A MMIO
+fault decoder, and dedicated guest smoke tests. These are integration
+milestones, not proof of complete Xbox GPU behavior. PCI forwarding,
+physical-address/DMA translation, device interrupt delivery, and display
+presentation remain unfinished.
 
 ## 1. Existing architecture and ownership
 
@@ -131,11 +134,20 @@ void __stdcall K_MmUnmapIoSpace(
     void* baseAddress, SIZE_T numberOfBytes);
 ```
 
-The current implementations in `guest32/kernel_memory.cpp` are explicit
-stubs: GPU instance-memory allocation returns null, and I/O-space map/unmap
-return null/no-op. The guest process has normal guest-VA virtual-memory
-operations and the shared XBE image mapping, but **there is no general shared
-GPU/DMA arena, physical-address resolver, or memory ownership API yet**.
+The current combined branch has a named shared GPU-memory mapping created by
+`xbox_kernel.dll` and mapped by `xbe_guest32.exe`. The provider receives the
+same host view through `ModuleStartWithMemory`. The shared layout is defined
+in `kernel_gpu_service_protocol.h` as VRAM plus RAMIN. The guest memory owner
+initializes this view and implements `K_MmClaimGpuInstanceMemory` as a
+page-aligned, bounded bump allocator over the RAMIN portion. The allocator
+returns a guest-process pointer into the shared mapping and reports alignment
+padding.
+
+This is **not yet a complete physical-memory/DMA subsystem**: there is no
+general Xbox physical-address resolver, permission-aware DMA translation, or
+fence-aware free/reuse. The current allocation path is monotonic for the
+lifetime of the guest and is reset only when the shared mapping is initialized
+again.
 
 ### Required contract
 
@@ -180,27 +192,19 @@ The NV2A developer must use this API rather than adding a second allocator.
 
 ## 3. MMIO
 
-`MmMapIoSpace` and `MmUnmapIoSpace` are currently not implemented. Windows
-physical mappings must not be attempted for Xbox chipset addresses.
+`K_MmMapIoSpace` and `K_MmUnmapIoSpace` now recognize the NV2A aperture
+(`0xFD000000`–`0xFE000000`) and return/accept the guest-visible device
+address without mapping host physical memory. The guest installs a vectored
+exception handler. Its x86 decoder handles a limited set of absolute and
+register-indirect byte/word/dword loads and stores, including immediate stores
+and sign/zero-extending byte/word loads, then forwards them through the GPU
+RPC client. Unsupported instructions or failed RPCs continue exception
+search rather than being silently emulated.
 
-The agreed implementation model is a **guest MMIO aperture**, not a native
-host physical mapping:
-
-- The kernel validates the requested Xbox physical range and reserves a
-  guest-VA aperture for the mapping.
-- GPU-register ranges are tagged as device mappings and associated with the
-  NV2A provider; ordinary RAM mappings continue through the kernel memory
-  manager.
-- Guest loads/stores to the aperture are trapped by a guest-side access
-  handler and translated to `XboxKernelGpuReadRegister` /
-  `XboxKernelGpuWriteRegister` RPCs. The handler must preserve the guest
-  instruction's width and sign/zero-extension semantics.
-- Unmap invalidates the aperture and waits for in-flight accesses before the
-  mapping record is freed.
-
-The trap/decoder and the mapping registry do not exist on the combined branch
-yet. Do not return a normal writable RAM pointer for the NV2A register range:
-that would make writes invisible to the service.
+This is a first MMIO path, not a complete mapping registry: current map/unmap
+validation is range-based, not allocation-backed, and the decoder supports
+only its explicitly implemented instruction forms. Expand tests before
+claiming arbitrary guest MMIO instructions are supported.
 
 ## 4. PCI and DMA
 
@@ -289,10 +293,13 @@ Existing combined-branch coverage:
 - `tests/kernel_io_group_a_guest_smoke.cpp`: kernel export dispatch smoke
   coverage, including current memory/interrupt export behavior.
 
-There are no NV2A tests in the combined branch yet. PR #37 adds
-`tests/nv2a_rpc_smoke.cpp` on its older branch; it covers register/method/
-flush and bounded VRAM/RAMIN transfers over a loopback pipe, but it does not
-exercise the combined backend or the hardware-facing kernel exports.
+The combined branch now has `kernel_gpu_service_guest_smoke` for the guest
+RPC client and `kernel_gpu_mmio_guest_smoke` for representative x86 MMIO
+loads/stores crossing the RPC pipe. The CI workflow configures and builds the
+NV2A provider separately, stages `nv2a.dll` beside `xbox_kernel.dll`, and
+builds/runs the guest GPU smoke targets. These tests exercise the client and
+decoder contracts; they do not yet prove a real XBE pushbuffer renders a
+frame.
 
 Required combined-branch tests:
 
@@ -340,10 +347,13 @@ same request ID with `value = XBOX_GPU_RPC_VERSION`. This proves that the
 guest request crossed the process boundary and reached the host service
 without depending on an NV2A rendering implementation.
 
-**Current implementation status:** the combined branch has the execution
-backend/control pipe and the shared GPU RPC wire header. The dedicated GPU
-pipe, host worker, guest client, GPU memory arena, MMIO trap, PCI forwarding,
-interrupt notification, and display forwarding are still implementation
-tasks. PR #37 supplies a useful older-branch reference for the first four RPC
-operations and bounded memory transfers, not a completed combined-kernel
-integration.
+**Current implementation status:** the combined branch has the dedicated GPU
+pipe, host worker, guest client, shared VRAM/RAMIN mapping, bounded RAMIN
+instance allocator, NV2A provider build/staging in CI, and a limited MMIO
+fault-emulation path with guest smoke tests. The provider is loaded by
+`xbox_kernel.dll` from the same output directory and attached to the shared
+memory view. Remaining major integration work is a kernel-owned physical
+address/DMA resolver, PCI config-space forwarding, provider-to-kernel
+interrupt notification through the existing interrupt manager, display-mode
+and present/flip forwarding, and an end-to-end XBE rendering test. PR #37 is
+a source/reference input, not a completed combined-kernel integration.
