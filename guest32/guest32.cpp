@@ -5,6 +5,7 @@
 #include <string>
 #include "kernel_compat.h"
 #include "kernel_gpu_service.h"
+#include "kernel_gpu_mmio.h"
 #include "guest_protocol.h"
 #include "kernel_storage_mounts.h"
 
@@ -91,6 +92,15 @@ int wmain(int argc, wchar_t** argv) {
         return error ? error : ERROR_PIPE_NOT_CONNECTED;
     }
     if (!XboxKernelGpuServiceInitialize(gpuPipe)) {
+        XboxKernelGpuServiceShutdown();
+        CloseHandle(gpuPipe);
+        CloseHandle(pipe);
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return ERROR_NOT_READY;
+    }
+
+    if (!XboxKernelGpuMmioInitialize()) {
         XboxKernelGpuServiceShutdown();
         CloseHandle(gpuPipe);
         CloseHandle(pipe);
@@ -248,6 +258,7 @@ int wmain(int argc, wchar_t** argv) {
                 guestThread = nullptr;
             }
             XboxKernelShutdownTitle();
+            XboxKernelGpuMmioShutdown();
             XboxKernelGpuServiceShutdown();
             CloseHandle(gpuPipe);
             gpuPipe = INVALID_HANDLE_VALUE;
@@ -267,6 +278,7 @@ int wmain(int argc, wchar_t** argv) {
             ExitProcess(ERROR_OPERATION_ABORTED);
     }
     XboxKernelShutdownTitle();
+    XboxKernelGpuMmioShutdown();
     XboxKernelGpuServiceShutdown();
     if (gpuPipe != INVALID_HANDLE_VALUE) CloseHandle(gpuPipe);
     XboxKernelUnmountConfiguredStorage();
