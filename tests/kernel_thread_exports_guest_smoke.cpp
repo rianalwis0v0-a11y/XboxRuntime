@@ -74,6 +74,12 @@ int main() {
         std::fprintf(stderr, "Xbox host bridge PCI ID mismatch: 0x%08X\n", hostBridgeId);
         return 8;
     }
+    std::uint32_t agpBridgeId = 0;
+    K_HalReadWritePCISpace(0, 0x1Eu, 0x00, &agpBridgeId, sizeof(agpBridgeId), FALSE);
+    if (agpBridgeId != 0x01B710DEu) {
+        std::fprintf(stderr, "Xbox AGP bridge PCI ID mismatch: 0x%08X\n", agpBridgeId);
+        return 14;
+    }
     std::uint32_t absentId = 0;
     K_HalReadWritePCISpace(1, 1, 0x00, &absentId, sizeof(absentId), FALSE);
     if (absentId != 0xFFFFFFFFu) {
