@@ -18,10 +18,13 @@ struct BackendContext {
     HANDLE pipe = INVALID_HANDLE_VALUE;
     HANDLE gpuPipe = INVALID_HANDLE_VALUE;
     HANDLE gpuThread = nullptr;
+    HANDLE gpuMemoryMapping = nullptr;
+    std::uint8_t* hostGpuMemoryView = nullptr;
     PROCESS_INFORMATION process{};
     std::wstring mappingName;
     std::wstring pipeName;
     std::wstring gpuPipeName;
+    std::wstring gpuMemoryMappingName;
     std::wstring titlePath;
     std::uint32_t base = 0;
     std::uint32_t size = 0;
@@ -107,7 +110,9 @@ bool GpuRangeFits(uint32_t offset, uint32_t length) {
 }
 
 DWORD WINAPI GpuServiceWorker(void* parameter) {
-    HANDLE pipe = static_cast<HANDLE>(parameter);
+    BackendContext* context = static_cast<BackendContext*>(parameter);
+    if (!context) return 1;
+    HANDLE pipe = context->gpuPipe;
     std::wstring moduleDirectory;
     std::wstring providerPath;
     HMODULE provider = nullptr;
@@ -117,15 +122,16 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         provider = LoadLibraryExW(providerPath.c_str(), nullptr,
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     }
-    using ProviderLifecycleFn = int (__cdecl*)();
-    const auto providerStart = reinterpret_cast<ProviderLifecycleFn>(
-        provider ? GetProcAddress(provider, "ModuleStart") : nullptr);
+    using ProviderStartWithMemoryFn = int (__cdecl*)(void*, uint32_t);
+    const auto providerStart = reinterpret_cast<ProviderStartWithMemoryFn>(
+        provider ? GetProcAddress(provider, "ModuleStartWithMemory") : nullptr);
     const auto providerStop = reinterpret_cast<void (__cdecl*)()>(
         provider ? GetProcAddress(provider, "ModuleStop") : nullptr);
-    if (provider && providerStart && providerStart() == 0) {
+    if (provider && providerStart && context->hostGpuMemoryView &&
+        providerStart(context->hostGpuMemoryView, XBOX_GPU_SHARED_MEMORY_SIZE) == 0) {
         providerStarted = true;
     } else if (provider) {
-        Log(L"NV2A provider loaded but ModuleStart failed or was missing.");
+        Log(L"NV2A provider could not attach to the shared GPU memory section.");
     } else {
         Log(L"nv2a.dll not found beside xbox_kernel.dll; GPU RPC remains transport-only.");
     }
@@ -571,7 +577,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         return 11;
     }
     context.gpuThread = CreateThread(nullptr, 0, GpuServiceWorker,
-        context.gpuPipe, 0, nullptr);
+        &context, 0, nullptr);
     if (!context.gpuThread) {
         const DWORD error = GetLastError();
         context.lastReserveResult = 11;
