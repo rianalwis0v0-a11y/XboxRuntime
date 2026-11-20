@@ -253,7 +253,6 @@ void StopGpuService(BackendContext& context) {
 
 void ResetContextHandles(BackendContext& context) {
     StopGpuService(context);
-    StopGpuService(context);
     if (context.pipe != INVALID_HANDLE_VALUE) {
         CloseHandle(context.pipe);
         context.pipe = INVALID_HANDLE_VALUE;
@@ -299,6 +298,7 @@ void StopGuestProcessLocked(BackendContext& context) {
             WaitForSingleObject(context.process.hProcess, 5000);
         }
     }
+    StopGpuService(context);
     if (context.pipe != INVALID_HANDLE_VALUE) {
         CloseHandle(context.pipe);
         context.pipe = INVALID_HANDLE_VALUE;
