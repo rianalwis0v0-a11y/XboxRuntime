@@ -543,12 +543,28 @@ extern "C" int WINAPI XNetInAddrToServer(IN_ADDR address, IN_ADDR* output) {
 
 namespace {
 PIP_ADAPTER_ADDRESSES FindUsableIPv4Adapter(std::vector<BYTE>& storage) {
+    constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST;
     ULONG bytes = 0;
-    GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, nullptr, &bytes);
-    if (!bytes) return nullptr;
-    storage.resize(bytes);
-    auto* first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, first, &bytes) != NO_ERROR) return nullptr;
+    ULONG result = GetAdaptersAddresses(AF_INET, flags, nullptr, nullptr, &bytes);
+    if (result != ERROR_BUFFER_OVERFLOW || !bytes) return nullptr;
+
+    // The adapter list can grow between the sizing and data calls. Retry a
+    // bounded number of times when IP Helper reports a larger required buffer.
+    PIP_ADAPTER_ADDRESSES first = nullptr;
+    for (unsigned attempt = 0; attempt != 3; ++attempt) {
+        try {
+            storage.resize(bytes);
+        } catch (...) {
+            return nullptr;
+        }
+        first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
+        result = GetAdaptersAddresses(AF_INET, flags, nullptr, first, &bytes);
+        if (result == NO_ERROR) break;
+        if (result != ERROR_BUFFER_OVERFLOW || !bytes) return nullptr;
+        first = nullptr;
+    }
+    if (!first) return nullptr;
+
     for (auto* adapter = first; adapter; adapter = adapter->Next) {
         if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
         for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
