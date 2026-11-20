@@ -16,6 +16,10 @@ int main() {
     params.cfgSockMaxStreamSockets = 2;
     if (XNetStartup(&params) != 0) return 1;
 
+    // XNetStartupParams default send/receive buffer sizes are applied to
+    // newly created sockets. Use non-default values so this catches ignored fields.
+    params.cfgSockDefaultRecvBufsizeInK = 24;
+    params.cfgSockDefaultSendBufsizeInK = 32;
     // A nested startup must not replace the first caller's quota configuration.
     XNetStartupParams nestedParams{};
     nestedParams.cfgSizeOfStruct = sizeof(nestedParams);
@@ -37,6 +41,22 @@ int main() {
         XboxNetSocketClose(quotaTcpA) != 0 ||
         XboxNetSocketClose(quotaTcpB) != 0)
         return 45;
+
+    const SOCKET bufferProbe = XSocketCreate(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    int actualReceiveBuffer = 0, actualSendBuffer = 0;
+    int optionLength = sizeof(int);
+    if (bufferProbe == INVALID_SOCKET ||
+        XSocketGetSockOpt(bufferProbe, SOL_SOCKET, SO_RCVBUF,
+            reinterpret_cast<char*>(&actualReceiveBuffer), &optionLength) != 0 ||
+        actualReceiveBuffer < 24 * 1024 ||
+        XSocketGetSockOpt(bufferProbe, SOL_SOCKET, SO_SNDBUF,
+            reinterpret_cast<char*>(&actualSendBuffer), &optionLength) != 0 ||
+        actualSendBuffer < 32 * 1024) {
+        if (bufferProbe != INVALID_SOCKET) XSocketClose(bufferProbe);
+        XNetCleanup();
+        return 53;
+    }
+    XSocketClose(bufferProbe);
 
     // Accepted TCP sockets consume the same stream-socket quota as created sockets.
     const SOCKET quotaListener = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
