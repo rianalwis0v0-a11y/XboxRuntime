@@ -67,7 +67,7 @@ before accepting the client, and verifies the XSocket last-error accessors.
 
 The XSocket layer exposes `XSocketWSARecv`, `XSocketWSARecvFrom`, `XSocketWSASend`, `XSocketWSASendTo`, `XSocketWSAGetOverlappedResult`, and `XSocketWSACancelOverlappedIO`. The wrappers preserve scatter/gather buffers, completion events, and completion-routine parameters while translating guest socket tokens to leased native sockets. Cancellation requests all outstanding I/O on the selected native socket. Original `XSocketWSA*` event helpers and `XCreateSocket` are registered under their XBE import names. The x86 smoke test covers overlapped TCP and UDP completion, including peer-address output.
 
-## Explicit Insignia resolver configuration and unsupported mappings
+## Explicit Insignia resolver configuration and server-address conversion
 
 The transport does not hard-code an Insignia DNS server. An optional resolver
 address can be supplied through `XBOX_RUNTIME_INSIGNIA_DNS_IPV4`. If the
@@ -75,9 +75,12 @@ variable is absent or invalid, hostname resolution uses the Windows-configured
 resolver. This allows a local Insignia DNS responder to be selected explicitly
 without changing the host's global DNS settings.
 
-`XNetServerToInAddr` and `XNetInAddrToServer` currently return
-`WSAEOPNOTSUPP`: the service-ID address translation table is not implemented.
-They deliberately do not return the input address as a fake successful mapping.
+`XNetServerToInAddr` and `XNetInAddrToServer` now implement the host/network
+byte-order conversion used by current Xenia-compatible implementations.
+Both validate their inputs, and the forward conversion requires a nonzero
+service ID and an initialized XNet subsystem. This is an address representation
+shim only: it does not resolve a service ID through Insignia, provide service
+discovery, or establish an authenticated online connection.
 
 
 ## WSA startup, events, and event-driven sockets
