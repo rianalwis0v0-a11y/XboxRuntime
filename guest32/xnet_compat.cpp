@@ -9,6 +9,7 @@
 #include <ws2tcpip.h>
 #include <bcrypt.h>
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -35,7 +36,15 @@ struct RegisteredKey {
     XNKID id;
     XNKEY key;
 };
+struct QosListener {
+    XNKID id{};
+    std::vector<BYTE> data;
+    DWORD bitsPerSecond = 0;
+    bool enabled = false;
+    XNQOSLISTENSTATS stats{};
+};
 std::vector<RegisteredKey> g_registeredKeys;
+std::vector<QosListener> g_qosListeners;
 struct AddressMapping { IN_ADDR address; XNADDR xnaddr; XNKID keyId; bool hasKeyId; };
 std::vector<AddressMapping> g_addressMappings;
 
@@ -113,6 +122,7 @@ extern "C" int WINAPI XNetCleanup() {
         for (auto& entry : g_registeredKeys)
             SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
+        g_qosListeners.clear();
         g_addressMappings.clear();
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup complete.");
@@ -129,6 +139,7 @@ void ReleaseXNetWorkerReference() {
         for (auto& entry : g_registeredKeys)
             SecureZeroMemory(&entry, sizeof(entry));
         g_registeredKeys.clear();
+        g_qosListeners.clear();
         g_addressMappings.clear();
         std::memset(&g_startupParams, 0, sizeof(g_startupParams));
         Log(L"XNet cleanup completed after outstanding DNS work.");
@@ -199,18 +210,75 @@ extern "C" int WINAPI XNetDnsRelease(XNDNS* result) {
 }
 
 namespace {
-int QosUnavailable() {
-    std::lock_guard<std::mutex> lock(g_xnetMutex);
-    return SocketFailure(g_xnetUsers ? WSAEOPNOTSUPP : WSANOTINITIALISED);
+bool SameXnkid(const XNKID& left, const XNKID& right) {
+    return std::memcmp(left.ab, right.ab, sizeof(left.ab)) == 0;
+}
+auto FindRegisteredKey(const XNKID& id) {
+    return std::find_if(g_registeredKeys.begin(), g_registeredKeys.end(),
+        [&](const RegisteredKey& entry) { return SameXnkid(entry.id, id); });
+}
+auto FindQosListener(const XNKID& id) {
+    return std::find_if(g_qosListeners.begin(), g_qosListeners.end(),
+        [&](const QosListener& entry) { return SameXnkid(entry.id, id); });
 }
 }
 
 extern "C" int WINAPI XNetQosListen(const XNKID* keyId, const BYTE* data,
     UINT dataSize, DWORD bitsPerSecond, DWORD flags) {
-    (void)keyId; (void)data; (void)dataSize; (void)bitsPerSecond; (void)flags;
-    // QoS listener sockets and their authenticated reply protocol are not
-    // implemented yet. Report that explicitly rather than claiming a listener exists.
-    return QosUnavailable();
+    constexpr DWORD allowedFlags = XNET_QOS_LISTEN_ENABLE |
+        XNET_QOS_LISTEN_DISABLE | XNET_QOS_LISTEN_SET_DATA |
+        XNET_QOS_LISTEN_SET_BITSPERSEC | XNET_QOS_LISTEN_RELEASE;
+    if (!keyId || (!data && dataSize)) return SocketFailure(WSAEFAULT);
+    if (!flags || (flags & ~allowedFlags) ||
+        ((flags & XNET_QOS_LISTEN_ENABLE) && (flags & XNET_QOS_LISTEN_DISABLE)) ||
+        ((flags & XNET_QOS_LISTEN_RELEASE) && flags != XNET_QOS_LISTEN_RELEASE))
+        return SocketFailure(WSAEINVAL);
+
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return SocketFailure(WSANOTINITIALISED);
+    if (FindRegisteredKey(*keyId) == g_registeredKeys.end())
+        return SocketFailure(WSAEINVAL);
+
+    auto listener = FindQosListener(*keyId);
+    if (flags == XNET_QOS_LISTEN_RELEASE) {
+        if (listener == g_qosListeners.end()) return SocketFailure(WSAEINVAL);
+        g_qosListeners.erase(listener);
+        return 0;
+    }
+
+    const UINT maxDataBytes = static_cast<UINT>(g_startupParams.cfgQosDataLimitDiv4) * 4u;
+    if ((flags & XNET_QOS_LISTEN_SET_DATA) && dataSize > maxDataBytes)
+        return SocketFailure(WSAEMSGSIZE);
+    if ((flags & XNET_QOS_LISTEN_SET_BITSPERSEC) && !bitsPerSecond)
+        return SocketFailure(WSAEINVAL);
+
+    if (listener == g_qosListeners.end()) {
+        if (!(flags & XNET_QOS_LISTEN_ENABLE))
+            return SocketFailure(WSAEINVAL);
+        try {
+            QosListener entry{};
+            entry.id = *keyId;
+            entry.stats.dwSizeOfStruct = sizeof(XNQOSLISTENSTATS);
+            g_qosListeners.push_back(std::move(entry));
+            listener = std::prev(g_qosListeners.end());
+        } catch (...) {
+            return SocketFailure(WSAENOBUFS);
+        }
+    }
+
+    if (flags & XNET_QOS_LISTEN_SET_DATA) {
+        try {
+            if (dataSize) listener->data.assign(data, data + dataSize);
+            else listener->data.clear();
+        } catch (...) {
+            return SocketFailure(WSAENOBUFS);
+        }
+    }
+    if (flags & XNET_QOS_LISTEN_SET_BITSPERSEC)
+        listener->bitsPerSecond = bitsPerSecond;
+    if (flags & XNET_QOS_LISTEN_DISABLE) listener->enabled = false;
+    if (flags & XNET_QOS_LISTEN_ENABLE) listener->enabled = true;
+    return 0;
 }
 
 extern "C" int WINAPI XNetQosLookup(UINT countXnAddr,
@@ -244,7 +312,16 @@ extern "C" int WINAPI XNetQosRelease(XNQOS* result) {
 extern "C" int WINAPI XNetQosGetListenStats(const XNKID* keyId,
     XNQOSLISTENSTATS* stats) {
     if (!keyId || !stats) return SocketFailure(WSAEFAULT);
-    return QosUnavailable();
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    if (!g_xnetUsers) return SocketFailure(WSANOTINITIALISED);
+    if (stats->dwSizeOfStruct != sizeof(XNQOSLISTENSTATS))
+        return SocketFailure(WSAEINVAL);
+    if (FindRegisteredKey(*keyId) == g_registeredKeys.end())
+        return SocketFailure(WSAEINVAL);
+    auto listener = FindQosListener(*keyId);
+    if (listener == g_qosListeners.end()) return SocketFailure(WSAEINVAL);
+    *stats = listener->stats;
+    return 0;
 }
 
 extern "C" int WINAPI XNetRandom(BYTE* buffer, UINT length) {
@@ -307,6 +384,10 @@ extern "C" int WINAPI XNetUnregisterKey(const XNKID* keyId) {
         if (std::memcmp(it->id.ab, keyId->ab, sizeof(keyId->ab)) == 0) {
             SecureZeroMemory(&*it, sizeof(*it));
             g_registeredKeys.erase(it);
+            g_qosListeners.erase(std::remove_if(g_qosListeners.begin(),
+                g_qosListeners.end(), [&](const QosListener& listener) {
+                    return SameXnkid(listener.id, *keyId);
+                }), g_qosListeners.end());
             for (auto mapIt = g_addressMappings.begin(); mapIt != g_addressMappings.end();) {
                 if (mapIt->hasKeyId && std::memcmp(mapIt->keyId.ab, keyId->ab, sizeof(keyId->ab)) == 0)
                     mapIt = g_addressMappings.erase(mapIt);
