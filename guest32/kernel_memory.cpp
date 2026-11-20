@@ -365,6 +365,7 @@ extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
     const SIZE_T aligned = (g_gpuInstanceNext + kPageSize - 1u) &
                            ~(static_cast<SIZE_T>(kPageSize) - 1u);
     if (aligned < g_gpuInstanceNext ||
+        aligned > static_cast<SIZE_T>(XBOX_GPU_SHARED_RAMIN_SIZE) ||
         numberOfBytes > static_cast<SIZE_T>(XBOX_GPU_SHARED_RAMIN_SIZE) - aligned)
         return nullptr;
     const SIZE_T end = aligned + numberOfBytes;
