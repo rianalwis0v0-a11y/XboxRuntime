@@ -209,3 +209,14 @@ target_compile_features(kernel_filesystem_provider_smoke PRIVATE cxx_std_17)
 target_compile_definitions(kernel_filesystem_provider_smoke PRIVATE NOMINMAX XBOX_FS_PROVIDER_TEST)
 target_compile_options(kernel_filesystem_provider_smoke PRIVATE /W4 /permissive-)
 add_test(NAME kernel_filesystem_provider_smoke COMMAND kernel_filesystem_provider_smoke)
+
+add_executable(kernel_gpu_mmio_guest_smoke
+  ../tests/kernel_gpu_mmio_guest_smoke.cpp
+  kernel_gpu_mmio.cpp
+  kernel_gpu_service.cpp
+)
+target_include_directories(kernel_gpu_mmio_guest_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_gpu_mmio_guest_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_gpu_mmio_guest_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_gpu_mmio_guest_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_gpu_mmio_guest_smoke COMMAND kernel_gpu_mmio_guest_smoke)
