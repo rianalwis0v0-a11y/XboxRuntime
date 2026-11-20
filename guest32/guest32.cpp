@@ -4,6 +4,7 @@
 #include <cwchar>
 #include <string>
 #include "kernel_compat.h"
+#include "kernel_gpu_service.h"
 #include "guest_protocol.h"
 #include "kernel_storage_mounts.h"
 
@@ -51,12 +52,13 @@ XboxGuestCommandReply Reply(std::uint32_t command, std::uint32_t status) {
 
 int wmain(int argc, wchar_t** argv) {
     const wchar_t* pipeName = ArgumentValue(argc, argv, L"--pipe");
+    const wchar_t* gpuPipeName = ArgumentValue(argc, argv, L"--gpu-pipe");
     const wchar_t* mappingName = ArgumentValue(argc, argv, L"--mapping");
     const wchar_t* eepromPath = ArgumentValue(argc, argv, L"--eeprom");
     const wchar_t* titlePath = ArgumentValue(argc, argv, L"--xbe");
     const std::uint32_t base = NumberArgument(argc, argv, L"--base");
     const std::uint32_t size = NumberArgument(argc, argv, L"--size");
-    if (!pipeName || !mappingName || !eepromPath || !base || !size ||
+    if (!pipeName || !gpuPipeName || !mappingName || !eepromPath || !base || !size ||
         std::uint64_t(base) + size > 0x80000000ull)
         return ERROR_INVALID_PARAMETER;
 
@@ -77,6 +79,24 @@ int wmain(int argc, wchar_t** argv) {
         UnmapViewOfFile(image);
         CloseHandle(mapping);
         return ERROR_PIPE_NOT_CONNECTED;
+    }
+
+    HANDLE gpuPipe = CreateFileW(gpuPipeName, GENERIC_READ | GENERIC_WRITE, 0,
+                                 nullptr, OPEN_EXISTING, 0, nullptr);
+    if (gpuPipe == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        CloseHandle(pipe);
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return error ? error : ERROR_PIPE_NOT_CONNECTED;
+    }
+    if (!XboxKernelGpuServiceInitialize(gpuPipe)) {
+        XboxKernelGpuServiceShutdown();
+        CloseHandle(gpuPipe);
+        CloseHandle(pipe);
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return ERROR_NOT_READY;
     }
 
     std::uint32_t status = ERROR_SUCCESS;
@@ -228,6 +248,9 @@ int wmain(int argc, wchar_t** argv) {
                 guestThread = nullptr;
             }
             XboxKernelShutdownTitle();
+            XboxKernelGpuServiceShutdown();
+            CloseHandle(gpuPipe);
+            gpuPipe = INVALID_HANDLE_VALUE;
             XboxKernelUnmountConfiguredStorage();
             XboxKernelFlushEeprom();
             break;
@@ -244,6 +267,8 @@ int wmain(int argc, wchar_t** argv) {
             ExitProcess(ERROR_OPERATION_ABORTED);
     }
     XboxKernelShutdownTitle();
+    XboxKernelGpuServiceShutdown();
+    if (gpuPipe != INVALID_HANDLE_VALUE) CloseHandle(gpuPipe);
     XboxKernelUnmountConfiguredStorage();
     XboxKernelFlushEeprom();
     CloseHandle(pipe);
