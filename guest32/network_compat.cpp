@@ -57,6 +57,14 @@ uint32_t StoreSocket(SOCKET socket) {
         return 0;
     }
     std::lock_guard<std::mutex> lock(g_mutex);
+    // Socket creation and accept can race the final Winsock cleanup. Recheck
+    // the startup reference while holding the same lock used by cleanup so a
+    // late native socket can never be published after the transport shuts down.
+    if (!g_startUsers) {
+        closesocket(socket);
+        WSASetLastError(WSANOTINITIALISED);
+        return 0;
+    }
     unsigned matchingSockets = 0;
     for (const auto& entry : g_sockets)
         if (entry.second->type == socketType) ++matchingSockets;
