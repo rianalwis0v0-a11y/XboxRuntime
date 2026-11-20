@@ -49,6 +49,46 @@ bool IsGpuRange(uint32_t address, unsigned width) {
     return width && address >= kNv2aMmioBase &&
         uint64_t(address) + width <= uint64_t(kNv2aMmioBase) + kNv2aMmioSize;
 }
+bool DecodeMemoryOperand(const uint8_t* code, SIZE_T available, SIZE_T& p,
+                         uint8_t modrm, const CONTEXT& context,
+                         uint32_t& address) {
+    const unsigned mod = modrm >> 6;
+    const unsigned rm = modrm & 7u;
+    if (mod == 3u) return false;
+    uint32_t base = 0, index = 0;
+    bool hasBase = true;
+    if (rm == 4u) {
+        if (p >= available) return false;
+        const uint8_t sib = code[p++];
+        const unsigned scale = sib >> 6;
+        const unsigned indexReg = (sib >> 3) & 7u;
+        const unsigned baseReg = sib & 7u;
+        if (indexReg != 4u) index = RegisterValue(context, indexReg) << scale;
+        if (mod == 0u && baseReg == 5u) hasBase = false;
+        else base = RegisterValue(context, baseReg);
+    } else if (mod == 0u && rm == 5u) {
+        hasBase = false;
+    } else {
+        base = RegisterValue(context, rm);
+    }
+
+    int32_t displacement = 0;
+    if (mod == 0u && !hasBase) {
+        if (p + 4 > available) return false;
+        std::memcpy(&displacement, code + p, 4);
+        p += 4;
+    } else if (mod == 1u) {
+        if (p >= available) return false;
+        displacement = static_cast<int8_t>(code[p++]);
+    } else if (mod == 2u) {
+        if (p + 4 > available) return false;
+        std::memcpy(&displacement, code + p, 4);
+        p += 4;
+    }
+    address = (hasBase ? base : 0u) + index +
+              static_cast<uint32_t>(displacement);
+    return true;
+}
 }
 
 LONG CALLBACK XboxKernelGpuMmioExceptionHandler(EXCEPTION_POINTERS* exception) {
@@ -107,10 +147,9 @@ LONG CALLBACK XboxKernelGpuMmioExceptionHandler(EXCEPTION_POINTERS* exception) {
                opcode == 0xC6 || opcode == 0xC7) {
         if (p + 1 > available) return EXCEPTION_CONTINUE_SEARCH;
         const uint8_t modrm = code[p++];
-        if ((modrm & 0xC7u) != 0x05u) return EXCEPTION_CONTINUE_SEARCH;
         const unsigned reg = (modrm >> 3) & 7u;
-        if (p + 4 > available) return EXCEPTION_CONTINUE_SEARCH;
-        std::memcpy(&address, code + p, 4); p += 4;
+        if (!DecodeMemoryOperand(code, available, p, modrm, context, address))
+            return EXCEPTION_CONTINUE_SEARCH;
         destinationRegister = reg;
         sourceRegister = reg;
         if (opcode == 0x8A || opcode == 0x8B) readOperation = true;
@@ -129,10 +168,9 @@ LONG CALLBACK XboxKernelGpuMmioExceptionHandler(EXCEPTION_POINTERS* exception) {
             second != 0xBE && second != 0xBF)
             return EXCEPTION_CONTINUE_SEARCH;
         const uint8_t modrm = code[p++];
-        if ((modrm & 0xC7u) != 0x05u || p + 4 > available)
+        if (!DecodeMemoryOperand(code, available, p, modrm, context, address))
             return EXCEPTION_CONTINUE_SEARCH;
         destinationRegister = (modrm >> 3) & 7u;
-        std::memcpy(&address, code + p, 4); p += 4;
         readOperation = true;
         width = (second == 0xB6 || second == 0xBE) ? 1u : 2u;
         signExtend = second == 0xBE || second == 0xBF;
