@@ -337,13 +337,29 @@ extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
 }
 extern "C" void* __stdcall K_MmMapIoSpace(
     ULONG_PTR physicalAddress, SIZE_T numberOfBytes, ULONG protect) {
-    (void)physicalAddress; (void)numberOfBytes; (void)protect;
-    return nullptr;
+    // The Xbox NV2A register aperture is guest-visible MMIO, not host physical
+    // memory. Return its original guest address; the installed x86 VEH routes
+    // supported loads/stores to the NV2A service instead of mapping host MMIO.
+    constexpr ULONG_PTR gpuBase = 0xFD000000u;
+    constexpr ULONG_PTR gpuLimit = 0xFE000000u;
+    if (!numberOfBytes || physicalAddress < gpuBase ||
+        physicalAddress >= gpuLimit ||
+        numberOfBytes > gpuLimit - physicalAddress ||
+        (protect & ~(PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                     PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)) != 0)
+        return nullptr;
+    return reinterpret_cast<void*>(physicalAddress);
 }
 extern "C" void* __stdcall K_MmUnmapIoSpace(
     void* baseAddress, SIZE_T numberOfBytes) {
-    (void)baseAddress; (void)numberOfBytes;
-    return nullptr;
+    const ULONG_PTR address = reinterpret_cast<ULONG_PTR>(baseAddress);
+    constexpr ULONG_PTR gpuBase = 0xFD000000u;
+    constexpr ULONG_PTR gpuLimit = 0xFE000000u;
+    if (!numberOfBytes || address < gpuBase || address >= gpuLimit ||
+        numberOfBytes > gpuLimit - address)
+        return nullptr;
+    // The aperture is fault-emulated and owns no host mapping to release.
+    return baseAddress;
 }
 extern "C" LONG __stdcall K_MmQueryStatistics(void* memoryStatistics) {
     (void)memoryStatistics;
