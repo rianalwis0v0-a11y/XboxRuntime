@@ -453,6 +453,9 @@ int main() {
     }
     XNetDnsRelease(cleanupDns);
     WSACloseEvent(cleanupDnsEvent);
-    std::puts("network_smoke: async DNS, TCP/UDP loopback, key lifecycle, and socket error checks passed");
+    if (XboxNetSocketCreate(1) != 0 ||
+        WSAGetLastError() != WSANOTINITIALISED)
+        return 50;
+    std::puts("network_smoke: async DNS, TCP/UDP loopback, socket quotas, and cleanup checks passed");
     return 0;
 }
