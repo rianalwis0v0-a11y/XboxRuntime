@@ -23,7 +23,6 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
-#include "kernel_gpu_service.h"
 #include "kernel_system.h"
 #include "kernel_nvsettings.h"
 #include "kernel_memory.h"
@@ -40,36 +39,7 @@
 
 extern "C" void KernelDispatch();
 
-// Kernel-facing NV2A facade. Hardware-facing guest code and the MMIO fault
-// bridge use this surface; the wire client remains the sole transport owner.
-extern "C" uint64_t XboxKernelGpuReadRegisterValue(
-    uint32_t offset, uint32_t width, int* succeeded) {
-    uint64_t value = 0;
-    const BOOL ok = XboxKernelGpuReadRegister(offset, width, &value);
-    if (succeeded) *succeeded = ok ? 1 : 0;
-    return ok ? value : 0;
-}
-extern "C" BOOL XboxKernelGpuWriteRegisterValue(
-    uint32_t offset, uint32_t width, uint64_t value) {
-    return XboxKernelGpuWriteRegister(offset, width, value);
-}
-extern "C" BOOL XboxKernelGpuSubmitMethodValue(
-    uint32_t subchannel, uint32_t method, uint32_t parameter) {
-    return XboxKernelGpuSubmitMethod(subchannel, method, parameter);
-}
-extern "C" BOOL XboxKernelGpuFlushValue(void) {
-    return XboxKernelGpuFlush();
-}
-extern "C" BOOL XboxKernelGpuReadLocalMemory(
-    BOOL ramin, uint32_t offset, void* destination, uint32_t length) {
-    return ramin ? XboxKernelGpuReadRamin(offset, destination, length)
-                 : XboxKernelGpuReadVram(offset, destination, length);
-}
-extern "C" BOOL XboxKernelGpuWriteLocalMemory(
-    BOOL ramin, uint32_t offset, const void* source, uint32_t length) {
-    return ramin ? XboxKernelGpuWriteRamin(offset, source, length)
-                 : XboxKernelGpuWriteVram(offset, source, length);
-}
+extern "C" void KernelDispatch();
 namespace {
 constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
