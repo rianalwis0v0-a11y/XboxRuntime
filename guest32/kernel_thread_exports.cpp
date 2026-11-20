@@ -117,7 +117,32 @@ PciConfigSpace MakeNv2aPciConfig() {
     StorePciDword(config, 0x80, 0x2B16D065u);
     return config;
 }
+PciConfigSpace MakeXboxAgpBridgeConfig() {
+    PciConfigSpace config{};
+    StorePciDword(config, 0x00, 0x01B710DEu);
+    StorePciDword(config, 0x04, 0x02200007u);
+    StorePciDword(config, 0x08, 0x060400A1u);
+    StorePciDword(config, 0x0C, 0x5F016DF7u);
+    StorePciDword(config, 0x10, 0xBF7E3FFFu);
+    StorePciDword(config, 0x14, 0xBBFFFBFFu);
+    StorePciDword(config, 0x18, 0x00010100u);
+    StorePciDword(config, 0x1C, 0x02A000F0u);
+    StorePciDword(config, 0x20, 0xFE70FD00u);
+    StorePciDword(config, 0x24, 0xF3F0F000u);
+    StorePciDword(config, 0x28, 0xFF3FBFFFu);
+    StorePciDword(config, 0x2C, 0xAFFF7FFFu);
+    StorePciDword(config, 0x30, 0x3EFFF5FDu);
+    StorePciDword(config, 0x38, 0x3BDAC4F7u);
+    StorePciDword(config, 0x3C, 0x0080E7F7u);
+    StorePciDword(config, 0x40, 0x00000001u);
+    StorePciDword(config, 0x44, 0x80000000u);
+    StorePciDword(config, 0x48, 0x00000014u);
+    StorePciDword(config, 0x4C, 0x00000001u);
+    StorePciDword(config, 0x54, 0x10000000u);
+    return config;
+}
 PciConfigSpace g_hostBridgePciConfig = MakeXboxHostBridgeConfig();
+PciConfigSpace g_agpBridgePciConfig = MakeXboxAgpBridgeConfig();
 PciConfigSpace g_nv2aPciConfig = MakeNv2aPciConfig();
 std::array<bool, 3> g_nv2aBarProbe{};
 
@@ -233,6 +258,7 @@ void XboxKernelResetThreadExports() {
     {
         std::lock_guard<std::mutex> lock(g_pciConfigMutex);
         g_hostBridgePciConfig = MakeXboxHostBridgeConfig();
+        g_agpBridgePciConfig = MakeXboxAgpBridgeConfig();
         g_nv2aPciConfig = MakeNv2aPciConfig();
         g_nv2aBarProbe = {};
     }
@@ -278,11 +304,11 @@ extern "C" void __stdcall K_HalReadWritePCISpace(
     // PCI_SLOT_NUMBER: device in bits 0..4, function in bits 5..7.
     PciConfigSpace* config = nullptr;
     const bool nv2a = busNumber == 1u && slotNumber == 0u;
-    if (slotNumber != 0u ||
-        !((busNumber == 0u) || (busNumber == 1u)))
-        config = nullptr;
-    else if (busNumber == 0u)
+    const bool agpBridge = busNumber == 0u && slotNumber == 0x1Eu;
+    if (busNumber == 0u && slotNumber == 0u)
         config = &g_hostBridgePciConfig;
+    else if (agpBridge)
+        config = &g_agpBridgePciConfig;
     else if (nv2a)
         config = &g_nv2aPciConfig;
 
