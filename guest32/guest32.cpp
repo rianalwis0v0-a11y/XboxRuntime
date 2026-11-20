@@ -98,12 +98,16 @@ int wmain(int argc, wchar_t** argv) {
     }
     gpuMemory.view = MapViewOfFile(gpuMemory.mapping, FILE_MAP_ALL_ACCESS,
         0, 0, XBOX_GPU_SHARED_MEMORY_SIZE);
-    if (!gpuMemory.view ||
-        !XboxKernelGpuMemoryInitialize(gpuMemory.view, XBOX_GPU_SHARED_MEMORY_SIZE)) {
+    if (!gpuMemory.view) {
         const DWORD error = GetLastError();
         UnmapViewOfFile(image);
         CloseHandle(mapping);
-        return error ? error : ERROR_NOT_READY;
+        return error ? error : ERROR_NOT_ENOUGH_MEMORY;
+    }
+    if (!XboxKernelGpuMemoryInitialize(gpuMemory.view, XBOX_GPU_SHARED_MEMORY_SIZE)) {
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return ERROR_NOT_READY;
     }
     gpuMemory.initialized = true;
 
