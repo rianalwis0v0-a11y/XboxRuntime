@@ -380,29 +380,63 @@ extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
 }
 extern "C" void* __stdcall K_MmMapIoSpace(
     ULONG_PTR physicalAddress, SIZE_T numberOfBytes, ULONG protect) {
-    // The Xbox NV2A register aperture is guest-visible MMIO, not host physical
-    // memory. Return its original guest address; the installed x86 VEH routes
-    // supported loads/stores to the NV2A service instead of mapping host MMIO.
-    constexpr ULONG_PTR gpuBase = 0xFD000000u;
-    constexpr ULONG_PTR gpuLimit = 0xFE000000u;
-    if (!numberOfBytes || physicalAddress < gpuBase ||
-        physicalAddress >= gpuLimit ||
-        numberOfBytes > gpuLimit - physicalAddress ||
-        (protect & ~(PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                     PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)) != 0)
+    constexpr ULONG_PTR vramApertureBase = 0xF0000000u;
+    constexpr ULONG_PTR mmioBase = 0xFD000000u;
+    constexpr ULONG_PTR mmioLimit = 0xFE000000u;
+    constexpr ULONG allowedProtect = PAGE_READONLY | PAGE_READWRITE |
+        PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    if (!numberOfBytes || (protect & ~allowedProtect) != 0)
         return nullptr;
-    return reinterpret_cast<void*>(physicalAddress);
+
+    // BAR1 on the Xbox NV2A maps a 128 MiB aperture at 0xF0000000. The
+    // provider currently backs 64 MiB of actual VRAM; only that verified
+    // portion is exposed as a direct alias into the shared host/guest section.
+    if (physicalAddress >= vramApertureBase) {
+        const ULONG_PTR offset = physicalAddress - vramApertureBase;
+        if (offset < XBOX_GPU_SHARED_VRAM_SIZE &&
+            numberOfBytes <= XBOX_GPU_SHARED_VRAM_SIZE - offset) {
+            std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+            if (!g_gpuMemoryView ||
+                g_gpuMemoryBytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+                return nullptr;
+            return g_gpuMemoryView + offset;
+        }
+    }
+
+    // BAR0 is the NV2A register aperture. Do not map host physical memory:
+    // the installed x86 VEH decodes supported guest loads/stores and sends
+    // them to the NV2A service over the dedicated GPU pipe.
+    if (physicalAddress >= mmioBase && physicalAddress < mmioLimit &&
+        numberOfBytes <= mmioLimit - physicalAddress)
+        return reinterpret_cast<void*>(physicalAddress);
+    return nullptr;
 }
 extern "C" void* __stdcall K_MmUnmapIoSpace(
     void* baseAddress, SIZE_T numberOfBytes) {
+    if (!baseAddress || !numberOfBytes) return nullptr;
     const ULONG_PTR address = reinterpret_cast<ULONG_PTR>(baseAddress);
-    constexpr ULONG_PTR gpuBase = 0xFD000000u;
-    constexpr ULONG_PTR gpuLimit = 0xFE000000u;
-    if (!numberOfBytes || address < gpuBase || address >= gpuLimit ||
-        numberOfBytes > gpuLimit - address)
-        return nullptr;
-    // The aperture is fault-emulated and owns no host mapping to release.
-    return baseAddress;
+    constexpr ULONG_PTR vramApertureBase = 0xF0000000u;
+    constexpr ULONG_PTR mmioBase = 0xFD000000u;
+    constexpr ULONG_PTR mmioLimit = 0xFE000000u;
+
+    {
+        std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+        if (g_gpuMemoryView) {
+            const ULONG_PTR viewBase = reinterpret_cast<ULONG_PTR>(g_gpuMemoryView);
+            if (address >= viewBase) {
+                const ULONG_PTR offset = address - viewBase;
+                if (offset < XBOX_GPU_SHARED_VRAM_SIZE &&
+                    numberOfBytes <= XBOX_GPU_SHARED_VRAM_SIZE - offset)
+                    return baseAddress;
+            }
+        }
+    }
+
+    if (address >= mmioBase && address < mmioLimit &&
+        numberOfBytes <= mmioLimit - address)
+        return baseAddress;
+    (void)vramApertureBase;
+    return nullptr;
 }
 extern "C" LONG __stdcall K_MmQueryStatistics(void* memoryStatistics) {
     (void)memoryStatistics;
