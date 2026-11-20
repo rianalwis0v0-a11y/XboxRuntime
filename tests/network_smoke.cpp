@@ -14,12 +14,11 @@ int main() {
     params.cfgKeyRegMax = 1;
     params.cfgSockMaxDgramSockets = 1;
     params.cfgSockMaxStreamSockets = 2;
-    if (XNetStartup(&params) != 0) return 1;
-
-    // XNetStartupParams default send/receive buffer sizes are applied to
-    // newly created sockets. Use non-default values so this catches ignored fields.
+    // Non-default values prove the transport applies the configured buffers.
     params.cfgSockDefaultRecvBufsizeInK = 24;
     params.cfgSockDefaultSendBufsizeInK = 32;
+    if (XNetStartup(&params) != 0) return 1;
+
     // A nested startup must not replace the first caller's quota configuration.
     XNetStartupParams nestedParams{};
     nestedParams.cfgSizeOfStruct = sizeof(nestedParams);
