@@ -39,6 +39,32 @@ struct XNDNS {
     UINT cina;
     IN_ADDR aina[8];
 };
+struct XNQOSINFO {
+    BYTE bFlags;
+    BYTE bReserved;
+    WORD cProbesXmit;
+    WORD cProbesRecv;
+    WORD cbData;
+    BYTE* pbData;
+    WORD wRttMinInMsecs;
+    WORD wRttMedInMsecs;
+    DWORD dwUpBitsPerSec;
+    DWORD dwDnBitsPerSec;
+};
+struct XNQOS {
+    DWORD cxnqos;
+    DWORD cxnqosPending;
+    XNQOSINFO axnqosinfo[1];
+};
+struct XNQOSLISTENSTATS {
+    DWORD dwSizeOfStruct;
+    DWORD dwRequestsReceived;
+    DWORD dwProbesReceived;
+    DWORD dwSlotsFullDiscards;
+    DWORD dwDataRepliesSent;
+    DWORD dwDataReplyBytesSent;
+    DWORD dwProbeRepliesSent;
+};
 #pragma pack(pop)
 
 static_assert(sizeof(XNetStartupParams) == 13, "XNetStartupParams ABI size");
@@ -46,6 +72,20 @@ static_assert(sizeof(XNKID) == 8, "XNKID ABI size");
 static_assert(sizeof(XNKEY) == 16, "XNKEY ABI size");
 static_assert(sizeof(XNADDR) == 36, "XNADDR ABI size");
 static_assert(sizeof(XNDNS) == 40, "XNDNS ABI size");
+static_assert(sizeof(XNQOSINFO) == 24, "XNQOSINFO ABI size");
+static_assert(sizeof(XNQOS) == 32, "XNQOS ABI size");
+static_assert(sizeof(XNQOSLISTENSTATS) == 28, "XNQOSLISTENSTATS ABI size");
+
+#define XNET_QOS_LISTEN_ENABLE 0x00000001u
+#define XNET_QOS_LISTEN_DISABLE 0x00000002u
+#define XNET_QOS_LISTEN_SET_DATA 0x00000004u
+#define XNET_QOS_LISTEN_SET_BITSPERSEC 0x00000008u
+#define XNET_QOS_LISTEN_RELEASE 0x00000010u
+#define XNET_XNQOSINFO_COMPLETE 0x01u
+#define XNET_XNQOSINFO_TARGET_CONTACTED 0x02u
+#define XNET_XNQOSINFO_TARGET_DISABLED 0x04u
+#define XNET_XNQOSINFO_DATA_RECEIVED 0x08u
+#define XNET_XNQOSINFO_PARTIAL_COMPLETE 0x10u
 
 #define XNET_GET_XNADDR_NONE 0x00000001u
 #define XNET_GET_XNADDR_ETHERNET 0x00000002u
@@ -83,6 +123,15 @@ int WINAPI XNetStartup(const XNetStartupParams* params);
 int WINAPI XNetCleanup();
 int WINAPI XNetDnsLookup(const char* hostname, WSAEVENT eventHandle, XNDNS** result);
 int WINAPI XNetDnsRelease(XNDNS* result);
+int WINAPI XNetQosListen(const XNKID* keyId, const BYTE* data, UINT dataSize,
+    DWORD bitsPerSecond, DWORD flags);
+int WINAPI XNetQosLookup(UINT countXnAddr, const XNADDR* xnAddrs[],
+    const XNKID* keyIds[], const XNKEY* keys[], UINT countInAddr,
+    const IN_ADDR inAddrs[], const DWORD serviceIds[], UINT probes,
+    DWORD bitsPerSecond, DWORD flags, WSAEVENT eventHandle, XNQOS** result);
+int WINAPI XNetQosServiceLookup(DWORD flags, WSAEVENT eventHandle, XNQOS** result);
+int WINAPI XNetQosRelease(XNQOS* result);
+int WINAPI XNetQosGetListenStats(const XNKID* keyId, XNQOSLISTENSTATS* stats);
 int WINAPI XNetRandom(BYTE* buffer, UINT length);
 int WINAPI XNetCreateKey(XNKID* keyId, XNKEY* key);
 int WINAPI XNetRegisterKey(const XNKID* keyId, const XNKEY* key);
