@@ -29,6 +29,31 @@ int main() {
         XboxNetSocketClose(quotaTcpA) != 0 ||
         XboxNetSocketClose(quotaTcpB) != 0)
         return 45;
+
+    // Accepted TCP sockets consume the same stream-socket quota as created sockets.
+    const SOCKET quotaListener = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const SOCKET quotaClient = XSocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in quotaAddress{};
+    quotaAddress.sin_family = AF_INET;
+    quotaAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    int quotaAddressLength = sizeof(quotaAddress);
+    if (quotaListener == INVALID_SOCKET || quotaClient == INVALID_SOCKET ||
+        XSocketBind(quotaListener, reinterpret_cast<sockaddr*>(&quotaAddress),
+            sizeof(quotaAddress)) != 0 ||
+        XSocketListen(quotaListener, 1) != 0 ||
+        XSocketGetSockName(quotaListener, reinterpret_cast<sockaddr*>(&quotaAddress),
+            &quotaAddressLength) != 0 ||
+        XSocketConnect(quotaClient, reinterpret_cast<sockaddr*>(&quotaAddress),
+            sizeof(quotaAddress)) != 0 ||
+        XSocketAccept(quotaListener, nullptr, nullptr) != INVALID_SOCKET ||
+        XSocketGetLastError() != WSAENOBUFS) {
+        if (quotaClient != INVALID_SOCKET) XSocketClose(quotaClient);
+        if (quotaListener != INVALID_SOCKET) XSocketClose(quotaListener);
+        return 49;
+    }
+    XSocketClose(quotaClient);
+    XSocketClose(quotaListener);
+
     // A zeroed startup structure must select the documented safe defaults.
     if (XNetCleanup() != 0) return 46;
     XNetStartupParams defaults{};
