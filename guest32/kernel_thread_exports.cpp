@@ -251,12 +251,6 @@ void XboxKernelResetThreadExports() {
 }
 
 
-namespace {
-[[noreturn]] void RaiseUnsupportedHardwareImport(ULONG ordinal) {
-    ULONG_PTR parameter = ordinal;
-    RaiseException(0xC000001Du, EXCEPTION_NONCONTINUABLE, 1, &parameter);
-}
-}
 extern "C" void __stdcall K_HalDisableSystemInterrupt(ULONG busInterruptLevel) {
     if (busInterruptLevel >= g_systemInterrupts.size()) return;
     std::lock_guard<std::mutex> lock(g_systemInterruptMutex);
