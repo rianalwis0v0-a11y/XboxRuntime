@@ -1,8 +1,9 @@
 {
-  "upstream": "1.1.1.1",
-  "ttl": 60,
+  "zone_url": null,
+  "refresh_seconds": 300,
+  "ttl": 300,
   "records": {
-    "test.xboxnet.local": {
+    "dns-health.xboxnet.test": {
       "A": "192.0.2.10"
     }
   }
