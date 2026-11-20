@@ -1,0 +1,27 @@
+name: XboxNet guest networking
+
+on:
+  push:
+    branches: [xboxnet]
+    paths:
+      - "guest32/**"
+      - "tests/network_smoke.cpp"
+      - ".github/workflows/xboxnet-network.yml"
+  pull_request:
+    paths:
+      - "guest32/**"
+      - "tests/network_smoke.cpp"
+      - ".github/workflows/xboxnet-network.yml"
+  workflow_dispatch:
+
+jobs:
+  network-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure 32-bit guest networking
+        run: cmake -S guest32 -B build/xboxnet -G "Visual Studio 17 2022" -A Win32
+      - name: Build
+        run: cmake --build build/xboxnet --config Release --parallel
+      - name: Run networking smoke tests
+        run: ctest --test-dir build/xboxnet -C Release --output-on-failure
