@@ -27,29 +27,29 @@ int main() {
     }
     std::vector<std::uint8_t> gpuMemory(XBOX_GPU_SHARED_MEMORY_SIZE, 0);
     if (!XboxKernelGpuMemoryInitialize(gpuMemory.data(), gpuMemory.size())) {
-        std::fprintf(stderr, "shared GPU memory initialization failed\\n");
+        std::fprintf(stderr, "shared GPU memory initialization failed\n");
         return 5;
     }
     SIZE_T padding = 99;
-    void* firstGpuAllocation = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
+    void* firstGpuAllocation = K_MmClaimGpuInstanceMemory(0x1001u, &padding);
     if (firstGpuAllocation != gpuMemory.data() + XBOX_GPU_SHARED_VRAM_SIZE ||
         padding != 0) {
-        std::fprintf(stderr, "first GPU instance allocation was not RAMIN-backed\\n");
+        std::fprintf(stderr, "first GPU instance allocation was not RAMIN-backed\n");
         return 6;
     }
-    void* secondGpuAllocation = K_MmClaimGpuInstanceMemory(0x1001u, &padding);
+    void* secondGpuAllocation = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
     if (secondGpuAllocation != gpuMemory.data() + XBOX_GPU_SHARED_VRAM_SIZE + 0x2000u ||
         padding != 0x0FFFu) {
-        std::fprintf(stderr, "GPU instance allocation alignment/padding failed\\n");
+        std::fprintf(stderr, "GPU instance allocation alignment/padding failed\n");
         return 7;
     }
     if (K_MmClaimGpuInstanceMemory(XBOX_GPU_SHARED_RAMIN_SIZE, nullptr) != nullptr) {
-        std::fprintf(stderr, "GPU instance allocator accepted an out-of-range claim\\n");
+        std::fprintf(stderr, "GPU instance allocator accepted an out-of-range claim\n");
         return 8;
     }
     XboxKernelGpuMemoryShutdown();
     if (K_MmClaimGpuInstanceMemory(0x100u, nullptr) != nullptr) {
-        std::fprintf(stderr, "GPU instance allocation succeeded after shutdown\\n");
+        std::fprintf(stderr, "GPU instance allocation succeeded after shutdown\n");
         return 9;
     }
     std::puts("kernel_memory_host_tests: PASS (guest ranges and shared GPU RAMIN allocator)");
