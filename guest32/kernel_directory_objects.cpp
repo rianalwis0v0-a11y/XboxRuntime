@@ -249,7 +249,7 @@ extern "C" LONG __stdcall K_NtQueryDirectoryObject(
     try {
         const auto* directory = static_cast<const GuestDirectoryObject*>(rawDirectory);
         const std::string prefix = directory->lookupName.empty()
-            ? std::string{} : directory->lookupName + "\\\\";
+            ? std::string{} : directory->lookupName + "\\";
         if (!prefix.empty()) {
             std::lock_guard<std::mutex> lock(g_directoryObjectMutex);
             for (const auto& entry : g_namedDirectories) {
@@ -259,7 +259,7 @@ extern "C" LONG __stdcall K_NtQueryDirectoryObject(
                     entry.first.compare(0, prefix.size(), prefix) != 0)
                     continue;
                 const std::string remainder = entry.first.substr(prefix.size());
-                if (remainder.find_first_of("\\\\/") != std::string::npos)
+                if (remainder.find_first_of("\\/") != std::string::npos)
                     continue;
                 const size_t nameOffset = directory->name.size() + 1u;
                 if (child->name.size() <= nameOffset) continue;
