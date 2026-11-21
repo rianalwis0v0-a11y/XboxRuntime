@@ -303,15 +303,33 @@ Existing combined-branch coverage:
 - `tests/kernel_io_group_a_guest_smoke.cpp`: kernel export dispatch smoke
   coverage, including current memory/interrupt export behavior.
 
-The combined branch now has `kernel_gpu_service_guest_smoke` for the guest
+The combined branch has `kernel_gpu_service_guest_smoke` for the guest
 RPC client and `kernel_gpu_mmio_guest_smoke` for representative x86 MMIO
-loads/stores crossing the RPC pipe. The CI workflow configures and builds the
-NV2A provider separately, stages `nv2a.dll` beside `xbox_kernel.dll`, and
-builds/runs the guest GPU smoke targets. These tests exercise the client and
-decoder contracts; they do not yet prove a real XBE pushbuffer renders a
-frame.
+loads/stores crossing the RPC pipe. CI builds the NV2A provider separately,
+stages `nv2a.dll` beside `xbox_kernel.dll`, and builds/runs the guest GPU
+smoke targets. These tests exercise the client and decoder contracts; they do
+not yet prove that a real guest XBE rendered a frame.
 
-Required combined-branch tests:
+**Pixel readback path already present:** after `XboxNV2A_Flush()` flushes the
+PGRAPH translator, it calls `sync_surface_to_vram()`. That function locks the
+bound color render target read-only and copies each row into the NV2A VRAM
+surface span. The existing `XboxNV2A_ReadVRAM` provider export and
+`XboxKernelGpuReadVram` guest RPC client can then retrieve those pixels.
+This is a real render-target-to-VRAM readback path, not merely a frame/draw
+counter. It is conditional on a supported NV097 surface being bound and
+successfully synchronized. The current GPU RPC transfers are capped at 64 KiB
+per request, so a full 640x480x4 framebuffer must be read in bounded chunks.
+The existing smoke test verifies arbitrary VRAM RPC bytes, but not pixels
+produced by a real draw; the latter remains an end-to-end test gap.
+
+**Physical DMA boundary:** `XboxKernelResolveGpuPhysicalAddress` currently
+validates and translates addresses only within the shared 64 MiB GPU VRAM
+window. It is not a general guest system-RAM mapper. The NV2A provider's DMA
+resolver still rejects non-local targets, so system-memory DMA is not
+implemented by this change. Do not treat the bounded VRAM mapping as full
+unified-memory DMA support.
+
+Required follow-up tests:
 
 1. GPU pipe startup ping from `xbe_guest32` to the host worker, with request
    ID/version validation.
@@ -326,9 +344,9 @@ Required combined-branch tests:
 8. Interrupt connect/disconnect, notification ordering, ISR delivery, and
    teardown with queued interrupts.
 9. Display mode change/flip and provider shutdown tests.
-10. End-to-end guest XBE writes NV2A registers, submits a pushbuffer, and
-    reaches a host provider; verify a rendered frame rather than merely a
-    successful XBE load.
+10. End-to-end guest XBE writes NV2A registers, submits a pushbuffer, flushes,
+    reads back the bound surface's VRAM span through the guest RPC, and checks
+    known pixel values.
 
 ## 8. Small guest-to-host example
 
@@ -357,13 +375,15 @@ same request ID with `value = XBOX_GPU_RPC_VERSION`. This proves that the
 guest request crossed the process boundary and reached the host service
 without depending on an NV2A rendering implementation.
 
-**Current implementation status:** the combined branch has the dedicated GPU
-pipe, host worker, guest client, shared VRAM/RAMIN mapping, bounded RAMIN
-instance allocator, NV2A provider build/staging in CI, and a limited MMIO
-fault-emulation path with guest smoke tests. The provider is loaded by
-`xbox_kernel.dll` from the same output directory and attached to the shared
-memory view. Remaining major integration work is a kernel-owned physical
-address/DMA resolver, PCI config-space forwarding, provider-to-kernel
-interrupt notification through the existing interrupt manager, display-mode
-and present/flip forwarding, and an end-to-end XBE rendering test. PR #37 is
-a source/reference input, not a completed combined-kernel integration.
+**Current implementation status on this branch:** the combined branch has
+the dedicated GPU pipe, host worker, guest client, shared VRAM/RAMIN mapping,
+bounded RAMIN instance allocator, bounded GPU-VRAM physical-address resolver,
+NV2A provider build/staging in CI, and a limited MMIO fault-emulation path
+with guest smoke tests. The provider is loaded by `xbox_kernel.dll` from the
+same output directory and attached to the shared memory view. Surface-to-VRAM
+pixel readback exists as described above, but an end-to-end guest draw/readback
+assertion has not yet been run. Remaining major integration work includes
+general system-memory DMA translation, PCI config-space forwarding,
+provider-to-kernel interrupt notification through the existing interrupt
+manager, display-mode and present/flip forwarding, and the end-to-end XBE
+render test.
