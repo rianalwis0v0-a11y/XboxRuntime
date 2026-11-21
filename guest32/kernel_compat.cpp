@@ -2144,11 +2144,14 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
 }
 
 using NtCreateMutantFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, BOOLEAN);
-extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK access, void* attributes, BOOL initialOwner) {
+extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK access, void* attributes) {
     if (!out) return LONG(0xC000000Du);
+    // Xbox ordinal 192 is NtCreateMutant@12: three stdcall arguments.
+    // The host NT implementation has a fourth InitialOwner parameter, which
+    // Xbox does not expose here; preserve the Xbox ABI and default to FALSE.
     static const NtCreateMutantFn create = ResolveNtService<NtCreateMutantFn>("NtCreateMutant");
-    if (create) return create(out, access, nullptr, initialOwner ? TRUE : FALSE);
-    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
+    if (create) return create(out, access, nullptr, FALSE);
+    HANDLE h = CreateMutexW(nullptr, FALSE, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
 }
