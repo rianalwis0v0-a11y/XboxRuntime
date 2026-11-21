@@ -21,4 +21,8 @@ BOOL __stdcall XboxKernelTranslateGuestVirtualToPhysical(
     std::uint32_t* physicalAddress);
 void* __stdcall XboxKernelGetPhysicalMemoryView(
     std::uint32_t* physicalBase, std::uint32_t* length);
+void* __stdcall XboxKernelAllocatePhysicalMemory(
+    std::uint32_t bytes, std::uint32_t alignment, std::uint32_t maximumAddress,
+    std::uint32_t* physicalAddress);
+BOOL __stdcall XboxKernelFreePhysicalMemory(void* allocation);
 }
