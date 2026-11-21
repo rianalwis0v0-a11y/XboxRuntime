@@ -662,7 +662,7 @@ std::wstring TranslateXboxObjectPath(const void* rawAttributes) {
     std::wstring path(static_cast<size_t>(chars), L'\0');
     if (!MultiByteToWideChar(CP_ACP, 0, oa->ObjectName->Buffer,
         oa->ObjectName->Length, path.data(), chars)) return {};
-    return MapXboxPath(std::move(path));
+    return MapXboxPath(path);
 }
 DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
