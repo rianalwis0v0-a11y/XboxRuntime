@@ -6,7 +6,7 @@ endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "xbe_guest32 must be configured with the Win32/x86 toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp kernel_gpu_service.cpp kernel_gpu_mmio.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp kernel_storage_mounts.cpp)
+add_executable(xbe_guest32 guest32.cpp thread_compat.cpp kernel_gpu_service.cpp kernel_gpu_mmio.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp kernel_storage_mounts.cpp)
 target_sources(xbe_guest32 PRIVATE
   ../modules/fatx/include/fatx.cpp
   ../modules/fatx/fatx_provider.cpp
@@ -33,6 +33,17 @@ endforeach()
 
 # Run the XNet/XSocket transport contract tests in the same x86 toolchain.
 enable_testing()
+
+# Validate Xbox KTHREAD layout and PsCreateSystemThreadEx startup semantics.
+add_executable(thread_compat_smoke
+  ../tests/thread_compat_smoke.cpp
+  thread_compat.cpp
+)
+target_include_directories(thread_compat_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(thread_compat_smoke PRIVATE cxx_std_17)
+target_compile_definitions(thread_compat_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(thread_compat_smoke PRIVATE /W4 /permissive-)
+add_test(NAME thread_compat_smoke COMMAND thread_compat_smoke)
 add_executable(network_smoke
   ../tests/network_smoke.cpp
   network_compat.cpp
