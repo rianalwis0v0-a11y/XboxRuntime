@@ -92,6 +92,12 @@ This is a verified source-level gap, **not proof that retail XNet uses every one
 
 The current loader path in this branch also only calls `XboxKernelResolveImports` for the kernel thunk table; it does not parse and bind the non-kernel import directory or install XNet call-site hooks. The XNet/XSocket functions compiled into `xbe_guest32.exe` are therefore not automatically reachable from an arbitrary retail XBE.
 
+### XBE import diagnostics added
+
+The kernel thunk resolver now emits a debugger-output line when an XBE imports one of the candidate networking/device-service kernel exports audited above. The trace includes the ordinal and export name for I/O-manager candidates (59–87, selected entries), `NtDeviceIoControlFile` (196), `NtFsControlFile` (200), and the PHY exports (252–253).
+
+This does not pretend to implement IRP/device semantics. It makes the next investigation evidence-driven: load a target XBE under a debugger, capture its `[XboxKernel] XBE imports network/I-O candidate` lines, and implement only the kernel calls the title actually imports. Static XNet call sites still require separate proof and are not patched by this diagnostic.
+
 ### Next safe engineering step
 
 Do not invent ordinal aliases for XNet. First capture a real title's kernel import list and identify which I/O-manager APIs its networking path actually invokes. Then implement only the required Xbox ABI structures and IRP/device semantics at those verified entry points, backed by a Windows socket/DNS adapter. In parallel, design an explicit guest-callable API registration path for imports that are genuinely present in an XBE. Statically linked call sites remain a separate problem and must not be rewritten without instruction-boundary and per-title evidence.
