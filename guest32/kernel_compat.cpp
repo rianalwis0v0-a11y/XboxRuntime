@@ -25,6 +25,7 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -2607,22 +2608,25 @@ static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
 }
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
-    if(!g_image||!InImage(g_entry))return false;
+    if(!g_image||!InImage(g_entry)||!InImage(g_base+0x15Cu,4))return false;
+    const uint32_t importDirectory=*reinterpret_cast<uint32_t*>(g_image+0x15C);
+    auto resolveNonKernel=[&](){return XboxGuestResolveNonKernelImports(g_base,g_size,importDirectory);};
     const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
     uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
-        // Some homebrew images have no kernel imports.
-        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return true;return false;
+        // Homebrew images may omit kernel imports; named XNET imports are still resolved.
+        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return resolveNonKernel();
+        return false;
     }
     g_stubPage=VirtualAlloc(nullptr,0x2000,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
     if(!g_stubPage)return false;
     uint32_t* table=reinterpret_cast<uint32_t*>(uintptr_t(thunk));
     for(uint32_t i=0;i<kThunkMax;i++){
         if(!InImage(thunk+i*4,4))return false;
-        uint32_t v=table[i];if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return true;}
+        uint32_t v=table[i];
+        if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return resolveNonKernel();}
         if((v&0x80000000u)==0)return false;
         uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;LogNetworkRelatedKernelImport(ordinal);
-        void* target=DataFor(ordinal);
-        if(!target)target=StubFor(ordinal);
+        void* target=DataFor(ordinal);if(!target)target=StubFor(ordinal);
         if(!target)return false;
         table[i]=uint32_t(reinterpret_cast<uintptr_t>(target));
     }
