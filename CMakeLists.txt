@@ -31,6 +31,7 @@ ExternalProject_Add(xbe_guest32_project
     CMAKE_ARGS
         "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${CMAKE_BINARY_DIR}/out"
     BUILD_ALWAYS 1
+    TEST_COMMAND ctest --test-dir <BINARY_DIR> -C $<CONFIG> --output-on-failure
 )
 
 # Host entry points: boot.exe loads main.dll, which starts runtime modules.
