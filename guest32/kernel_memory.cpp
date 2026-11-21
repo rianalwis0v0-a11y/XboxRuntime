@@ -4,9 +4,12 @@
 #include <windows.h>
 #include "kernel_memory.h"
 #include "kernel_object_manager.h"
+#include "kernel_gpu_service_protocol.h"
 
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 namespace {
 constexpr LONG kSuccess = 0;
@@ -17,6 +20,10 @@ constexpr LONG kAccessDenied = static_cast<LONG>(0xC0000022u);
 constexpr LONG kUnsuccessful = static_cast<LONG>(0xC0000001u);
 constexpr std::uint64_t kGuestAddressLimit = 0x100000000ull;
 constexpr std::uint32_t kPageSize = 0x1000u;
+std::mutex g_gpuMemoryMutex;
+std::uint8_t* g_gpuMemoryView = nullptr;
+SIZE_T g_gpuMemoryBytes = 0;
+SIZE_T g_gpuInstanceNext = 0;
 
 LONG StatusFromWin32(DWORD error) noexcept {
     switch (error) {
@@ -34,6 +41,14 @@ LONG StatusFromWin32(DWORD error) noexcept {
 bool ValidHandle(HANDLE handle) noexcept {
     return handle != nullptr && handle != INVALID_HANDLE_VALUE;
 }
+using NtAllocateVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID*, ULONG_PTR, PSIZE_T, ULONG, ULONG);
+using NtFreeVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID*, PSIZE_T, ULONG);
+using NtProtectVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID*, PSIZE_T, ULONG, PULONG);
+using NtQueryVirtualMemoryFn = LONG (NTAPI*)(HANDLE, PVOID, ULONG, PVOID, SIZE_T, PSIZE_T);
+template <typename T> T ResolveNtMemoryService(const char* name) noexcept {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? reinterpret_cast<T>(GetProcAddress(ntdll, name)) : nullptr;
+}
 
 bool CopyToGuest(void* destination, const void* source, SIZE_T bytes) noexcept {
     if (!destination || !source || !bytes) return false;
@@ -41,6 +56,25 @@ bool CopyToGuest(void* destination, const void* source, SIZE_T bytes) noexcept {
     return WriteProcessMemory(GetCurrentProcess(), destination, source, bytes, &written) &&
            written == bytes;
 }
+}
+
+extern "C" BOOL __stdcall XboxKernelGpuMemoryInitialize(void* view, SIZE_T bytes) {
+    if (!view || bytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+        return FALSE;
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    if (g_gpuMemoryView && g_gpuMemoryView != view)
+        return FALSE;
+    g_gpuMemoryView = static_cast<std::uint8_t*>(view);
+    g_gpuMemoryBytes = bytes;
+    g_gpuInstanceNext = 0;
+    return TRUE;
+}
+
+extern "C" void __stdcall XboxKernelGpuMemoryShutdown(void) {
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    g_gpuMemoryView = nullptr;
+    g_gpuMemoryBytes = 0;
+    g_gpuInstanceNext = 0;
 }
 
 bool XboxKernelNormalizeGuestRange32(std::uint32_t base, std::uint32_t size,
@@ -77,11 +111,30 @@ extern "C" LONG __stdcall K_NtAllocateVirtualMemory(
         return kInvalidParameter;
     void* requestedBase = requested
         ? reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase)) : nullptr;
-    void* allocation = VirtualAlloc(requestedBase, alignedSize, allocationType, protect);
-    if (!allocation) return StatusFromWin32(GetLastError());
+    static const NtAllocateVirtualMemoryFn ntAllocate =
+        ResolveNtMemoryService<NtAllocateVirtualMemoryFn>("NtAllocateVirtualMemory");
+    void* allocation = requestedBase;
+    SIZE_T nativeSize = alignedSize;
+    LONG nativeStatus = ntAllocate
+        ? ntAllocate(GetCurrentProcess(), &allocation, 0, &nativeSize,
+                     allocationType, protect)
+        : kUnsuccessful;
+    if (!ntAllocate) {
+        allocation = VirtualAlloc(requestedBase, alignedSize, allocationType, protect);
+        if (!allocation) return StatusFromWin32(GetLastError());
+    } else if (nativeStatus < 0) {
+        return nativeStatus;
+    }
+    alignedSize = static_cast<std::uint32_t>(nativeSize);
     const std::uintptr_t actual = reinterpret_cast<std::uintptr_t>(allocation);
     if (actual > 0xFFFFFFFFu) {
-        VirtualFree(allocation, 0, MEM_RELEASE);
+        SIZE_T releaseSize = 0;
+        static const NtFreeVirtualMemoryFn ntFreeOnRangeError =
+            ResolveNtMemoryService<NtFreeVirtualMemoryFn>("NtFreeVirtualMemory");
+        if (ntFreeOnRangeError)
+            (void)ntFreeOnRangeError(GetCurrentProcess(), &allocation, &releaseSize, MEM_RELEASE);
+        else
+            VirtualFree(allocation, 0, MEM_RELEASE);
         return kInvalidParameter;
     }
     *baseAddress = allocation;
@@ -110,7 +163,15 @@ extern "C" LONG __stdcall K_NtFreeVirtualMemory(
         base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
         size = alignedSize;
     }
-    if (!VirtualFree(base, size, freeType)) return StatusFromWin32(GetLastError());
+    static const NtFreeVirtualMemoryFn ntFree =
+        ResolveNtMemoryService<NtFreeVirtualMemoryFn>("NtFreeVirtualMemory");
+    if (ntFree) {
+        SIZE_T nativeSize = size;
+        const LONG status = ntFree(GetCurrentProcess(), &base, &nativeSize, freeType);
+        if (status < 0) return status;
+    } else if (!VirtualFree(base, size, freeType)) {
+        return StatusFromWin32(GetLastError());
+    }
     if (freeType == MEM_RELEASE) {
         *baseAddress = nullptr;
         *regionSize = 0;
@@ -133,8 +194,17 @@ extern "C" LONG __stdcall K_NtProtectVirtualMemory(
         return kInvalidParameter;
     void* base = reinterpret_cast<void*>(static_cast<std::uintptr_t>(alignedBase));
     DWORD previous = 0;
-    if (!VirtualProtect(base, alignedSize, newProtect, &previous))
+    static const NtProtectVirtualMemoryFn ntProtect =
+        ResolveNtMemoryService<NtProtectVirtualMemoryFn>("NtProtectVirtualMemory");
+    if (ntProtect) {
+        SIZE_T nativeSize = alignedSize;
+        const LONG status = ntProtect(GetCurrentProcess(), &base, &nativeSize,
+                                      newProtect, &previous);
+        if (status < 0) return status;
+        alignedSize = static_cast<std::uint32_t>(nativeSize);
+    } else if (!VirtualProtect(base, alignedSize, newProtect, &previous)) {
         return StatusFromWin32(GetLastError());
+    }
     *baseAddress = base;
     *regionSize = alignedSize;
     *oldProtect = previous;
@@ -145,8 +215,17 @@ extern "C" LONG __stdcall K_NtQueryVirtualMemory(void* baseAddress,
                                                   void* memoryInformation) {
     if (!baseAddress || !memoryInformation) return kInvalidParameter;
     MEMORY_BASIC_INFORMATION info{};
-    if (!VirtualQuery(baseAddress, &info, sizeof(info)))
+    static const NtQueryVirtualMemoryFn ntQuery =
+        ResolveNtMemoryService<NtQueryVirtualMemoryFn>("NtQueryVirtualMemory");
+    if (ntQuery) {
+        SIZE_T returned = 0;
+        const LONG status = ntQuery(GetCurrentProcess(), baseAddress, 0,
+                                    &info, sizeof(info), &returned);
+        if (status < 0) return status;
+        if (returned < sizeof(info)) return kUnsuccessful;
+    } else if (!VirtualQuery(baseAddress, &info, sizeof(info))) {
         return StatusFromWin32(GetLastError());
+    }
     return CopyToGuest(memoryInformation, &info, sizeof(info))
         ? kSuccess : kInvalidParameter;
 }
@@ -190,3 +269,182 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE source, HANDLE* target,
     return kSuccess;
 }
 
+
+
+
+// Original Xbox kernel-stack and page-residency exports.
+// StackBase is the high address returned to the caller; StackLimit is the
+// low allocation address supplied back to MmDeleteKernelStack.
+
+namespace {
+struct GuestKernelStackAllocation {
+    void* low = nullptr;
+    SIZE_T bytes = 0;
+};
+std::mutex g_kernelStackMutex;
+std::unordered_map<void*, GuestKernelStackAllocation> g_kernelStacks;
+
+bool GuestRangeFits32(const void* base, SIZE_T bytes) noexcept {
+    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(base);
+    return base && bytes && start <= 0xFFFFFFFFu &&
+        bytes <= 0x100000000ull - start;
+}
+}
+
+extern "C" void* __stdcall K_MmCreateKernelStack(SIZE_T numberOfBytes,
+                                                   BOOLEAN debuggerThread) {
+    (void)debuggerThread; // Debugger-specific stack policy is not exposed by Win32.
+    if (!numberOfBytes || numberOfBytes > 0x10000000u) return nullptr;
+    constexpr SIZE_T page = 0x1000u;
+    if (numberOfBytes > SIZE_MAX - (page - 1u)) return nullptr;
+    const SIZE_T rounded = (numberOfBytes + page - 1u) & ~(page - 1u);
+    void* low = VirtualAlloc(nullptr, rounded, MEM_RESERVE | MEM_COMMIT,
+                             PAGE_READWRITE);
+    if (!low || !GuestRangeFits32(low, rounded)) {
+        if (low) VirtualFree(low, 0, MEM_RELEASE);
+        return nullptr;
+    }
+    void* stackBase = static_cast<std::uint8_t*>(low) + numberOfBytes;
+    {
+        std::lock_guard<std::mutex> lock(g_kernelStackMutex);
+        if (!g_kernelStacks.emplace(stackBase,
+                GuestKernelStackAllocation{low, rounded}).second) {
+            VirtualFree(low, 0, MEM_RELEASE);
+            return nullptr;
+        }
+    }
+    return stackBase;
+}
+
+extern "C" void __stdcall K_MmDeleteKernelStack(void* stackBase,
+                                                   void* stackLimit) {
+    if (!stackBase || !stackLimit) return;
+    void* allocation = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_kernelStackMutex);
+        auto it = g_kernelStacks.find(stackBase);
+        if (it == g_kernelStacks.end() || it->second.low != stackLimit) return;
+        allocation = it->second.low;
+        g_kernelStacks.erase(it);
+    }
+    VirtualFree(allocation, 0, MEM_RELEASE);
+}
+
+extern "C" void __stdcall K_MmLockUnlockBufferPages(
+    void* baseAddress, SIZE_T numberOfBytes, BOOLEAN unlockPages) {
+    if (!GuestRangeFits32(baseAddress, numberOfBytes)) return;
+    if (unlockPages) {
+        (void)VirtualUnlock(baseAddress, numberOfBytes);
+    } else {
+        (void)VirtualLock(baseAddress, numberOfBytes);
+    }
+}
+
+extern "C" void __stdcall K_MmPersistContiguousMemory(
+    void* baseAddress, SIZE_T numberOfBytes, BOOLEAN persist) {
+    if (!GuestRangeFits32(baseAddress, numberOfBytes)) return;
+    if (persist) {
+        (void)VirtualLock(baseAddress, numberOfBytes);
+    } else {
+        (void)VirtualUnlock(baseAddress, numberOfBytes);
+    }
+}
+
+// These operations require physical RAM / chipset mappings which the current
+// Windows-backed guest does not own. Returning failure (or raising the normal
+// unsupported-import exception for void APIs) is safer than inventing MMIO.
+extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
+    SIZE_T numberOfBytes, SIZE_T* numberOfPaddingBytes) {
+    if (numberOfPaddingBytes) *numberOfPaddingBytes = 0;
+    if (!numberOfBytes) return nullptr;
+
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    if (!g_gpuMemoryView || g_gpuMemoryBytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+        return nullptr;
+
+    const SIZE_T aligned = (g_gpuInstanceNext + kPageSize - 1u) &
+                           ~(static_cast<SIZE_T>(kPageSize) - 1u);
+    if (aligned < g_gpuInstanceNext ||
+        aligned > static_cast<SIZE_T>(XBOX_GPU_SHARED_RAMIN_SIZE) ||
+        numberOfBytes > static_cast<SIZE_T>(XBOX_GPU_SHARED_RAMIN_SIZE) - aligned)
+        return nullptr;
+    const SIZE_T end = aligned + numberOfBytes;
+    const SIZE_T roundedEnd = (end + kPageSize - 1u) &
+                              ~(static_cast<SIZE_T>(kPageSize) - 1u);
+    if (roundedEnd < end || roundedEnd > XBOX_GPU_SHARED_RAMIN_SIZE)
+        return nullptr;
+
+    if (numberOfPaddingBytes) *numberOfPaddingBytes = roundedEnd - end;
+    g_gpuInstanceNext = roundedEnd;
+    return g_gpuMemoryView + XBOX_GPU_SHARED_VRAM_SIZE + aligned;
+}
+extern "C" void* __stdcall K_MmMapIoSpace(
+    ULONG_PTR physicalAddress, SIZE_T numberOfBytes, ULONG protect) {
+    constexpr ULONG_PTR vramApertureBase = 0xF0000000u;
+    constexpr ULONG_PTR mmioBase = 0xFD000000u;
+    constexpr ULONG_PTR mmioLimit = 0xFE000000u;
+    constexpr ULONG allowedProtect = PAGE_READONLY | PAGE_READWRITE |
+        PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    if (!numberOfBytes || (protect & ~allowedProtect) != 0)
+        return nullptr;
+
+    // BAR1 on the Xbox NV2A maps a 128 MiB aperture at 0xF0000000. The
+    // provider currently backs 64 MiB of actual VRAM; only that verified
+    // portion is exposed as a direct alias into the shared host/guest section.
+    if (physicalAddress >= vramApertureBase) {
+        const ULONG_PTR offset = physicalAddress - vramApertureBase;
+        if (offset < XBOX_GPU_SHARED_VRAM_SIZE &&
+            numberOfBytes <= XBOX_GPU_SHARED_VRAM_SIZE - offset) {
+            std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+            if (!g_gpuMemoryView ||
+                g_gpuMemoryBytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+                return nullptr;
+            return g_gpuMemoryView + offset;
+        }
+    }
+
+    // BAR0 is the NV2A register aperture. Do not map host physical memory:
+    // the installed x86 VEH decodes supported guest loads/stores and sends
+    // them to the NV2A service over the dedicated GPU pipe.
+    if (physicalAddress >= mmioBase && physicalAddress < mmioLimit &&
+        numberOfBytes <= mmioLimit - physicalAddress)
+        return reinterpret_cast<void*>(physicalAddress);
+    return nullptr;
+}
+extern "C" void* __stdcall K_MmUnmapIoSpace(
+    void* baseAddress, SIZE_T numberOfBytes) {
+    if (!baseAddress || !numberOfBytes) return nullptr;
+    const ULONG_PTR address = reinterpret_cast<ULONG_PTR>(baseAddress);
+    constexpr ULONG_PTR vramApertureBase = 0xF0000000u;
+    constexpr ULONG_PTR mmioBase = 0xFD000000u;
+    constexpr ULONG_PTR mmioLimit = 0xFE000000u;
+
+    {
+        std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+        if (g_gpuMemoryView) {
+            const ULONG_PTR viewBase = reinterpret_cast<ULONG_PTR>(g_gpuMemoryView);
+            if (address >= viewBase) {
+                const ULONG_PTR offset = address - viewBase;
+                if (offset < XBOX_GPU_SHARED_VRAM_SIZE &&
+                    numberOfBytes <= XBOX_GPU_SHARED_VRAM_SIZE - offset)
+                    return baseAddress;
+            }
+        }
+    }
+
+    if (address >= mmioBase && address < mmioLimit &&
+        numberOfBytes <= mmioLimit - address)
+        return baseAddress;
+    (void)vramApertureBase;
+    return nullptr;
+}
+extern "C" LONG __stdcall K_MmQueryStatistics(void* memoryStatistics) {
+    (void)memoryStatistics;
+    return static_cast<LONG>(0xC00000BBu); // STATUS_NOT_SUPPORTED
+}
+extern "C" void __stdcall K_MmLockUnlockPhysicalPage(
+    ULONG_PTR physicalAddress, BOOLEAN unlockPage) {
+    (void)physicalAddress; (void)unlockPage;
+    const ULONG_PTR ordinal = 176;
+    RaiseException(0xC000001Du, EXCEPTION_NONCONTINUABLE, 1, &ordinal);
+}

@@ -7,10 +7,13 @@
 
 int main() {
     static_assert(sizeof(void*) == 4, "registry test must run as x86");
-    assert(XboxGuestApiCount() == 29u);
+    assert(XboxGuestApiCount() == 31u);
     assert(XboxGuestApiLookup(nullptr) == 0u);
     assert(XboxGuestApiLookup("") == 0u);
     assert(XboxGuestApiLookup("XNetDefinitelyNotAnApi") == 0u);
+
+    assert(XboxGuestApiLookup("DirectSoundCreate") != 0u);
+    assert(XboxGuestApiLookup("DirectSoundCreate8") != 0u);
 
     const char* names[] = {
         "XNetStartup", "XNetCleanup", "XNetDnsLookup", "XNetDnsRelease",
@@ -71,6 +74,20 @@ int main() {
     assert(XboxGuestResolveNonKernelImports(base, sizeof(image), va(0x100)));
     std::memcpy(&resolved, image + 0x200, sizeof(resolved));
     assert(resolved == XboxGuestApiLookup("XNetStartup"));
+
+    // DSOUND imports are resolved through the host DirectSound compatibility shim.
+    std::memset(image, 0, sizeof(image));
+    const Descriptor soundDescriptor{ va(0x200), va(0x300) };
+    std::memcpy(image + 0x100, &soundDescriptor, sizeof(soundDescriptor));
+    std::memcpy(image + 0x108, &terminator, sizeof(terminator));
+    const wchar_t soundLibraryName[] = L"DSOUND.DLL";
+    std::memcpy(image + 0x300, soundLibraryName, sizeof(soundLibraryName));
+    std::memcpy(image + 0x200, &importName, sizeof(importName));
+    std::memcpy(image + 0x204, &endThunk, sizeof(endThunk));
+    std::memcpy(image + 0x402, "DirectSoundCreate", sizeof("DirectSoundCreate"));
+    assert(XboxGuestResolveNonKernelImports(base, sizeof(image), va(0x100)));
+    std::memcpy(&resolved, image + 0x200, sizeof(resolved));
+    assert(resolved == XboxGuestApiLookup("DirectSoundCreate"));
 
     // Unknown names and unknown non-kernel libraries must fail closed.
     std::memcpy(image + 0x200, &importName, sizeof(importName));

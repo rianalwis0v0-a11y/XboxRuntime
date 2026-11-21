@@ -1,12 +1,16 @@
 name: Kernel host and guest32 build/tests
+# Re-run full integration after the IoCreateFile ANSI-name fix.
 
 on:
   push:
     branches:
       - work/kernel-execution-backend
+      - work/kernel-combined-clean-import
+      - work/filesystem-provider-integration-current
   pull_request:
     branches:
       - work/kernel-execution-backend
+      - work/kernel-combined-clean-import
   workflow_dispatch:
 
 concurrency:
@@ -57,6 +61,31 @@ jobs:
           path: nxdk/samples/hello/bin/default.xbe
           if-no-files-found: error
 
+      - name: Build bounded GPU-only NV2A triangle XBE
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("nxdk/samples/triangle/main.c")
+          text = source.read_text()
+          old = "    while(1) {"
+          new = "    for (frames_total = 0; frames_total < 3; ++frames_total) {"
+          if text.count(old) != 1:
+              raise SystemExit("Expected exactly one triangle render loop")
+          source.write_text(text.replace(old, new))
+          PY
+          eval "$(./nxdk/bin/activate -s)"
+          make -C nxdk/samples/triangle -j2
+          test -s nxdk/samples/triangle/bin/default.xbe
+          sha256sum nxdk/samples/triangle/bin/default.xbe
+
+      - name: Upload GPU-only triangle XBE
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdk-gpu-only-triangle-xbe
+          path: nxdk/samples/triangle/bin/default.xbe
+          if-no-files-found: error
+
 
   kernel:
     needs: nxdk-homebrew-xbe
@@ -64,6 +93,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Check out completed XBE loader implementation
         uses: actions/checkout@v4
@@ -78,6 +109,12 @@ jobs:
           name: nxdk-kernel-smoke-xbe
           path: nxdk-fixture
 
+      - name: Download GPU-only triangle XBE
+        uses: actions/download-artifact@v4
+        with:
+          name: nxdk-gpu-only-triangle-xbe
+          path: nxdk-gpu-fixture
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -90,7 +127,66 @@ jobs:
         run: cmake -S modules/xbox_kernel -B build-kernel-host -A x64
 
       - name: Build host kernel backend
-        run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke
+        run: cmake --build build-kernel-host --config Release --target xbox_kernel kernel_guest_backend_smoke kernel_memory_host_tests kernel_gpu_provider_memory_smoke kernel_io_system_host_tests kernel_nvsettings_host_tests
+
+      - name: Configure NV2A provider
+        run: cmake -S modules/nv2a -B build-nv2a -A x64
+
+      - name: Build NV2A provider
+        run: cmake --build build-nv2a --config Release --target nv2a nv2a_vertex_shader_smoke
+
+      - name: Run NV2A shader validation tests
+        run: ctest --test-dir build-nv2a -C Release --output-on-failure -R "nv2a_vertex_shader_smoke"
+      - name: Verify NV2A provider ABI exports
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          if (!$vs) { throw "Visual Studio installation not found" }
+          $dumpbin = Get-ChildItem (Join-Path $vs "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -like "*Hostx64*x64*dumpbin.exe" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$dumpbin) { throw "MSVC dumpbin.exe not found" }
+          $exports = & $dumpbin /exports "build-nv2a/out/nv2a.dll"
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed for NV2A provider" }
+          $required = @("ModuleStartWithMemory", "ModuleStop", "XboxNV2A_ReadRegister",
+            "XboxNV2A_WriteRegister", "XboxNV2A_SubmitMethod", "XboxNV2A_Flush",
+            "XboxNV2A_ReadVRAM", "XboxNV2A_WriteVRAM", "XboxNV2A_ReadRAMIN",
+            "XboxNV2A_WriteRAMIN")
+          $text = $exports -join "`n"
+          foreach ($name in $required) {
+            if ($text -notmatch [regex]::Escape($name)) { throw "NV2A export missing: $name" }
+          }
+      - name: Inspect NV2A provider runtime dependencies
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          $dumpbin = Get-ChildItem (Join-Path $vs "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -like "*Hostx64*x64*dumpbin.exe" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          & $dumpbin /dependents "build-nv2a/out/nv2a.dll"
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin dependency inspection failed" }
+          Get-Item "build-nv2a/out/nv2a.dll" | Format-List FullName,Length
+          Get-ChildItem "$env:windir/System32" -Filter "*d3dcompiler*.dll" | Select-Object FullName
+      - name: Stage NV2A provider beside host kernel
+        shell: pwsh
+        run: Copy-Item "build-nv2a/out/nv2a.dll" "build-kernel-host/out/nv2a.dll" -Force
+      - name: Stage NV2A Visual C++ runtime dependency
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products "*" -property installationPath
+          if (!$vs) { throw "Visual Studio installation not found" }
+          # Prefer the x64 runtime installed in Windows System32 on hosted runners.
+          $crt = Get-Item "$env:windir/System32/vcruntime140.dll" -ErrorAction SilentlyContinue
+          if (!$crt) {
+            $crt = Get-ChildItem (Join-Path $vs "VC") -Filter "vcruntime140.dll" -Recurse |
+              Where-Object { $_.FullName -match "[\\\\/]x64[\\\\/]" } |
+              Select-Object -First 1
+          }
+          if (!$crt) { throw "x64 VCRUNTIME140.dll not found in Windows or Visual Studio" }
+          Copy-Item $crt.FullName "build-kernel-host/out/vcruntime140.dll" -Force
 
       - name: Configure main runtime module
         run: cmake -S main -B build-main -A x64
@@ -101,11 +197,11 @@ jobs:
       - name: Configure x86 guest
         run: cmake -S guest32 -B build-guest32 -A Win32
 
-      - name: Build x86 guest and networking tests
-        run: cmake --build build-guest32 --config Release --target xbe_guest32 network_smoke guest_api_registry_smoke kernel_crypto_guest_smoke kernel_time_guest_smoke kernel_object_reference_guest_smoke
+      - name: Build x86 guest, audio, and networking tests
+        run: cmake --build build-guest32 --config Release --target xbe_guest32 thread_compat_smoke privileged_instruction_smoke network_smoke guest_api_registry_smoke kernel_crypto_guest_smoke kernel_time_guest_smoke kernel_object_reference_guest_smoke kernel_system_guest_smoke kernel_io_guest_smoke kernel_notification_guest_smoke kernel_nvsettings_guest_smoke kernel_thread_exports_guest_smoke kernel_io_completion_guest_smoke kernel_directory_object_guest_smoke kernel_io_group_a_guest_smoke kernel_gpu_mmio_guest_smoke kernel_gpu_service_guest_smoke kernel_filesystem_provider_smoke
 
-      - name: Run x86 networking and guest API tests
-        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "network_smoke|guest_api_registry_smoke|kernel_crypto_guest_smoke|kernel_time_guest_smoke|kernel_object_reference_guest_smoke"
+      - name: Run x86 guest API and DirectSound import tests
+        run: ctest --test-dir build-guest32 -C Release --output-on-failure -R "thread_compat_smoke|privileged_instruction_smoke|network_smoke|guest_api_registry_smoke|kernel_crypto_guest_smoke|kernel_time_guest_smoke|kernel_object_reference_guest_smoke|kernel_system_guest_smoke|kernel_io_guest_smoke|kernel_notification_guest_smoke|kernel_nvsettings_guest_smoke|kernel_thread_exports_guest_smoke|kernel_io_completion_guest_smoke|kernel_directory_object_guest_smoke|kernel_io_group_a_guest_smoke|kernel_gpu_mmio_guest_smoke|kernel_gpu_service_guest_smoke|kernel_filesystem_provider_smoke"
 
       - name: Verify backend exports
         shell: pwsh
@@ -128,7 +224,7 @@ jobs:
         run: Copy-Item "build-guest32/out/xbe_guest32.exe" "build-kernel-host/out/xbe_guest32.exe" -Force
 
       - name: Run shared-memory guest execution smoke test
-        run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R kernel_guest_backend_smoke
+        run: ctest --test-dir build-kernel-host -C Release --output-on-failure -R "kernel_guest_backend_smoke|kernel_memory_host_tests|kernel_gpu_provider_memory_smoke|kernel_io_system_host_tests|kernel_nvsettings_host_tests"
 
       - name: Build x64 XBE loader DLL for joint integration
         shell: cmd
@@ -149,15 +245,23 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force integration | Out-Null
           Copy-Item build-kernel-host/out/xbox_kernel.dll integration/
+          Copy-Item build-kernel-host/out/nv2a.dll integration/
+          Copy-Item build-kernel-host/out/vcruntime140.dll integration/
           Copy-Item build-guest32/out/xbe_guest32.exe integration/
           Copy-Item xbe_loader.dll integration/
           Copy-Item kernel_xbe_integration.exe integration/
           Copy-Item nxdk-fixture/default.xbe integration/
+          Copy-Item nxdk-gpu-fixture/default.xbe integration/gpu_only.xbe
           Get-FileHash integration/default.xbe -Algorithm SHA256 | Format-List
+          Get-FileHash integration/gpu_only.xbe -Algorithm SHA256 | Format-List
 
       - name: Execute NXDK XBE through real loader and kernel backend
         working-directory: integration
         run: ./kernel_xbe_integration.exe ./default.xbe
+
+      - name: Execute GPU-only NV2A triangle XBE
+        working-directory: integration
+        run: ./kernel_xbe_integration.exe ./gpu_only.xbe
 
       - name: Verify backend pair
         shell: pwsh

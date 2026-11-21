@@ -1,4 +1,5 @@
 #include "../guest32/kernel_memory.h"
+#include "../guest32/kernel_gpu_service_protocol.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -23,6 +24,51 @@ int main() {
         std::fprintf(stderr, "zero-sized guest range accepted\n");
         return 4;
     }
-    std::puts("kernel_memory_host_tests: PASS (32-bit range alignment and overflow boundaries)");
+    HANDLE sharedMapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr,
+        PAGE_READWRITE, 0, XBOX_GPU_SHARED_MEMORY_SIZE, nullptr);
+    if (!sharedMapping) {
+        std::fprintf(stderr, "shared GPU file mapping creation failed\n");
+        return 5;
+    }
+    auto* hostView = static_cast<std::uint8_t*>(MapViewOfFile(
+        sharedMapping, FILE_MAP_ALL_ACCESS, 0, 0, XBOX_GPU_SHARED_MEMORY_SIZE));
+    auto* guestView = static_cast<std::uint8_t*>(MapViewOfFile(
+        sharedMapping, FILE_MAP_ALL_ACCESS, 0, 0, XBOX_GPU_SHARED_MEMORY_SIZE));
+    if (!hostView || !guestView || hostView == guestView ||
+        !XboxKernelGpuMemoryInitialize(guestView, XBOX_GPU_SHARED_MEMORY_SIZE)) {
+        std::fprintf(stderr, "shared GPU memory views failed to initialize\n");
+        return 6;
+    }
+    SIZE_T padding = 99;
+    void* firstGpuAllocation = K_MmClaimGpuInstanceMemory(0x1001u, &padding);
+    if (firstGpuAllocation != guestView + XBOX_GPU_SHARED_VRAM_SIZE ||
+        padding != 0x0FFFu) {
+        std::fprintf(stderr, "first GPU instance allocation was not RAMIN-backed\n");
+        return 7;
+    }
+    static_cast<std::uint8_t*>(firstGpuAllocation)[0] = 0xA5u;
+    if (hostView[XBOX_GPU_SHARED_VRAM_SIZE] != 0xA5u) {
+        std::fprintf(stderr, "host and guest GPU memory views are not coherent\n");
+        return 8;
+    }
+    void* secondGpuAllocation = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
+    if (secondGpuAllocation != guestView + XBOX_GPU_SHARED_VRAM_SIZE + 0x2000u ||
+        padding != 0) {
+        std::fprintf(stderr, "GPU instance allocation alignment/padding failed\n");
+        return 9;
+    }
+    if (K_MmClaimGpuInstanceMemory(XBOX_GPU_SHARED_RAMIN_SIZE, nullptr) != nullptr) {
+        std::fprintf(stderr, "GPU instance allocator accepted an out-of-range claim\n");
+        return 10;
+    }
+    XboxKernelGpuMemoryShutdown();
+    if (K_MmClaimGpuInstanceMemory(0x100u, nullptr) != nullptr) {
+        std::fprintf(stderr, "GPU instance allocation succeeded after shutdown\n");
+        return 11;
+    }
+    UnmapViewOfFile(guestView);
+    UnmapViewOfFile(hostView);
+    CloseHandle(sharedMapping);
+    std::puts("kernel_memory_host_tests: PASS (guest ranges and shared GPU RAMIN allocator)");
     return 0;
 }

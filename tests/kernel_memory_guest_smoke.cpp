@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "kernel_memory.h"
+#include "../guest32/kernel_gpu_service_protocol.h"
 
 namespace {
 int Fail(const char* what, LONG status) {
@@ -57,6 +58,106 @@ int main() {
     if (status != static_cast<LONG>(0xC000000Du))
         return Fail("reject unsupported ZeroBits", status);
 
-    std::puts("kernel_memory_guest_smoke: PASS (x86 stdcall ABI, VM reserve/commit/protect/query/decommit/release)");
+
+    // Group A: kernel-stack allocation follows the Xbox high-base/low-limit
+    // convention and only releases an exact pair returned by the allocator.
+    void* stackBase = K_MmCreateKernelStack(0x2801, FALSE);
+    if (!stackBase) return Fail("MmCreateKernelStack", 0xC0000017L);
+    MEMORY_BASIC_INFORMATION stackAllocation{};
+    if (!VirtualQuery(static_cast<std::uint8_t*>(stackBase) - 1,
+                      &stackAllocation, sizeof(stackAllocation)))
+        return Fail("query kernel stack allocation", 0xC0000001L);
+    void* stackLimit = stackAllocation.AllocationBase;
+    if (reinterpret_cast<std::uintptr_t>(stackBase) > 0xFFFFFFFFu ||
+        reinterpret_cast<std::uintptr_t>(stackLimit) > 0xFFFFFFFFu)
+        return Fail("kernel stack must be guest-addressable", 0xC000000DL);
+    K_MmDeleteKernelStack(stackBase, reinterpret_cast<void*>(
+        reinterpret_cast<std::uintptr_t>(stackLimit) + 0x1000));
+    // A mismatched limit must not release the allocation.
+    MEMORY_BASIC_INFORMATION stackInfo{};
+    if (!VirtualQuery(stackLimit, &stackInfo, sizeof(stackInfo)) ||
+        stackInfo.State != MEM_COMMIT)
+        return Fail("reject mismatched MmDeleteKernelStack pair", 0xC0000001L);
+    K_MmDeleteKernelStack(stackBase, stackLimit);
+    if (VirtualQuery(stackLimit, &stackInfo, sizeof(stackInfo)) &&
+        stackInfo.State == MEM_COMMIT)
+        return Fail("MmDeleteKernelStack release", 0xC0000001L);
+
+    // Residency calls are void exports; exercise both directions on a
+    // committed guest buffer without assuming the host can pin every page.
+    void* resident = VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT,
+                                  PAGE_READWRITE);
+    if (!resident) return Fail("residency test allocation", 0xC0000017L);
+    K_MmLockUnlockBufferPages(resident, 0x1000, FALSE);
+    K_MmLockUnlockBufferPages(resident, 0x1000, TRUE);
+    K_MmPersistContiguousMemory(resident, 0x1000, TRUE);
+    K_MmPersistContiguousMemory(resident, 0x1000, FALSE);
+    VirtualFree(resident, 0, MEM_RELEASE);
+
+    SIZE_T padding = 99;
+    if (K_MmClaimGpuInstanceMemory(0x1000, &padding) != nullptr || padding != 0)
+        return Fail("GPU instance memory must fail without a GPU memory backend", 0xC0000001L);
+    auto* sharedGpuMemory = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, XBOX_GPU_SHARED_MEMORY_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+    if (!sharedGpuMemory)
+        return Fail("shared GPU memory test allocation", 0xC0000017L);
+    if (!XboxKernelGpuMemoryInitialize(sharedGpuMemory, XBOX_GPU_SHARED_MEMORY_SIZE)) {
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("initialize shared GPU memory", 0xC0000001L);
+    }
+    void* firstGpuClaim = K_MmClaimGpuInstanceMemory(0x1001u, &padding);
+    if (firstGpuClaim != sharedGpuMemory + XBOX_GPU_SHARED_VRAM_SIZE ||
+        padding != 0x0FFFu) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("first shared RAMIN claim", 0xC0000001L);
+    }
+    void* secondGpuClaim = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
+    if (secondGpuClaim != sharedGpuMemory + XBOX_GPU_SHARED_VRAM_SIZE + 0x2000u ||
+        padding != 0) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("second shared RAMIN claim", 0xC0000001L);
+    }
+    if (K_MmClaimGpuInstanceMemory(XBOX_GPU_SHARED_RAMIN_SIZE, nullptr) != nullptr) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("reject RAMIN exhaustion", 0xC0000001L);
+    }
+    void* mappedVram = K_MmMapIoSpace(0xF0001000u, 0x1000u, PAGE_READWRITE);
+    if (mappedVram != sharedGpuMemory + 0x1000u) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("map shared NV2A VRAM aperture", 0xC0000001L);
+    }
+    static_cast<std::uint8_t*>(mappedVram)[0] = 0x6Bu;
+    if (sharedGpuMemory[0x1000u] != 0x6Bu ||
+        K_MmUnmapIoSpace(mappedVram, 0x1000u) != mappedVram) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("shared VRAM alias/unmap", 0xC0000001L);
+    }
+    if (K_MmMapIoSpace(0xF4000000u, 0x1000u, PAGE_READWRITE) != nullptr) {
+        XboxKernelGpuMemoryShutdown();
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("reject VRAM aperture beyond backed memory", 0xC0000001L);
+    }
+    XboxKernelGpuMemoryShutdown();
+    if (K_MmClaimGpuInstanceMemory(0x100u, nullptr) != nullptr) {
+        VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+        return Fail("reject GPU claim after shutdown", 0xC0000001L);
+    }
+    VirtualFree(sharedGpuMemory, 0, MEM_RELEASE);
+    void* gpuRegisters = K_MmMapIoSpace(0xFD000000u, 0x1000, PAGE_READWRITE);
+    if (gpuRegisters != reinterpret_cast<void*>(0xFD000000u))
+        return Fail("NV2A MMIO aperture mapping", 0xC0000001L);
+    if (K_MmUnmapIoSpace(gpuRegisters, 0x1000) != gpuRegisters)
+        return Fail("NV2A MMIO aperture unmapping", 0xC0000001L);
+    if (K_MmMapIoSpace(0xFE800000u, 0x1000, PAGE_READWRITE) != nullptr)
+        return Fail("reject non-NV2A physical MMIO", 0xC0000001L);
+    if (K_MmQueryStatistics(nullptr) != static_cast<LONG>(0xC00000BBu))
+        return Fail("MmQueryStatistics explicit unsupported status", 0xC0000001L);
+
+    std::puts("kernel_memory_guest_smoke: PASS (x86 ABI, VM + Group A stack/residency + NV2A MMIO aperture)");
     return 0;
 }

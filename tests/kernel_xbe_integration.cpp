@@ -14,7 +14,7 @@ using GetBackendV2 = int (__cdecl*)(XBE_EXECUTION_BACKEND_V2*);
 using RegisterBackendV2 = int (__cdecl*)(const XBE_EXECUTION_BACKEND_V2*);
 using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
-using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
+using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
@@ -53,10 +53,11 @@ int wmain(int argc, wchar_t** argv) {
                      XboxXbe::ErrorName(parsed.error), parsed.detail);
         return 4;
     }
-    std::printf("NXDK XBE metadata: base=0x%08X size=0x%08X entry=0x%08X "
-                "TLS=0x%08X sections=%u\n",
-                image.baseAddress, image.imageSize, image.entryPoint,
-                image.tlsAddress, image.sectionCount);
+    std::printf("NXDK XBE metadata: base=0x%08X size=0x%08X header=0x%08X entry=0x%08X "
+                "TLS=0x%08X kernelThunk=0x%08X nonKernelImports=0x%08X sections=%u\n",
+                image.baseAddress, image.imageSize, image.headerSize, image.entryPoint,
+                image.tlsAddress, image.kernelThunkAddress,
+                image.nonKernelImportDirectoryAddress, image.sectionCount);
     for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
         const auto& section = image.sections[i];
         std::printf("Section %u: flags=0x%08X VA=0x%08X virtual=0x%08X raw=0x%08X rawSize=0x%08X\n",
@@ -145,6 +146,23 @@ int wmain(int argc, wchar_t** argv) {
         } else {
             xbeActive = true;
             std::puts("PASS: LoadXbe mapped the on-disk NXDK image and the real kernel backend accepted startup.");
+            // Diagnostic only: report the actual host protection of every XBE section.
+            for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+                const auto& section = image.sections[i];
+                MEMORY_BASIC_INFORMATION sectionMemory{};
+                if (VirtualQuery(reinterpret_cast<const void*>(
+                        static_cast<std::uintptr_t>(section.virtualAddress)),
+                        &sectionMemory, sizeof(sectionMemory)) == sizeof(sectionMemory)) {
+                    std::printf("Mapped section %u: flags=0x%08X VA=0x%08X size=0x%08X "
+                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\\n",
+                                i, section.flags, section.virtualAddress, section.virtualSize,
+                                sectionMemory.BaseAddress, sectionMemory.State,
+                                sectionMemory.Protect, sectionMemory.Type);
+                } else {
+                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\\n",
+                                i, GetLastError());
+                }
+            }
         }
     }
 
@@ -207,10 +225,26 @@ int wmain(int argc, wchar_t** argv) {
         std::uint32_t faultAddress = 0;
         std::uint32_t faultProtection = 0;
         std::uint32_t faultState = 0;
+        std::uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
+        std::uint32_t esi = 0, edi = 0, ebp = 0, esp = 0;
         const int waitResult = waitForExit(30000, &exitCode, &tlsCleared,
             &exceptionInstruction, &accessType, &faultAddress,
-            &faultProtection, &faultState);
+            &faultProtection, &faultState, &eax, &ebx, &ecx, &edx,
+            &esi, &edi, &ebp, &esp);
         if (exceptionInstruction) {
+            for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+                const auto& section = image.sections[i];
+                const std::uint64_t sectionEnd =
+                    std::uint64_t(section.virtualAddress) + section.virtualSize;
+                if (exceptionInstruction >= section.virtualAddress &&
+                    std::uint64_t(exceptionInstruction) < sectionEnd) {
+                    std::printf("Faulting EIP is in XBE section %u: flags=0x%08X "
+                                "executable=%u writable=%u\n",
+                                i, section.flags, (section.flags & 4u) != 0,
+                                (section.flags & 1u) != 0);
+                    break;
+                }
+            }
             std::uint8_t faultBytes[32]{};
             SIZE_T faultCopied = 0;
             if (ReadProcessMemory(GetCurrentProcess(),
@@ -237,6 +271,9 @@ int wmain(int argc, wchar_t** argv) {
                     "faultProtect=0x%08X faultState=0x%08X\n",
                     waitResult, exitCode, tlsCleared, exceptionInstruction,
                     accessType, faultAddress, faultProtection, faultState);
+        std::printf("Guest x86 registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X "
+                    "ESI=%08X EDI=%08X EBP=%08X ESP=%08X\n",
+                    eax, ebx, ecx, edx, esi, edi, ebp, esp);
         if (waitResult != ERROR_SUCCESS || exitCode != ERROR_SUCCESS ||
             tlsCleared != 1) {
             std::fprintf(stderr, "FAIL: guest did not return cleanly or TLS cleanup failed "

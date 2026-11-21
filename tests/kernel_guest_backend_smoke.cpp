@@ -206,6 +206,6 @@ int main() {
     backend.releaseImage(image, backend.context);
     stop();
     FreeLibrary(module);
-    std::puts("kernel_guest_backend_smoke: PASS (shared mapping + x86 entry + TLS template/zero-fill + callbacks + stop/release)");
+    std::puts("kernel_guest_backend_smoke: PASS (shared mapping + GPU RPC startup ping + x86 entry + TLS template/zero-fill + callbacks + stop/release)");
     return 0;
 }

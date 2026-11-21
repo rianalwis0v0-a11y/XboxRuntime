@@ -4,7 +4,12 @@
 #include <cwchar>
 #include <string>
 #include "kernel_compat.h"
+#include "kernel_gpu_service.h"
+#include "kernel_gpu_mmio.h"
+#include "kernel_memory.h"
+#include "kernel_gpu_service_protocol.h"
 #include "guest_protocol.h"
+#include "kernel_storage_mounts.h"
 
 namespace {
 bool ReadExact(HANDLE handle, void* output, DWORD bytes) {
@@ -46,16 +51,29 @@ std::uint32_t NumberArgument(int argc, wchar_t** argv, const wchar_t* name) {
 XboxGuestCommandReply Reply(std::uint32_t command, std::uint32_t status) {
     return { XBOX_GUEST_PROTOCOL_MAGIC, command, status };
 }
+struct GpuMemoryMappingGuard {
+    HANDLE mapping = nullptr;
+    void* view = nullptr;
+    bool initialized = false;
+    ~GpuMemoryMappingGuard() {
+        if (initialized) XboxKernelGpuMemoryShutdown();
+        if (view) UnmapViewOfFile(view);
+        if (mapping) CloseHandle(mapping);
+    }
+};
+
 }
 
 int wmain(int argc, wchar_t** argv) {
     const wchar_t* pipeName = ArgumentValue(argc, argv, L"--pipe");
+    const wchar_t* gpuPipeName = ArgumentValue(argc, argv, L"--gpu-pipe");
+    const wchar_t* gpuMemoryName = ArgumentValue(argc, argv, L"--gpu-memory");
     const wchar_t* mappingName = ArgumentValue(argc, argv, L"--mapping");
     const wchar_t* eepromPath = ArgumentValue(argc, argv, L"--eeprom");
     const wchar_t* titlePath = ArgumentValue(argc, argv, L"--xbe");
     const std::uint32_t base = NumberArgument(argc, argv, L"--base");
     const std::uint32_t size = NumberArgument(argc, argv, L"--size");
-    if (!pipeName || !mappingName || !eepromPath || !base || !size ||
+    if (!pipeName || !gpuPipeName || !gpuMemoryName || !mappingName || !eepromPath || !base || !size ||
         std::uint64_t(base) + size > 0x80000000ull)
         return ERROR_INVALID_PARAMETER;
 
@@ -70,6 +88,29 @@ int wmain(int argc, wchar_t** argv) {
         return error ? error : ERROR_INVALID_ADDRESS;
     }
 
+    GpuMemoryMappingGuard gpuMemory;
+    gpuMemory.mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, gpuMemoryName);
+    if (!gpuMemory.mapping) {
+        const DWORD error = GetLastError();
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return error;
+    }
+    gpuMemory.view = MapViewOfFile(gpuMemory.mapping, FILE_MAP_ALL_ACCESS,
+        0, 0, XBOX_GPU_SHARED_MEMORY_SIZE);
+    if (!gpuMemory.view) {
+        const DWORD error = GetLastError();
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return error ? error : ERROR_NOT_ENOUGH_MEMORY;
+    }
+    if (!XboxKernelGpuMemoryInitialize(gpuMemory.view, XBOX_GPU_SHARED_MEMORY_SIZE)) {
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return ERROR_NOT_READY;
+    }
+    gpuMemory.initialized = true;
+
     HANDLE pipe = CreateFileW(pipeName, GENERIC_READ | GENERIC_WRITE, 0,
                               nullptr, OPEN_EXISTING, 0, nullptr);
     if (pipe == INVALID_HANDLE_VALUE) {
@@ -78,9 +119,39 @@ int wmain(int argc, wchar_t** argv) {
         return ERROR_PIPE_NOT_CONNECTED;
     }
 
+    HANDLE gpuPipe = CreateFileW(gpuPipeName, GENERIC_READ | GENERIC_WRITE, 0,
+                                 nullptr, OPEN_EXISTING, 0, nullptr);
+    if (gpuPipe == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        CloseHandle(pipe);
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return error ? error : ERROR_PIPE_NOT_CONNECTED;
+    }
+    if (!XboxKernelGpuServiceInitialize(gpuPipe)) {
+        XboxKernelGpuServiceShutdown();
+        CloseHandle(gpuPipe);
+        CloseHandle(pipe);
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return ERROR_NOT_READY;
+    }
+
+    if (!XboxKernelGpuMmioInitialize()) {
+        XboxKernelGpuServiceShutdown();
+        CloseHandle(gpuPipe);
+        CloseHandle(pipe);
+        UnmapViewOfFile(image);
+        CloseHandle(mapping);
+        return ERROR_NOT_READY;
+    }
+
     std::uint32_t status = ERROR_SUCCESS;
     if (!XboxKernelInitializeEeprom(eepromPath)) status = ERROR_OPEN_FAILED;
-    else XboxKernelSetTitlePath(titlePath);
+    else {
+        XboxKernelSetTitlePath(titlePath);
+        if (!XboxKernelMountConfiguredStorage()) status = ERROR_INVALID_DATA;
+    }
 
     XboxGuestHello hello{
         XBOX_GUEST_PROTOCOL_MAGIC, XBOX_GUEST_PROTOCOL_VERSION,
@@ -158,7 +229,8 @@ int wmain(int argc, wchar_t** argv) {
         } else if (message.command == XboxGuestWaitForExit) {
             XboxGuestExitReply exitReply{
                 XBOX_GUEST_PROTOCOL_MAGIC, XboxGuestWaitForExit,
-                ERROR_INVALID_STATE, 0, 0, 0, 0, 0, 0, 0
+                ERROR_INVALID_STATE, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0
             };
             if (guestThread) {
                 const DWORD timeout = message.imageBase ? message.imageBase : INFINITE;
@@ -194,7 +266,9 @@ int wmain(int argc, wchar_t** argv) {
                         XboxKernelGetLastExceptionDiagnostic(
                             nullptr, &exitReply.exceptionInstruction,
                             &exitReply.accessType, &exitReply.faultAddress,
-                            &exitReply.faultProtection, &exitReply.faultState);
+                            &exitReply.faultProtection, &exitReply.faultState,
+                            &exitReply.eax, &exitReply.ebx, &exitReply.ecx, &exitReply.edx,
+                            &exitReply.esi, &exitReply.edi, &exitReply.ebp, &exitReply.esp);
                         XboxKernelShutdownTitle();
                     } else {
                         exitReply.status = GetLastError();
@@ -221,6 +295,11 @@ int wmain(int argc, wchar_t** argv) {
                 guestThread = nullptr;
             }
             XboxKernelShutdownTitle();
+            XboxKernelGpuMmioShutdown();
+            XboxKernelGpuServiceShutdown();
+            CloseHandle(gpuPipe);
+            gpuPipe = INVALID_HANDLE_VALUE;
+            XboxKernelUnmountConfiguredStorage();
             XboxKernelFlushEeprom();
             break;
         } else {
@@ -236,6 +315,10 @@ int wmain(int argc, wchar_t** argv) {
             ExitProcess(ERROR_OPERATION_ABORTED);
     }
     XboxKernelShutdownTitle();
+    XboxKernelGpuMmioShutdown();
+    XboxKernelGpuServiceShutdown();
+    if (gpuPipe != INVALID_HANDLE_VALUE) CloseHandle(gpuPipe);
+    XboxKernelUnmountConfiguredStorage();
     XboxKernelFlushEeprom();
     CloseHandle(pipe);
     UnmapViewOfFile(image);

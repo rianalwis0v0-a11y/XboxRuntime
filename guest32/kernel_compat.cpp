@@ -23,11 +23,20 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "kernel_system.h"
+#include "kernel_nvsettings.h"
 #include "kernel_memory.h"
+#include "kernel_thread_exports.h"
+#include "kernel_io_completion.h"
+#include "kernel_io_exports.h"
+#include "kernel_directory_objects.h"
 #include "kernel_object_manager.h"
 #include "kernel_object_reference.h"
-#include "kernel_crypto.h"
+#include "kernel_filesystem_bridge.h"
 #include "kernel_time.h"
+#include "thread_compat.h"
+#include "privileged_instruction.h"
+#include "kernel_crypto.h"
 #include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
@@ -41,10 +50,10 @@ static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
+struct GuestFilesystemHandle { XBOX_FS_FILE file=nullptr; ULONGLONG currentOffset=0; std::mutex mutex; bool closed=false; };
+std::mutex g_filesystemHandlesMutex;
+std::unordered_map<HANDLE,std::shared_ptr<GuestFilesystemHandle>> g_filesystemHandles;
 ULONG g_fileCacheSize = 1024 * 1024;
-std::array<uint8_t, 256> g_eeprom{};
-std::wstring g_eepromPath;
-std::mutex g_eepromMutex;
 std::mutex g_stringAllocationMutex;
 std::unordered_set<void*> g_stringAllocations;
 std::mutex g_kernelObjectMutex;
@@ -127,10 +136,14 @@ DWORD KernelTimeout(const LARGE_INTEGER* timeout) {
         remaining100ns = ULONGLONG(-(ticks + 1)) + 1;
     } else if (ticks > 0) {
         // Absolute NT time is measured from 1601-01-01, like FILETIME.
-        const ULONGLONG now = static_cast<ULONGLONG>(XboxKernelCurrentSystemTime100ns());
+        FILETIME ft{};
+        GetSystemTimeAsFileTime(&ft);
+        ULARGE_INTEGER now{};
+        now.LowPart = ft.dwLowDateTime;
+        now.HighPart = ft.dwHighDateTime;
         const ULONGLONG deadline = static_cast<ULONGLONG>(ticks);
-        if (deadline <= now) return 0;
-        remaining100ns = deadline - now;
+        if (deadline <= now.QuadPart) return 0;
+        remaining100ns = deadline - now.QuadPart;
     }
     if (!remaining100ns) return 0;
     // Round up: a positive sub-millisecond interval must not become a poll.
@@ -151,38 +164,25 @@ bool FreeStringAllocation(void* p) {
     HeapFree(GetProcessHeap(), 0, p);
     return true;
 }
-bool g_eepromReady = false;
-
 constexpr uint32_t kStatusInvalidParameter = 0xC000000Du;
 constexpr uint32_t kStatusDeviceNotConnected = 0xC000009Du;
 
 extern "C" uint32_t __stdcall K_HalReadSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t* value) {
     if (!value) return kStatusInvalidParameter;
-    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    if (address != 0xA8) return kStatusDeviceNotConnected;
     const uint32_t count = word ? 2u : 1u;
-    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    *value = g_eeprom[command];
-    if (word) *value |= uint32_t(g_eeprom[uint32_t(command) + 1]) << 8;
+    uint8_t bytes[2]{};
+    if (!XboxNvReadRaw(command, bytes, count)) return kStatusDeviceNotConnected;
+    *value = bytes[0];
+    if (word) *value |= uint32_t(bytes[1]) << 8;
     return 0;
 }
 
 extern "C" uint32_t __stdcall K_HalWriteSMBusValue(uint8_t address, uint8_t command, uint8_t word, uint32_t value) {
-    if (address != 0xA8 || !g_eepromReady) return kStatusDeviceNotConnected;
+    if (address != 0xA8) return kStatusDeviceNotConnected;
     const uint32_t count = word ? 2u : 1u;
-    if (uint32_t(command) + count > g_eeprom.size()) return kStatusInvalidParameter;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    g_eeprom[command] = uint8_t(value & 0xFFu);
-    if (word) g_eeprom[uint32_t(command) + 1] = uint8_t((value >> 8) & 0xFFu);
-    // Persist each SMBus write so a guest crash does not discard EEPROM changes.
-    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return kStatusDeviceNotConnected;
-    DWORD written = 0;
-    BOOL ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
-    if (ok) ok = (written == DWORD(g_eeprom.size())) && FlushFileBuffers(f);
-    CloseHandle(f);
-    return ok ? 0u : kStatusDeviceNotConnected;
+    uint8_t bytes[2] = { uint8_t(value & 0xFFu), uint8_t((value >> 8) & 0xFFu) };
+    return XboxNvWriteRaw(command, bytes, count) ? 0u : kStatusDeviceNotConnected;
 }
 
 bool InImage(uint32_t va,uint32_t n=4){return va>=g_base&&uint64_t(va)+n<=uint64_t(g_base)+g_size;}
@@ -292,6 +292,24 @@ extern "C" LONG __stdcall K_KeInsertQueue(GuestKQueue* queue, GuestListEntry* en
 extern "C" LONG __stdcall K_KeInsertHeadQueue(GuestKQueue* queue, GuestListEntry* entry) {
     return InsertGuestQueueEntry(queue, entry, true);
 }
+
+extern "C" GuestListEntry* __stdcall K_KeRundownQueue(GuestKQueue* queue) {
+    if (!queue) return nullptr;
+    auto state = GetGuestQueueState(queue, true);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    GuestListEntry* head = &queue->EntryListHead;
+    if (head->Flink == head) return nullptr;
+    GuestListEntry* first = head->Flink;
+    GuestListEntry* last = head->Blink;
+    first->Blink = nullptr;
+    last->Flink = nullptr;
+    InitializeGuestList(head);
+    queue->Header.SignalState = 0;
+    queue->CurrentCount = 0;
+    g_activeGuestQueues.erase(queue);
+    state->changed.notify_all();
+    return first;
+}
 extern "C" GuestListEntry* __stdcall K_KeRemoveQueue(
     GuestKQueue* queue, ULONG, const LARGE_INTEGER* timeout) {
     if (!queue) return reinterpret_cast<GuestListEntry*>(uintptr_t(0xC000000Du));
@@ -374,12 +392,12 @@ extern "C" LONGLONG __fastcall K_ExInterlockedCompareExchange64(
 // receives only an entry pointer and therefore cannot locate its queue lock).
 struct GuestDeviceQueue {
     SHORT Type;
-    SHORT Size;
-    GuestListEntry DeviceListHead;
-    volatile LONG Lock;
+    UCHAR Size;
     UCHAR Busy;
-    UCHAR Reserved[3];
+    GuestListEntry DeviceListHead;
 };
+static_assert(sizeof(GuestDeviceQueue) == 12,
+              "NXDK KDEVICE_QUEUE x86 layout");
 struct GuestDeviceQueueEntry {
     GuestListEntry DeviceListEntry;
     ULONG SortKey;
@@ -395,9 +413,7 @@ extern "C" void __stdcall K_KeInitializeDeviceQueue(GuestDeviceQueue* queue) {
     queue->Size = sizeof(*queue);
     queue->DeviceListHead.Flink = &queue->DeviceListHead;
     queue->DeviceListHead.Blink = &queue->DeviceListHead;
-    queue->Lock = 0;
     queue->Busy = FALSE;
-    std::memset(queue->Reserved, 0, sizeof(queue->Reserved));
 }
 extern "C" BOOL __stdcall K_KeInsertDeviceQueue(GuestDeviceQueue* queue, GuestDeviceQueueEntry* entry) {
     if (!queue || !entry) return FALSE;
@@ -543,18 +559,52 @@ extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return Interl
 extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
-extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
+// Resolve NT system services once. Xbox semantics stay in these wrappers;
+// the NT calls provide the host scheduling/clock primitives underneath.
+using NtDelayExecutionFn = LONG (NTAPI*)(BOOLEAN, PLARGE_INTEGER);
+using NtQueryPerformanceCounterFn = LONG (NTAPI*)(PLARGE_INTEGER, PLARGE_INTEGER);
+using NtYieldExecutionFn = LONG (NTAPI*)();
+template <typename T> static T ResolveNtService(const char* name) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    return ntdll ? reinterpret_cast<T>(GetProcAddress(ntdll, name)) : nullptr;
+}
 extern "C" LONG __stdcall K_KeDelayExecutionThread(uint32_t, BOOL alertable, const LARGE_INTEGER* interval) {
-    if (!interval) { SwitchToThread(); return 0; }
-    const DWORD timeout = KernelTimeout(interval);
-    const DWORD result = SleepEx(timeout, alertable ? TRUE : FALSE);
-    // STATUS_USER_APC is returned when an alertable delay is interrupted.
+    if (!interval) {
+        static const NtYieldExecutionFn yield = ResolveNtService<NtYieldExecutionFn>("NtYieldExecution");
+        if (yield) return yield();
+        SwitchToThread();
+        return 0;
+    }
+    static const NtDelayExecutionFn delay = ResolveNtService<NtDelayExecutionFn>("NtDelayExecution");
+    if (delay) {
+        LARGE_INTEGER relative{};
+        relative.QuadPart = interval->QuadPart;
+        return delay(alertable ? TRUE : FALSE, &relative);
+    }
+    const DWORD result = SleepEx(KernelTimeout(interval), alertable ? TRUE : FALSE);
     return result == WAIT_IO_COMPLETION ? LONG(0x000000C0u) : 0;
 }
 extern "C" uint64_t __stdcall K_KeQueryPerformanceCounter(uint64_t*frequency){
-    LARGE_INTEGER c{},f{};QueryPerformanceCounter(&c);QueryPerformanceFrequency(&f);if(frequency)*frequency=f.QuadPart;return c.QuadPart;
+    static const NtQueryPerformanceCounterFn query =
+        ResolveNtService<NtQueryPerformanceCounterFn>("NtQueryPerformanceCounter");
+    LARGE_INTEGER counter{}, freq{};
+    if (query && query(&counter, &freq) >= 0) {
+        if (frequency) *frequency = static_cast<uint64_t>(freq.QuadPart);
+        return static_cast<uint64_t>(counter.QuadPart);
+    }
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&freq);
+    if (frequency) *frequency = static_cast<uint64_t>(freq.QuadPart);
+    return static_cast<uint64_t>(counter.QuadPart);
 }
-extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){LARGE_INTEGER f{};QueryPerformanceFrequency(&f);return f.QuadPart;}
+extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){
+    uint64_t frequency = 0;
+    (void)K_KeQueryPerformanceCounter(&frequency);
+    return frequency;
+}
+extern "C" void __stdcall K_KeQuerySystemTimeNative(LARGE_INTEGER*out){
+    if (out) out->QuadPart = XboxKernelCurrentSystemTime100ns();
+}
 extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
 extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
 
@@ -570,11 +620,20 @@ extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
-struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+static_assert(sizeof(GuestAnsiString) == 8, "NXDK ANSI_STRING must be 8 bytes on x86");
+struct GuestObjectAttributes { HANDLE RootDirectory; GuestAnsiString* ObjectName; ULONG Attributes; };
+static_assert(sizeof(GuestObjectAttributes) == 12, "NXDK OBJECT_ATTRIBUTES must be 12 bytes on x86");
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
-std::wstring TranslateXboxPath(const GuestUnicodeString* name){
-    if(!name||!name->Buffer||!name->Length)return {};
-    std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
+std::wstring TranslateXboxPath(const GuestAnsiString* name){
+    if(!name||!name->Buffer||!name->Length||name->Length>name->MaximumLength)return {};
+    const int characters = MultiByteToWideChar(CP_ACP, 0, name->Buffer,
+        static_cast<int>(name->Length), nullptr, 0);
+    if (characters <= 0) return {};
+    std::wstring p(static_cast<size_t>(characters), L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, name->Buffer, static_cast<int>(name->Length),
+        p.data(), characters) != characters) return {};
+    if (!XboxKernelResolveSymbolicLinks(&p)) return {};
     const std::wstring cd=L"\\Device\\Cdrom0";
     const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
     if(p.rfind(cd,0)==0)p=g_titleDirectory+p.substr(cd.size());
@@ -585,19 +644,136 @@ std::wstring TranslateXboxPath(const GuestUnicodeString* name){
     }else if(p[0]==L'\\')p=g_titleDirectory+p;
     return p;
 }
+std::wstring TranslateXboxDevicePath(const GuestAnsiString* name) {
+    if (!name || !name->Buffer || !name->Length || name->Length > name->MaximumLength) return {};
+    const int n = MultiByteToWideChar(CP_ACP, 0, name->Buffer, int(name->Length), nullptr, 0);
+    if (n <= 0) return {};
+    std::wstring path(size_t(n), L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, name->Buffer, int(name->Length), path.data(), n) != n) return {};
+    if (!XboxKernelResolveSymbolicLinks(&path) || path.rfind(L"\\Device\\", 0) != 0) return {};
+    return path;
+}
+std::shared_ptr<GuestFilesystemHandle> FindFilesystemHandle(HANDLE h) {
+    std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex);
+    auto it=g_filesystemHandles.find(h);
+    return it==g_filesystemHandles.end()?nullptr:it->second;
+}
+HANDLE PublishFilesystemHandle(XBOX_FS_FILE file) {
+    if (!file) return nullptr;
+    try {
+        auto value=std::make_shared<GuestFilesystemHandle>(); value->file=file;
+        HANDLE token=reinterpret_cast<HANDLE>(value.get());
+        std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex);
+        if (!g_filesystemHandles.emplace(token,value).second) return nullptr;
+        return token;
+    } catch (...) { return nullptr; }
+}
+bool CloseFilesystemHandle(HANDLE h) {
+    std::shared_ptr<GuestFilesystemHandle> value;
+    { std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex);
+      auto it=g_filesystemHandles.find(h); if(it==g_filesystemHandles.end()) return false;
+      value=it->second; g_filesystemHandles.erase(it); }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if(!value->closed){value->closed=true;XboxFsClose(value->file);value->file=nullptr;}
+    return true;
+}
+void CloseAllFilesystemHandles() {
+    std::unordered_map<HANDLE,std::shared_ptr<GuestFilesystemHandle>> values;
+    { std::lock_guard<std::mutex> lock(g_filesystemHandlesMutex); values.swap(g_filesystemHandles); }
+    for(auto& item:values){auto& v=item.second;std::lock_guard<std::mutex> lock(v->mutex);
+        if(!v->closed){v->closed=true;XboxFsClose(v->file);v->file=nullptr;}}
+}
 DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
-LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
+LONG NtCreateFileImpl(HANDLE* out,uint32_t access,GuestObjectAttributes* oa,GuestIoStatusBlock* io,const LARGE_INTEGER* allocationSize,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options) {
     if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
+    *out=nullptr;
+    if(oa->RootDirectory)return LONG(0xC00000BBu);
+    const std::wstring devicePath=TranslateXboxDevicePath(oa->ObjectName);
+    if(!devicePath.empty()&&XboxFsIsPathMounted(devicePath.c_str())){
+        // Provider ABI v1 supports opening existing files; creation and allocation changes need explicit callbacks.
+        if(allocationSize||disposition!=1u||(options&~1u))return LONG(0xC00000BBu);
+        XBOX_FS_FILE providerFile=nullptr;
+        LONG status=XboxFsOpen(devicePath.c_str(),access,share,&providerFile);
+        if(status!=0){if(io){io->Status=status;io->Information=0;}return status;}
+        HANDLE token=PublishFilesystemHandle(providerFile);
+        if(!token){XboxFsClose(providerFile);if(io){io->Status=LONG(0xC0000017u);io->Information=0;}return LONG(0xC0000017u);}
+        *out=token;if(io){io->Status=0;io->Information=1;}return 0;
+    }
     std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
-    DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
-    if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
+    DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
     HANDLE h=CreateFileW(path.c_str(),FileAccess(access),((share&1)?FILE_SHARE_READ:0)|((share&2)?FILE_SHARE_WRITE:0)|((share&4)?FILE_SHARE_DELETE:0),nullptr,FileDisposition(disposition),flags,nullptr);
     if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
     *out=h;if(io){io->Status=0;io->Information=1;}return 0;
 }
-extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
-extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER* allocationSize,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,allocationSize,attrs,share,disposition,options);}
+extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,nullptr,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+
+#pragma pack(push, 4)
+struct GuestAnsiStringIo { USHORT Length; USHORT MaximumLength; char* Buffer; };
+struct GuestObjectAttributesIo { HANDLE RootDirectory; GuestAnsiStringIo* ObjectName; ULONG Attributes; };
+#pragma pack(pop)
+static_assert(sizeof(GuestAnsiStringIo) == 8, "Xbox ANSI_STRING x86 layout");
+static_assert(sizeof(GuestObjectAttributesIo) == 12, "Xbox OBJECT_ATTRIBUTES x86 layout");
+extern "C" LONG __stdcall K_NtQueryInformationFile(
+    HANDLE, GuestIoStatusBlock*, void*, ULONG, ULONG);
+extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
+    HANDLE, GuestIoStatusBlock*, void*, ULONG, ULONG);
+
+extern "C" LONG __stdcall K_IoCreateFile(
+    HANDLE* fileHandle, ACCESS_MASK desiredAccess,
+    GuestObjectAttributesIo* objectAttributes, GuestIoStatusBlock* ioStatus,
+    const LARGE_INTEGER* allocationSize, ULONG fileAttributes,
+    ULONG shareAccess, ULONG disposition, ULONG createOptions, ULONG options) {
+    if (!fileHandle || !objectAttributes || !objectAttributes->ObjectName ||
+        !ioStatus)
+        return LONG(0xC000000Du);
+    *fileHandle = nullptr;
+    if (objectAttributes->RootDirectory || allocationSize || options != 0)
+        return LONG(0xC00000BBu);
+    const GuestAnsiStringIo* ansi = objectAttributes->ObjectName;
+    if (!ansi->Buffer || !ansi->Length || ansi->Length > ansi->MaximumLength)
+        return LONG(0xC000000Du);
+    // Xbox OBJECT_ATTRIBUTES carries an ANSI_STRING here, matching the
+    // NtCreateFile provider above. Keep the original byte string and let
+    // TranslateXboxPath perform the single, validated code-page conversion.
+    GuestAnsiString convertedName{};
+    convertedName.Length = ansi->Length;
+    convertedName.MaximumLength = ansi->MaximumLength;
+    convertedName.Buffer = ansi->Buffer;
+    GuestObjectAttributes converted{};
+    converted.RootDirectory = objectAttributes->RootDirectory;
+    converted.ObjectName = &convertedName;
+    converted.Attributes = objectAttributes->Attributes;
+    return NtCreateFileImpl(fileHandle, desiredAccess, &converted, ioStatus,
+                            allocationSize, fileAttributes, shareAccess, disposition,
+                            createOptions);
+}
+
+extern "C" LONG __stdcall K_IoQueryFileInformation(
+    void* fileObject, ULONG informationClass, ULONG length,
+    void* information, ULONG* returnedLength) {
+    if (returnedLength) *returnedLength = 0;
+    if (!fileObject || !information) return LONG(0xC000000Du);
+    GuestIoStatusBlock io{};
+    const LONG status = K_NtQueryInformationFile(
+        reinterpret_cast<HANDLE>(fileObject), &io, information, length,
+        informationClass);
+    if (returnedLength && status == 0) *returnedLength = io.Information;
+    return status;
+}
+extern "C" LONG __stdcall K_IoQueryVolumeInformation(
+    void* fileObject, ULONG informationClass, ULONG length,
+    void* information, ULONG* returnedLength) {
+    if (returnedLength) *returnedLength = 0;
+    if (!fileObject || !information) return LONG(0xC000000Du);
+    GuestIoStatusBlock io{};
+    const LONG status = K_NtQueryVolumeInformationFile(
+        reinterpret_cast<HANDLE>(fileObject), &io, information, length,
+        informationClass);
+    if (returnedLength && status == 0) *returnedLength = io.Information;
+    return status;
+}
 struct GuestFileNetworkOpenInformation {
     LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
     LARGE_INTEGER AllocationSize, EndOfFile;
@@ -613,9 +789,25 @@ static LARGE_INTEGER FileTimeToLarge(const FILETIME& value) {
 }
 extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
     GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* out) {
-    if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
+    if (!oa || !oa->ObjectName || !out)
         return LONG(0xC000000Du);
     if (oa->RootDirectory) return LONG(0xC00000BBu);
+    const std::wstring devicePath = TranslateXboxDevicePath(oa->ObjectName);
+    if (!devicePath.empty() && XboxFsIsPathMounted(devicePath.c_str())) {
+        XBOX_FS_FILE file = nullptr;
+        LONG status = XboxFsOpen(devicePath.c_str(), 0, 7, &file);
+        if (status != 0) return status;
+        XBOX_FS_FILE_INFO info{};
+        status = XboxFsQueryInformation(file, &info);
+        XboxFsClose(file);
+        if (status != 0) return status;
+        GuestFileNetworkOpenInformation value{};
+        value.AllocationSize.QuadPart = LONGLONG(info.allocationSize);
+        value.EndOfFile.QuadPart = LONGLONG(info.size);
+        value.FileAttributes = info.attributes;
+        *out = value;
+        return 0;
+    }
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     WIN32_FILE_ATTRIBUTE_DATA data{};
@@ -651,6 +843,9 @@ extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
 
 extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
+    if (oa->RootDirectory) return LONG(0xC00000BBu);
+    const std::wstring devicePath = TranslateXboxDevicePath(oa->ObjectName);
+    if (!devicePath.empty() && XboxFsIsPathMounted(devicePath.c_str())) return LONG(0xC00000BBu);
     const std::wstring path = TranslateXboxPath(oa->ObjectName);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
@@ -661,17 +856,37 @@ extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
     if (error == ERROR_DIRECTORY) return LONG(0xC0000103u);
     return LONG(0xC0000001u);
 }
-extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+extern "C" LONG __stdcall K_NtReadFile(HANDLE h,HANDLE event,void* apcRoutine,void* apcContext,GuestIoStatusBlock*io,void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(auto file=FindFilesystemHandle(h)){
+        if(apcRoutine||apcContext)return LONG(0xC00000BBu);
+        if(!buffer&&length)return LONG(0xC000000Du);
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        if(offset&&offset->QuadPart<0)return LONG(0xC000000Du);
+        const ULONGLONG start=offset?ULONGLONG(offset->QuadPart):file->currentOffset;
+        ULONG transferred=0;LONG status=XboxFsRead(file->file,start,buffer,length,&transferred);
+        if(status==0)file->currentOffset=start+transferred;
+        if(io){io->Status=status;io->Information=transferred;}if(event&&status==0)SetEvent(event);return status;
+    }
     if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
     DWORD read=0;if(!ReadFile(h,buffer,length,&read,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
     if(io){io->Status=read?0:LONG(0xC0000011u);io->Information=read;}if(event)SetEvent(event);return read?0:LONG(0xC0000011u);
 }
-extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void*,void*,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+extern "C" LONG __stdcall K_NtWriteFile(HANDLE h,HANDLE event,void* apcRoutine,void* apcContext,GuestIoStatusBlock*io,const void*buffer,uint32_t length,const LARGE_INTEGER*offset,uint32_t*){
+    if(auto file=FindFilesystemHandle(h)){
+        if(apcRoutine||apcContext)return LONG(0xC00000BBu);
+        if(!buffer&&length)return LONG(0xC000000Du);
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        if(offset&&offset->QuadPart<0)return LONG(0xC000000Du);
+        const ULONGLONG start=offset?ULONGLONG(offset->QuadPart):file->currentOffset;
+        ULONG transferred=0;LONG status=XboxFsWrite(file->file,start,buffer,length,&transferred);
+        if(status==0)file->currentOffset=start+transferred;
+        if(io){io->Status=status;io->Information=transferred;}if(event&&status==0)SetEvent(event);return status;
+    }
     if(offset){LARGE_INTEGER p=*offset;if(!SetFilePointerEx(h,p,nullptr,FILE_BEGIN))return LONG(0xC0000001u);}
     DWORD written=0;if(!WriteFile(h,buffer,length,&written,nullptr)){if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return LONG(0xC0000001u);}
     if(io){io->Status=0;io->Information=written;}if(event)SetEvent(event);return 0;
 }
-extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
+extern "C" LONG __stdcall K_NtFlushBuffersFile(HANDLE h,GuestIoStatusBlock*io){if(FindFilesystemHandle(h)){if(io){io->Status=LONG(0xC00000BBu);io->Information=0;}return LONG(0xC00000BBu);}BOOL ok=FlushFileBuffers(h);if(io){io->Status=ok?0:LONG(0xC0000001u);io->Information=0;}return ok?0:LONG(0xC0000001u);}
 
 // NT FILE_INFORMATION_CLASS values used by retail Xbox titles.
 struct GuestFileBasicInformation {
@@ -702,6 +917,24 @@ static LONG FileStatusFromWin32(DWORD e) {
 extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                        void* out, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !out) return LONG(0xC000000Du);
+    if(auto file=FindFilesystemHandle(h)){
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        XBOX_FS_FILE_INFO info{};LONG status=XboxFsQueryInformation(file->file,&info);
+        if(status!=0){if(io){io->Status=status;io->Information=0;}return status;}
+        if(infoClass==4){
+            if(length<sizeof(GuestFileBasicInformation))return LONG(0xC0000004u);
+            GuestFileBasicInformation value{};value.FileAttributes=info.attributes;
+            std::memcpy(out,&value,sizeof(value));if(io){io->Status=0;io->Information=sizeof(value);}return 0;
+        }
+        if(infoClass==5){
+            if(length<sizeof(GuestFileStandardInformation))return LONG(0xC0000004u);
+            GuestFileStandardInformation value{};value.AllocationSize.QuadPart=LONGLONG(info.allocationSize);
+            value.EndOfFile.QuadPart=LONGLONG(info.size);value.NumberOfLinks=1;
+            value.Directory=(info.attributes&FILE_ATTRIBUTE_DIRECTORY)?TRUE:FALSE;
+            std::memcpy(out,&value,sizeof(value));if(io){io->Status=0;io->Information=sizeof(value);}return 0;
+        }
+        return LONG(0xC00000BBu);
+    }
     ULONG required = 0;
     switch (infoClass) {
     case 4: required = sizeof(GuestFileBasicInformation); break;
@@ -753,6 +986,14 @@ extern "C" LONG __stdcall K_NtQueryInformationFile(HANDLE h, GuestIoStatusBlock*
 extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* io,
                                                      void* in, ULONG length, ULONG infoClass) {
     if (!h || h == INVALID_HANDLE_VALUE || !in) return LONG(0xC000000Du);
+    if(auto file=FindFilesystemHandle(h)){
+        std::lock_guard<std::mutex> lock(file->mutex);if(file->closed)return LONG(0xC0000008u);
+        if(infoClass!=14)return LONG(0xC00000BBu);
+        if(length<sizeof(GuestFilePositionInformation))return LONG(0xC0000004u);
+        const LONGLONG position=static_cast<GuestFilePositionInformation*>(in)->CurrentByteOffset.QuadPart;
+        if(position<0)return LONG(0xC000000Du);
+        file->currentOffset=ULONGLONG(position);if(io){io->Status=0;io->Information=0;}return 0;
+    }
     BOOL ok=FALSE;
     if(infoClass==4) {
         if(length<sizeof(GuestFileBasicInformation)) return LONG(0xC0000004u);
@@ -786,6 +1027,7 @@ extern "C" LONG __stdcall K_NtSetInformationFile(HANDLE h, GuestIoStatusBlock* i
 }
 extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
     HANDLE h, GuestIoStatusBlock* io, void* out, ULONG length, ULONG infoClass) {
+    if (FindFilesystemHandle(h)) { if (io) { io->Status = LONG(0xC00000BBu); io->Information = 0; } return LONG(0xC00000BBu); }
     constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
     constexpr LONG statusInfoLengthMismatch = LONG(0xC0000004u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
@@ -887,25 +1129,46 @@ extern "C" LONG __stdcall K_NtQueryVolumeInformationFile(
 }
 
 extern "C" LONG __stdcall K_NtClose(HANDLE h) {
+    if(CloseFilesystemHandle(h))return 0;
     CloseGuestDirectorySearch(h);
     if (XboxKernelCloseObjectHandle(h)) return 0;
+    XboxKernelForgetThreadHandle(h);
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
 }
-extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK,void*,uint32_t type,BOOL initial){
-    if(!out)return LONG(0xC000000Du);HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
+using NtCreateEventFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, ULONG, BOOLEAN);
+using NtSetEventFn = LONG (NTAPI*)(HANDLE, PLONG);
+using NtResetEventFn = LONG (NTAPI*)(HANDLE, PLONG);
+extern "C" LONG __stdcall K_NtCreateEvent(HANDLE*out,ACCESS_MASK access,void* attributes,uint32_t type,BOOL initial){
+    if(!out)return LONG(0xC000000Du);
+    static const NtCreateEventFn create = ResolveNtService<NtCreateEventFn>("NtCreateEvent");
+    if (create) return create(out, access, nullptr, type, initial ? TRUE : FALSE);
+    HANDLE h=CreateEventW(nullptr,type==0,initial,nullptr);if(!h)return LONG(0xC0000001u);*out=h;return 0;
 }
-extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);}
-extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){return ResetEvent(h)?0:LONG(0xC0000008u);}
+extern "C" LONG __stdcall K_NtSetEvent(HANDLE h,LONG*previous){
+    static const NtSetEventFn set = ResolveNtService<NtSetEventFn>("NtSetEvent");
+    if (set) return set(h, previous);
+    if(previous)*previous=0;return SetEvent(h)?0:LONG(0xC0000008u);
+}
+extern "C" LONG __stdcall K_NtClearEvent(HANDLE h){
+    static const NtResetEventFn reset = ResolveNtService<NtResetEventFn>("NtResetEvent");
+    if (reset) return reset(h, nullptr);
+    return ResetEvent(h)?0:LONG(0xC0000008u);
+}
+using NtWaitForSingleObjectFn = LONG (NTAPI*)(HANDLE, BOOLEAN, PLARGE_INTEGER);
+using NtWaitForMultipleObjectsFn = LONG (NTAPI*)(ULONG, HANDLE*, ULONG, BOOLEAN, PLARGE_INTEGER);
+using NtSignalAndWaitForSingleObjectFn = LONG (NTAPI*)(HANDLE, HANDLE, BOOLEAN, PLARGE_INTEGER);
 extern "C" LONG __stdcall K_NtWaitForSingleObject(HANDLE h, BOOL alertable, const LARGE_INTEGER* timeout) {
     if (!h || h == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    static const NtWaitForSingleObjectFn wait =
+        ResolveNtService<NtWaitForSingleObjectFn>("NtWaitForSingleObject");
+    if (wait) return wait(h, alertable ? TRUE : FALSE,
+                          const_cast<PLARGE_INTEGER>(timeout));
     const DWORD result = WaitForSingleObjectEx(h, KernelTimeout(timeout), alertable ? TRUE : FALSE);
     if (result == WAIT_OBJECT_0) return 0;
     if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
-    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u); // STATUS_USER_APC
+    if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
     return LONG(0xC0000008u);
 }
-struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
-
 struct GuestFileDirectoryInformation {
     ULONG NextEntryOffset;
     ULONG FileIndex;
@@ -917,6 +1180,14 @@ struct GuestFileDirectoryInformation {
 };
 static_assert(offsetof(GuestFileDirectoryInformation, FileName) == 64,
               "Xbox FILE_DIRECTORY_INFORMATION filename offset must be 0x40");
+struct GuestFileNamesInformation {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    ULONG FileNameLength;
+    CHAR FileName[1];
+};
+static_assert(offsetof(GuestFileNamesInformation, FileName) == 12,
+              "Xbox FILE_NAMES_INFORMATION filename offset must be 0x0C");
 static bool SkipDotDirectoryEntries(HANDLE search, WIN32_FIND_DATAW& data) {
     while (wcscmp(data.cFileName, L".") == 0 || wcscmp(data.cFileName, L"..") == 0) {
         if (!FindNextFileW(search, &data)) return false;
@@ -937,8 +1208,15 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     constexpr LONG statusNoMoreFiles = LONG(0x80000006u);
     constexpr LONG statusBufferOverflow = LONG(0x80000005u);
     if (!file || file == INVALID_HANDLE_VALUE) return SetDirectoryIoStatus(io, statusInvalidHandle);
-    if (!information || informationClass != 1 || length < 64)
-        return SetDirectoryIoStatus(io, informationClass != 1 ? LONG(0xC0000003u) : statusInvalidParameter);
+    if (FindFilesystemHandle(file)) return SetDirectoryIoStatus(io, statusNotSupported);
+    if (!information) return SetDirectoryIoStatus(io, statusInvalidParameter);
+    if (informationClass != 1 && informationClass != 12)
+        return SetDirectoryIoStatus(io, LONG(0xC0000003u)); // STATUS_INVALID_INFO_CLASS
+    const ULONG minimumLength = informationClass == 1
+        ? static_cast<ULONG>(offsetof(GuestFileDirectoryInformation, FileName))
+        : static_cast<ULONG>(offsetof(GuestFileNamesInformation, FileName));
+    if (length < minimumLength)
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
     if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
     if (fileMask && ((fileMask->Length && !fileMask->Buffer) ||
                      fileMask->Length > fileMask->MaximumLength))
@@ -1005,29 +1283,112 @@ extern "C" LONG __stdcall K_NtQueryDirectoryFile(
     const size_t nameChars = wcslen(state.current.cFileName);
     const int nameBytes = nameChars ? WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
         static_cast<int>(nameChars), nullptr, 0, nullptr, nullptr) : 0;
-    if (nameBytes < 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
-    const size_t required = offsetof(GuestFileDirectoryInformation, FileName) + static_cast<size_t>(nameBytes);
+    if (nameChars && nameBytes <= 0) return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    const size_t filenameOffset = informationClass == 1
+        ? offsetof(GuestFileDirectoryInformation, FileName)
+        : offsetof(GuestFileNamesInformation, FileName);
+    const size_t required = filenameOffset + static_cast<size_t>(nameBytes);
     if (required > length) return SetDirectoryIoStatus(io, statusBufferOverflow, static_cast<ULONG>(required));
 
-    auto* out = static_cast<GuestFileDirectoryInformation*>(information);
-    std::memset(out, 0, required);
-    out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
-    out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
-    out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
-    out->ChangeTime = out->LastWriteTime;
-    ULARGE_INTEGER size{};
-    size.HighPart = state.current.nFileSizeHigh;
-    size.LowPart = state.current.nFileSizeLow;
-    out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
-    out->AllocationSize = out->EndOfFile;
-    out->FileAttributes = state.current.dwFileAttributes;
-    out->FileNameLength = static_cast<ULONG>(nameBytes);
-    if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
-        static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
-        return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    if (informationClass == 1) {
+        auto* out = static_cast<GuestFileDirectoryInformation*>(information);
+        std::memset(out, 0, required);
+        out->CreationTime = FileTimeToLarge(state.current.ftCreationTime);
+        out->LastAccessTime = FileTimeToLarge(state.current.ftLastAccessTime);
+        out->LastWriteTime = FileTimeToLarge(state.current.ftLastWriteTime);
+        out->ChangeTime = out->LastWriteTime;
+        ULARGE_INTEGER size{};
+        size.HighPart = state.current.nFileSizeHigh;
+        size.LowPart = state.current.nFileSizeLow;
+        out->EndOfFile.QuadPart = static_cast<LONGLONG>(size.QuadPart);
+        out->AllocationSize = out->EndOfFile;
+        out->FileAttributes = state.current.dwFileAttributes;
+        out->FileNameLength = static_cast<ULONG>(nameBytes);
+        if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+            static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    } else {
+        auto* out = static_cast<GuestFileNamesInformation*>(information);
+        std::memset(out, 0, required);
+        out->NextEntryOffset = 0;
+        out->FileIndex = 0; // The host FindFirstFile API does not expose Xbox file indices.
+        out->FileNameLength = static_cast<ULONG>(nameBytes);
+        if (nameBytes && !WideCharToMultiByte(CP_ACP, 0, state.current.cFileName,
+            static_cast<int>(nameChars), out->FileName, nameBytes, nullptr, nullptr))
+            return SetDirectoryIoStatus(io, LONG(0xC0000001u));
+    }
     state.currentValid = false;
     if (event) SetEvent(event);
     return SetDirectoryIoStatus(io, 0, static_cast<ULONG>(required));
+}
+
+
+static LONG NtControlFileImpl(HANDLE file, HANDLE event, void* apcRoutine,
+    GuestIoStatusBlock* io, ULONG controlCode, void* inputBuffer,
+    ULONG inputLength, void* outputBuffer, ULONG outputLength, bool filesystemControl) {
+    constexpr LONG statusInvalidParameter = LONG(0xC000000Du);
+    constexpr LONG statusInvalidHandle = LONG(0xC0000008u);
+    constexpr LONG statusNotSupported = LONG(0xC00000BBu);
+    if (!io) return statusInvalidParameter;
+    if (!file || file == INVALID_HANDLE_VALUE)
+        return SetDirectoryIoStatus(io, statusInvalidHandle);
+    if (apcRoutine) return SetDirectoryIoStatus(io, statusNotSupported);
+    if ((inputLength && !inputBuffer) || (outputLength && !outputBuffer))
+        return SetDirectoryIoStatus(io, statusInvalidParameter);
+
+    if (filesystemControl) {
+        using NativeNtFsControlFile = LONG (NTAPI*)(HANDLE, HANDLE, void*, void*,
+            GuestIoStatusBlock*, ULONG, void*, ULONG, void*, ULONG);
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto native = ntdll ? reinterpret_cast<NativeNtFsControlFile>(
+            GetProcAddress(ntdll, "NtFsControlFile")) : nullptr;
+        if (!native) return SetDirectoryIoStatus(io, statusNotSupported);
+        // The guest APC routine is not a host APC thunk; asynchronous APC delivery
+        // is owned by the threading provider. Synchronous FSCTLs use the native
+        // host filesystem path and its IO_STATUS_BLOCK/event completion semantics.
+        return native(file, event, nullptr, nullptr, io, controlCode,
+            inputBuffer, inputLength, outputBuffer, outputLength);
+    }
+
+    DWORD bytesReturned = 0;
+    const BOOL succeeded = DeviceIoControl(file, controlCode, inputBuffer,
+        inputLength, outputBuffer, outputLength, &bytesReturned, nullptr);
+    const DWORD error = succeeded ? ERROR_SUCCESS : GetLastError();
+    LONG status = 0;
+    if (!succeeded) {
+        switch (error) {
+        case ERROR_INVALID_HANDLE: status = statusInvalidHandle; break;
+        case ERROR_INVALID_PARAMETER: status = statusInvalidParameter; break;
+        case ERROR_ACCESS_DENIED: status = LONG(0xC0000022u); break;
+        case ERROR_INVALID_FUNCTION: status = LONG(0xC0000010u); break; // STATUS_INVALID_DEVICE_REQUEST
+        case ERROR_NOT_SUPPORTED: status = statusNotSupported; break;
+        case ERROR_INSUFFICIENT_BUFFER: status = LONG(0xC0000023u); break; // STATUS_BUFFER_TOO_SMALL
+        case ERROR_MORE_DATA: status = LONG(0x80000005u); break; // STATUS_BUFFER_OVERFLOW
+        case ERROR_NOACCESS: status = LONG(0xC0000005u); break; // STATUS_ACCESS_VIOLATION
+        case ERROR_NOT_READY: status = LONG(0xC00000A3u); break; // STATUS_DEVICE_NOT_READY
+        case ERROR_IO_DEVICE: status = LONG(0xC0000185u); break; // STATUS_IO_DEVICE_ERROR
+        default: status = LONG(0xC0000001u); break; // STATUS_UNSUCCESSFUL
+        }
+    }
+    const LONG result = SetDirectoryIoStatus(io, status, bytesReturned);
+    if (event) SetEvent(event);
+    return result;
+}
+
+extern "C" LONG __stdcall K_NtDeviceIoControlFile(HANDLE file, HANDLE event,
+    void* apcRoutine, void* apcContext, GuestIoStatusBlock* io, ULONG controlCode,
+    void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    (void)apcContext;
+    return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
+        inputBuffer, inputLength, outputBuffer, outputLength, false);
+}
+
+extern "C" LONG __stdcall K_NtFsControlFile(HANDLE file, HANDLE event,
+    void* apcRoutine, void* apcContext, GuestIoStatusBlock* io, ULONG controlCode,
+    void* inputBuffer, ULONG inputLength, void* outputBuffer, ULONG outputLength) {
+    (void)apcContext;
+    return NtControlFileImpl(file, event, apcRoutine, io, controlCode,
+        inputBuffer, inputLength, outputBuffer, outputLength, true);
 }
 
 
@@ -1339,8 +1700,12 @@ extern "C" uint16_t __fastcall K_RtlUshortByteSwap(uint16_t v){return _byteswap_
 extern "C" void __stdcall K_DbgBreakPoint(){DebugBreak();}
 extern "C" void __stdcall K_DbgBreakPointWithStatus(uint32_t){DebugBreak();}
 extern "C" uint32_t __cdecl K_DbgPrint(const char*fmt,...){char b[1024];va_list a;va_start(a,fmt);int n=vsnprintf_s(b,sizeof(b),_TRUNCATE,fmt,a);va_end(a);OutputDebugStringA(b);return n<0?0:uint32_t(n);}
-extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK, void*, LONG initial, LONG maximum){
+using NtCreateSemaphoreFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, LONG, LONG);
+using NtReleaseSemaphoreFn = LONG (NTAPI*)(HANDLE, LONG, PLONG);
+extern "C" LONG __stdcall K_NtCreateSemaphore(HANDLE* out, ACCESS_MASK access, void* attributes, LONG initial, LONG maximum){
     if(!out||maximum<=0||initial<0||initial>maximum)return LONG(0xC000000Du);
+    static const NtCreateSemaphoreFn create = ResolveNtService<NtCreateSemaphoreFn>("NtCreateSemaphore");
+    if (create) return create(out, access, nullptr, initial, maximum);
     HANDLE h=CreateSemaphoreW(nullptr,initial,maximum,nullptr);if(!h)return LONG(0xC0000017u);*out=h;return 0;
 }
 
@@ -1370,12 +1735,22 @@ extern "C" LONG __stdcall K_NtQueryTimer(HANDLE timer, ULONG infoClass, void* in
     return QueryNativeObject(timer, infoClass, info, length, returnLength, "NtQueryTimer");
 }
 extern "C" LONG __stdcall K_NtReleaseSemaphore(HANDLE h,LONG count,LONG* previous){
-    if(count<=0)return LONG(0xC000000Du);LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
+    if(count<=0)return LONG(0xC000000Du);
+    static const NtReleaseSemaphoreFn release = ResolveNtService<NtReleaseSemaphoreFn>("NtReleaseSemaphore");
+    if (release) return release(h, count, previous);
+    LONG p=0;BOOL ok=ReleaseSemaphore(h,count,&p);if(ok&&previous)*previous=p;return ok?0:LONG(0xC0000008u);
 }
 extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* handles, ULONG waitType, BOOL alertable, const LARGE_INTEGER* timeout, void*) {
     if (!handles || !count || count > MAXIMUM_WAIT_OBJECTS || waitType > 1) return LONG(0xC000000Du);
     for (ULONG i = 0; i < count; ++i)
         if (!handles[i] || handles[i] == INVALID_HANDLE_VALUE) return LONG(0xC0000008u);
+    static const NtWaitForMultipleObjectsFn wait =
+        ResolveNtService<NtWaitForMultipleObjectsFn>("NtWaitForMultipleObjects");
+    if (wait) {
+        HANDLE* mutableHandles = const_cast<HANDLE*>(handles);
+        return wait(count, mutableHandles, waitType, alertable ? TRUE : FALSE,
+                    const_cast<PLARGE_INTEGER>(timeout));
+    }
     const DWORD result = WaitForMultipleObjectsEx(count, handles, waitType == 0,
                                                    KernelTimeout(timeout), alertable ? TRUE : FALSE);
     if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + count)
@@ -1388,40 +1763,32 @@ extern "C" LONG __stdcall K_NtWaitForMultipleObjects(ULONG count, const HANDLE* 
 extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE wait, BOOL alertable, const LARGE_INTEGER* timeout) {
     if (!signal || !wait || signal == INVALID_HANDLE_VALUE || wait == INVALID_HANDLE_VALUE)
         return LONG(0xC0000008u);
+    static const NtSignalAndWaitForSingleObjectFn signalAndWait =
+        ResolveNtService<NtSignalAndWaitForSingleObjectFn>("NtSignalAndWaitForSingleObject");
+    if (signalAndWait)
+        return signalAndWait(signal, wait, alertable ? TRUE : FALSE,
+                             const_cast<PLARGE_INTEGER>(timeout));
     const DWORD result = SignalObjectAndWait(signal, wait, KernelTimeout(timeout), alertable ? TRUE : FALSE);
     if (result == WAIT_OBJECT_0) return 0;
     if (result == WAIT_TIMEOUT) return LONG(0x00000102u);
     if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
     return LONG(0xC0000008u);
 }
-struct GuestClientId { HANDLE UniqueProcess; HANDLE UniqueThread; };
-extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, void*, HANDLE process,
-                                                   GuestClientId* clientId, LPTHREAD_START_ROUTINE start,
-                                                   void* context) {
-    if (!threadHandle || !start) return LONG(0xC000000Du);
-    if (process && process != GetCurrentProcess() && process != reinterpret_cast<HANDLE>(intptr_t(-1)))
-        return LONG(0xC000000Du);
-    DWORD threadId = 0;
-    HANDLE thread = CreateThread(nullptr, 0, start, context, 0, &threadId);
-    if (!thread) return LONG(0xC0000017u);
-    *threadHandle = thread;
-    if (clientId) {
-        clientId->UniqueProcess = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(GetCurrentProcessId()));
-        clientId->UniqueThread = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(threadId));
-    }
-    return 0;
-}
+// PsCreateSystemThread's five-argument Xbox ABI is implemented in thread_compat.cpp.
 extern "C" void __stdcall K_PsTerminateSystemThread(LONG status) { ExitThread(DWORD(status)); }
 extern "C" LONG __stdcall K_KeSuspendThread(HANDLE thread) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD previous = SuspendThread(thread);
     return previous == DWORD(-1) ? LONG(0xC0000008u) : LONG(previous);
 }
 extern "C" LONG __stdcall K_KeResumeThread(HANDLE thread) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD previous = ResumeThread(thread);
     return previous == DWORD(-1) ? LONG(0xC0000008u) : LONG(previous);
 }
 extern "C" LONG __stdcall K_KeAlertResumeThread(HANDLE thread) { return K_KeResumeThread(thread); }
 extern "C" LONG __stdcall K_KeSetPriorityThread(HANDLE thread, LONG priority) {
+    thread = XboxKernelResolveThreadHandle(thread);
     const int previous = GetThreadPriority(thread);
     if (previous == THREAD_PRIORITY_ERROR_RETURN) return LONG(0xC0000008u);
     const int mapped = priority >= 15 ? THREAD_PRIORITY_TIME_CRITICAL :
@@ -1433,12 +1800,15 @@ extern "C" LONG __stdcall K_KeSetPriorityThread(HANDLE thread, LONG priority) {
 extern "C" LONG __stdcall K_KeSetBasePriorityThread(HANDLE thread, LONG increment) {
     return K_KeSetPriorityThread(thread, increment);
 }
-extern "C" LONG __stdcall K_KeQueryBasePriorityThread(HANDLE) { return 0; }
+extern "C" LONG __stdcall K_KeQueryBasePriorityThread(HANDLE thread) {
+    return GetThreadPriority(XboxKernelResolveThreadHandle(thread));
+}
 extern "C" void __stdcall K_KeSetPriorityProcess(HANDLE process, LONG priority) {
     const DWORD cls = priority > 0 ? HIGH_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
     if (process) SetPriorityClass(process, cls);
 }
 extern "C" void __stdcall K_KeSetDisableBoostThread(HANDLE thread, BOOL disable) {
+    thread = XboxKernelResolveThreadHandle(thread);
     if (thread) SetThreadPriorityBoost(thread, disable);
 }
 extern "C" void __stdcall K_KeBoostPriorityThread(HANDLE) { /* Windows schedules runnable threads. */ }
@@ -1608,6 +1978,8 @@ extern "C" void __stdcall K_KeStallExecutionProcessor(uint32_t microseconds) {
     while (uint64_t(now.QuadPart - start.QuadPart) < target);
 }
 extern "C" LONG __stdcall K_NtYieldExecution() {
+    static const NtYieldExecutionFn yield = ResolveNtService<NtYieldExecutionFn>("NtYieldExecution");
+    if (yield) return yield();
     SwitchToThread();
     return 0;
 }
@@ -1705,9 +2077,9 @@ extern "C" void __stdcall K_RtlRip(const char* message, const char* file, ULONG 
 }
 extern "C" void __stdcall K_KeBugCheck(ULONG code) { ExitProcess(code); }
 extern "C" void __stdcall K_KeBugCheckEx(ULONG code, ULONG, ULONG, ULONG, ULONG) { ExitProcess(code); }
-extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { ExitProcess(0); }
+extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
 extern "C" BOOL __stdcall K_HalIsResetOrShutdownPending() { return FALSE; }
-extern "C" void __stdcall K_HalInitiateShutdown() { ExitProcess(0); }
+extern "C" void __stdcall K_HalInitiateShutdown() { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
 extern "C" ULONG __stdcall K_DbgPrompt(const char* prompt, char* response, ULONG length) {
     if (prompt) OutputDebugStringA(prompt);
     if (response && length) response[0] = 0;
@@ -1763,9 +2135,15 @@ extern "C" LONG __stdcall K_NtSetTimerEx(
     return status;
 }
 
-extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK, void*, BOOL initialOwner) {
+using NtCreateMutantFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, BOOLEAN);
+extern "C" LONG __stdcall K_NtCreateMutant(HANDLE* out, ACCESS_MASK access, void* attributes) {
     if (!out) return LONG(0xC000000Du);
-    HANDLE h = CreateMutexW(nullptr, initialOwner, nullptr);
+    // Xbox ordinal 192 is NtCreateMutant@12: three stdcall arguments.
+    // The host NT implementation has a fourth InitialOwner parameter, which
+    // Xbox does not expose here; preserve the Xbox ABI and default to FALSE.
+    static const NtCreateMutantFn create = ResolveNtService<NtCreateMutantFn>("NtCreateMutant");
+    if (create) return create(out, access, nullptr, FALSE);
+    HANDLE h = CreateMutexW(nullptr, FALSE, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
 }
@@ -1776,25 +2154,31 @@ extern "C" LONG __stdcall K_NtReleaseMutant(HANDLE mutant, LONG* previous) {
     if (previous) *previous = 1;
     return 0;
 }
-extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK, void*, ULONG type) {
+using NtCreateTimerFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, ULONG);
+extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK access, void* attributes, ULONG type) {
     if (!out) return LONG(0xC000000Du);
+    static const NtCreateTimerFn create = ResolveNtService<NtCreateTimerFn>("NtCreateTimer");
+    if (create) return create(out, access, nullptr, type);
     HANDLE h = CreateWaitableTimerW(nullptr, type == 0, nullptr);
     if (!h) return LONG(0xC0000017u);
     *out = h; return 0;
 }
 extern "C" LONG __stdcall K_NtSuspendThread(HANDLE thread, ULONG* previous) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD n = SuspendThread(thread);
     if (n == DWORD(-1)) return LONG(0xC0000008u);
     if (previous) *previous = n;
     return 0;
 }
 extern "C" LONG __stdcall K_NtResumeThread(HANDLE thread, ULONG* previous) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD n = ResumeThread(thread);
     if (n == DWORD(-1)) return LONG(0xC0000008u);
     if (previous) *previous = n;
     return 0;
 }
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
+extern "C" void __stdcall K_AvSendTVEncoderOption(void*, uint32_t, uint32_t, uint32_t*) { K_Unsupported(2); }
 }
 extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
@@ -1802,8 +2186,18 @@ extern "C" __declspec(naked) void KernelDispatch(){
         add esp, 4
         cmp eax, 1
         je av_get
+        cmp eax, 2
+        je av_send_unsupported
+        cmp eax, 3
+        je av_set_display_unsupported
         cmp eax, 4
         je av_set
+        cmp eax, 24
+        je ex_query_nv
+        cmp eax, 25
+        je ex_refurb
+        cmp eax, 29
+        je ex_save_nv
         cmp eax, 5
         je dbg_break
         cmp eax, 6
@@ -1824,6 +2218,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ex_interlocked_compare_exchange64
         cmp eax, 23
         je pool_size
+        cmp eax, 47
+        je hal_register_shutdown_notification
         cmp eax, 45
         je smbus_read
         cmp eax, 50
@@ -1838,6 +2234,98 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je iex
         cmp eax, 55
         je iexa
+        cmp eax, 66
+        je io_create_file
+        cmp eax, 75
+        je io_query_file_information
+        cmp eax, 76
+        je io_query_volume_information
+        cmp eax, 79
+        je io_set_completion
+        cmp eax, 188
+        je nt_create_directory_object
+        cmp eax, 201
+        je nt_open_directory_object
+        cmp eax, 246
+        je ob_reference_object_by_handle
+        cmp eax, 248
+        je ob_reference_object_by_pointer
+        cmp eax, 250
+        je obf_dereference_object
+        cmp eax, 251
+        je obf_reference_object
+        cmp eax, 191
+        je nt_create_io_completion
+        cmp eax, 212
+        je nt_query_io_completion
+        cmp eax, 223
+        je nt_remove_io_completion
+        cmp eax, 227
+        je nt_set_io_completion
+        cmp eax, 228
+        je nt_set_system_time
+        cmp eax, 335
+        je xc_sha_init
+        cmp eax, 336
+        je xc_sha_update
+        cmp eax, 337
+        je xc_sha_final
+        cmp eax, 338
+        je xc_rc4_key
+        cmp eax, 339
+        je xc_rc4_crypt
+        cmp eax, 340
+        je xc_hmac
+        cmp eax, 346
+        je xc_des_key_parity
+        cmp eax, 350
+        je xc_crypt_service
+        cmp eax, 59
+        je io_allocate_irp
+        cmp eax, 60
+        je io_build_async_fsd
+        cmp eax, 61
+        je io_build_device_control
+        cmp eax, 62
+        je io_build_sync_fsd
+        cmp eax, 63
+        je io_check_share_access
+        cmp eax, 65
+        je io_create_device
+        cmp eax, 68
+        je io_delete_device
+        cmp eax, 72
+        je io_free_irp
+        cmp eax, 73
+        je io_initialize_irp
+        cmp eax, 77
+        je io_queue_thread_irp
+        cmp eax, 78
+        je io_remove_share_access
+        cmp eax, 80
+        je io_set_share_access
+        cmp eax, 81
+        je io_start_next_packet
+        cmp eax, 82
+        je io_start_next_packet_key
+        cmp eax, 83
+        je io_start_packet
+        cmp eax, 84
+        je io_sync_device_control
+        cmp eax, 85
+        je io_sync_fsd
+        cmp eax, 86
+        je iof_call_driver
+        cmp eax, 87
+        je iof_complete_request
+        cmp eax, 90
+        je io_dismount_volume
+        cmp eax, 91
+        je io_dismount_volume_name
+        cmp eax, 67
+        je io_create_symbolic_link
+        cmp eax, 69
+        je io_delete_symbolic_link
         cmp eax, 74
         je io_invalid_device_request
         cmp eax, 361
@@ -1866,6 +2354,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_suspend_thread
         cmp eax, 254
         je ps_create_thread
+        cmp eax, 255
+        je ps_create_thread_ex
+        cmp eax, 256
+        je ps_query_statistics
         cmp eax, 258
         je ps_terminate_thread
         cmp eax, 56
@@ -1880,7 +2372,59 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je exf_insert_tail
         cmp eax, 34
         je exf_remove_head
-                cmp eax, 167
+                cmp eax, 39
+        je hal_disable_system_interrupt
+        cmp eax, 43
+        je hal_enable_system_interrupt
+        cmp eax, 44
+        je hal_get_interrupt_vector
+        cmp eax, 46
+        je hal_read_write_pci_space
+        cmp eax, 139
+        je ke_restore_fp_state
+        cmp eax, 142
+        je ke_save_fp_state
+        cmp eax, 38
+        je hal_clear_softint
+        cmp eax, 48
+        je hal_request_softint
+        cmp eax, 93
+        je ke_alert_thread
+        cmp eax, 98
+        je ke_connect_interrupt
+        cmp eax, 100
+        je ke_disconnect_interrupt
+        cmp eax, 105
+        je ke_initialize_apc
+        cmp eax, 109
+        je ke_initialize_interrupt
+        cmp eax, 118
+        je ke_insert_queue_apc
+        cmp eax, 141
+        je ke_rundown_queue
+        cmp eax, 153
+        je ke_synchronize_execution
+        cmp eax, 163
+        je ki_unlock_dispatcher
+        cmp eax, 168
+        je mm_claim_gpu_memory
+        cmp eax, 169
+        je mm_create_kernel_stack
+        cmp eax, 170
+        je mm_delete_kernel_stack
+        cmp eax, 175
+        je mm_lock_buffer_pages
+        cmp eax, 176
+        je mm_lock_physical_page
+        cmp eax, 177
+        je mm_map_io_space
+        cmp eax, 178
+        je mm_persist_memory
+        cmp eax, 181
+        je mm_query_statistics
+        cmp eax, 183
+        je mm_unmap_io_space
+        cmp eax, 167
         je mm_alloc_system
         cmp eax, 172
         je mm_free_system
@@ -2074,6 +2618,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_set_timer_ex
         cmp eax, 207
         je nt_query_directory_file
+        cmp eax, 208
+        je nt_query_directory_object
         cmp eax, 210
         je nt_query_full_attributes_file
         cmp eax, 211
@@ -2082,6 +2628,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_set_information_file
         cmp eax, 190
         je nt_create_file
+        cmp eax, 196
+        je nt_device_io_control_file
+        cmp eax, 200
+        je nt_fs_control_file
         cmp eax, 195
         je nt_delete_file
         cmp eax, 202
@@ -2230,37 +2780,16 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_query_semaphore
         cmp eax, 216
         je nt_query_timer
-        cmp eax, 228
-        je nt_set_system_time
-        cmp eax, 335
-        je xc_sha_init
-        cmp eax, 336
-        je xc_sha_update
-        cmp eax, 337
-        je xc_sha_final
-        cmp eax, 338
-        je xc_rc4_key
-        cmp eax, 339
-        je xc_rc4_crypt
-        cmp eax, 340
-        je xc_hmac
-        cmp eax, 346
-        je xc_des_key_parity
-        cmp eax, 350
-        je xc_crypt_service
-        cmp eax, 244
-        je ob_reference_object_by_pointer
-        cmp eax, 246
-        je ob_reference_object_by_handle
-        cmp eax, 250
-        je obf_dereference_object
-        cmp eax, 251
-        je obf_reference_object
         push eax
         call K_Unsupported
         add esp, 4
         ret
     av_get: jmp K_AvGetSavedDataAddress
+    av_send_unsupported: jmp K_AvSendTVEncoderOption
+    av_set_display_unsupported: jmp K_AvSetDisplayMode
+    ex_query_nv: jmp K_ExQueryNonVolatileSetting
+    ex_refurb: jmp K_ExReadWriteRefurbInfo
+    ex_save_nv: jmp K_ExSaveNonVolatileSetting
     av_set: jmp K_AvSetSavedDataAddress
     dbg_break: jmp K_DbgBreakPoint
     dbg_break_status: jmp K_DbgBreakPointWithStatus
@@ -2292,6 +2821,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_set_thread_priority: jmp K_KeSetPriorityThread
     ke_suspend_thread: jmp K_KeSuspendThread
     ps_create_thread: jmp K_PsCreateSystemThread
+    ps_create_thread_ex: jmp K_PsCreateSystemThreadEx
+    ps_query_statistics: jmp K_PsQueryStatistics
     ps_terminate_thread: jmp K_PsTerminateSystemThread
     ke_query_base_priority: jmp K_KeQueryBasePriorityThread
     interlocked_flush_slist: jmp K_InterlockedFlushSList
@@ -2300,6 +2831,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     exf_insert_head: jmp K_ExfInterlockedInsertHeadList
     exf_insert_tail: jmp K_ExfInterlockedInsertTailList
     exf_remove_head: jmp K_ExfInterlockedRemoveHeadList
+    hal_register_shutdown_notification: jmp K_HalRegisterShutdownNotification
     hal_return_firmware: jmp K_HalReturnToFirmware
     rtl_assert: jmp K_RtlAssert
     hal_read_tray: jmp K_HalReadSMCTrayState
@@ -2326,6 +2858,39 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_is_dpc: jmp K_KeIsExecutingDpc
     ke_test_alert: jmp K_KeTestAlertThread
     ke_set_event_boost: jmp K_KeSetEventBoostPriority
+    io_create_file: jmp K_IoCreateFile
+    io_query_file_information: jmp K_IoQueryFileInformation
+    io_query_volume_information: jmp K_IoQueryVolumeInformation
+    io_set_completion: jmp K_IoSetIoCompletion
+    nt_create_directory_object: jmp K_NtCreateDirectoryObject
+    nt_open_directory_object: jmp K_NtOpenDirectoryObject
+    nt_create_io_completion: jmp K_NtCreateIoCompletion
+    nt_query_io_completion: jmp K_NtQueryIoCompletion
+    nt_remove_io_completion: jmp K_NtRemoveIoCompletion
+    nt_set_io_completion: jmp K_NtSetIoCompletion
+    io_allocate_irp: jmp K_IoAllocateIrp
+    io_build_async_fsd: jmp K_IoBuildAsynchronousFsdRequest
+    io_build_device_control: jmp K_IoBuildDeviceIoControlRequest
+    io_build_sync_fsd: jmp K_IoBuildSynchronousFsdRequest
+    io_check_share_access: jmp K_IoCheckShareAccess
+    io_create_device: jmp K_IoCreateDevice
+    io_delete_device: jmp K_IoDeleteDevice
+    io_free_irp: jmp K_IoFreeIrp
+    io_initialize_irp: jmp K_IoInitializeIrp
+    io_queue_thread_irp: jmp K_IoQueueThreadIrp
+    io_remove_share_access: jmp K_IoRemoveShareAccess
+    io_set_share_access: jmp K_IoSetShareAccess
+    io_start_next_packet: jmp K_IoStartNextPacket
+    io_start_next_packet_key: jmp K_IoStartNextPacketByKey
+    io_start_packet: jmp K_IoStartPacket
+    io_sync_device_control: jmp K_IoSynchronousDeviceIoControlRequest
+    io_sync_fsd: jmp K_IoSynchronousFsdRequest
+    iof_call_driver: jmp K_IofCallDriver
+    iof_complete_request: jmp K_IofCompleteRequest
+    io_dismount_volume: jmp K_IoDismountVolume
+    io_dismount_volume_name: jmp K_IoDismountVolumeByName
+    io_create_symbolic_link: jmp K_IoCreateSymbolicLink
+    io_delete_symbolic_link: jmp K_IoDeleteSymbolicLink
     io_invalid_device_request: jmp K_IoInvalidDeviceRequest
     rtl_capture_context: jmp K_RtlCaptureContext
     rtl_capture_stack: jmp K_RtlCaptureStackBackTrace
@@ -2376,7 +2941,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     current_thread: jmp K_KeGetCurrentThread
     qpc: jmp K_KeQueryPerformanceCounter
     qpf: jmp K_KeQueryPerformanceFrequency
-    qst: jmp K_KeQuerySystemTime
+    qst: jmp K_KeQuerySystemTimeNative
     mm_alloc_system: jmp K_MmAllocateSystemMemory
     mm_free_system: jmp K_MmFreeSystemMemory
     mm_alloc: jmp K_MmAllocateContiguousMemory
@@ -2389,16 +2954,46 @@ extern "C" __declspec(naked) void KernelDispatch(){
     mm_query_protect: jmp K_MmQueryAddressProtect
     mm_query_size: jmp K_MmQueryAllocationSize
     mm_set_protect: jmp K_MmSetAddressProtect
+
+    hal_disable_system_interrupt: jmp K_HalDisableSystemInterrupt
+    hal_enable_system_interrupt: jmp K_HalEnableSystemInterrupt
+    hal_get_interrupt_vector: jmp K_HalGetInterruptVector
+    hal_read_write_pci_space: jmp K_HalReadWritePCISpace
+    ke_restore_fp_state: jmp K_KeRestoreFloatingPointState
+    ke_save_fp_state: jmp K_KeSaveFloatingPointState
+    hal_clear_softint: jmp K_HalClearSoftwareInterrupt
+    hal_request_softint: jmp K_HalRequestSoftwareInterrupt
+    ke_alert_thread: jmp K_KeAlertThread
+    ke_connect_interrupt: jmp K_KeConnectInterrupt
+    ke_disconnect_interrupt: jmp K_KeDisconnectInterrupt
+    ke_initialize_apc: jmp K_KeInitializeApc
+    ke_initialize_interrupt: jmp K_KeInitializeInterrupt
+    ke_insert_queue_apc: jmp K_KeInsertQueueApc
+    ke_rundown_queue: jmp K_KeRundownQueue
+    ke_synchronize_execution: jmp K_KeSynchronizeExecution
+    ki_unlock_dispatcher: jmp K_KfLowerIrql
+    mm_claim_gpu_memory: jmp K_MmClaimGpuInstanceMemory
+    mm_create_kernel_stack: jmp K_MmCreateKernelStack
+    mm_delete_kernel_stack: jmp K_MmDeleteKernelStack
+    mm_lock_buffer_pages: jmp K_MmLockUnlockBufferPages
+    mm_lock_physical_page: jmp K_MmLockUnlockPhysicalPage
+    mm_map_io_space: jmp K_MmMapIoSpace
+    mm_persist_memory: jmp K_MmPersistContiguousMemory
+    mm_query_statistics: jmp K_MmQueryStatistics
+    mm_unmap_io_space: jmp K_MmUnmapIoSpace
     nt_alloc_vm: jmp K_NtAllocateVirtualMemory
     nt_free_vm: jmp K_NtFreeVirtualMemory
     nt_yield: jmp K_NtYieldExecution
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
     nt_set_timer_ex: jmp K_NtSetTimerEx
     nt_query_directory_file: jmp K_NtQueryDirectoryFile
+    nt_query_directory_object: jmp K_NtQueryDirectoryObject
     nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
     nt_create_file: jmp K_NtCreateFile
+    nt_device_io_control_file: jmp K_NtDeviceIoControlFile
+    nt_fs_control_file: jmp K_NtFsControlFile
     nt_delete_file: jmp K_NtDeleteFile
     nt_open_file: jmp K_NtOpenFile
     nt_read_file: jmp K_NtReadFile
@@ -2482,55 +3077,27 @@ extern "C" __declspec(naked) void KernelDispatch(){
     xc_hmac: jmp K_XcHMAC
     xc_des_key_parity: jmp K_XcDESKeyParity
     xc_crypt_service: jmp K_XcCryptService
-    ob_reference_object_by_pointer: jmp K_ObReferenceObjectByPointer
     ob_reference_object_by_handle: jmp K_ObReferenceObjectByHandle
+    ob_reference_object_by_pointer: jmp K_ObReferenceObjectByPointer
     obf_dereference_object: jmp K_ObfDereferenceObject
     obf_reference_object: jmp K_ObfReferenceObject
     }
 }
 bool XboxKernelInitializeEeprom(const wchar_t* path) {
-    if (!path || !*path) return false;
-    g_eepromPath = path;
-    HANDLE f = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    LARGE_INTEGER size{};
-    bool ok = GetFileSizeEx(f, &size) != FALSE;
-    if (ok && size.QuadPart == 0) {
-        // Blank EEPROM is intentionally unprovisioned, not a fabricated Xbox identity.
-        g_eeprom.fill(0xFF);
-        DWORD written = 0;
-        ok = WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr) &&
-             written == g_eeprom.size() && FlushFileBuffers(f);
-    } else if (ok && size.QuadPart == static_cast<LONGLONG>(g_eeprom.size())) {
-        DWORD read = 0;
-        ok = SetFilePointer(f, 0, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
-             ReadFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &read, nullptr) &&
-             read == g_eeprom.size();
-    } else {
-        ok = false; // Never silently truncate or replace a user's EEPROM backup.
-    }
-    CloseHandle(f);
-    g_eepromReady = ok;
+    const bool ok = XboxNvInitialize(path);
     if (ok) OutputDebugStringW(L"[XboxEEPROM] Persistent 256-byte EEPROM loaded. A blank all-FF image is unprovisioned and cannot register with Insignia.\\n");
     return ok;
 }
 
 void XboxKernelFlushEeprom() {
-    if (!g_eepromReady || g_eepromPath.empty()) return;
-    std::lock_guard<std::mutex> lock(g_eepromMutex);
-    HANDLE f = CreateFileW(g_eepromPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(f, g_eeprom.data(), DWORD(g_eeprom.size()), &written, nullptr);
-    FlushFileBuffers(f);
-    CloseHandle(f);
+    XboxNvFlush();
 }
 
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
+bool XboxKernelProtectImage();
+
 bool XboxKernelResolveImports(const XboxKernelState& image) {
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);
@@ -2551,9 +3118,13 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
     // The loader has already selected the correct retail/debug/Chihiro XOR
     // scheme and validated this decoded guest VA. Never decode it a second time.
     const uint32_t thunk = image.kernelThunkAddress;
-    if (!thunk)
-        return XboxGuestResolveNonKernelImports(g_base, g_size,
-            image.nonKernelImportDirectoryAddress);
+    if (!thunk) {
+        const bool importsResolved = XboxGuestResolveNonKernelImports(
+            g_base, g_size, image.nonKernelImportDirectoryAddress);
+        // The guest process applies final section permissions once, after
+        // this resolver returns. Keep the image writable until that point.
+        return importsResolved;
+    }
     if ((thunk & 3u) != 0 || !InImage(thunk, 4))
         return false;
 
@@ -2566,8 +3137,11 @@ bool XboxKernelResolveImports(const XboxKernelState& image) {
         const uint32_t value = table[i];
         if (value == 0) {
             FlushInstructionCache(GetCurrentProcess(), g_stubPage, g_stubCount * 10u);
-            return XboxGuestResolveNonKernelImports(g_base, g_size,
-                image.nonKernelImportDirectoryAddress);
+            const bool importsResolved = XboxGuestResolveNonKernelImports(
+                g_base, g_size, image.nonKernelImportDirectoryAddress);
+            // The guest process applies final section permissions once
+            // after import resolution has completed.
+            return importsResolved;
         }
         if ((value & 0x80000000u) == 0) return false;
         const uint32_t ordinal = value & 0x7FFFFFFFu;
@@ -2606,9 +3180,11 @@ bool XboxKernelProtectImage() {
             uint64_t(section.virtualAddress) + section.virtualSize >
                 uint64_t(g_base) + g_size)
             return false;
-        DWORD protection = (section.flags & 4u)
-            ? ((section.flags & 1u) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ)
-            : ((section.flags & 1u) ? PAGE_READWRITE : PAGE_READONLY);
+        // The original Xbox Pentium III has no NX bit: writable title pages
+        // are executable too. Preserve write permission from XBE flag 0, but
+        // do not translate a missing SECTION_EXECUTABLE bit into host DEP.
+        DWORD protection = (section.flags & 1u)
+            ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ;
         const uint64_t first = uint64_t(section.virtualAddress) & ~uint64_t(0xFFFu);
         const uint64_t last = (uint64_t(section.virtualAddress) +
             section.virtualSize + 0xFFFu) & ~uint64_t(0xFFFu);
@@ -2624,8 +3200,10 @@ bool XboxKernelProtectImage() {
             }
         }
     }
+    // The Xbox CPU also permits instruction fetches from the read-only
+    // header mapping; Windows DEP must not impose an NX restriction here.
     DWORD oldProtection = 0;
-    if (!VirtualProtect(g_image, g_headerSize, PAGE_READONLY, &oldProtection)) {
+    if (!VirtualProtect(g_image, g_headerSize, PAGE_EXECUTE_READ, &oldProtection)) {
         SetLastError(GetLastError() | 0x00020000u);
         return false;
     }
@@ -2633,11 +3211,14 @@ bool XboxKernelProtectImage() {
 }
 
 void XboxKernelSetStartupEvent(HANDLE eventHandle) {
+    if (eventHandle) XboxKernelResetShutdownNotifications();
     g_startupEvent = eventHandle;
 }
 
 void XboxKernelShutdownTitle() {
-    XboxKernelResetSystemTime();
+    XboxKernelInvokeShutdownNotifications();
+    CloseAllFilesystemHandles();
+    XboxKernelResetThreadExports();
     g_startupEvent = nullptr;
     XboxKernelCloseAllObjectHandles();
     if (g_stubPage) {
@@ -2709,10 +3290,42 @@ std::uint32_t g_lastGuestAccessType = 0;
 std::uint32_t g_lastGuestFaultAddress = 0;
 std::uint32_t g_lastGuestFaultProtection = 0;
 std::uint32_t g_lastGuestFaultState = 0;
+std::uint32_t g_lastGuestEax = 0, g_lastGuestEbx = 0;
+std::uint32_t g_lastGuestEcx = 0, g_lastGuestEdx = 0;
+std::uint32_t g_lastGuestEsi = 0, g_lastGuestEdi = 0;
+std::uint32_t g_lastGuestEbp = 0, g_lastGuestEsp = 0;
 
 int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
+    // NXDK probes the Xbox Pentium III clock with RDMSR 0x2A. Emulate only
+    // that documented register; unknown MSRs remain normal guest faults.
+    if (exception && exception->ExceptionRecord &&
+        exception->ExceptionRecord->ExceptionCode == EXCEPTION_PRIV_INSTRUCTION &&
+        exception->ContextRecord) {
+        CONTEXT* cpu = exception->ContextRecord;
+        const std::uintptr_t ip = static_cast<std::uintptr_t>(cpu->Eip);
+        MEMORY_BASIC_INFORMATION instructionMemory{};
+        if (VirtualQuery(reinterpret_cast<const void*>(ip), &instructionMemory,
+                         sizeof(instructionMemory)) == sizeof(instructionMemory) &&
+            instructionMemory.State == MEM_COMMIT &&
+            !(instructionMemory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+            static_cast<std::uint64_t>(ip) + 2u <=
+                static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(
+                    instructionMemory.BaseAddress)) + instructionMemory.RegionSize) {
+            std::uint8_t opcode[2]{};
+            std::memcpy(opcode, reinterpret_cast<const void*>(ip), sizeof(opcode));
+            if (XboxGuestEmulateRdmsr(cpu, opcode, sizeof(opcode)))
+                return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    }
     if (exception && exception->ExceptionRecord) {
         const auto* record = exception->ExceptionRecord;
+        if (exception->ContextRecord) {
+            const CONTEXT* context = exception->ContextRecord;
+            g_lastGuestEax = context->Eax; g_lastGuestEbx = context->Ebx;
+            g_lastGuestEcx = context->Ecx; g_lastGuestEdx = context->Edx;
+            g_lastGuestEsi = context->Esi; g_lastGuestEdi = context->Edi;
+            g_lastGuestEbp = context->Ebp; g_lastGuestEsp = context->Esp;
+        }
         g_lastGuestExceptionCode = record->ExceptionCode;
         g_lastGuestExceptionInstruction =
             static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(
@@ -2741,16 +3354,25 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
                                           std::uint32_t* accessType,
                                           std::uint32_t* faultAddress,
                                           std::uint32_t* faultProtection,
-                                          std::uint32_t* faultState) {
+                                          std::uint32_t* faultState,
+                                          std::uint32_t* eax, std::uint32_t* ebx,
+                                          std::uint32_t* ecx, std::uint32_t* edx,
+                                          std::uint32_t* esi, std::uint32_t* edi,
+                                          std::uint32_t* ebp, std::uint32_t* esp) {
     if (code) *code = g_lastGuestExceptionCode;
     if (instruction) *instruction = g_lastGuestExceptionInstruction;
     if (accessType) *accessType = g_lastGuestAccessType;
     if (faultAddress) *faultAddress = g_lastGuestFaultAddress;
     if (faultProtection) *faultProtection = g_lastGuestFaultProtection;
     if (faultState) *faultState = g_lastGuestFaultState;
+    if (eax) *eax = g_lastGuestEax; if (ebx) *ebx = g_lastGuestEbx;
+    if (ecx) *ecx = g_lastGuestEcx; if (edx) *edx = g_lastGuestEdx;
+    if (esi) *esi = g_lastGuestEsi; if (edi) *edi = g_lastGuestEdi;
+    if (ebp) *ebp = g_lastGuestEbp; if (esp) *esp = g_lastGuestEsp;
 }
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
+    XboxKernelInitializeCurrentThread();
     XboxKernelBeginObjectHandleSession();
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
@@ -2846,6 +3468,8 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
     g_lastGuestFaultAddress = 0;
     g_lastGuestFaultProtection = 0;
     g_lastGuestFaultState = 0;
+    g_lastGuestEax = g_lastGuestEbx = g_lastGuestEcx = g_lastGuestEdx = 0;
+    g_lastGuestEsi = g_lastGuestEdi = g_lastGuestEbp = g_lastGuestEsp = 0;
     DWORD result = 0;
     using Entry = void (__cdecl*)();
     __try {

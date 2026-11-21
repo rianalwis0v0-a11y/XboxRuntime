@@ -1,0 +1,66 @@
+name: Kernel filesystem provider integration tests
+
+on:
+  push:
+    branches:
+      - work/filesystem-provider-integration-current
+    paths:
+      - "guest32/kernel_filesystem_bridge.*"
+      - "guest32/CMakeLists.txt"
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "modules/xbox_storage/**"
+      - "modules/fatx/include/fatx.*"
+      - "modules/fatx/fatx_provider.*"
+      - "guest32/kernel_storage_mounts.*"
+      - "tests/fatx_smoke.cpp"
+      - "tests/xdvdfs_smoke.cpp"
+      - "tests/xbox_storage_smoke.cpp"
+      - "tests/kernel_filesystem_provider_smoke.cpp"
+      - ".github/workflows/kernel-filesystem-provider-tests.yml"
+  pull_request:
+    branches:
+      - work/kernel-combined-clean-import
+    paths:
+      - "guest32/kernel_filesystem_bridge.*"
+      - "guest32/CMakeLists.txt"
+      - "modules/fatx/**"
+      - "modules/xdvdfs/**"
+      - "modules/xbox_storage/**"
+      - "modules/fatx/include/fatx.*"
+      - "modules/fatx/fatx_provider.*"
+      - "guest32/kernel_storage_mounts.*"
+      - "tests/xbox_storage_smoke.cpp"
+      - "tests/kernel_filesystem_provider_smoke.cpp"
+      - ".github/workflows/kernel-filesystem-provider-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  provider-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x86 provider integration test
+        run: cmake -S guest32 -B build-provider -A Win32
+      - name: Build provider integration test
+        run: cmake --build build-provider --config Release --target kernel_filesystem_provider_smoke
+      - name: Run provider integration test
+        run: ctest --test-dir build-provider -C Release --output-on-failure -R kernel_filesystem_provider_smoke
+      - name: Configure FATX module and smoke tests
+        run: cmake -S modules/fatx -B build-fatx -A x64
+      - name: Build FATX DLL and smoke test
+        run: cmake --build build-fatx --config Release --target fatx fatx_smoke
+      - name: Run FATX smoke test
+        run: ctest --test-dir build-fatx -C Release --output-on-failure -R fatx_smoke
+      - name: Configure XDVDFS module and smoke tests
+        run: cmake -S modules/xdvdfs -B build-xdvdfs -A x64
+      - name: Build XDVDFS DLL and smoke test
+        run: cmake --build build-xdvdfs --config Release --target xdvdfs xdvdfs_smoke
+      - name: Run XDVDFS smoke test
+        run: ctest --test-dir build-xdvdfs -C Release --output-on-failure -R xdvdfs_smoke
+      - name: Configure host storage module
+        run: cmake -S modules/xbox_storage -B build-storage -A x64
+      - name: Build host storage module and smoke test
+        run: cmake --build build-storage --config Release --target xbox_storage xbox_storage_smoke
+      - name: Run host storage configuration smoke test
+        run: ctest --test-dir build-storage -C Release --output-on-failure -R xbox_storage_smoke
