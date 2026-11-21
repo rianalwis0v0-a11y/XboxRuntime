@@ -72,3 +72,27 @@ that exact export.
   additional exports.
 - Keep all network-facing logon behavior fail-closed until a real verifier
   and protocol implementation are available.
+
+## Guest32 compatibility implementation
+
+The repository now has an initial implementation in
+`guest32/xonline_compat.h` and `guest32/xonline_compat.cpp`:
+
+- `XUID`: 64-bit user/team identifier plus 32-bit user flags.
+- `XONLINE_USER`: 112-byte packed structure in this reference layout:
+  XUID at offset 0, gamertag at 12, options at 28, passcode at 32,
+  72 reserved bytes at 36, and per-user HRESULT at 108.
+- `XOnlineStartup` / `XOnlineCleanup`: runtime lifecycle; startup requires
+  XNet to be initialized first.
+- `XOnlineGetUsers`: currently returns an empty list because console HDD and
+  memory-unit account storage are not implemented.
+- `XOnlineLogon`: creates a tracked task handle.
+- `XOnlineTaskContinue`: completes the task with
+  `XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE` until a real backend is configured.
+- `XOnlineLogonTaskGetResults` and `XOnlineTaskClose`: expose the task result
+  and release its handle.
+
+The guest smoke test checks structure sizes/offsets and the task lifecycle.
+This deliberately does **not** report a successful sign-in. It is an ABI and
+lifecycle scaffold; real local account persistence, the XboxNet logon protocol,
+ticket verification, service authorization, and console testing remain open.
