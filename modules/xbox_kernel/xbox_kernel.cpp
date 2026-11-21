@@ -163,21 +163,14 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     using ProviderInitializeRendererFn = int (__cdecl*)(HWND, uint32_t, uint32_t);
     const auto initializeRenderer = reinterpret_cast<ProviderInitializeRendererFn>(
         provider ? GetProcAddress(provider, "XboxNV2A_InitializeRenderer") : nullptr);
-    using ProviderBindGuestMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
-    const auto bindGuestMemory = reinterpret_cast<ProviderBindGuestMemoryFn>(
-        provider ? GetProcAddress(provider, "XboxNV2A_BindGuestPhysicalMemory") : nullptr);
-    if (provider && providerStart && bindGuestMemory &&
-        context->hostGpuMemoryView && context->hostView && context->size &&
+    if (provider && providerStart && context->hostGpuMemoryView &&
         providerStart(context->hostGpuMemoryView, XBOX_GPU_SHARED_MEMORY_SIZE) == 0) {
-        if (bindGuestMemory(context->base, context->hostView, context->size) == 0) {
-            providerStarted = true;
-            Log(L"NV2A PCI/AGP DMA bound to the shared XBE physical image window.");
-        } else {
-            Log(L"NV2A provider rejected the guest physical image window.");
-            const auto stop = reinterpret_cast<void (__cdecl*)()>(
-                GetProcAddress(provider, "ModuleStop"));
-            if (stop) stop();
-        }
+        providerStarted = true;
+        /* The current XBE mapping is a guest virtual image view, not a
+         * guest-physical RAM aperture. Do not bind it as PCI/AGP DMA memory.
+         * The provider exposes an explicit bounded bind API for a future
+         * physical-memory section once the kernel owns that mapping. */
+        Log(L"NV2A provider started; PCI/AGP DMA remains disabled until guest physical RAM is mapped.");
     } else if (provider) {
         Log(L"NV2A provider could not attach to the shared GPU memory section.");
     } else {
