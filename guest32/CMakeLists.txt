@@ -17,7 +17,6 @@ add_executable(network_smoke
 )
 target_compile_features(network_smoke PRIVATE cxx_std_17)
 target_include_directories(network_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(network_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(network_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(network_smoke PRIVATE ws2_32 iphlpapi bcrypt)
 add_test(NAME network_smoke COMMAND network_smoke)
