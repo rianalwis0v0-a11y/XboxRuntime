@@ -161,7 +161,11 @@ typedef struct XboxNV2A_DMA_INFO {
     uint32_t mapped_length;
 } XboxNV2A_DMA_INFO;
 
-/* NV2A RAMHT lookup and validated local-VRAM DMA object resolution.
+/* Bind a bounded guest physical RAM window for PCI/AGP DMA. Pass null/zero to unbind. */
+__declspec(dllexport) int __cdecl XboxNV2A_BindGuestPhysicalMemory(
+    uint32_t guest_physical_base, void* memory, uint32_t length);
+
+/* NV2A RAMHT lookup and validated DMA object resolution.
  * channel is the PFIFO channel ID (0..31); returned instance is a RAMIN byte offset. */
 __declspec(dllexport) int __cdecl XboxNV2A_LookupRAMHT(
     uint32_t channel, uint32_t handle, uint32_t* context_out);
