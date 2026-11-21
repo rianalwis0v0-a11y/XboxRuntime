@@ -1087,7 +1087,7 @@ for ($i=0; $i -lt $ordinals.Count; $i++) {
 }
 Put32 (0x6800 + 4*$ordinals.Count) 0
 # XBE library-version record and the section-name string used by the loader.
-[Text.Encoding]::ASCII.GetBytes("XNET" + ([char]0 * 4)).CopyTo($b,0x200)
+[Text.Encoding]::ASCII.GetBytes("XNET" + [char]0 + [char]0 + [char]0 + [char]0).CopyTo($b,0x200)
 Put16 0x208 1
 Put16 0x20A 0
 Put16 0x20C 5849
