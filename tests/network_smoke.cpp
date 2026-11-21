@@ -21,7 +21,7 @@ int main() {
     XONLINE_USER localUsers[XONLINE_MAX_STORED_ONLINE_USERS]{};
     if (XOnlineGetUsers(localUsers, &storedUsers) != S_OK || storedUsers != 0)
         return 43;
-    XONLINE_USER loginUser{};
+    XONLINE_USER* signedOnUsers = XOnlineGetLogonUsers();\n    if (!signedOnUsers || signedOnUsers[0].xuid.qwUserID != 0) { XOnlineCleanup(); return 49; }\n\n    XONLINE_USER loginUser{};
     loginUser.xuid.qwUserID = 1;
     const DWORD requestedServices[] = { 6, 7 };
     HANDLE logonEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
