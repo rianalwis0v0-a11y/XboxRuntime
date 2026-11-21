@@ -6,7 +6,7 @@ endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "xbe_guest32 must be configured with the Win32/x86 toolchain.")
 endif()
-add_executable(xbe_guest32 guest32.cpp thread_compat.cpp privileged_instruction.cpp kernel_gpu_service.cpp kernel_gpu_mmio.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp directsound_compat.cpp guest_api_registry.cpp kernel_storage_mounts.cpp)
+add_executable(xbe_guest32 guest32.cpp thread_compat.cpp privileged_instruction.cpp kernel_gpu_service.cpp kernel_gpu_mmio.cpp kernel_compat.cpp kernel_crypto.cpp kernel_time.cpp kernel_object_reference.cpp kernel_memory.cpp kernel_physical_memory.cpp kernel_object_manager.cpp kernel_system.cpp kernel_nvsettings.cpp kernel_thread_exports.cpp kernel_io_completion.cpp kernel_io_exports.cpp kernel_filesystem_bridge.cpp kernel_directory_objects.cpp network_compat.cpp xnet_compat.cpp directsound_compat.cpp guest_api_registry.cpp kernel_storage_mounts.cpp)
 target_sources(xbe_guest32 PRIVATE
   ../modules/fatx/include/fatx.cpp
   ../modules/fatx/fatx_provider.cpp
@@ -81,6 +81,18 @@ target_compile_definitions(guest_api_registry_smoke PRIVATE WIN32_LEAN_AND_MEAN 
 target_compile_options(guest_api_registry_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(guest_api_registry_smoke PRIVATE ws2_32 iphlpapi)
 add_test(NAME guest_api_registry_smoke COMMAND guest_api_registry_smoke)
+
+
+# Guest physical RAM mapping, permission-aware VA-to-PA translation and teardown.
+add_executable(kernel_physical_memory_smoke
+  ../tests/kernel_physical_memory_smoke.cpp
+  kernel_physical_memory.cpp
+)
+target_include_directories(kernel_physical_memory_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(kernel_physical_memory_smoke PRIVATE cxx_std_17)
+target_compile_definitions(kernel_physical_memory_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(kernel_physical_memory_smoke PRIVATE /W4 /permissive-)
+add_test(NAME kernel_physical_memory_smoke COMMAND kernel_physical_memory_smoke)
 
 # Execute the x86 guest-facing memory/object entry points with their real stdcall ABI.
 add_executable(kernel_memory_guest_smoke
