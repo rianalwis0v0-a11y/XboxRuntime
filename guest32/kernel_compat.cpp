@@ -32,6 +32,7 @@
 #include <atomic>
 #include "kernel_compat.h"
 #include "guest_api_registry.h"
+#include "static_xnet_trace.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -44,6 +45,10 @@ static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
+static std::array<XboxStaticXnetRange, 16> g_staticXnetRanges{};
+static uint32_t g_staticXnetRangeCount = 0;
+static uint32_t g_staticXnetLibraryBuild = 0;
+static std::array<std::atomic<bool>, kThunkMax> g_staticXnetLogged{};
 ULONG g_fileCacheSize = 1024 * 1024;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
@@ -1877,6 +1882,50 @@ extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(
 extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
         mov eax, [esp]
+        cmp eax, 59
+        jb trace_check_high
+        cmp eax, 87
+        jbe trace_static_xnet
+        trace_check_high:
+        cmp eax, 187
+        je trace_static_xnet
+        cmp eax, 190
+        je trace_static_xnet
+        cmp eax, 196
+        je trace_static_xnet
+        cmp eax, 198
+        je trace_static_xnet
+        cmp eax, 200
+        je trace_static_xnet
+        cmp eax, 202
+        je trace_static_xnet
+        cmp eax, 207
+        je trace_static_xnet
+        cmp eax, 211
+        je trace_static_xnet
+        cmp eax, 218
+        je trace_static_xnet
+        cmp eax, 219
+        je trace_static_xnet
+        cmp eax, 236
+        je trace_static_xnet
+        cmp eax, 252
+        je trace_static_xnet
+        cmp eax, 253
+        jne trace_static_xnet_done
+        trace_static_xnet:
+        pushfd
+        pushad
+        mov eax, [esp+40]
+        mov ecx, [esp+36]
+        push eax
+        push ecx
+        call XboxKernelTraceStaticXnetCall
+        add esp, 8
+        popad
+        popfd
+        trace_static_xnet_done:
+        mov eax, [esp]
         add esp, 4
         cmp eax, 1
         je av_get
@@ -2579,34 +2628,37 @@ void XboxKernelFlushEeprom() {
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
+void XboxKernelResetStaticXnetTrace() {
+    g_staticXnetRanges.fill({0, 0});
+    g_staticXnetRangeCount = 0;
+    g_staticXnetLibraryBuild = 0;
+    for (auto& logged : g_staticXnetLogged) logged.store(false);
+}
+void XboxKernelAddStaticXnetCodeRange(uint32_t address, uint32_t size, uint32_t libraryBuild) {
+    if (!address || !size || uint64_t(address) + size > 0x100000000ull ||
+        g_staticXnetRangeCount >= g_staticXnetRanges.size()) return;
+    g_staticXnetRanges[g_staticXnetRangeCount++] = {address, size};
+    if (libraryBuild) g_staticXnetLibraryBuild = libraryBuild;
+    char message[192]{};
+    sprintf_s(message, "[XboxKernel] Static XNET code section: VA=0x%08X size=0x%08X XNET-library-build=%u\n",
+        address, size, g_staticXnetLibraryBuild);
+    OutputDebugStringA(message);
+}
+extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t returnAddress) {
+    if (ordinal >= kThunkMax) return;
+    const char* name = XboxStaticXnetKernelCandidateName(ordinal);
+    if (!name || !XboxStaticXnetContains(g_staticXnetRanges.data(), g_staticXnetRangeCount, returnAddress))
+        return;
+    bool expected = false;
+    if (!g_staticXnetLogged[ordinal].compare_exchange_strong(expected, true)) return;
+    char message[224]{};
+    sprintf_s(message, "[XboxKernel] STATIC_XNET_KERNEL_CALL ordinal=%u (%s) caller=0x%08X XNET-library-build=%u\n",
+        ordinal, name, returnAddress, g_staticXnetLibraryBuild);
+    OutputDebugStringA(message);
+}
 static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
-    const char* name = nullptr;
-    switch (ordinal) {
-    case 59: name = "IoAllocateIrp"; break;
-    case 60: name = "IoBuildAsynchronousFsdRequest"; break;
-    case 61: name = "IoBuildDeviceIoControlRequest"; break;
-    case 62: name = "IoBuildSynchronousFsdRequest"; break;
-    case 65: name = "IoCreateDevice"; break;
-    case 66: name = "IoCreateFile"; break;
-    case 67: name = "IoCreateSymbolicLink"; break;
-    case 68: name = "IoDeleteDevice"; break;
-    case 69: name = "IoDeleteSymbolicLink"; break;
-    case 72: name = "IoFreeIrp"; break;
-    case 73: name = "IoInitializeIrp"; break;
-    case 77: name = "IoQueueThreadIrp"; break;
-    case 81: name = "IoStartNextPacket"; break;
-    case 82: name = "IoStartNextPacketByKey"; break;
-    case 83: name = "IoStartPacket"; break;
-    case 84: name = "IoSynchronousDeviceIoControlRequest"; break;
-    case 85: name = "IoSynchronousFsdRequest"; break;
-    case 86: name = "IofCallDriver"; break;
-    case 87: name = "IofCompleteRequest"; break;
-    case 196: name = "NtDeviceIoControlFile"; break;
-    case 200: name = "NtFsControlFile"; break;
-    case 252: name = "PhyGetLinkState"; break;
-    case 253: name = "PhyInitialize"; break;
-    default: return;
-    }
+    const char* name = XboxStaticXnetKernelCandidateName(ordinal);
+    if (!name) return;
     char message[160]{};
     sprintf_s(message, "[XboxKernel] XBE imports network/I-O candidate: ordinal %u (%s)\n",
         ordinal, name);
