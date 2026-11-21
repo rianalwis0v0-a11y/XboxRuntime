@@ -34,6 +34,7 @@
 #include "kernel_object_reference.h"
 #include "kernel_filesystem_bridge.h"
 #include "kernel_time.h"
+#include "thread_compat.h"
 #include "kernel_crypto.h"
 #include "guest_api_registry.h"
 
@@ -557,7 +558,6 @@ extern "C" LONG __fastcall K_InterlockedIncrement(volatile LONG*p){return Interl
 extern "C" LONG __fastcall K_InterlockedExchange(volatile LONG*p,LONG v){return InterlockedExchange(p,v);}
 extern "C" LONG __fastcall K_InterlockedExchangeAdd(volatile LONG*p,LONG v){return InterlockedExchangeAdd(p,v);}
 extern "C" DWORD __stdcall K_KeGetCurrentIrql(){return g_guestIrql;}
-extern "C" HANDLE __stdcall K_KeGetCurrentThread(){return GetCurrentThread();}
 // Resolve NT system services once. Xbox semantics stay in these wrappers;
 // the NT calls provide the host scheduling/clock primitives underneath.
 using NtDelayExecutionFn = LONG (NTAPI*)(BOOLEAN, PLARGE_INTEGER);
@@ -1131,6 +1131,7 @@ extern "C" LONG __stdcall K_NtClose(HANDLE h) {
     if(CloseFilesystemHandle(h))return 0;
     CloseGuestDirectorySearch(h);
     if (XboxKernelCloseObjectHandle(h)) return 0;
+    XboxKernelForgetThreadHandle(h);
     return CloseHandle(h) ? 0 : LONG(0xC0000008u);
 }
 using NtCreateEventFn = LONG (NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, ULONG, BOOLEAN);
@@ -1791,15 +1792,18 @@ extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, vo
 }
 extern "C" void __stdcall K_PsTerminateSystemThread(LONG status) { ExitThread(DWORD(status)); }
 extern "C" LONG __stdcall K_KeSuspendThread(HANDLE thread) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD previous = SuspendThread(thread);
     return previous == DWORD(-1) ? LONG(0xC0000008u) : LONG(previous);
 }
 extern "C" LONG __stdcall K_KeResumeThread(HANDLE thread) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD previous = ResumeThread(thread);
     return previous == DWORD(-1) ? LONG(0xC0000008u) : LONG(previous);
 }
 extern "C" LONG __stdcall K_KeAlertResumeThread(HANDLE thread) { return K_KeResumeThread(thread); }
 extern "C" LONG __stdcall K_KeSetPriorityThread(HANDLE thread, LONG priority) {
+    thread = XboxKernelResolveThreadHandle(thread);
     const int previous = GetThreadPriority(thread);
     if (previous == THREAD_PRIORITY_ERROR_RETURN) return LONG(0xC0000008u);
     const int mapped = priority >= 15 ? THREAD_PRIORITY_TIME_CRITICAL :
@@ -1811,12 +1815,15 @@ extern "C" LONG __stdcall K_KeSetPriorityThread(HANDLE thread, LONG priority) {
 extern "C" LONG __stdcall K_KeSetBasePriorityThread(HANDLE thread, LONG increment) {
     return K_KeSetPriorityThread(thread, increment);
 }
-extern "C" LONG __stdcall K_KeQueryBasePriorityThread(HANDLE) { return 0; }
+extern "C" LONG __stdcall K_KeQueryBasePriorityThread(HANDLE thread) {
+    return GetThreadPriority(XboxKernelResolveThreadHandle(thread));
+}
 extern "C" void __stdcall K_KeSetPriorityProcess(HANDLE process, LONG priority) {
     const DWORD cls = priority > 0 ? HIGH_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
     if (process) SetPriorityClass(process, cls);
 }
 extern "C" void __stdcall K_KeSetDisableBoostThread(HANDLE thread, BOOL disable) {
+    thread = XboxKernelResolveThreadHandle(thread);
     if (thread) SetThreadPriorityBoost(thread, disable);
 }
 extern "C" void __stdcall K_KeBoostPriorityThread(HANDLE) { /* Windows schedules runnable threads. */ }
@@ -2172,12 +2179,14 @@ extern "C" LONG __stdcall K_NtCreateTimer(HANDLE* out, ACCESS_MASK access, void*
     *out = h; return 0;
 }
 extern "C" LONG __stdcall K_NtSuspendThread(HANDLE thread, ULONG* previous) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD n = SuspendThread(thread);
     if (n == DWORD(-1)) return LONG(0xC0000008u);
     if (previous) *previous = n;
     return 0;
 }
 extern "C" LONG __stdcall K_NtResumeThread(HANDLE thread, ULONG* previous) {
+    thread = XboxKernelResolveThreadHandle(thread);
     DWORD n = ResumeThread(thread);
     if (n == DWORD(-1)) return LONG(0xC0000008u);
     if (previous) *previous = n;
@@ -2360,6 +2369,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je ke_suspend_thread
         cmp eax, 254
         je ps_create_thread
+        cmp eax, 255
+        je ps_create_thread_ex
         cmp eax, 256
         je ps_query_statistics
         cmp eax, 258
@@ -2823,6 +2834,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     ke_set_thread_priority: jmp K_KeSetPriorityThread
     ke_suspend_thread: jmp K_KeSuspendThread
     ps_create_thread: jmp K_PsCreateSystemThread
+    ps_create_thread_ex: jmp K_PsCreateSystemThreadEx
     ps_query_statistics: jmp K_PsQueryStatistics
     ps_terminate_thread: jmp K_PsTerminateSystemThread
     ke_query_base_priority: jmp K_KeQueryBasePriorityThread
@@ -3351,6 +3363,7 @@ void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
 }
 
 DWORD WINAPI XboxKernelStartXbe(void*) {
+    XboxKernelInitializeCurrentThread();
     XboxKernelBeginObjectHandleSession();
     if (!g_entry || !InImage(g_entry)) return ERROR_INVALID_ADDRESS;
 
