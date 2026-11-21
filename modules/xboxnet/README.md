@@ -34,6 +34,10 @@ but cannot bypass CGNAT or create port forwarding.
 The example address is reserved for documentation and is not a live XboxNet
 endpoint. Do not configure an Xbox to use it as a production service.
 
+## Guest XOnline compatibility
+
+`guest32/xonline_compat.*` adds a first, deliberately fail-closed original-Xbox XOnline ABI slice: startup/cleanup, local-user enumeration stub, `XOnlineLogon`, task pumping, logon-result retrieval, and task close. The XONLINE_USER/XUID layouts are checked with compile-time size and offset assertions against the public RXDK-Libs XDK header. XOnline startup requires XNet to be initialized first. Since this runtime does not yet have local HDD/memory-unit account storage or a real XboxNet ticket verifier/service endpoint, user enumeration returns an empty list and logon tasks complete with `XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE`; this is a compatibility scaffold, not successful Xbox Live sign-in.
+
 ## HTTP status gateway
 
 `gateway.py` is the first server-side HTTP component. It is intentionally
