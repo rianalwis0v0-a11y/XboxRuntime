@@ -42,7 +42,8 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(len(payload["services"]), len(SERVICE_CATALOG))
         states = {item["id"]: item["state"] for item in payload["services"]}
         self.assertEqual(states["authentication"], "scaffold")
-        self.assertTrue(all(state == "not_implemented" for key, state in states.items() if key != "authentication"))
+        self.assertEqual(states["security_gateway"], "scaffold")
+        self.assertTrue(all(state == "not_implemented" for key, state in states.items() if key not in {"authentication", "security_gateway"}))
 
     def test_unknown_path_is_404(self):
         with self.assertRaises(HTTPError) as caught:
