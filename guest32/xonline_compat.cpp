@@ -17,7 +17,7 @@ struct XboxOnlineTask {
 namespace {
 std::mutex g_mutex;
 bool g_started = false;
-std::unordered_set<XONLINETASK_HANDLE> g_tasks;
+std::unordered_set<XONLINETASK_HANDLE> g_tasks;\nXONLINE_USER g_logonUsers[XONLINE_MAX_LOGON_USERS]{};
 
 bool IsOwnedTask(XONLINETASK_HANDLE task) {
     return task != nullptr && g_tasks.find(task) != g_tasks.end();
@@ -111,3 +111,4 @@ extern "C" HRESULT WINAPI XOnlineTaskClose(XONLINETASK_HANDLE task) {
     delete task;
     return S_OK;
 }
+\nextern "C" XONLINE_USER* WINAPI XOnlineGetLogonUsers() {\n    std::lock_guard<std::mutex> lock(g_mutex);\n    return g_started ? g_logonUsers : nullptr;\n}\n
