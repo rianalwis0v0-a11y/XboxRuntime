@@ -93,7 +93,8 @@ bool IsSupportedNonKernelLibrary(std::uint32_t base, std::uint32_t size,
     }
     if (n + 1 == std::size(ascii) || name[n] != L'\0') return false;
     const std::wstring value(ascii);
-    return value == L"XNET" || value == L"XNET.DLL" ||\n           value == L"DSOUND" || value == L"DSOUND.DLL";
+    return value == L"XNET" || value == L"XNET.DLL" ||
+           value == L"DSOUND" || value == L"DSOUND.DLL";
 }
 }
 
@@ -150,7 +151,7 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(
                 terminatedThunks = true;
                 break;
             }
-            // XNet's named imports are supported. Ordinal imports require an
+            // Named XNet and DSOUND imports are supported. Ordinal imports require an
             // authoritative per-library ordinal map and are intentionally rejected.
             if (importNameAddress & 0x80000000u) return false;
             // PE-derived XBE thunk data may be represented as an image VA or
