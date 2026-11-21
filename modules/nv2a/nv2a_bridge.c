@@ -24,6 +24,8 @@ static uint32_t g_bound_engine[32][8];
 static uint32_t g_ref_counter[32];
 static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
+static IDirect3D8* g_d3d8_factory;
+static IDirect3DDevice8* g_d3d8_device;
 static uint32_t g_transform_execution_mode;
 /* Mirror NV2A program/constant upload ports into the existing D3D11 HLSL
  * translator. The translator compiles on the first draw and caches by
@@ -548,6 +550,44 @@ static void submit_pgraph_method(uint32_t channel, uint32_t subchannel, uint32_t
 }
 
 
+int __cdecl XboxNV2A_InitializeRenderer(HWND window, uint32_t width, uint32_t height)
+{
+    if (!g_started || !window || !IsWindow(window) ||
+        width == 0 || height == 0 || width > 8192u || height > 8192u)
+        return 1;
+    if (xbox_GetD3DDevice())
+        return g_d3d8_device == xbox_GetD3DDevice() ? 0 : 2;
+
+    IDirect3D8* factory = xbox_Direct3DCreate8(0);
+    if (!factory || !factory->lpVtbl || !factory->lpVtbl->CreateDevice)
+        return 3;
+
+    D3DPRESENT_PARAMETERS present = {0};
+    present.BackBufferWidth = width;
+    present.BackBufferHeight = height;
+    present.BackBufferFormat = D3DFMT_X8R8G8B8;
+    present.BackBufferCount = 1;
+    present.MultiSampleType = D3DMULTISAMPLE_NONE;
+    present.SwapEffect = D3DSWAPEFFECT_DISCARD;
+    present.hDeviceWindow = window;
+    present.Windowed = TRUE;
+    present.EnableAutoDepthStencil = TRUE;
+    present.AutoDepthStencilFormat = D3DFMT_D24S8;
+
+    IDirect3DDevice8* device = NULL;
+    const HRESULT result = factory->lpVtbl->CreateDevice(
+        factory, 0, 1, window, 0, &present, &device);
+    if (FAILED(result) || !device) {
+        if (factory->lpVtbl->Release)
+            factory->lpVtbl->Release(factory);
+        return 4;
+    }
+    g_d3d8_factory = factory;
+    g_d3d8_device = device;
+    OutputDebugStringW(L"[XboxRuntime:NV2A] D3D8/D3D11 renderer initialized.\n");
+    return 0;
+}
+
 int __cdecl ModuleStart(void)
 {
     return ModuleStartWithMemory(NULL, 0);
@@ -636,6 +676,14 @@ void __cdecl ModuleStop(void)
     release_texture_cache();
     pgraph_d3d11_shutdown();
     release_surface_targets();
+    if (g_d3d8_device && g_d3d8_device->lpVtbl &&
+        g_d3d8_device->lpVtbl->Release)
+        (void)g_d3d8_device->lpVtbl->Release(g_d3d8_device);
+    g_d3d8_device = NULL;
+    if (g_d3d8_factory && g_d3d8_factory->lpVtbl &&
+        g_d3d8_factory->lpVtbl->Release)
+        (void)g_d3d8_factory->lpVtbl->Release(g_d3d8_factory);
+    g_d3d8_factory = NULL;
 
     // The upstream NV2A singleton currently has no public destroy/reset API.
     // Keep its backing allocation alive until the host process exits; freeing
@@ -2652,6 +2700,10 @@ void __cdecl XboxNV2A_Flush(void)
     if (g_started) {
         pgraph_d3d11_flush();
         sync_surface_to_vram();
+        if (g_d3d8_device && g_d3d8_device->lpVtbl &&
+            g_d3d8_device->lpVtbl->Present)
+            (void)g_d3d8_device->lpVtbl->Present(
+                g_d3d8_device, NULL, NULL, NULL, NULL);
     }
 }
 
