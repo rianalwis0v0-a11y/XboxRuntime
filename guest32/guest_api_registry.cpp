@@ -15,7 +15,7 @@ struct Entry { const char* name; std::uint32_t address; };
 #define GUEST_API(s) {#s,GuestAddress(&s)}
 const Entry kApis[]={
  GUEST_API(XNetStartup),GUEST_API(XNetCleanup),GUEST_API(XNetDnsLookup),GUEST_API(XNetDnsRelease),
- GUEST_API(XNetInAddrToString),GUEST_API(XNetServerToInAddr),GUEST_API(XNetInAddrToServer),
+ GUEST_API(XNetInAddrToString),GUEST_API(XNetServerToInAddr),GUEST_API(XNetInAddrToXnAddr),
  GUEST_API(XNetGetEthernetLinkStatus),GUEST_API(XNetGetTitleXnAddr),
  GUEST_API(XSocketCreate),GUEST_API(XSocketClose),GUEST_API(XSocketBind),GUEST_API(XSocketConnect),
  GUEST_API(XSocketListen),GUEST_API(XSocketAccept),GUEST_API(XSocketShutdown),GUEST_API(XSocketIOCTLSocket),
