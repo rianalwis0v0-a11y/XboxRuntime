@@ -129,9 +129,6 @@ DWORD WINAPI XNetGetDebugXnAddr(XNADDR* address);
 BOOL XboxNetIsStarted();
 
 extern "C" {
-}
-
-extern "C" {
 SOCKET WINAPI XSocketCreate(int af, int type, int protocol);
 int WINAPI XSocketClose(SOCKET socket);
 int WINAPI XSocketBind(SOCKET socket, const struct sockaddr* address, int addressLength);
