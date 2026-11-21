@@ -35,6 +35,7 @@
 #include "kernel_filesystem_bridge.h"
 #include "kernel_time.h"
 #include "thread_compat.h"
+#include "privileged_instruction.h"
 #include "kernel_crypto.h"
 #include "guest_api_registry.h"
 
@@ -3308,6 +3309,27 @@ std::uint32_t g_lastGuestEsi = 0, g_lastGuestEdi = 0;
 std::uint32_t g_lastGuestEbp = 0, g_lastGuestEsp = 0;
 
 int GuestExceptionFilter(EXCEPTION_POINTERS* exception) {
+    // NXDK probes the Xbox Pentium III clock with RDMSR 0x2A. Emulate only
+    // that documented register; unknown MSRs remain normal guest faults.
+    if (exception && exception->ExceptionRecord &&
+        exception->ExceptionRecord->ExceptionCode == EXCEPTION_PRIV_INSTRUCTION &&
+        exception->ContextRecord) {
+        CONTEXT* cpu = exception->ContextRecord;
+        const std::uintptr_t ip = static_cast<std::uintptr_t>(cpu->Eip);
+        MEMORY_BASIC_INFORMATION instructionMemory{};
+        if (VirtualQuery(reinterpret_cast<const void*>(ip), &instructionMemory,
+                         sizeof(instructionMemory)) == sizeof(instructionMemory) &&
+            instructionMemory.State == MEM_COMMIT &&
+            !(instructionMemory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+            static_cast<std::uint64_t>(ip) + 2u <=
+                static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(
+                    instructionMemory.BaseAddress)) + instructionMemory.RegionSize) {
+            std::uint8_t opcode[2]{};
+            std::memcpy(opcode, reinterpret_cast<const void*>(ip), sizeof(opcode));
+            if (XboxGuestEmulateRdmsr(cpu, opcode, sizeof(opcode)))
+                return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    }
     if (exception && exception->ExceptionRecord) {
         const auto* record = exception->ExceptionRecord;
         if (exception->ContextRecord) {
