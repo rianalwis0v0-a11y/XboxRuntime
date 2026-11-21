@@ -95,6 +95,14 @@ PciConfigSpace MakeXboxHostBridgeConfig() {
     StorePciDword(config, 0xE4, 0x01FF75B7u);
     return config;
 }
+PciConfigSpace MakeXboxHostBridgeClockConfig() {
+    PciConfigSpace config{};
+    config.fill(0xFFu);
+    // NXDK's CRT probes bus 0, device 0, function 3, register 0x6C.
+    // Divider=1 and multiplier=8 produce the Xbox 133.333 MHz FSB.
+    StorePciDword(config, 0x6C, 0x00000801u);
+    return config;
+}
 PciConfigSpace MakeNv2aPciConfig() {
     PciConfigSpace config{};
     // DVT4 PCI config-space dump: bus 1, device 0, function 0.
@@ -142,6 +150,7 @@ PciConfigSpace MakeXboxAgpBridgeConfig() {
     return config;
 }
 PciConfigSpace g_hostBridgePciConfig = MakeXboxHostBridgeConfig();
+PciConfigSpace g_hostBridgeClockPciConfig = MakeXboxHostBridgeClockConfig();
 PciConfigSpace g_agpBridgePciConfig = MakeXboxAgpBridgeConfig();
 PciConfigSpace g_nv2aPciConfig = MakeNv2aPciConfig();
 std::array<bool, 3> g_nv2aBarProbe{};
@@ -305,8 +314,11 @@ extern "C" void __stdcall K_HalReadWritePCISpace(
     PciConfigSpace* config = nullptr;
     const bool nv2a = busNumber == 1u && slotNumber == 0u;
     const bool agpBridge = busNumber == 0u && slotNumber == 0x1Eu;
+    const bool hostBridgeClock = busNumber == 0u && slotNumber == 0x60u;
     if (busNumber == 0u && slotNumber == 0u)
         config = &g_hostBridgePciConfig;
+    else if (hostBridgeClock)
+        config = &g_hostBridgeClockPciConfig;
     else if (agpBridge)
         config = &g_agpBridgePciConfig;
     else if (nv2a)
