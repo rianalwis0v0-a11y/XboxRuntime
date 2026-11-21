@@ -1360,6 +1360,7 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
     if (!dma->mapped_length || offset > dma->mapped_length ||
         !dma_get_span(dma, offset, 1u, &texture_start))
         return 5;
+    (void)texture_start;
 
     output->texture_offset = offset;
     output->format = format;
@@ -1416,7 +1417,7 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
         source_total+=input;destination_total+=output;
         w=w>1u?w/2u:1u;h=h>1u?h/2u:1u;
     }
-    if(source_total>(uint64_t)XBOX_VRAM_SIZE-texture_address)return 6;
+    if(source_total>(uint64_t)texture_dma->mapped_length-info->texture_offset)return 6;
     uint8_t* linear=(uint8_t*)HeapAlloc(GetProcessHeap(),0,(SIZE_T)source_total);
     if(!linear)return 7;
     const uint8_t* swizzled=texture_data;
