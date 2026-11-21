@@ -651,16 +651,39 @@ std::wstring TranslateXboxPath(const GuestUnicodeString* name) {
     return MapXboxPath(std::wstring(name->Buffer, name->Length / sizeof(wchar_t)));
 }
 std::wstring TranslateXboxObjectPath(const void* rawAttributes) {
-    if (!rawAttributes) return {};
+    static std::atomic<unsigned> traceCount{0};
+    const bool trace = traceCount.fetch_add(1, std::memory_order_relaxed) < 8;
+    if (!rawAttributes) {
+        if (trace) std::fprintf(stderr, "[XboxKernel] NtOpenFile: null OBJECT_ATTRIBUTES\n");
+        return {};
+    }
     uint32_t first = 0;
     std::memcpy(&first, rawAttributes, sizeof(first));
     if (first == sizeof(GuestLegacyObjectAttributes)) {
         const auto* oa = static_cast<const GuestLegacyObjectAttributes*>(rawAttributes);
+        if (trace) {
+            const auto* name = oa->ObjectName;
+            std::fprintf(stderr,
+                "[XboxKernel] NtOpenFile legacy OA=%p root=%p name=%p len=%u max=%u buffer=%p\n",
+                rawAttributes, oa->RootDirectory, name,
+                name ? name->Length : 0, name ? name->MaximumLength : 0,
+                name ? name->Buffer : nullptr);
+        }
         if (oa->RootDirectory || !oa->ObjectName) return {};
-        return TranslateXboxPath(oa->ObjectName);
+        std::wstring path = TranslateXboxPath(oa->ObjectName);
+        if (trace) std::fprintf(stderr, "[XboxKernel] NtOpenFile legacy translated chars=%zu\n", path.size());
+        return path;
     }
 
     const auto* oa = static_cast<const GuestXboxObjectAttributes*>(rawAttributes);
+    if (trace) {
+        const auto* name = oa->ObjectName;
+        std::fprintf(stderr,
+            "[XboxKernel] NtOpenFile Xbox OA=%p first=%08X root=%p name=%p attrs=%08X len=%u max=%u buffer=%p\n",
+            rawAttributes, first, oa->RootDirectory, name, oa->Attributes,
+            name ? name->Length : 0, name ? name->MaximumLength : 0,
+            name ? name->Buffer : nullptr);
+    }
     if (oa->RootDirectory || !oa->ObjectName || !oa->ObjectName->Buffer ||
         !oa->ObjectName->Length || oa->ObjectName->Length > oa->ObjectName->MaximumLength) return {};
     const int chars = MultiByteToWideChar(CP_ACP, 0, oa->ObjectName->Buffer,
@@ -669,7 +692,9 @@ std::wstring TranslateXboxObjectPath(const void* rawAttributes) {
     std::wstring path(static_cast<size_t>(chars), L'\0');
     if (!MultiByteToWideChar(CP_ACP, 0, oa->ObjectName->Buffer,
         oa->ObjectName->Length, path.data(), chars)) return {};
-    return MapXboxPath(path);
+    path = MapXboxPath(path);
+    if (trace) std::fprintf(stderr, "[XboxKernel] NtOpenFile Xbox translated chars=%zu\n", path.size());
+    return path;
 }
 DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
