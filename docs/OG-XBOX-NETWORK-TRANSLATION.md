@@ -97,3 +97,14 @@ The current loader path in this branch also only calls `XboxKernelResolveImports
 Do not invent ordinal aliases for XNet. First capture a real title's kernel import list and identify which I/O-manager APIs its networking path actually invokes. Then implement only the required Xbox ABI structures and IRP/device semantics at those verified entry points, backed by a Windows socket/DNS adapter. In parallel, design an explicit guest-callable API registration path for imports that are genuinely present in an XBE. Statically linked call sites remain a separate problem and must not be rewritten without instruction-boundary and per-title evidence.
 
 Audit scope: `tools/kernel_exports.json` export names/ordinals compared with the `cmp eax, <ordinal>` routes in `KernelDispatch`; source inspection only. No Windows build or runtime test was run as part of this audit.
+
+## First kernel-level Windows translation implemented
+
+The guest kernel now routes the documented PHY exports to Windows adapter discovery:
+
+- Ordinal 252, `PhyGetLinkState(BOOLEAN Verify)`: calls `GetAdaptersAddresses` and returns 1 when at least one host adapter reports `IfOperStatusUp`, otherwise 0. The Xbox `Verify` argument is accepted but ignored because Windows exposes current operational status rather than the Xbox PHY's MII repoll mode.
+- Ordinal 253, `PhyInitialize(BOOLEAN ForceReset, PVOID Param2)`: validates that Windows adapter enumeration is available and returns `STATUS_SUCCESS` (0) on success/no-adapter state, or `STATUS_UNSUCCESSFUL` on an enumeration failure. Windows owns physical NIC initialization; the guest does not reset or access hardware.
+
+This is a real kernel-import path, unlike merely exporting XNet wrapper names: the XBE kernel thunk resolver already maps imported kernel ordinals through `KernelDispatch`, and these two ordinals now have explicit routes. It provides host link-state visibility only; it does **not** implement packet transport by itself or prove that a particular title reaches Winsock. The existing XNet/XSocket Winsock backend remains the socket transport layer, and a real-XBE end-to-end call-path test is still required.
+
+The ABI signatures and ordinals were checked against the Xbox kernel export reference. The host implementation uses Windows IP Helper (`GetAdaptersAddresses`), already linked by `guest32/CMakeLists.txt` as `iphlpapi`. No MCPX register, PHY, DMA, or interrupt model was added.
