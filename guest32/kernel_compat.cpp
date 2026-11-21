@@ -1774,23 +1774,7 @@ extern "C" LONG __stdcall K_NtSignalAndWaitForSingleObject(HANDLE signal, HANDLE
     if (result == WAIT_IO_COMPLETION) return LONG(0x000000C0u);
     return LONG(0xC0000008u);
 }
-struct GuestClientId { HANDLE UniqueProcess; HANDLE UniqueThread; };
-extern "C" LONG __stdcall K_PsCreateSystemThread(HANDLE* threadHandle, ULONG, void*, HANDLE process,
-                                                   GuestClientId* clientId, LPTHREAD_START_ROUTINE start,
-                                                   void* context) {
-    if (!threadHandle || !start) return LONG(0xC000000Du);
-    if (process && process != GetCurrentProcess() && process != reinterpret_cast<HANDLE>(intptr_t(-1)))
-        return LONG(0xC000000Du);
-    DWORD threadId = 0;
-    HANDLE thread = CreateThread(nullptr, 0, start, context, 0, &threadId);
-    if (!thread) return LONG(0xC0000017u);
-    *threadHandle = thread;
-    if (clientId) {
-        clientId->UniqueProcess = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(GetCurrentProcessId()));
-        clientId->UniqueThread = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(threadId));
-    }
-    return 0;
-}
+// PsCreateSystemThread's five-argument Xbox ABI is implemented in thread_compat.cpp.
 extern "C" void __stdcall K_PsTerminateSystemThread(LONG status) { ExitThread(DWORD(status)); }
 extern "C" LONG __stdcall K_KeSuspendThread(HANDLE thread) {
     thread = XboxKernelResolveThreadHandle(thread);
