@@ -14,8 +14,9 @@ SERVICE_CATALOG = (
     {
         "id": "authentication",
         "name": "Authentication and domain service",
-        "state": "not_implemented",
+        "state": "scaffold",
         "protocol": "research_required",
+        "note": "Internal fail-closed adapter boundary only; no Xbox ticket protocol is implemented.",
     },
     {
         "id": "security_gateway",
