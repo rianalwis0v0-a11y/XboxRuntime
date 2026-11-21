@@ -9,6 +9,7 @@
 #include "kernel_time.h"
 #include "kernel_crypto.h"
 #include "kernel_directory_objects.h"
+#include "kernel_physical_memory.h"
 #include "fatx_provider.h"
 #include <vector>
 
@@ -37,6 +38,11 @@ extern "C" GuestListEntry* __stdcall K_KeRundownQueue(GuestKQueue*);
 extern "C" UCHAR __fastcall K_KfRaiseIrql(UCHAR);
 extern "C" void __fastcall K_KfLowerIrql(UCHAR);
 extern "C" DWORD __stdcall K_KeGetCurrentIrql();
+extern "C" void* __stdcall K_MmAllocateContiguousMemory(std::uint32_t);
+extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(
+    std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+extern "C" void __stdcall K_MmFreeContiguousMemory(void*);
+extern "C" std::uint64_t __stdcall K_MmGetPhysicalAddress(void*);
 
 
 #pragma pack(push, 4)
@@ -261,6 +267,62 @@ int TestFilesystemNtDispatch() {
 
 namespace {
 int Fail(int code, const char* message) { std::fprintf(stderr, "FAIL %d: %s\n", code, message); return code; }
+
+int TestContiguousPhysicalMemory() {
+    void* view = VirtualAlloc(nullptr, XBOX_GUEST_PHYSICAL_RAM_SIZE,
+        MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (!view) return Fail(70, "allocate guest physical RAM section");
+    if (!XboxKernelPhysicalMemoryInitialize(view, XBOX_GUEST_PHYSICAL_RAM_BASE,
+            XBOX_GUEST_PHYSICAL_RAM_SIZE)) {
+        VirtualFree(view, 0, MEM_RELEASE);
+        return Fail(71, "initialize guest physical RAM section");
+    }
+
+    void* allocation = K_MmAllocateContiguousMemory(0x2000u);
+    if (!allocation) {
+        XboxKernelPhysicalMemoryShutdown();
+        VirtualFree(view, 0, MEM_RELEASE);
+        return Fail(72, "MmAllocateContiguousMemory");
+    }
+    const std::uint64_t physical = K_MmGetPhysicalAddress(allocation);
+    if (physical > 0x03FFFFFFu || (physical & 0xFFFu) != 0) {
+        K_MmFreeContiguousMemory(allocation);
+        XboxKernelPhysicalMemoryShutdown();
+        VirtualFree(view, 0, MEM_RELEASE);
+        return Fail(73, "MmGetPhysicalAddress for contiguous allocation");
+    }
+    static_cast<std::uint8_t*>(allocation)[0] = 0xC7;
+    if (static_cast<std::uint8_t*>(view)[physical] != 0xC7) {
+        K_MmFreeContiguousMemory(allocation);
+        XboxKernelPhysicalMemoryShutdown();
+        VirtualFree(view, 0, MEM_RELEASE);
+        return Fail(74, "guest/physical RAM shared-view coherence");
+    }
+
+    void* constrained = K_MmAllocateContiguousMemoryEx(
+        0x1000u, 0x2000u, 0x3FFFu, 0x2000u, 0u);
+    if (!constrained) {
+        K_MmFreeContiguousMemory(allocation);
+        XboxKernelPhysicalMemoryShutdown();
+        VirtualFree(view, 0, MEM_RELEASE);
+        return Fail(75, "MmAllocateContiguousMemoryEx constraints");
+    }
+    const std::uint64_t constrainedPhysical = K_MmGetPhysicalAddress(constrained);
+    if (constrainedPhysical < 0x2000u || constrainedPhysical > 0x3FFFu ||
+        (constrainedPhysical & 0x1FFFu) != 0) {
+        K_MmFreeContiguousMemory(constrained);
+        K_MmFreeContiguousMemory(allocation);
+        XboxKernelPhysicalMemoryShutdown();
+        VirtualFree(view, 0, MEM_RELEASE);
+        return Fail(76, "contiguous allocation physical bounds/alignment");
+    }
+
+    K_MmFreeContiguousMemory(constrained);
+    K_MmFreeContiguousMemory(allocation);
+    XboxKernelPhysicalMemoryShutdown();
+    VirtualFree(view, 0, MEM_RELEASE);
+    return 0;
+}
 volatile LONG g_deviceDeleteCalls = 0;
 volatile LONG g_startIoCalls = 0;
 volatile LONG g_dismountCalls = 0;
@@ -283,6 +345,8 @@ void __stdcall DeleteDeviceCallback(GuestDeviceObject* device) {
 
 int main() {
     static_assert(sizeof(void*) == 4, "Xbox I/O smoke test requires x86");
+    const int physicalMemoryStatus = TestContiguousPhysicalMemory();
+    if (physicalMemoryStatus) return physicalMemoryStatus;
     char directory[MAX_PATH]{};
     if (!GetTempPathA(MAX_PATH, directory)) return 1;
     char path[MAX_PATH]{};
