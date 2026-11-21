@@ -114,7 +114,8 @@ extern "C" void* __stdcall XboxKernelGetPhysicalMemoryView(
 }
 
 extern "C" void* __stdcall XboxKernelAllocatePhysicalMemory(
-    std::uint32_t bytes, std::uint32_t alignment, std::uint32_t maximumAddress,
+    std::uint32_t bytes, std::uint32_t minimumAddress,
+    std::uint32_t maximumAddress, std::uint32_t alignment,
     std::uint32_t* physicalAddress) {
     if (!bytes || !physicalAddress) return nullptr;
     if (!alignment) alignment = 0x1000u;
@@ -124,16 +125,24 @@ extern "C" void* __stdcall XboxKernelAllocatePhysicalMemory(
         ReleaseSRWLockExclusive(&g_physicalLock);
         return nullptr;
     }
+    const std::uint64_t minAddress = minimumAddress;
     const std::uint64_t maxExclusive = maximumAddress
         ? static_cast<std::uint64_t>(maximumAddress) + 1u : 0x100000000ull;
+    if (minAddress >= maxExclusive || minAddress < g_base) {
+        ReleaseSRWLockExclusive(&g_physicalLock);
+        return nullptr;
+    }
     for (auto it = g_freeRanges.begin(); it != g_freeRanges.end(); ++it) {
         const std::uint64_t start = it->first;
         const std::uint64_t size = it->second;
-        const std::uint64_t aligned = (start + alignment - 1u) &
+        const std::uint64_t candidatePhysical = g_base + start > minAddress
+            ? g_base + start : minAddress;
+        const std::uint64_t alignedPhysical = (candidatePhysical + alignment - 1u) &
             ~(static_cast<std::uint64_t>(alignment) - 1u);
+        const std::uint64_t aligned = alignedPhysical - g_base;
         const std::uint64_t end = aligned + bytes;
         if (aligned < start || end < aligned || end > start + size ||
-            end > g_length || static_cast<std::uint64_t>(g_base) + end > maxExclusive)
+            end > g_length || alignedPhysical + bytes > maxExclusive)
             continue;
         const std::uint32_t oldStart = it->first;
         const std::uint32_t oldSize = it->second;
@@ -168,26 +177,23 @@ extern "C" BOOL __stdcall XboxKernelFreePhysicalMemory(void* allocation) {
     const std::uint32_t offset = static_cast<std::uint32_t>(address - view);
     std::uint32_t size = found->second;
     g_allocations.erase(found);
+    std::uint32_t mergedStart = offset;
     auto next = g_freeRanges.lower_bound(offset);
     if (next != g_freeRanges.begin()) {
         auto previous = std::prev(next);
         if (static_cast<std::uint64_t>(previous->first) + previous->second == offset) {
+            mergedStart = previous->first;
             size += previous->second;
-            const std::uint32_t mergedStart = previous->first;
             g_freeRanges.erase(previous);
-            offset; // keep the merge calculation explicit
-            next = g_freeRanges.lower_bound(mergedStart);
-            g_freeRanges.emplace(mergedStart, size);
-            ReleaseSRWLockExclusive(&g_physicalLock);
-            return TRUE;
         }
     }
+    next = g_freeRanges.lower_bound(offset);
     if (next != g_freeRanges.end() &&
-        static_cast<std::uint64_t>(offset) + size == next->first) {
+        static_cast<std::uint64_t>(offset) + found->second == next->first) {
         size += next->second;
         g_freeRanges.erase(next);
     }
-    g_freeRanges.emplace(offset, size);
+    g_freeRanges.emplace(mergedStart, size);
     ReleaseSRWLockExclusive(&g_physicalLock);
     return TRUE;
 }
