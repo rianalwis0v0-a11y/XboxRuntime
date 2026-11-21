@@ -74,3 +74,26 @@ Preferred implementation order:
 - No raw Ethernet frame bridge unless a future title demonstrably requires one.
 - No Xbox Live/Insignia server implementation.
 - No unverified XDK binary decompilation or arbitrary static-code patching.
+## Dispatch audit — concrete blocker
+
+A source audit of `tools/kernel_exports.json` against `guest32/kernel_compat.cpp` found that the guest's kernel dispatcher currently has **no routes** for the I/O-manager entry points that would be candidates for a lower-level device-service boundary:
+
+| Ordinal | Xbox kernel export | Current guest dispatcher |
+|---:|---|---|
+| 59–62 | `IoAllocateIrp`, `IoBuildAsynchronousFsdRequest`, `IoBuildDeviceIoControlRequest`, `IoBuildSynchronousFsdRequest` | Unsupported |
+| 65–69 | `IoCreateDevice`, `IoCreateFile`, `IoCreateSymbolicLink`, `IoDeleteDevice`, `IoDeleteSymbolicLink` | Unsupported |
+| 72–73 | `IoFreeIrp`, `IoInitializeIrp` | Unsupported |
+| 77 | `IoQueueThreadIrp` | Unsupported |
+| 81–87 | `IoStartNextPacket`, `IoStartNextPacketByKey`, `IoStartPacket`, `IoSynchronousDeviceIoControlRequest`, `IoSynchronousFsdRequest`, `IofCallDriver`, `IofCompleteRequest` | Unsupported |
+| 196 | `NtDeviceIoControlFile` | Unsupported |
+| 200 | `NtFsControlFile` | Unsupported |
+
+This is a verified source-level gap, **not proof that retail XNet uses every one of these exports**. The current `KernelDispatch` sends unmapped ordinals to `K_Unsupported`, which raises a guest exception. Therefore, even if a title's statically linked networking code reaches one of these lower-level APIs, the current guest cannot service that call.
+
+The current loader path in this branch also only calls `XboxKernelResolveImports` for the kernel thunk table; it does not parse and bind the non-kernel import directory or install XNet call-site hooks. The XNet/XSocket functions compiled into `xbe_guest32.exe` are therefore not automatically reachable from an arbitrary retail XBE.
+
+### Next safe engineering step
+
+Do not invent ordinal aliases for XNet. First capture a real title's kernel import list and identify which I/O-manager APIs its networking path actually invokes. Then implement only the required Xbox ABI structures and IRP/device semantics at those verified entry points, backed by a Windows socket/DNS adapter. In parallel, design an explicit guest-callable API registration path for imports that are genuinely present in an XBE. Statically linked call sites remain a separate problem and must not be rewritten without instruction-boundary and per-title evidence.
+
+Audit scope: `tools/kernel_exports.json` export names/ordinals compared with the `cmp eax, <ordinal>` routes in `KernelDispatch`; source inspection only. No Windows build or runtime test was run as part of this audit.
