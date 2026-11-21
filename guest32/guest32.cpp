@@ -139,7 +139,7 @@ uint32_t Load(const wchar_t* path,Reply& reply){
   char sectionName[9]{};
   std::memcpy(sectionName, name, available);
   if ((s.flags & 4u) && std::strcmp(sectionName, "XNET") == 0 &&
-      g_staticXnet.rangeCount < std::size(g_staticXnet.ranges)) {
+      g_staticXnet.rangeCount < 16u) {
    g_staticXnet.ranges[g_staticXnet.rangeCount++] = {s.va, s.vs};
   }
  }
