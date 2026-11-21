@@ -2572,6 +2572,39 @@ void XboxKernelFlushEeprom() {
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
+static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
+    const char* name = nullptr;
+    switch (ordinal) {
+    case 59: name = "IoAllocateIrp"; break;
+    case 60: name = "IoBuildAsynchronousFsdRequest"; break;
+    case 61: name = "IoBuildDeviceIoControlRequest"; break;
+    case 62: name = "IoBuildSynchronousFsdRequest"; break;
+    case 65: name = "IoCreateDevice"; break;
+    case 66: name = "IoCreateFile"; break;
+    case 67: name = "IoCreateSymbolicLink"; break;
+    case 68: name = "IoDeleteDevice"; break;
+    case 69: name = "IoDeleteSymbolicLink"; break;
+    case 72: name = "IoFreeIrp"; break;
+    case 73: name = "IoInitializeIrp"; break;
+    case 77: name = "IoQueueThreadIrp"; break;
+    case 81: name = "IoStartNextPacket"; break;
+    case 82: name = "IoStartNextPacketByKey"; break;
+    case 83: name = "IoStartPacket"; break;
+    case 84: name = "IoSynchronousDeviceIoControlRequest"; break;
+    case 85: name = "IoSynchronousFsdRequest"; break;
+    case 86: name = "IofCallDriver"; break;
+    case 87: name = "IofCompleteRequest"; break;
+    case 196: name = "NtDeviceIoControlFile"; break;
+    case 200: name = "NtFsControlFile"; break;
+    case 252: name = "PhyGetLinkState"; break;
+    case 253: name = "PhyInitialize"; break;
+    default: return;
+    }
+    char message[160]{};
+    sprintf_s(message, "[XboxKernel] XBE imports network/I-O candidate: ordinal %u (%s)\\n",
+        ordinal, name);
+    OutputDebugStringA(message);
+}
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
     if(!g_image||!InImage(g_entry))return false;
@@ -2587,7 +2620,7 @@ bool XboxKernelResolveImports(const XboxKernelState& image){
         if(!InImage(thunk+i*4,4))return false;
         uint32_t v=table[i];if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return true;}
         if((v&0x80000000u)==0)return false;
-        uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;
+        uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;LogNetworkRelatedKernelImport(ordinal);
         void* target=DataFor(ordinal);
         if(!target)target=StubFor(ordinal);
         if(!target)return false;
