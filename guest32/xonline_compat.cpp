@@ -64,7 +64,7 @@ extern "C" HRESULT WINAPI XOnlineLogon(const XONLINE_USER* users,
     XONLINETASK_HANDLE* outputTask) {
     if (!outputTask) return E_POINTER;
     *outputTask = nullptr;
-    if (!users || !serviceIds || serviceCount == 0)
+    if (!users || (!serviceIds && serviceCount != 0))
         return E_INVALIDARG;
 
     std::lock_guard<std::mutex> lock(g_mutex);
