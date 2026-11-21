@@ -12,6 +12,10 @@ extern "C" {
 // Shared host/guest NV2A memory mapping. The mapping is owned by guest32.cpp.
 BOOL __stdcall XboxKernelGpuMemoryInitialize(void* view, SIZE_T bytes);
 void __stdcall XboxKernelGpuMemoryShutdown(void);
+// Resolve a bounded Xbox unified-memory physical range into the shared GPU
+// backing store. access is a bitmask: 1 = GPU read, 2 = GPU write.
+void* __stdcall XboxKernelResolveGpuPhysicalAddress(
+    std::uint32_t physicalAddress, SIZE_T numberOfBytes, ULONG access);
 
 LONG __stdcall K_NtAllocateVirtualMemory(void** base, ULONG_PTR zeroBits,
                                          SIZE_T* regionSize, ULONG allocationType,
