@@ -36,7 +36,12 @@ void Log(const wchar_t* message) {
 }
 }
 
-BOOL XboxNetIsStarted() {\n    std::lock_guard<std::mutex> lock(g_xnetMutex);\n    return g_xnetUsers != 0;\n}\n\nextern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
+BOOL XboxNetIsStarted() {
+    std::lock_guard<std::mutex> lock(g_xnetMutex);
+    return g_xnetUsers != 0;
+}
+
+extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
     if (params && params->cfgSizeOfStruct != sizeof(XNetStartupParams))
         return WSAEFAULT;
@@ -303,7 +308,7 @@ bool IsUsableIPv4Address(IN_ADDR address) {
     // Reject unspecified, the entire loopback range, multicast, and limited
     // broadcast. Link-local addresses remain visible so callers can report
     // XNADDR_AUTO rather than pretending the console has no network at all.
-    if (host == INADDR_ANY || (host >> 24) == IN_LOOPBACKNET ||
+    if (host == INADDR_ANY || (host >> 24) == 127u ||
         (host >= 0xE0000000u && host <= 0xEFFFFFFFu) ||
         host == INADDR_BROADCAST) {
         return false;
