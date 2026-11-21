@@ -112,6 +112,35 @@ class DNSServiceTests(unittest.TestCase):
         self.assertEqual(service._records["shared.xboxnet.test"]["A"], "192.0.2.11")
         self.assertEqual(service._records["local.xboxnet.test"]["A"], "192.0.2.10")
 
+    def test_failed_zone_refresh_keeps_last_known_good_snapshot(self):
+        from unittest.mock import patch
+
+        service = DNSService({
+            "records": {"local.xboxnet.test": {"A": "192.0.2.10"}},
+            "zone_url": "https://zones.example.test/feed.json",
+            "ttl": 30,
+            "refresh_seconds": 300,
+        })
+        service._records["feed.xboxnet.test"] = {"A": "198.51.100.9"}
+
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self, limit):
+                return b'{"not":"a list"}'
+
+        with patch("dns_server.urllib.request.urlopen", return_value=Response()):
+            self.assertFalse(service.refresh_zones())
+
+        self.assertEqual(
+            service._records["feed.xboxnet.test"]["A"], "198.51.100.9"
+        )
+        self.assertEqual(
+            service._records["local.xboxnet.test"]["A"], "192.0.2.10"
+        )
+
     def test_ignores_response_packets(self):
         self.assertIsNone(self.service.handle(b"\x00" * 12))
 
