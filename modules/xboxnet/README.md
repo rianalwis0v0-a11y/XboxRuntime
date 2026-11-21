@@ -60,7 +60,10 @@ composes the authentication adapter with an authenticated context, enforces
 payload/response limits, and dispatches to explicitly registered service
 handlers. The default ticket verifier still rejects all tickets, so the composed
 flow is fail-closed until a researched verifier is supplied. It does not implement original-Xbox
-gateway framing, cryptography, or a network endpoint. Profiles, friends/presence,
+gateway framing, cryptography, or a network endpoint. `account_profiles.py` now provides a SQLite-backed internal account/profile store
+and authenticated JSON service adapter for create/get/update operations. XUIDs
+are allocated locally; gamertags are unique case-insensitively. This is still a
+service scaffold, not the original Xbox profile wire/API protocol. Friends/presence,
 title-specific matchmaking, and peer connectivity remain `not_implemented`.
 The HTTP status gateway does not accept console authentication or game traffic.
 Do not expose it publicly as an Xbox Live endpoint.
