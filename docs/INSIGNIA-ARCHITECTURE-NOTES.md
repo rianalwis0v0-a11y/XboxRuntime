@@ -55,9 +55,12 @@ code, or traffic from a console the developer owns. They must not be guessed.
 - Unmapped names return NOERROR/NODATA, matching the reference mapping-server
   behavior rather than acting as an open recursive resolver.
 - The example uses a reserved TEST-NET address. It is not a live service.
-- XboxNet does not yet implement the Kerberos-derived authentication server,
-  security gateway, account APIs, or matchmaking backend. No Xbox Live sign-in
-  should be claimed.
+- `modules/xboxnet/auth_domain.py` now defines an internal, protocol-neutral
+  verifier interface with size bounds and fail-closed behavior. Its default
+  verifier rejects all tickets; it is only an adapter seam, not an Xbox endpoint.
+- XboxNet still does not implement the Kerberos-derived ticket format, key
+  derivation, domain exchange, security gateway, account APIs, or matchmaking
+  backend. No Xbox Live sign-in should be claimed.
 
 ## References
 
