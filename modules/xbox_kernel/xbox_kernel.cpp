@@ -124,7 +124,7 @@ HWND CreateGpuRendererWindow() {
     windowClass.cbSize = sizeof(windowClass);
     windowClass.lpfnWndProc = GpuRendererWindowProc;
     windowClass.hInstance = g_module;
-    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     windowClass.lpszClassName = className;
     if (!RegisterClassExW(&windowClass) &&
         GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
