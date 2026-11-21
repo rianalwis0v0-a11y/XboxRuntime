@@ -49,6 +49,7 @@ static std::wstring g_titleDirectory;
 static std::array<XboxStaticXnetRange, 16> g_staticXnetRanges{};
 static uint32_t g_staticXnetRangeCount = 0;
 static uint32_t g_staticXnetLibraryBuild = 0;
+static std::atomic<uint32_t> g_staticXnetTraceCount{0};
 static std::array<std::atomic<bool>, kThunkMax> g_staticXnetLogged{};
 ULONG g_fileCacheSize = 1024 * 1024;
 std::array<uint8_t, 256> g_eeprom{};
@@ -2704,6 +2705,7 @@ void XboxKernelResetStaticXnetTrace() {
     g_staticXnetRanges.fill({0, 0});
     g_staticXnetRangeCount = 0;
     g_staticXnetLibraryBuild = 0;
+    g_staticXnetTraceCount.store(0);
     for (auto& logged : g_staticXnetLogged) logged.store(false);
 }
 void XboxKernelAddStaticXnetCodeRange(uint32_t address, uint32_t size, uint32_t libraryBuild) {
@@ -2723,10 +2725,14 @@ extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t
         return;
     bool expected = false;
     if (!g_staticXnetLogged[ordinal].compare_exchange_strong(expected, true)) return;
+    g_staticXnetTraceCount.fetch_add(1);
     char message[224]{};
     sprintf_s(message, "[XboxKernel] STATIC_XNET_KERNEL_CALL ordinal=%u (%s) caller=0x%08X XNET-library-build=%u\n",
         ordinal, name, returnAddress, g_staticXnetLibraryBuild);
     OutputDebugStringA(message);
+}
+uint32_t XboxKernelGetStaticXnetTraceCount() {
+    return g_staticXnetTraceCount.load();
 }
 static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
     const char* name = XboxStaticXnetKernelCandidateName(ordinal);
