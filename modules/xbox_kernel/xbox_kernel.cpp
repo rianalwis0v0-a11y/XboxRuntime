@@ -149,6 +149,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     HMODULE provider = nullptr;
     bool providerStarted = false;
     HWND rendererWindow = nullptr;
+    bool rendererReady = false;
     if (ModuleDirectory(moduleDirectory)) {
         providerPath = moduleDirectory + L"\\nv2a.dll";
         provider = LoadLibraryExW(providerPath.c_str(), nullptr,
@@ -180,6 +181,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
                 rendererWindow = nullptr;
             }
         } else {
+            rendererReady = true;
             Log(L"NV2A D3D8/D3D11 renderer initialized at 640x480.");
         }
     } else if (providerStarted) {
@@ -201,7 +203,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
     const auto writeRamin = reinterpret_cast<GpuMemoryWriteFn>(
         providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
-    const bool providerReady = providerStarted && readRegister && writeRegister &&
+    const bool providerReady = providerStarted && rendererReady && readRegister && writeRegister &&
         submitMethod && flush && readVram && writeVram && readRamin && writeRamin;
     if (providerStarted && !providerReady) {
         Log(L"NV2A provider is missing one or more required C ABI exports.");
