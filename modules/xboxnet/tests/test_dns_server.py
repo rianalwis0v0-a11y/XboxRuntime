@@ -72,6 +72,45 @@ class DNSServiceTests(unittest.TestCase):
         response = self.service.handle(query("dashboard.xboxnet.test", 255))
         self.assertEqual(struct.unpack_from("!H", response, 6)[0], 2)
 
+    def test_refresh_replaces_removed_feed_records_and_keeps_local_overrides(self):
+        from unittest.mock import patch
+
+        service = DNSService({
+            "records": {"local.xboxnet.test": {"A": "192.0.2.10"},
+                        "shared.xboxnet.test": {"A": "192.0.2.11"}},
+            "zone_url": "https://zones.example.test/feed.json",
+            "ttl": 30,
+            "refresh_seconds": 300,
+        })
+        feeds = [
+            b'[{"type":"a","name":"old.xboxnet.test","value":"198.51.100.1"},'
+            b'{"type":"a","name":"shared.xboxnet.test","value":"198.51.100.2"}]',
+            b'[{"type":"a","name":"new.xboxnet.test","value":"198.51.100.3"},'
+            b'{"type":"a","name":"shared.xboxnet.test","value":"198.51.100.4"}]',
+        ]
+
+        class Response:
+            def __init__(self, payload):
+                self.payload = payload
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self, limit):
+                return self.payload
+
+        with patch("dns_server.urllib.request.urlopen",
+                   side_effect=[Response(feeds[0]), Response(feeds[1])]):
+            self.assertTrue(service.refresh_zones())
+            self.assertIn("old.xboxnet.test", service._records)
+            self.assertEqual(service._records["shared.xboxnet.test"]["A"], "192.0.2.11")
+            self.assertTrue(service.refresh_zones())
+
+        self.assertNotIn("old.xboxnet.test", service._records)
+        self.assertIn("new.xboxnet.test", service._records)
+        self.assertEqual(service._records["shared.xboxnet.test"]["A"], "192.0.2.11")
+        self.assertEqual(service._records["local.xboxnet.test"]["A"], "192.0.2.10")
+
     def test_ignores_response_packets(self):
         self.assertIsNone(self.service.handle(b"\x00" * 12))
 
