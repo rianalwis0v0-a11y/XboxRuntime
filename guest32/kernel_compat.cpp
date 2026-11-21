@@ -35,6 +35,7 @@
 #include "static_xnet_trace.h"
 
 extern "C" void KernelDispatch();
+extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t returnAddress);
 namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
