@@ -17,6 +17,10 @@ __declspec(dllexport) int __cdecl ModuleStart(void);
 __declspec(dllexport) int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize);
 __declspec(dllexport) void __cdecl ModuleStop(void);
 
+// Attach the upstream D3D8-to-D3D11 renderer to a host-owned window.
+__declspec(dllexport) int __cdecl XboxNV2A_InitializeRenderer(
+    HWND window, uint32_t width, uint32_t height);
+
 // NV2A register offsets are relative to the 0xFD000000 MMIO aperture.
 // Access sizes accepted by the upstream model are 1, 2, or 4 bytes.
 __declspec(dllexport) uint64_t __cdecl XboxNV2A_ReadRegister(
