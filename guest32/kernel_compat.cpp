@@ -26,6 +26,7 @@
 #include "kernel_system.h"
 #include "kernel_nvsettings.h"
 #include "kernel_memory.h"
+#include "kernel_physical_memory.h"
 #include "kernel_thread_exports.h"
 #include "kernel_io_completion.h"
 #include "kernel_io_exports.h"
@@ -605,8 +606,18 @@ extern "C" uint64_t __stdcall K_KeQueryPerformanceFrequency(){
 extern "C" void __stdcall K_KeQuerySystemTimeNative(LARGE_INTEGER*out){
     if (out) out->QuadPart = XboxKernelCurrentSystemTime100ns();
 }
-extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n){return VirtualAlloc(nullptr,n,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);}
-extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(uint32_t n,uint32_t,uint32_t,uint32_t,uint32_t){return K_MmAllocateContiguousMemory(n);}
+extern "C" void* __stdcall K_MmAllocateContiguousMemory(uint32_t n) {
+    std::uint32_t physical = 0;
+    return XboxKernelAllocatePhysicalMemory(n, 0u, 0x03FFFFFFu,
+        0x1000u, &physical);
+}
+extern "C" void* __stdcall K_MmAllocateContiguousMemoryEx(
+    uint32_t n, uint32_t lowest, uint32_t highest,
+    uint32_t alignment, uint32_t) {
+    std::uint32_t physical = 0;
+    return XboxKernelAllocatePhysicalMemory(n, lowest, highest,
+        alignment ? alignment : 0x1000u, &physical);
+}
 
 extern "C" void* __stdcall K_MmAllocateSystemMemory(ULONG bytes, ULONG protect) {
     if (!bytes) return nullptr;
@@ -616,8 +627,14 @@ extern "C" void* __stdcall K_MmAllocateSystemMemory(ULONG bytes, ULONG protect) 
 extern "C" BOOL __stdcall K_MmFreeSystemMemory(void* base, ULONG) {
     return base ? VirtualFree(base, 0, MEM_RELEASE) : FALSE;
 }
-extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,MEM_RELEASE);}
-extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
+extern "C" void __stdcall K_MmFreeContiguousMemory(void* p) {
+    if (p) (void)XboxKernelFreePhysicalMemory(p);
+}
+extern "C" uint64_t __stdcall K_MmGetPhysicalAddress(void* p) {
+    std::uint32_t physical = 0;
+    return XboxKernelTranslateGuestVirtualToPhysical(
+        p, 1u, XboxGuestMemoryRead, &physical) ? physical : 0u;
+}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
 struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
