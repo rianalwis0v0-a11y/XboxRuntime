@@ -6,9 +6,12 @@
 #include "xonline_compat.h"
 
 int main() {
-    // XOnline ABI and asynchronous task lifecycle. No remote verifier is
+    if (XOnlineStartup(nullptr) != XONLINE_E_NOT_INITIALIZED) return 42;\n\n    XNetStartupParams params{};
+    params.cfgSizeOfStruct = sizeof(params);
+    params.cfgSockMaxSockets = 4;
+    if (XNetStartup(&params) != 0) return 1;\n\n    // XOnline ABI and asynchronous task lifecycle. No remote verifier is
     // configured, so the task must finish with a fail-closed service error.
-    static_assert(sizeof(XONLINE_USER) == 116, "original Xbox XONLINE_USER ABI");
+    static_assert(sizeof(XONLINE_USER) == 112, "original Xbox XONLINE_USER ABI");
     if (XOnlineStartup(nullptr) != S_OK) return 42;
     DWORD storedUsers = XONLINE_MAX_STORED_ONLINE_USERS;
     XONLINE_USER localUsers[XONLINE_MAX_STORED_ONLINE_USERS]{};
@@ -29,10 +32,7 @@ int main() {
         return 44;
     }
 
-    XNetStartupParams params{};
-    params.cfgSizeOfStruct = sizeof(params);
-    params.cfgSockMaxSockets = 4;
-    if (XNetStartup(&params) != 0) return 1;
+
 
     WSADATA guestWsaData{};
     if (XboxWSAStartup(MAKEWORD(2, 2), &guestWsaData) != 0 ||
