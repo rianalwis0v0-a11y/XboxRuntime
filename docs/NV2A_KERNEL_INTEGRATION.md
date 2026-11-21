@@ -324,10 +324,23 @@ produced by a real draw; the latter remains an end-to-end test gap.
 
 **Physical DMA boundary:** `XboxKernelResolveGpuPhysicalAddress` currently
 validates and translates addresses only within the shared 64 MiB GPU VRAM
-window. It is not a general guest system-RAM mapper. The NV2A provider's DMA
-resolver still rejects non-local targets, so system-memory DMA is not
-implemented by this change. Do not treat the bounded VRAM mapping as full
-unified-memory DMA support.
+window. It is not a general guest system-RAM mapper.
+
+The NV2A provider now exposes `XboxNV2A_BindGuestPhysicalMemory(base, view,
+length)` and routes validated PCI/AGP DMA spans through that explicitly
+bound window. The span resolver is used by DMA pushbuffer reads, vertex-array
+reads, and linear/mip/paletted texture decoding; it checks both the DMA
+object's limit and the bound window before producing a host pointer. Unbinding
+or changing the mapping invalidates cached DMA contexts. Local VRAM DMA keeps
+using the existing VRAM path.
+
+**Important:** the current kernel backend does not yet own a true guest
+physical-RAM section. Its `hostView` is the XBE's guest virtual image mapping,
+not a physical-memory aperture, so the kernel deliberately does not bind it
+as PCI/AGP memory. PCI/AGP DMA therefore remains unavailable at runtime until
+a real guest physical RAM mapping and guest virtual-to-physical ownership
+contract are implemented. The provider-side bounded DMA support is ready for
+that mapping, but this is not end-to-end system-memory DMA.
 
 Required follow-up tests:
 
