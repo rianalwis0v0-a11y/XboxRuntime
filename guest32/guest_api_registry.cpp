@@ -28,6 +28,14 @@ const Entry kApis[]={
 bool Range(std::uint32_t b,std::uint32_t s,std::uint32_t a,std::uint32_t n) noexcept {
  return a>=b && std::uint64_t(a)+n<=std::uint64_t(b)+s;
 }
+bool WriteGuestThunk(std::uint32_t address,std::uint32_t target) noexcept {
+ auto* destination=reinterpret_cast<void*>(static_cast<std::uintptr_t>(address));
+ DWORD previous=0;
+ if(!VirtualProtect(destination,sizeof(target),PAGE_EXECUTE_READWRITE,&previous))return false;
+ std::memcpy(destination,&target,sizeof(target));
+ DWORD ignored=0;
+ return VirtualProtect(destination,sizeof(target),previous,&ignored)!=FALSE;
+}
 bool IsXNet(std::uint32_t b,std::uint32_t s,std::uint32_t a) noexcept {
  if(!Range(b,s,a,2)) return false;
  const auto* p=reinterpret_cast<const wchar_t*>(static_cast<std::uintptr_t>(a));
@@ -76,7 +84,8 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(std::uint32_t base,std:
    const std::uint64_t remaining=std::uint64_t(base)+size-(std::uint64_t(nameVa)+2);
    if(remaining>0xFFFFFFFFull||!std::memchr(name,0,static_cast<std::size_t>(remaining)))return false;
    const std::uint32_t target=XboxGuestApiLookup(name);if(!target)return false;
-   std::memcpy(reinterpret_cast<void*>(static_cast<std::uintptr_t>(taddr)),&target,4);
+   // Import tables commonly live in read-only sections; restore page protection after patching.
+   if(!WriteGuestThunk(taddr,target))return false;
   }
   if(!thunkEnded)return false;
  }
