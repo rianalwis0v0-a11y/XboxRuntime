@@ -109,6 +109,37 @@ bool GpuRangeFits(uint32_t offset, uint32_t length) {
     return uint64_t(offset) + uint64_t(length) <= 0x100000000ull;
 }
 
+LRESULT CALLBACK GpuRendererWindowProc(HWND window, UINT message,
+                                                WPARAM wparam, LPARAM lparam) {
+    if (message == WM_CLOSE) {
+        ShowWindow(window, SW_HIDE);
+        return 0;
+    }
+    return DefWindowProcW(window, message, wparam, lparam);
+}
+
+HWND CreateGpuRendererWindow() {
+    const wchar_t* className = L"XboxRuntimeNv2aRendererWindow";
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = GpuRendererWindowProc;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.lpszClassName = className;
+    if (!RegisterClassExW(&windowClass) &&
+        GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        return nullptr;
+
+    HWND window = CreateWindowExW(0, className, L"XboxRuntime - NV2A",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+        nullptr, nullptr, windowClass.hInstance, nullptr);
+    if (window) {
+        ShowWindow(window, SW_SHOW);
+        UpdateWindow(window);
+    }
+    return window;
+}
+
 DWORD WINAPI GpuServiceWorker(void* parameter) {
     BackendContext* context = static_cast<BackendContext*>(parameter);
     if (!context) return 1;
@@ -117,6 +148,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     std::wstring providerPath;
     HMODULE provider = nullptr;
     bool providerStarted = false;
+    HWND rendererWindow = nullptr;
     if (ModuleDirectory(moduleDirectory)) {
         providerPath = moduleDirectory + L"\\nv2a.dll";
         provider = LoadLibraryExW(providerPath.c_str(), nullptr,
@@ -127,6 +159,9 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         provider ? GetProcAddress(provider, "ModuleStartWithMemory") : nullptr);
     const auto providerStop = reinterpret_cast<void (__cdecl*)()>(
         provider ? GetProcAddress(provider, "ModuleStop") : nullptr);
+    using ProviderInitializeRendererFn = int (__cdecl*)(HWND, uint32_t, uint32_t);
+    const auto initializeRenderer = reinterpret_cast<ProviderInitializeRendererFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_InitializeRenderer") : nullptr);
     if (provider && providerStart && context->hostGpuMemoryView &&
         providerStart(context->hostGpuMemoryView, XBOX_GPU_SHARED_MEMORY_SIZE) == 0) {
         providerStarted = true;
@@ -134,6 +169,21 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         Log(L"NV2A provider could not attach to the shared GPU memory section.");
     } else {
         Log(L"nv2a.dll not found beside xbox_kernel.dll.");
+    }
+    if (providerStarted && initializeRenderer) {
+        rendererWindow = CreateGpuRendererWindow();
+        if (!rendererWindow ||
+            initializeRenderer(rendererWindow, 640u, 480u) != 0) {
+            Log(L"NV2A D3D8/D3D11 renderer initialization failed; GPU register and memory services remain available.");
+            if (rendererWindow) {
+                DestroyWindow(rendererWindow);
+                rendererWindow = nullptr;
+            }
+        } else {
+            Log(L"NV2A D3D8/D3D11 renderer initialized at 640x480.");
+        }
+    } else if (providerStarted) {
+        Log(L"NV2A provider does not export renderer initialization.");
     }
     const auto readRegister = reinterpret_cast<GpuReadRegisterFn>(
         providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRegister") : nullptr);
@@ -275,6 +325,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     }
 cleanup:
     if (providerStarted && providerStop) providerStop();
+    if (rendererWindow) DestroyWindow(rendererWindow);
     if (provider) FreeLibrary(provider);
     return 0;
 }
