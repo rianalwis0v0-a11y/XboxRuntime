@@ -24,7 +24,7 @@ These are C-linkage functions compiled into `xbe_guest32`; they are **not curren
 |---|---|---|
 | `XNetStartup` | `int WINAPI (const XNetStartupParams*)` | 0 on startup success; otherwise Winsock error. Reference-counted Winsock 2.2 startup. |
 | `XNetCleanup` | `int WINAPI ()` | 0; decrements startup reference count and cleans up transport at zero. |
-| `XNetDnsLookup` | `int WINAPI (const char*, WSAEVENT, XNDNS**)` | Queues a worker-thread lookup, returns an owned `XNDNS` result, then signals the supplied event when `iStatus`/`cina` are ready. Caller must wait for completion before reading or releasing the result. |
+| `XNetDnsLookup` | `int WINAPI (const char*, WSAEVENT, XNDNS**)` | Queues a worker-thread lookup through Windows `getaddrinfo` (therefore using host-configured DNS), returns an owned `XNDNS` result, then signals the supplied event when `iStatus`/`cina` are ready. Caller must wait for completion before reading or releasing the result. |
 | `XNetDnsRelease` | `int WINAPI (XNDNS*)` | 0; frees result allocated by this implementation. |
 | `XNetRandom` | `int WINAPI (BYTE*, UINT)` | Uses Windows system-preferred BCrypt RNG; 0 on success, WSA error on failure. |
 | `XNetInAddrToString` | `int WINAPI (IN_ADDR, char*, int)` | Uses `InetNtopA` to write a thread-safe IPv4 string into the caller buffer; returns a Winsock error on invalid/short output buffer. |
@@ -208,3 +208,8 @@ The guest WSA aliases now maintain their own startup reference count on top of
 the shared Winsock transport. An unmatched `WSACleanup` returns
 `SOCKET_ERROR` with `WSANOTINITIALISED`, and versions newer than 2.2 are
 rejected with `WSAVERNOTSUPPORTED`. The smoke test covers both cases.
+
+
+## Host DNS policy
+
+The generic guest transport delegates name resolution to Windows `getaddrinfo`. It does not hardcode an Insignia resolver address or silently route arbitrary hostnames to a service-specific DNS server. The guest therefore inherits the Windows machine's configured DNS servers, suffixes and resolver policy. Any Insignia-specific DNS policy belongs in the separate service configuration layer, not in the generic Winsock transport adapter.
