@@ -14,5 +14,6 @@ void XboxKernelFlushEeprom();
 void XboxKernelSetTitlePath(const wchar_t* path);
 void XboxKernelResetStaticXnetTrace();
 void XboxKernelAddStaticXnetCodeRange(uint32_t address, uint32_t size, uint32_t libraryBuild);
+uint32_t XboxKernelGetStaticXnetTraceCount();
 bool XboxKernelResolveImports(const XboxKernelState& image);
 DWORD WINAPI XboxKernelStartXbe(void* context);
