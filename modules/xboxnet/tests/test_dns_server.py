@@ -75,13 +75,6 @@ class DNSServiceTests(unittest.TestCase):
     def test_refresh_replaces_removed_feed_records_and_keeps_local_overrides(self):
         from unittest.mock import patch
 
-        service = DNSService({
-            "records": {"local.xboxnet.test": {"A": "192.0.2.10"},
-                        "shared.xboxnet.test": {"A": "192.0.2.11"}},
-            "zone_url": "https://zones.example.test/feed.json",
-            "ttl": 30,
-            "refresh_seconds": 300,
-        })
         feeds = [
             b'[{"type":"a","name":"old.xboxnet.test","value":"198.51.100.1"},'
             b'{"type":"a","name":"shared.xboxnet.test","value":"198.51.100.2"}]',
@@ -101,6 +94,14 @@ class DNSServiceTests(unittest.TestCase):
 
         with patch("dns_server.urllib.request.urlopen",
                    side_effect=[Response(feeds[0]), Response(feeds[1])]):
+            service = DNSService({
+                "records": {"local.xboxnet.test": {"A": "192.0.2.10"},
+                            "shared.xboxnet.test": {"A": "192.0.2.11"}},
+                "zone_url": "https://zones.example.test/feed.json",
+                "ttl": 30,
+                "refresh_seconds": 300,
+            })
+            self.assertIn("old.xboxnet.test", service._records)
             self.assertTrue(service.refresh_zones())
             self.assertIn("old.xboxnet.test", service._records)
             self.assertEqual(service._records["shared.xboxnet.test"]["A"], "192.0.2.11")
