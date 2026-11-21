@@ -1,7 +1,7 @@
 import unittest
 
-from auth_domain import AuthDecision
-from security_gateway import AuthContext, SecurityGatewayDispatcher
+from auth_domain import AuthDecision, AuthDomainService
+from security_gateway import AuthContext, SecurityGatewayDispatcher, XboxNetSecurityGateway
 
 
 class EchoHandler:
@@ -67,6 +67,27 @@ class SecurityGatewayTests(unittest.TestCase):
         )
         result = dispatcher.dispatch(self.context, "echo", b"hello")
         self.assertEqual(result.code, "response_too_large")
+
+    def test_ticket_flow_fails_closed_with_default_verifier(self):
+        gateway = XboxNetSecurityGateway(
+            AuthDomainService(),
+            SecurityGatewayDispatcher({"echo": EchoHandler()}),
+        )
+        result = gateway.dispatch_ticket(b"ticket", "echo", b"hello")
+        self.assertEqual(result.code, "authentication_failed")
+
+    def test_ticket_flow_authenticates_before_dispatch(self):
+        class AcceptVerifier:
+            def verify(self, ticket):
+                return "player-2" if ticket == b"valid" else None
+
+        gateway = XboxNetSecurityGateway(
+            AuthDomainService(AcceptVerifier()),
+            SecurityGatewayDispatcher({"echo": EchoHandler()}),
+        )
+        result = gateway.dispatch_ticket(b"valid", "echo", b"hello")
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.response, b"player-2:hello")
 
     def test_limits_must_be_positive(self):
         with self.assertRaises(ValueError):
