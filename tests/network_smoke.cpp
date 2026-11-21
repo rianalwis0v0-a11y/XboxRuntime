@@ -24,19 +24,40 @@ int main() {
     XONLINE_USER loginUser{};
     loginUser.xuid.qwUserID = 1;
     const DWORD requestedServices[] = { 6, 7 };
-    XONLINETASK_HANDLE logonTask = nullptr;
-    if (XOnlineLogon(&loginUser, requestedServices, 2, nullptr, &logonTask) != S_OK ||
-        !logonTask || XOnlineLogonTaskGetResults(logonTask) != XONLINETASK_S_RUNNING ||
-        XOnlineTaskContinue(logonTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
-        XOnlineLogonTaskGetResults(logonTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
-        XOnlineTaskClose(logonTask) != S_OK ||
-        XOnlineTaskClose(logonTask) != E_INVALIDARG ||
-        XOnlineCleanup() != S_OK) {
+    HANDLE logonEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!logonEvent) {
         XOnlineCleanup();
         return 44;
     }
 
+    XONLINETASK_HANDLE logonTask = nullptr;
+    if (XOnlineLogon(&loginUser, requestedServices, 2, logonEvent, &logonTask) != S_OK ||
+        !logonTask || XOnlineLogonTaskGetResults(logonTask) != XONLINETASK_S_RUNNING) {
+        if (logonTask) XOnlineTaskClose(logonTask);
+        CloseHandle(logonEvent);
+        XOnlineCleanup();
+        return 44;
+    }
+    if (XOnlineTaskContinue(logonTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
+        WaitForSingleObject(logonEvent, 0) != WAIT_OBJECT_0 ||
+        XOnlineLogonTaskGetResults(logonTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
+        XOnlineTaskClose(logonTask) != S_OK ||
+        XOnlineTaskClose(logonTask) != E_INVALIDARG) {
+        CloseHandle(logonEvent);
+        XOnlineCleanup();
+        return 44;
+    }
+    CloseHandle(logonEvent);
 
+    // Closing a still-pending task cancels it and invalidates the handle.
+    XONLINETASK_HANDLE cancelledTask = nullptr;
+    if (XOnlineLogon(&loginUser, requestedServices, 2, nullptr, &cancelledTask) != S_OK ||
+        !cancelledTask || XOnlineTaskClose(cancelledTask) != S_OK ||
+        XOnlineTaskContinue(cancelledTask) != E_INVALIDARG) {
+        XOnlineCleanup();
+        return 47;
+    }
+    if (XOnlineCleanup() != S_OK) return 48;
 
     WSADATA guestWsaData{};
     if (XboxWSAStartup(MAKEWORD(2, 2), &guestWsaData) != 0 ||
