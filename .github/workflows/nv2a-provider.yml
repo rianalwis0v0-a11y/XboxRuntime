@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build-win32:
+  build-x64:
     runs-on: windows-latest
     steps:
       - name: Check out repository and pinned dependencies
@@ -23,8 +23,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Configure 32-bit NV2A provider
-        run: cmake -S modules/nv2a -B build/nv2a -A Win32 -DBUILD_TESTING=ON
+      - name: Configure x64 NV2A provider
+        run: cmake -S modules/nv2a -B build/nv2a -A x64 -DBUILD_TESTING=ON
 
       - name: Build provider and smoke test
         run: cmake --build build/nv2a --config Release --parallel
