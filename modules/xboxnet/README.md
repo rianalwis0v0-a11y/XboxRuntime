@@ -84,10 +84,13 @@ See [XNet and XOnline reference notes](docs/XNET-XDK-REFERENCE.md) and the [orig
 
 ## Architecture research
 
-See [docs/INSIGNIA-ARCHITECTURE-NOTES.md](../../docs/INSIGNIA-ARCHITECTURE-NOTES.md)
-for the public Insignia DNS design and the high-level original Xbox Live service
-architecture. DNS is only discovery; authentication, the security gateway, HTTP
-service APIs, and title-specific matchmaking are separate backend work.
+See [Insignia architecture notes](../../docs/INSIGNIA-ARCHITECTURE-NOTES.md)
+for the public Insignia DNS design and high-level Xbox Live architecture.
+See [Halo 2 networking research](../../docs/HALO2-NETWORKING-RESEARCH.md)
+for the important distinction between original-Xbox Halo 2's player-hosted
+gameplay model and Halo 2 Vista's separate GFWL dedicated-server mode. DNS is
+only discovery; authentication, the security gateway, HTTP service APIs, and
+title-specific matchmaking are separate backend work.
 
 ## Guest build and smoke test
 
