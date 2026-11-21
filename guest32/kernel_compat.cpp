@@ -605,11 +605,17 @@ std::wstring MapXboxPath(std::wstring p) {
     else if (_wcsnicmp(p.c_str(), hd.c_str(), hd.size()) == 0)
         p = g_titleDirectory + p.substr(hd.size());
     else if (_wcsicmp(p.c_str(), configVolume.c_str()) == 0) {
-        std::wstring root = g_eepromPath;
-        const size_t separator = root.find_last_of(L"\\/");
-        if (separator != std::wstring::npos) root.resize(separator);
-        else root = g_titleDirectory;
-        if (root.empty()) root = g_titleDirectory;
+        // Keep the emulated config volume beside the title. The EEPROM may be
+        // stored elsewhere (for example in a shared user-data directory), so
+        // deriving the config-volume root from the EEPROM path can point at an
+        // unrelated or unavailable directory.
+        std::wstring root = g_titleDirectory;
+        if (root.empty()) {
+            root = g_eepromPath;
+            const size_t separator = root.find_last_of(L"\\/");
+            if (separator != std::wstring::npos) root.resize(separator);
+            else root.clear();
+        }
         if (root.empty()) return {};
 
         const std::wstring configPath = root + L"\\config.bin";
