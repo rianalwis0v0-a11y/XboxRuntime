@@ -123,6 +123,22 @@ BOOL XboxKernelGpuFlush(void) {
 BOOL XboxKernelGpuReadVram(uint32_t offset, void* destination, uint32_t length) {
     return CallBuffer(XboxGpuRpcReadVram, offset, destination, length, false) ? TRUE : FALSE;
 }
+BOOL XboxKernelGpuReadVramRange(uint32_t offset, void* destination, uint32_t length) {
+    const uint64_t end = static_cast<uint64_t>(offset) + length;
+    if ((!destination && length) || end > XBOX_GPU_SHARED_VRAM_SIZE)
+        return FALSE;
+    auto* output = static_cast<uint8_t*>(destination);
+    uint32_t completed = 0;
+    while (completed < length) {
+        const uint32_t remaining = length - completed;
+        const uint32_t chunk = remaining > XBOX_GPU_RPC_MAX_TRANSFER
+            ? XBOX_GPU_RPC_MAX_TRANSFER : remaining;
+        if (!XboxKernelGpuReadVram(offset + completed, output + completed, chunk))
+            return FALSE;
+        completed += chunk;
+    }
+    return TRUE;
+}
 BOOL XboxKernelGpuWriteVram(uint32_t offset, const void* source, uint32_t length) {
     return CallBuffer(XboxGpuRpcWriteVram, offset, const_cast<void*>(source), length, true) ? TRUE : FALSE;
 }
