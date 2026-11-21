@@ -163,9 +163,21 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
     using ProviderInitializeRendererFn = int (__cdecl*)(HWND, uint32_t, uint32_t);
     const auto initializeRenderer = reinterpret_cast<ProviderInitializeRendererFn>(
         provider ? GetProcAddress(provider, "XboxNV2A_InitializeRenderer") : nullptr);
-    if (provider && providerStart && context->hostGpuMemoryView &&
+    using ProviderBindGuestMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
+    const auto bindGuestMemory = reinterpret_cast<ProviderBindGuestMemoryFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_BindGuestPhysicalMemory") : nullptr);
+    if (provider && providerStart && bindGuestMemory &&
+        context->hostGpuMemoryView && context->hostView && context->size &&
         providerStart(context->hostGpuMemoryView, XBOX_GPU_SHARED_MEMORY_SIZE) == 0) {
-        providerStarted = true;
+        if (bindGuestMemory(context->base, context->hostView, context->size) == 0) {
+            providerStarted = true;
+            Log(L"NV2A PCI/AGP DMA bound to the shared XBE physical image window.");
+        } else {
+            Log(L"NV2A provider rejected the guest physical image window.");
+            const auto stop = reinterpret_cast<void (__cdecl*)()>(
+                GetProcAddress(provider, "ModuleStop"));
+            if (stop) stop();
+        }
     } else if (provider) {
         Log(L"NV2A provider could not attach to the shared GPU memory section.");
     } else {
