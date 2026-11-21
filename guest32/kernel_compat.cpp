@@ -2717,6 +2717,7 @@ void XboxKernelAddStaticXnetCodeRange(uint32_t address, uint32_t size, uint32_t 
     sprintf_s(message, "[XboxKernel] Static XNET code section: VA=0x%08X size=0x%08X XNET-library-build=%u\n",
         address, size, g_staticXnetLibraryBuild);
     OutputDebugStringA(message);
+    std::fputs(message, stderr);
 }
 extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t returnAddress) {
     if (ordinal >= kThunkMax) return;
@@ -2730,6 +2731,7 @@ extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t
     sprintf_s(message, "[XboxKernel] STATIC_XNET_KERNEL_CALL ordinal=%u (%s) caller=0x%08X XNET-library-build=%u\n",
         ordinal, name, returnAddress, g_staticXnetLibraryBuild);
     OutputDebugStringA(message);
+    std::fputs(message, stderr);
 }
 uint32_t XboxKernelGetStaticXnetTraceCount() {
     return g_staticXnetTraceCount.load();
