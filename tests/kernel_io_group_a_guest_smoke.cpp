@@ -508,7 +508,7 @@ int main() {
     HANDLE createdDirectory = nullptr;
     if (K_NtCreateDirectoryObject(&createdDirectory, &directoryAttributes) != 0 || !createdDirectory)
         return Fail(56, "NtCreateDirectoryObject fixture");
-    char childPath[] = "\\\\BaseNamedObjects\\\\XboxRuntimeDispatchSmoke\\\\Child";
+    char childPath[] = "\\BaseNamedObjects\\XboxRuntimeDispatchSmoke\\Child";
     GuestAnsiString childName{};
     childName.Length = static_cast<USHORT>(std::strlen(childPath));
     childName.MaximumLength = childName.Length;
