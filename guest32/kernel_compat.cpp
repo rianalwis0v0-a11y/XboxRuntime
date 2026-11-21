@@ -1881,39 +1881,43 @@ extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(
 }
 extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
-        mov eax, [esp]
-        cmp eax, 59
-        jb trace_check_high
-        cmp eax, 87
-        jbe trace_static_xnet
-        trace_check_high:
-        cmp eax, 187
-        je trace_static_xnet
-        cmp eax, 190
-        je trace_static_xnet
-        cmp eax, 196
-        je trace_static_xnet
-        cmp eax, 198
-        je trace_static_xnet
-        cmp eax, 200
-        je trace_static_xnet
-        cmp eax, 202
-        je trace_static_xnet
-        cmp eax, 207
-        je trace_static_xnet
-        cmp eax, 211
-        je trace_static_xnet
-        cmp eax, 218
-        je trace_static_xnet
-        cmp eax, 219
-        je trace_static_xnet
-        cmp eax, 236
-        je trace_static_xnet
-        cmp eax, 252
-        je trace_static_xnet
-        cmp eax, 253
+        pushfd
+        push edx
+        mov edx, [esp+8]
+        cmp edx, 59
+        jb trace_static_xnet_done
+        cmp edx, 87
+        jbe trace_static_xnet_entry
+        cmp edx, 187
+        je trace_static_xnet_entry
+        cmp edx, 190
+        je trace_static_xnet_entry
+        cmp edx, 196
+        je trace_static_xnet_entry
+        cmp edx, 198
+        je trace_static_xnet_entry
+        cmp edx, 200
+        je trace_static_xnet_entry
+        cmp edx, 202
+        je trace_static_xnet_entry
+        cmp edx, 207
+        je trace_static_xnet_entry
+        cmp edx, 211
+        je trace_static_xnet_entry
+        cmp edx, 218
+        je trace_static_xnet_entry
+        cmp edx, 219
+        je trace_static_xnet_entry
+        cmp edx, 236
+        je trace_static_xnet_entry
+        cmp edx, 252
+        je trace_static_xnet_entry
+        cmp edx, 253
         jne trace_static_xnet_done
+        trace_static_xnet_entry: jmp trace_static_xnet
         trace_static_xnet:
+        pop edx
+        popfd
         pushfd
         pushad
         mov eax, [esp+40]
@@ -1924,7 +1928,11 @@ extern "C" __declspec(naked) void KernelDispatch(){
         add esp, 8
         popad
         popfd
+        jmp trace_static_xnet_exit
         trace_static_xnet_done:
+        pop edx
+        popfd
+        trace_static_xnet_exit:
         mov eax, [esp]
         add esp, 4
         cmp eax, 1
