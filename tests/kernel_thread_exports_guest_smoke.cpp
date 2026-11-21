@@ -74,6 +74,20 @@ int main() {
         std::fprintf(stderr, "Xbox host bridge PCI ID mismatch: 0x%08X\n", hostBridgeId);
         return 8;
     }
+    std::uint32_t fsbRatio = 0;
+    K_HalReadWritePCISpace(0, 0x60u, 0x6Cu, &fsbRatio, sizeof(fsbRatio), FALSE);
+    if (fsbRatio != 0x00000801u) {
+        std::fprintf(stderr, "NXDK host-bridge FSB ratio mismatch: 0x%08X\\n", fsbRatio);
+        return 15;
+    }
+    std::uint8_t fsbDivider = 0, fsbMultiplier = 0;
+    K_HalReadWritePCISpace(0, 0x60u, 0x6Cu, &fsbDivider, 1, FALSE);
+    K_HalReadWritePCISpace(0, 0x60u, 0x6Du, &fsbMultiplier, 1, FALSE);
+    if (fsbDivider != 1u || fsbMultiplier != 8u) {
+        std::fprintf(stderr, "NXDK PCI clock byte lanes mismatch: %u/%u\\n",
+                     fsbDivider, fsbMultiplier);
+        return 16;
+    }
     std::uint32_t agpBridgeId = 0;
     K_HalReadWritePCISpace(0, 0x1Eu, 0x00, &agpBridgeId, sizeof(agpBridgeId), FALSE);
     if (agpBridgeId != 0x01B710DEu) {
