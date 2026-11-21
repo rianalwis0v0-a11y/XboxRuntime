@@ -298,21 +298,63 @@ extern "C" int WINAPI XNetUnregisterInAddr(const IN_ADDR) {
 }
 
 namespace {
+bool IsUsableIPv4Address(IN_ADDR address) {
+    const uint32_t host = ntohl(address.s_addr);
+    // Reject unspecified, the entire loopback range, multicast, and limited
+    // broadcast. Link-local addresses remain visible so callers can report
+    // XNADDR_AUTO rather than pretending the console has no network at all.
+    if (host == INADDR_ANY || (host >> 24) == IN_LOOPBACKNET ||
+        (host >= 0xE0000000u && host <= 0xEFFFFFFFu) ||
+        host == INADDR_BROADCAST) {
+        return false;
+    }
+    return true;
+}
+
 PIP_ADAPTER_ADDRESSES FindUsableIPv4Adapter(std::vector<BYTE>& storage) {
-    ULONG bytes = 0;
-    GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, nullptr, &bytes);
-    if (!bytes) return nullptr;
-    storage.resize(bytes);
-    auto* first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, first, &bytes) != NO_ERROR) return nullptr;
-    for (auto* adapter = first; adapter; adapter = adapter->Next) {
-        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
-        for (auto* unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
-            if (unicast->Address.lpSockaddr && unicast->Address.lpSockaddr->sa_family == AF_INET) {
-                const auto* ip = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
-                if (ip->sin_addr.s_addr != htonl(INADDR_ANY) && ip->sin_addr.s_addr != htonl(INADDR_LOOPBACK)) return adapter;
+    constexpr ULONG kFlags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST;
+    // The adapter list can change between the sizing and data calls. Retry a
+    // bounded number of times and fail closed on every unexpected IP Helper
+    // result instead of interpreting a partial buffer as a valid adapter list.
+    for (unsigned attempt = 0; attempt != 3; ++attempt) {
+        ULONG bytes = 0;
+        const ULONG sizingResult =
+            GetAdaptersAddresses(AF_INET, kFlags, nullptr, nullptr, &bytes);
+        if (sizingResult != ERROR_BUFFER_OVERFLOW || bytes == 0)
+            return nullptr;
+
+        try {
+            storage.resize(bytes);
+        } catch (...) {
+            return nullptr;
+        }
+
+        auto* first = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(storage.data());
+        const ULONG result =
+            GetAdaptersAddresses(AF_INET, kFlags, nullptr, first, &bytes);
+        if (result == ERROR_BUFFER_OVERFLOW)
+            continue;
+        if (result != NO_ERROR)
+            return nullptr;
+
+        for (auto* adapter = first; adapter; adapter = adapter->Next) {
+            if (adapter->OperStatus != IfOperStatusUp ||
+                adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+                continue;
+            }
+            for (auto* unicast = adapter->FirstUnicastAddress; unicast;
+                 unicast = unicast->Next) {
+                if (!unicast->Address.lpSockaddr ||
+                    unicast->Address.lpSockaddr->sa_family != AF_INET) {
+                    continue;
+                }
+                const auto* ip =
+                    reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
+                if (IsUsableIPv4Address(ip->sin_addr))
+                    return adapter;
             }
         }
+        return nullptr;
     }
     return nullptr;
 }
