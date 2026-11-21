@@ -36,3 +36,22 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
         LIBRARY_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/out"
     )
 endforeach()
+
+# Keep the NV2A microcode validator's safety contract executable in CI.
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(nv2a_vertex_shader_smoke
+        ../../tests/nv2a_vertex_shader_smoke.cpp
+        nv2a_vertex_shader.c
+    )
+    target_include_directories(nv2a_vertex_shader_smoke PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    target_compile_definitions(nv2a_vertex_shader_smoke PRIVATE
+        WIN32_LEAN_AND_MEAN NOMINMAX
+    )
+    if(MSVC)
+        target_compile_options(nv2a_vertex_shader_smoke PRIVATE /W4 /permissive-)
+    endif()
+    add_test(NAME nv2a_vertex_shader_smoke COMMAND nv2a_vertex_shader_smoke)
+endif()
