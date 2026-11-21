@@ -24,6 +24,7 @@ bool IsOwnedTask(XONLINETASK_HANDLE task) {
 
 extern "C" HRESULT WINAPI XOnlineStartup(const XONLINE_STARTUP_PARAMS* params) {
     (void)params; // The current compatibility backend does not allocate a private pool.
+    if (!XboxNetIsStarted()) return XONLINE_E_NOT_INITIALIZED;
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_started) return S_OK;
     g_started = true;
