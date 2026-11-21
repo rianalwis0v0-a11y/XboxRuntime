@@ -123,7 +123,7 @@ HWND CreateGpuRendererWindow() {
     WNDCLASSEXW windowClass{};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.lpfnWndProc = GpuRendererWindowProc;
-    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.hInstance = g_module;
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = className;
     if (!RegisterClassExW(&windowClass) &&
