@@ -1,5 +1,6 @@
 #include "guest_api_registry.h"
 #include "xnet_compat.h"
+#include "directsound_compat.h"
 
 #include <cstring>
 #include <cstdint>
@@ -21,6 +22,8 @@ struct Entry {
 };
 #define GUEST_API(symbol) { #symbol, GuestAddress(&symbol) }
 const Entry kGuestApis[] = {
+    GUEST_API(DirectSoundCreate),
+    GUEST_API(DirectSoundCreate8),
     GUEST_API(XNetStartup),
     GUEST_API(XNetCleanup),
     GUEST_API(XNetDnsLookup),
@@ -73,7 +76,7 @@ bool GuestRange(std::uint32_t base, std::uint32_t size,
     return address >= base &&
         std::uint64_t(address) + bytes <= std::uint64_t(base) + size;
 }
-bool IsXnetLibrary(std::uint32_t base, std::uint32_t size,
+bool IsSupportedNonKernelLibrary(std::uint32_t base, std::uint32_t size,
                    std::uint32_t address) noexcept {
     if (!GuestRange(base, size, address, 2)) return false;
     const wchar_t* name = reinterpret_cast<const wchar_t*>(
@@ -90,7 +93,7 @@ bool IsXnetLibrary(std::uint32_t base, std::uint32_t size,
     }
     if (n + 1 == std::size(ascii) || name[n] != L'\0') return false;
     const std::wstring value(ascii);
-    return value == L"XNET" || value == L"XNET.DLL";
+    return value == L"XNET" || value == L"XNET.DLL" ||\n           value == L"DSOUND" || value == L"DSOUND.DLL";
 }
 }
 
@@ -127,7 +130,7 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(
             break;
         }
         if (!descriptor.wideCharName ||
-            !IsXnetLibrary(imageBase, imageSize, descriptor.wideCharName) ||
+            !IsSupportedNonKernelLibrary(imageBase, imageSize, descriptor.wideCharName) ||
             !GuestRange(imageBase, imageSize, descriptor.firstThunk, 4))
             return false;
 
