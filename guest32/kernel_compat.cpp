@@ -1836,7 +1836,8 @@ ULONG QueryHostAdapterList(std::vector<unsigned char>& storage) {
     constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
     ULONG bytes = 16 * 1024;
     for (unsigned attempt = 0; attempt < 3; ++attempt) {
-        storage.resize(bytes);
+        try { storage.resize(bytes); }
+        catch (...) { return ERROR_NOT_ENOUGH_MEMORY; }
         auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(storage.data());
         ULONG result = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, adapters, &bytes);
         if (result == ERROR_BUFFER_OVERFLOW) continue;
@@ -1852,7 +1853,7 @@ extern "C" ULONG __stdcall K_PhyGetLinkState(BOOLEAN verify) {
     if (result != NO_ERROR) return 0;
     const auto* adapter = reinterpret_cast<const IP_ADAPTER_ADDRESSES*>(storage.data());
     for (; adapter; adapter = adapter->Next) {
-        if (adapter->OperStatus == IfOperStatusUp) return 1u;
+        if (adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK && adapter->OperStatus == IfOperStatusUp) return 1u;
     }
     return 0u;
 }
