@@ -11,7 +11,9 @@ int main() {
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
     params.cfgSockMaxSockets = 4;
-    if (XNetStartup(&params) != 0) return 1;\n\n    // XOnline ABI and asynchronous task lifecycle. No remote verifier is
+    if (XNetStartup(&params) != 0) return 1;
+
+    // XOnline ABI and asynchronous task lifecycle. No remote verifier is
     // configured, so the task must finish with a fail-closed service error.
     static_assert(sizeof(XONLINE_USER) == 112, "original Xbox XONLINE_USER ABI");
     if (XOnlineStartup(nullptr) != S_OK) return 42;
