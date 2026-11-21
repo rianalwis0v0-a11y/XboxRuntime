@@ -32,3 +32,10 @@ target_compile_definitions(guest_api_registry_smoke PRIVATE WIN32_LEAN_AND_MEAN 
 target_compile_options(guest_api_registry_smoke PRIVATE /W4 /permissive-)
 target_link_libraries(guest_api_registry_smoke PRIVATE ws2_32 iphlpapi bcrypt)
 add_test(NAME guest_api_registry_smoke COMMAND guest_api_registry_smoke)
+
+add_executable(static_xnet_trace_smoke ../tests/static_xnet_trace_smoke.cpp)
+target_include_directories(static_xnet_trace_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(static_xnet_trace_smoke PRIVATE cxx_std_17)
+target_compile_definitions(static_xnet_trace_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(static_xnet_trace_smoke PRIVATE /W4 /permissive-)
+add_test(NAME static_xnet_trace_smoke COMMAND static_xnet_trace_smoke)
