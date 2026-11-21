@@ -1137,21 +1137,19 @@ Put32 0x8168 0
 
 Put32 0x6000 0x54535258
 Put32 0x6028 4096
-# Guest-side OBJECT_ATTRIBUTES + UNICODE_STRING for \Device\Cdrom0\xbe-test.txt.
+# Xbox-native OBJECT_ATTRIBUTES + ANSI OBJECT_STRING for the title file.
+# OBJECT_ATTRIBUTES is { RootDirectory, ObjectName, Attributes }; OBJECT_STRING
+# is { Length, MaximumLength, Buffer }. Keep this fixture on the Xbox ABI rather
+# than relying on the older Windows-shaped Unicode compatibility path.
 $guestPath = "\Device\Cdrom0\xbe-test.txt"
-$guestPathBytes = [Text.Encoding]::Unicode.GetBytes($guestPath + [char]0)
-$guestPathLength = [uint32]($guestPath.Length * 2)
-Put32 0x6080 ([uint32]($guestPathLength -bor (($guestPathLength + 2) -shl 16)))
+$guestPathBytes = [Text.Encoding]::ASCII.GetBytes($guestPath + [char]0)
+$guestPathLength = [uint16]$guestPath.Length
+Put16 0x6080 $guestPathLength
+Put16 0x6082 ([uint16]($guestPathLength + 1))
 Put32 0x6084 $testPathVa
-Put32 0x6090 24
-Put32 0x6094 0
-Put32 0x6098 $unicodeVa
-Put32 0x609C 0
-Put32 0x60A0 0
-Put32 0x60A4 0
-Put32 0x60B0 0
-Put32 0x60B4 0
-Put32 0x60B8 0
+Put32 0x6090 0
+Put32 0x6094 $unicodeVa
+Put32 0x6098 0x40
 $guestPathBytes.CopyTo($b,0x6100)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
 $directoryPath = "\Device\Cdrom0"
