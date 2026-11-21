@@ -23,6 +23,7 @@
 #include <vector>
 #include <algorithm>
 #include "kernel_compat.h"
+#include "static_xnet_trace.h"
 
 namespace {
 constexpr uint32_t kHeaderMin=0x178, kSectionSize=56;
@@ -34,12 +35,15 @@ struct Section { uint32_t flags,va,vs,raw,rawSize,name,refs,head,tail; uint8_t d
 static_assert(sizeof(Section)==kSectionSize);
 struct Reply { uint32_t magic,version,status,imageBase,imageSize,entry,sectionCount; };
 enum : uint32_t { OK=0, ARGUMENT=1, IO=2, FORMAT=3, LAYOUT=4, MEMORY=5 };
+struct StaticXnetMetadata { XboxStaticXnetRange ranges[16]{}; uint32_t rangeCount=0; uint32_t libraryBuild=0; };
+StaticXnetMetadata g_staticXnet;
 void* g_image=nullptr;
 uint32_t U32(const std::vector<uint8_t>& b,size_t o){uint32_t v=0;std::memcpy(&v,b.data()+o,4);return v;}
 bool Fits(uint64_t o,uint64_t n,uint64_t lim){return o<=lim&&n<=lim-o;}
 bool VaOffset(uint32_t va,uint32_t base,uint32_t size,uint32_t& out){if(va<base)return false;uint64_t d=uint64_t(va)-base;if(d>=size)return false;out=uint32_t(d);return true;}
 void Release(){if(g_image)VirtualFree(g_image,0,MEM_RELEASE);g_image=nullptr;}
 uint32_t Load(const wchar_t* path,Reply& reply){
+ g_staticXnet = {};
  HANDLE f=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,nullptr);
  if(f==INVALID_HANDLE_VALUE)return IO;
  LARGE_INTEGER fs{};
@@ -110,6 +114,20 @@ uint32_t Load(const wchar_t* path,Reply& reply){
   if(s.vs>s.rawSize)std::memset(d+s.rawSize,0,s.vs-s.rawSize);
  }
 
+ // XNET is statically linked into many retail titles. Record its library
+ // build and executable code section(s); the kernel trace uses these exact
+ // ranges to distinguish XNet-originated kernel calls from title calls.
+ if (libraryCount) {
+  const auto* libraries = static_cast<const uint8_t*>(mem) + libraryOff;
+  for (uint32_t i = 0; i < libraryCount; ++i) {
+   const uint8_t* record = libraries + uint64_t(i) * 16u;
+   if (std::memcmp(record, "XNET", 4) == 0) {
+    std::memcpy(&g_staticXnet.libraryBuild, record + 12, sizeof(uint16_t));
+    break;
+   }
+  }
+ }
+
  // Resolve each section name from its mapped VA as Cxbx does, but cap the
  // scan to the XBE's mapped image so malformed names cannot read past it.
  for(const auto&s:sections){
@@ -117,8 +135,13 @@ uint32_t Load(const wchar_t* path,Reply& reply){
   uint32_t nameOff=0;
   if(!VaOffset(s.name,base,image,nameOff)||!Fits(nameOff,1,image)){VirtualFree(mem,0,MEM_RELEASE);return FORMAT;}
   const uint8_t*name=static_cast<const uint8_t*>(mem)+nameOff;
-  size_t available=std::min<size_t>(9u,size_t(image-nameOff));
-  for(size_t n=0;n<available;n++)if(name[n]==0)break;
+  size_t available=std::min<size_t>(8u,size_t(image-nameOff));
+  char sectionName[9]{};
+  std::memcpy(sectionName, name, available);
+  if ((s.flags & 4u) && std::strcmp(sectionName, "XNET") == 0 &&
+      g_staticXnet.rangeCount < std::size(g_staticXnet.ranges)) {
+   g_staticXnet.ranges[g_staticXnet.rangeCount++] = {s.va, s.vs};
+  }
  }
 
  // Apply Xbox section permissions with page-rounded ranges constrained to
@@ -152,6 +175,11 @@ int wmain(int argc,wchar_t**argv){
   if(!XboxKernelInitializeEeprom(eepromPath))r.status=IO;
   else {
    XboxKernelSetTitlePath(xbePath);
+   XboxKernelResetStaticXnetTrace();
+   for (uint32_t i = 0; i < g_staticXnet.rangeCount; ++i)
+    XboxKernelAddStaticXnetCodeRange(g_staticXnet.ranges[i].begin, g_staticXnet.ranges[i].size, g_staticXnet.libraryBuild);
+   if (g_staticXnet.libraryBuild && !g_staticXnet.rangeCount)
+    OutputDebugStringA("[XboxKernel] XNET library version is present but no executable XNET section was found; static-call tracing is unavailable.\n");
    XboxKernelState image{r.imageBase,r.imageSize,r.entry,r.sectionCount,*reinterpret_cast<uint32_t*>(uintptr_t(r.imageBase+0x12C))};
    if(!XboxKernelResolveImports(image))r.status=FORMAT;
   }
