@@ -353,6 +353,26 @@ extern "C" void __stdcall K_MmPersistContiguousMemory(
 // These operations require physical RAM / chipset mappings which the current
 // Windows-backed guest does not own. Returning failure (or raising the normal
 // unsupported-import exception for void APIs) is safer than inventing MMIO.
+// Translate Xbox unified-memory physical addresses into the shared 64 MiB
+// backing store. This is the common DMA address resolver for NV2A; it never
+// accepts host pointers or the separate RAMIN allocation window.
+extern "C" void* __stdcall XboxKernelResolveGpuPhysicalAddress(
+    std::uint32_t physicalAddress, SIZE_T numberOfBytes, ULONG access) {
+    constexpr ULONG kRead = 1u;
+    constexpr ULONG kWrite = 2u;
+    if (!numberOfBytes || (access & ~(kRead | kWrite)) != 0 || access == 0)
+        return nullptr;
+    const std::uint64_t start = physicalAddress;
+    const std::uint64_t end = start + static_cast<std::uint64_t>(numberOfBytes);
+    if (end < start || end > XBOX_GPU_SHARED_VRAM_SIZE)
+        return nullptr;
+
+    std::lock_guard<std::mutex> lock(g_gpuMemoryMutex);
+    if (!g_gpuMemoryView || g_gpuMemoryBytes < XBOX_GPU_SHARED_MEMORY_SIZE)
+        return nullptr;
+    return g_gpuMemoryView + static_cast<SIZE_T>(start);
+}
+
 extern "C" void* __stdcall K_MmClaimGpuInstanceMemory(
     SIZE_T numberOfBytes, SIZE_T* numberOfPaddingBytes) {
     if (numberOfPaddingBytes) *numberOfPaddingBytes = 0;
