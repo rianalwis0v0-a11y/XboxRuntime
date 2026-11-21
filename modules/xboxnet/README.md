@@ -51,11 +51,14 @@ Available routes:
 - Unknown paths return 404. POST requests return 501 because no XboxNet
   protocol handlers or state-changing APIs have been implemented.
 
-The catalog lists authentication/domain, security gateway, profiles,
-friends/presence, title-specific matchmaking, and peer connectivity as
-`not_implemented`. These are architecture placeholders, not working Xbox Live
-services. The gateway does not accept console authentication or game traffic.
-Do not expose it publicly as an Xbox Live endpoint.
+The catalog marks authentication/domain as `scaffold`: `auth_domain.py` now
+provides a bounded, fail-closed internal adapter boundary with a verifier
+interface and tests. Its default verifier rejects every ticket. It does not
+parse, validate, or mint original-Xbox tickets, and it is not exposed as a
+console endpoint. Security gateway, profiles, friends/presence, title-specific
+matchmaking, and peer connectivity remain `not_implemented`. The gateway does
+not accept console authentication or game traffic. Do not expose it publicly
+as an Xbox Live endpoint.
 
 Gateway tests are included in the existing Python test suite:
 
