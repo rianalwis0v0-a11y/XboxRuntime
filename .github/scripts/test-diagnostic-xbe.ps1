@@ -935,12 +935,12 @@ EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
 # Validate the guest OBJECT_ATTRIBUTES and UNICODE_STRING fixture before NtOpenFile.
-$directoryUnicodeVa = [uint32]($base + 0x6500)
-$directoryObjectAttributesVa = [uint32]($base + 0x6510)
-$directoryPathVa = [uint32]($base + 0x6540)
-$directoryHandleVa = [uint32]($base + 0x6710)
-$directoryInfoVa = [uint32]($base + 0x6600)
-$directoryIoVa = [uint32]($base + 0x6700)
+$directoryUnicodeVa = [uint32]($base + 0x6600)
+$directoryObjectAttributesVa = [uint32]($base + 0x6610)
+$directoryPathVa = [uint32]($base + 0x6640)
+$directoryHandleVa = [uint32]($base + 0x6790)
+$directoryInfoVa = [uint32]($base + 0x6680)
+$directoryIoVa = [uint32]($base + 0x6780)
 EmitLoadEax ([uint32]($directoryObjectAttributesVa + 8))
 EmitCheckEqual $directoryUnicodeVa
 EmitLoadEax $directoryUnicodeVa
@@ -1155,9 +1155,11 @@ $guestPathBytes.CopyTo($b,0x6100)
 $directoryPath = "\Device\Cdrom0"
 $directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
 $directoryPathLength = [uint16]($directoryPath.Length * 2)
-# Keep the directory OBJECT_ATTRIBUTES outside report+0x500..0x590, which
-# the later native-object diagnostics use as scratch storage.
+# Reserve a non-overlapping slice below the import thunk table. The report's
+# 0x6500..0x6590 area is reused by later tests; 0x6600..0x67FF is dedicated
+# to this directory-open/query fixture.
 $directoryUnicodeVa = [uint32]($base + 0x6600)
+$directoryObjectAttributesVa = [uint32]($base + 0x6610)
 $directoryPathVa = [uint32]($base + 0x6640)
 Put16 0x6600 $directoryPathLength
 Put16 0x6602 ([uint16]($directoryPathLength + 2))
