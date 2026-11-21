@@ -23,6 +23,29 @@ int main() {
     std::uint32_t base = 0, size = 0;
     ok = ok && XboxKernelGetPhysicalMemoryView(&base, &size) == view &&
          base == 0 && size == XBOX_GUEST_PHYSICAL_RAM_SIZE;
+    std::uint32_t allocatedPhysical = 0xFFFFFFFFu;
+    void* allocation = XboxKernelAllocatePhysicalMemory(
+        0x2000u, 0u, 0x03FFFFFFu, 0x1000u, &allocatedPhysical);
+    ok = ok && allocation != nullptr && allocatedPhysical < XBOX_GUEST_PHYSICAL_RAM_SIZE &&
+         (allocatedPhysical & 0xFFFu) == 0;
+    std::uint32_t translated = 0xFFFFFFFFu;
+    ok = ok && XboxKernelTranslateGuestVirtualToPhysical(
+        allocation, 0x2000u, XboxGuestMemoryRead | XboxGuestMemoryWrite, &translated) &&
+         translated == allocatedPhysical;
+    if (allocation) {
+        static_cast<std::uint8_t*>(allocation)[0] = 0xA5;
+        ok = ok && bytes[allocatedPhysical] == 0xA5;
+        ok = ok && XboxKernelFreePhysicalMemory(allocation);
+        ok = ok && !XboxKernelFreePhysicalMemory(allocation);
+    }
+    DWORD oldProtection = 0;
+    ok = ok && VirtualProtect(bytes + 0x3000, 0x1000, PAGE_READONLY, &oldProtection);
+    ok = ok && XboxKernelTranslateGuestVirtualToPhysical(
+        bytes + 0x3000, 4, XboxGuestMemoryRead, &physical);
+    ok = ok && !XboxKernelTranslateGuestVirtualToPhysical(
+        bytes + 0x3000, 4, XboxGuestMemoryWrite, &physical);
+    DWORD ignoredProtection = 0;
+    VirtualProtect(bytes + 0x3000, 0x1000, oldProtection, &ignoredProtection);
     XboxKernelPhysicalMemoryShutdown();
     ok = ok && !XboxKernelTranslateGuestVirtualToPhysical(
         bytes, 4, XboxGuestMemoryRead, &physical);
