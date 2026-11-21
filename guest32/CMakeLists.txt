@@ -13,6 +13,7 @@ add_executable(network_smoke
   ../tests/network_smoke.cpp
   network_compat.cpp
   xnet_compat.cpp
+  xonline_compat.cpp
 )
 target_compile_features(network_smoke PRIVATE cxx_std_17)
 target_compile_definitions(network_smoke PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
