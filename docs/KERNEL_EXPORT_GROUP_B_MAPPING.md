@@ -16,7 +16,7 @@ No signatures, structure layouts, host behavior, or calling conventions are asse
 | 201 | `NtOpenDirectoryObject` | Implemented for named directories in the shared object namespace; duplicates typed guest handles; x86 ordinal-dispatch tested; access checks/root-relative lookup remain unsupported |
 | 203 | `NtOpenSymbolicLinkObject` | Explicit fail-fast route; behavior unsupported |
 | 206 | `NtQueueApcThread` | Explicit fail-fast route; behavior unsupported |
-| 208 | `NtQueryDirectoryObject` | Explicit fail-fast route; behavior unsupported |
+| 208 | `NtQueryDirectoryObject` | Implemented for immediate child directories in the runtime-owned namespace; x86 ordinal dispatch and buffer/context tests; object type IDs remain zero and enumeration is one entry per call |
 | 215 | `NtQuerySymbolicLinkObject` | Explicit fail-fast route; behavior unsupported |
 | 220 | `NtReadFileScatter` | Explicit fail-fast route; behavior unsupported |
 | 228 | `NtSetSystemTime` | Implemented through title-local virtual clock offset; x86 ordinal-dispatch tested; host Windows clock remains unchanged |
