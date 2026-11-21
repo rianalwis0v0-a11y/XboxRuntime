@@ -55,6 +55,65 @@ int main() {
         return 7;
     if (!XboxKernelCloseObjectHandle(recreated)) return 8;
 
+
+    // NtQueryDirectoryObject enumerates immediate child directories in the
+    // runtime-owned namespace, preserving the Xbox x86 output layout.
+    char rootText[] = "\\BaseNamedObjects\\XboxRuntimeQueryRoot";
+    char childText[] = "\\BaseNamedObjects\\XboxRuntimeQueryRoot\\ChildA";
+    GuestAnsiString rootName{};
+    rootName.Length = static_cast<USHORT>(std::strlen(rootText));
+    rootName.MaximumLength = rootName.Length;
+    rootName.Buffer = rootText;
+    GuestObjectAttributes rootAttributes{};
+    rootAttributes.ObjectName = &rootName;
+    HANDLE rootDirectory = nullptr;
+    if (K_NtCreateDirectoryObject(&rootDirectory, &rootAttributes) != 0 ||
+        !rootDirectory) return 9;
+
+    GuestAnsiString childName{};
+    childName.Length = static_cast<USHORT>(std::strlen(childText));
+    childName.MaximumLength = childName.Length;
+    childName.Buffer = childText;
+    GuestObjectAttributes childAttributes{};
+    childAttributes.ObjectName = &childName;
+    HANDLE childDirectory = nullptr;
+    if (K_NtCreateDirectoryObject(&childDirectory, &childAttributes) != 0 ||
+        !childDirectory) return 10;
+
+    alignas(4) unsigned char queryBuffer[128]{};
+    ULONG context = 0;
+    ULONG returned = 0;
+    status = K_NtQueryDirectoryObject(rootDirectory, queryBuffer,
+        sizeof(queryBuffer), TRUE, &context, &returned);
+    struct DirectoryInformation {
+        GuestAnsiString Name;
+        ULONG Type;
+    };
+    static_assert(sizeof(DirectoryInformation) == 12,
+                  "Xbox OBJECT_DIRECTORY_INFORMATION layout");
+    auto* information = reinterpret_cast<DirectoryInformation*>(queryBuffer);
+    if (status != 0 || returned < sizeof(*information) + 1u ||
+        information->Name.Length != 6 ||
+        std::memcmp(information->Name.Buffer, "ChildA", 6) != 0 ||
+        information->Type != 0 || context != 1)
+        return 11;
+
+    status = K_NtQueryDirectoryObject(rootDirectory, queryBuffer,
+        sizeof(queryBuffer), FALSE, &context, &returned);
+    if (status != static_cast<LONG>(0x8000001Au))
+        return 12;
+
+    context = 0;
+    status = K_NtQueryDirectoryObject(rootDirectory, queryBuffer,
+        12, TRUE, &context, &returned);
+    if (status != static_cast<LONG>(0xC0000023u) ||
+        returned <= 12 || context != 0)
+        return 13;
+
+    if (!XboxKernelCloseObjectHandle(childDirectory) ||
+        !XboxKernelCloseObjectHandle(rootDirectory))
+        return 14;
+
     std::puts("kernel_directory_object_guest_smoke: PASS (create, typed handle, duplicate, collision, destroy)");
     return 0;
 }
