@@ -122,7 +122,7 @@ int WINAPI XNetInAddrToXnAddr(const IN_ADDR address, XNADDR* output, XNKID* keyI
 int WINAPI XNetUnregisterInAddr(const IN_ADDR address);
 DWORD WINAPI XNetGetEthernetLinkStatus();
 DWORD WINAPI XNetGetTitleXnAddr(XNADDR* address);
-DWORD WINAPI XNetGetDebugXnAddr(XNADDR* address);
+DWORD WINAPI XNetGetDebugXnAddr(XNADDR* address);\n}\n\n// Internal runtime query; not an Xbox XDK export.\nBOOL XboxNetIsStarted();\n\nextern "C" {
 }
 
 extern "C" {
