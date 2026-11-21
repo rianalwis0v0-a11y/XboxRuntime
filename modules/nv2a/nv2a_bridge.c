@@ -657,8 +657,9 @@ int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize)
     g_pgraph_custom_draws = 0;
     g_pgraph_custom_vertices = 0;
 
-    // Initializes the PGRAPH method translator. Its D3D8 device is supplied
-    // by xbox_d3d8 when the game/runtime creates the Xbox D3D device.
+    // Initialize the method translator first. The host kernel then creates
+    // the D3D8/D3D11 device on its GPU worker thread and supplies its HWND
+    // through XboxNV2A_InitializeRenderer.
     pgraph_d3d11_init();
 
     g_started = 1;
