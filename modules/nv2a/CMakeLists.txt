@@ -20,7 +20,7 @@ target_include_directories(nv2a PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/xboxrecomp/src/kernel"
 )
-target_link_libraries(nv2a PRIVATE xbox_nv2a xbox_d3d8)
+target_link_libraries(nv2a PRIVATE xbox_nv2a xbox_d3d8 user32)
 target_compile_definitions(nv2a PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 if(MSVC)
     target_compile_options(nv2a PRIVATE /W4 /permissive-)
