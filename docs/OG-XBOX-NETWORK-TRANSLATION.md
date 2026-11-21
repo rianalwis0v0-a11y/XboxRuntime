@@ -58,6 +58,12 @@ Preferred implementation order:
 4. Complete the XNet/XSocket APIs required by a selected title, backed by Winsock. Keep unimplemented features explicit (QoS, secure XNADDR/key exchange, NAT traversal, voice, broadcast/system-link and overlapped I/O).
 5. Run Windows/MSVC x86 builds and tests. First prove UDP/TCP loopback through the Xbox ABI wrappers, then real LAN traffic, then a supported title's actual connection flow.
 
+## Named XNET import binding
+
+The x86 guest now resolves the XBE non-kernel import directory for the XNET / XNET.DLL library. The registry binds the 29 XNet/XSocket entry points currently implemented in xnet_compat.cpp to their actual 32-bit guest function addresses. The resolver validates descriptor, thunk, library-name and import-name ranges; accepts a name thunk stored as an image VA or RVA; temporarily makes each import-thunk cell writable and restores its prior page protection; and rejects unknown XNET names, unknown libraries and ordinal imports. It does not patch statically linked XNet call sites: only imports represented in the XBE non-kernel import directory are covered.
+
+A dedicated x86 guest_api_registry_smoke target exercises a known named import and fail-closed cases for ordinal imports, unknown API names and unknown libraries. This test target has been added but has not yet been built or run in this environment.
+
 ## Tests required
 
 - Startup/cleanup reference counting and failure paths.
