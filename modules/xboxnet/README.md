@@ -55,10 +55,13 @@ The catalog marks authentication/domain as `scaffold`: `auth_domain.py` now
 provides a bounded, fail-closed internal adapter boundary with a verifier
 interface and tests. Its default verifier rejects every ticket. It does not
 parse, validate, or mint original-Xbox tickets, and it is not exposed as a
-console endpoint. Security gateway, profiles, friends/presence, title-specific
-matchmaking, and peer connectivity remain `not_implemented`. The gateway does
-not accept console authentication or game traffic. Do not expose it publicly
-as an Xbox Live endpoint.
+console endpoint. `security_gateway.py` adds a second internal scaffold: it
+accepts an authenticated context, enforces payload/response limits, and dispatches
+to explicitly registered service handlers. It does not implement original-Xbox
+gateway framing, cryptography, or a network endpoint. Profiles, friends/presence,
+title-specific matchmaking, and peer connectivity remain `not_implemented`.
+The HTTP status gateway does not accept console authentication or game traffic.
+Do not expose it publicly as an Xbox Live endpoint.
 
 Gateway tests are included in the existing Python test suite:
 
