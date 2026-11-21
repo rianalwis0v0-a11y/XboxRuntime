@@ -51,6 +51,25 @@ int main() {
         std::fprintf(stderr, "host and guest GPU memory views are not coherent\n");
         return 8;
     }
+    void* dmaRead = XboxKernelResolveGpuPhysicalAddress(0x1234u, 16u, 1u);
+    void* dmaWrite = XboxKernelResolveGpuPhysicalAddress(0x2000u, 16u, 2u);
+    if (dmaRead != guestView + 0x1234u ||
+        dmaWrite != guestView + 0x2000u) {
+        std::fprintf(stderr, "GPU physical DMA ranges did not resolve into shared unified memory\\n");
+        return 12;
+    }
+    static_cast<std::uint8_t*>(dmaWrite)[0] = 0x5Au;
+    if (hostView[0x2000u] != 0x5Au) {
+        std::fprintf(stderr, "DMA writes were not coherent with the host GPU view\\n");
+        return 13;
+    }
+    if (XboxKernelResolveGpuPhysicalAddress(
+            XBOX_GPU_SHARED_VRAM_SIZE - 8u, 16u, 1u) != nullptr ||
+        XboxKernelResolveGpuPhysicalAddress(0u, 16u, 0u) != nullptr ||
+        XboxKernelResolveGpuPhysicalAddress(0u, 0u, 1u) != nullptr) {
+        std::fprintf(stderr, "GPU DMA resolver accepted invalid access/range\\n");
+        return 14;
+    }
     void* secondGpuAllocation = K_MmClaimGpuInstanceMemory(0x1000u, &padding);
     if (secondGpuAllocation != guestView + XBOX_GPU_SHARED_VRAM_SIZE + 0x2000u ||
         padding != 0) {
@@ -69,6 +88,6 @@ int main() {
     UnmapViewOfFile(guestView);
     UnmapViewOfFile(hostView);
     CloseHandle(sharedMapping);
-    std::puts("kernel_memory_host_tests: PASS (guest ranges and shared GPU RAMIN allocator)");
+    std::puts("kernel_memory_host_tests: PASS (guest ranges, shared RAMIN allocator, and bounded unified-memory DMA resolver)");
     return 0;
 }

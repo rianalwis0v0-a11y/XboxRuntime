@@ -17,6 +17,9 @@
 
 static uint8_t* g_vram;
 static uint8_t* g_ramin;
+static uint8_t* g_guest_physical_memory;
+static uint32_t g_guest_physical_base;
+static uint32_t g_guest_physical_length;
 
 static uint8_t* g_gpu_memory;
 static NV2AState* g_gpu;
@@ -67,6 +70,58 @@ static NV2A_TEXTURE_CACHE g_texture_cache[32][8][4];
 static void mark_all_textures_dirty(void);
 static void mark_context_textures_dirty(uint32_t channel, uint32_t subchannel);
 static void release_texture_cache(void);
+
+/* Resolve a checked byte span from GPU-local VRAM or the explicitly bound
+ * guest physical image window. Never reinterpret an unvalidated DMA address
+ * as a host pointer. */
+static int dma_get_span(const XboxNV2A_DMA_INFO* dma, uint32_t offset,
+                        uint32_t length, const uint8_t** output)
+{
+    if (output) *output = NULL;
+    if (!dma || !output || !dma->mapped_length ||
+        offset > dma->mapped_length || length > dma->mapped_length - offset)
+        return 0;
+    const uint64_t address = (uint64_t)dma->base_address + offset;
+    if (dma->dma_target == 0u) {
+        if (!g_vram || address > XBOX_VRAM_SIZE ||
+            length > (uint64_t)XBOX_VRAM_SIZE - address) return 0;
+        *output = g_vram + (size_t)address;
+        return 1;
+    }
+    if (dma->dma_target == 0x00010000u ||
+        dma->dma_target == 0x00020000u) {
+        if (!g_guest_physical_memory || address < g_guest_physical_base ||
+            address - g_guest_physical_base > g_guest_physical_length ||
+            length > (uint64_t)g_guest_physical_length -
+                (address - g_guest_physical_base)) return 0;
+        *output = g_guest_physical_memory +
+            (size_t)(address - g_guest_physical_base);
+        return 1;
+    }
+    return 0;
+}
+
+int __cdecl XboxNV2A_BindGuestPhysicalMemory(uint32_t guest_physical_base,
+                                             void* memory, uint32_t length)
+{
+    if (!g_started) return 1;
+    if (!memory && !length && !guest_physical_base) {
+        g_guest_physical_memory = NULL;
+        g_guest_physical_base = 0;
+        g_guest_physical_length = 0;
+        memset(g_dma_contexts, 0, sizeof(g_dma_contexts));
+        mark_all_textures_dirty();
+        return 0;
+    }
+    if (!memory || !length || guest_physical_base >= 0x08000000u ||
+        length > 0x08000000u - guest_physical_base) return 2;
+    g_guest_physical_memory = (uint8_t*)memory;
+    g_guest_physical_base = guest_physical_base;
+    g_guest_physical_length = length;
+    memset(g_dma_contexts, 0, sizeof(g_dma_contexts));
+    mark_all_textures_dirty();
+    return 0;
+}
 
 
 int __cdecl XboxNV2A_BuildIndexedVertexStream(uint32_t channel,
@@ -692,6 +747,9 @@ void __cdecl ModuleStop(void)
     // Keep its backing allocation alive until the host process exits; freeing
     // it here would leave the singleton's VRAM/RAMIN pointers dangling.
     g_started = 0;
+    g_guest_physical_memory = NULL;
+    g_guest_physical_base = 0;
+    g_guest_physical_length = 0;
     OutputDebugStringW(L"[XboxRuntime:NV2A] Translator stopped. GPU memory retained until process exit.\n");
 }
 
@@ -1080,21 +1138,13 @@ int __cdecl XboxNV2A_DecodeTextureMipChainFromDMA(uint32_t channel,
      * NV097 context slots: DMA_A, DMA_B, DMA_C and DMA_D. */
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length || texture_offset > dma->mapped_length)
         return 2;
-    if (texture_offset > dma->mapped_length)
-        return 3;
-
-    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
-    if (source_address > XBOX_VRAM_SIZE)
-        return 4;
-
     const uint32_t available = dma->mapped_length - texture_offset;
-    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
-        return 5;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, texture_offset, available, &source)) return 3;
     return XboxNV2A_DecodeTextureMipChainRGBA8(
-        format, width, height, level_count,
-        g_vram + (size_t)source_address, available,
+        format, width, height, level_count, source, available,
         destination, destination_capacity, level_offsets, level_sizes);
 }
 
@@ -1111,19 +1161,13 @@ int __cdecl XboxNV2A_DecodeTextureFromDMA(uint32_t channel,
         return 1;
     const uint32_t slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length || texture_offset > dma->mapped_length)
         return 2;
-    if (texture_offset > dma->mapped_length)
-        return 3;
-    const uint64_t source_address = (uint64_t)dma->base_address + texture_offset;
-    if (source_address > XBOX_VRAM_SIZE)
-        return 4;
     const uint32_t available = dma->mapped_length - texture_offset;
-    if ((uint64_t)available > (uint64_t)XBOX_VRAM_SIZE - source_address)
-        return 5;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, texture_offset, available, &source)) return 3;
     return XboxNV2A_DecodeTextureRGBA8(format, width, height, source_pitch,
-        g_vram + (size_t)source_address, available, destination,
-        destination_capacity, destination_pitch);
+        source, available, destination, destination_capacity, destination_pitch);
 }
 
 
@@ -1840,16 +1884,24 @@ static int resolve_dma_instance(uint32_t instance, uint32_t handle,
 
     if (dma_class != 0x02u && dma_class != 0x03u && dma_class != 0x3Du)
         return 5;
-    if (target != 0u) return 6;
-    if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
-        return 7;
+    if (target == 0u) {
+        if (base >= XBOX_VRAM_SIZE || limit > XBOX_VRAM_SIZE - base)
+            return 7;
+    } else if (target == 0x00010000u || target == 0x00020000u) {
+        if (!g_guest_physical_memory || base < g_guest_physical_base ||
+            (uint64_t)(base - g_guest_physical_base) + limit >
+                g_guest_physical_length)
+            return 7;
+    } else {
+        return 6;
+    }
 
     output->handle = handle;
     output->instance_offset = instance;
     output->dma_class = dma_class;
     output->dma_target = target;
     output->engine = engine;
-    output->base_address = base;
+    output->base_address = target == 0u ? base : base;
     output->limit = limit;
     output->mapped_length = limit;
     return 0;
@@ -1950,16 +2002,15 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
         source_span > (uint64_t)dma->mapped_length - first_offset)
         return 7;
 
-    const uint64_t gpu_offset = (uint64_t)dma->base_address + first_offset;
-    if (gpu_offset > XBOX_VRAM_SIZE ||
-        source_span > (uint64_t)XBOX_VRAM_SIZE - gpu_offset)
-        return 8;
+    const uint8_t* source = NULL;
+    if (!dma_get_span(dma, (uint32_t)first_offset, (uint32_t)source_span,
+                      &source)) return 8;
 
     uint8_t* output = (uint8_t*)destination;
     for (uint32_t vertex = 0; vertex < vertex_count; ++vertex) {
-        const uint64_t source_offset = gpu_offset + (uint64_t)vertex * stride;
+        const uint64_t source_offset = (uint64_t)vertex * stride;
         memcpy(output + (size_t)vertex * element_bytes,
-               g_vram + (size_t)source_offset, element_bytes);
+               source + (size_t)source_offset, element_bytes);
     }
     return 0;
 }
@@ -2443,7 +2494,7 @@ static int validate_puller_method(uint32_t channel, uint32_t subchannel,
     return 0;
 }
 
-static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
+static int walk_dma_pushbuffer(uint32_t channel, const uint8_t* memory,
                                uint32_t mapped_length, uint32_t initial_get,
                                uint32_t put, uint32_t* final_get,
                                uint32_t* methods_submitted, int dispatch)
@@ -2465,7 +2516,7 @@ static int walk_dma_pushbuffer(uint32_t channel, uint32_t base,
         if (++steps > 1048576u || get > mapped_length || mapped_length - get < 4u)
             return 2;
 
-        const uint32_t word = read_le32(g_vram + base + get);
+        const uint32_t word = read_le32(memory + get);
         get += 4u;
 
         if (remaining) {
@@ -2583,8 +2634,10 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
     if (get > put || put > dma->mapped_length || (get & 3u) || (put & 3u))
         return 9;
 
+    const uint8_t* pushbuffer = NULL;
+    if (!dma_get_span(dma, 0u, dma->mapped_length, &pushbuffer)) return 10;
     uint32_t checked_get = get, checked_methods = 0;
-    int result = walk_dma_pushbuffer(channel, dma->base_address,
+    int result = walk_dma_pushbuffer(channel, pushbuffer,
         dma->mapped_length, get, put, &checked_get, &checked_methods, 0);
     if (result != 0) {
         raise_dma_pusher_error(result);
@@ -2593,7 +2646,7 @@ static int submit_dma_pushbuffer_info(uint32_t channel,
 
     /* Only dispatch after the complete packet/control-flow stream validates. */
     uint32_t executed_get = get, executed_methods = 0;
-    result = walk_dma_pushbuffer(channel, dma->base_address,
+    result = walk_dma_pushbuffer(channel, pushbuffer,
         dma->mapped_length, get, put, &executed_get, &executed_methods, 1);
     if (result != 0) {
         raise_dma_pusher_error(result);

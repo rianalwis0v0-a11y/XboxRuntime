@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 #include <thread>
 #include "kernel_gpu_service.h"
 #include "kernel_gpu_service_protocol.h"
@@ -59,6 +60,12 @@ DWORD WINAPI ServerMain(void* raw) {
     const std::uint8_t writeData[] = {0x10, 0x20, 0x30, 0x40};
     const std::uint8_t readData[] = {0xA1, 0xB2, 0xC3, 0xD4};
     const std::uint8_t raminData[] = {0x55, 0x66, 0x77};
+    static std::uint8_t frameReadback[XBOX_GPU_RPC_MAX_TRANSFER];
+    static std::uint8_t frameReadbackTail[16];
+    for (std::uint32_t i = 0; i < XBOX_GPU_RPC_MAX_TRANSFER; ++i)
+        frameReadback[i] = static_cast<std::uint8_t>((i * 37u + 11u) & 0xFFu);
+    for (std::uint32_t i = 0; i < sizeof(frameReadbackTail); ++i)
+        frameReadbackTail[i] = static_cast<std::uint8_t>((i * 13u + 7u) & 0xFFu);
     bool ok =
         Exchange(pipe, 1, XboxGpuRpcPing, 0, 0, 0, 0, nullptr, 0,
                  XBOX_GPU_RPC_VERSION, nullptr, 0) &&
@@ -77,7 +84,13 @@ DWORD WINAPI ServerMain(void* raw) {
         Exchange(pipe, 8, XboxGpuRpcReadRamin, 0x400, sizeof(raminData), 0, 0,
                  nullptr, 0, sizeof(raminData), raminData, sizeof(raminData)) &&
         Exchange(pipe, 9, XboxGpuRpcWriteRamin, 0x500, sizeof(writeData), 0, 0,
-                 writeData, sizeof(writeData), 0, nullptr, 0);
+                 writeData, sizeof(writeData), 0, nullptr, 0) &&
+        Exchange(pipe, 10, XboxGpuRpcReadVram, 0x1000, XBOX_GPU_RPC_MAX_TRANSFER, 0, 0,
+                 nullptr, 0, XBOX_GPU_RPC_MAX_TRANSFER, frameReadback,
+                 XBOX_GPU_RPC_MAX_TRANSFER) &&
+        Exchange(pipe, 11, XboxGpuRpcReadVram, 0x11000, sizeof(frameReadbackTail), 0, 0,
+                 nullptr, 0, sizeof(frameReadbackTail), frameReadbackTail,
+                 sizeof(frameReadbackTail));
     FlushFileBuffers(pipe);
     DisconnectNamedPipe(pipe);
     return ok ? 0 : 2;
@@ -109,6 +122,7 @@ int main() {
     const std::uint8_t expectedRamin[] = {0x55, 0x66, 0x77};
     const std::uint8_t writeData[] = {0x10, 0x20, 0x30, 0x40};
     std::uint8_t buffer[4]{};
+    std::vector<std::uint8_t> frameReadback(XBOX_GPU_RPC_MAX_TRANSFER + 16u);
     ok = ok && XboxKernelGpuServiceConnected();
     ok = ok && XboxKernelGpuReadRegister(0x100, 4, &value) &&
          value == 0x12345678u;
@@ -122,6 +136,15 @@ int main() {
     ok = ok && XboxKernelGpuReadRamin(0x400, buffer, 3) &&
          std::memcmp(buffer, expectedRamin, 3) == 0;
     ok = ok && XboxKernelGpuWriteRamin(0x500, writeData, sizeof(writeData));
+    ok = ok && XboxKernelGpuReadVramRange(0x1000, frameReadback.data(),
+                                           static_cast<std::uint32_t>(frameReadback.size()));
+    for (std::uint32_t i = 0; ok && i < XBOX_GPU_RPC_MAX_TRANSFER; ++i)
+        ok = frameReadback[i] == static_cast<std::uint8_t>((i * 37u + 11u) & 0xFFu);
+    for (std::uint32_t i = 0; ok && i < 16u; ++i)
+        ok = frameReadback[XBOX_GPU_RPC_MAX_TRANSFER + i] ==
+             static_cast<std::uint8_t>((i * 13u + 7u) & 0xFFu);
+    ok = ok && !XboxKernelGpuReadVramRange(
+        XBOX_GPU_SHARED_VRAM_SIZE - 4u, buffer, 8u);
     XboxKernelGpuServiceShutdown();
     CloseHandle(client);
 
