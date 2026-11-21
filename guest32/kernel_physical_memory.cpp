@@ -12,7 +12,7 @@ std::uint8_t* g_view = nullptr;
 std::uint32_t g_base = 0;
 std::uint32_t g_length = 0;
 
-bool RangeValid(const void* address, SIZE_T length) noexcept {
+bool RangeValid(const void* address, SIZE_T length, ULONG access) noexcept {
     if (!address || !length) return false;
     const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(address);
     if (length > UINTPTR_MAX - start) return false;
@@ -25,8 +25,10 @@ bool RangeValid(const void* address, SIZE_T length) noexcept {
             (info.Protect & 0xFFu) == PAGE_NOACCESS)
             return false;
         const DWORD protection = info.Protect & 0xFFu;
-        if ((protection == PAGE_READONLY || protection == PAGE_EXECUTE ||
-             protection == PAGE_EXECUTE_READ) && false)
+        if ((access & XboxGuestMemoryRead) == 0) return false;
+        if ((access & XboxGuestMemoryWrite) != 0 &&
+            (protection == PAGE_READONLY || protection == PAGE_EXECUTE ||
+             protection == PAGE_EXECUTE_READ))
             return false;
         const std::uintptr_t regionBase = reinterpret_cast<std::uintptr_t>(info.BaseAddress);
         if (info.RegionSize > UINTPTR_MAX - regionBase) return false;
@@ -67,10 +69,14 @@ extern "C" BOOL __stdcall XboxKernelTranslateGuestVirtualToPhysical(
     std::uint32_t* physicalAddress) {
     constexpr ULONG allowed = XboxGuestMemoryRead | XboxGuestMemoryWrite;
     if (!physicalAddress || !guestAddress || !length || !access ||
-        (access & ~allowed) != 0 || !RangeValid(guestAddress, length))
+        (access & ~allowed) != 0)
         return FALSE;
 
     AcquireSRWLockShared(&g_physicalLock);
+    if (!g_view || !RangeValid(guestAddress, length, access)) {
+        ReleaseSRWLockShared(&g_physicalLock);
+        return FALSE;
+    }
     const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(guestAddress);
     const std::uintptr_t viewStart = reinterpret_cast<std::uintptr_t>(g_view);
     const std::uint64_t offset = start >= viewStart ? start - viewStart : UINT64_MAX;
