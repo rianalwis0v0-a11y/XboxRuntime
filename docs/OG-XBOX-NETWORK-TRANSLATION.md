@@ -120,3 +120,41 @@ The guest kernel now routes the documented PHY exports to Windows adapter discov
 This is a real kernel-import path, unlike merely exporting XNet wrapper names: the XBE kernel thunk resolver already maps imported kernel ordinals through `KernelDispatch`, and these two ordinals now have explicit routes. It provides host link-state visibility only; it does **not** implement packet transport by itself or prove that a particular title reaches Winsock. The existing XNet/XSocket Winsock backend remains the socket transport layer, and a real-XBE end-to-end call-path test is still required.
 
 The ABI signatures and ordinals were checked against the Xbox kernel export reference. The host implementation uses Windows IP Helper (`GetAdaptersAddresses`), already linked by `guest32/CMakeLists.txt` as `iphlpapi`. No MCPX register, PHY, DMA, or interrupt model was added.
+
+
+## Static XNET library detection and runtime call tracing
+
+Retail XBE titles commonly link XNET as static code. The loader now records two pieces of evidence from the mapped XBE:
+
+- The XNET library-version record and its build number (when present).
+- Executable sections named XNET, with their exact guest VA ranges.
+
+Before guest execution, those ranges are registered with the kernel compatibility layer. KernelDispatch now checks calls to known network/device and XNet configuration I/O kernel ordinals. When a call's return address is inside a recorded executable XNET section, the runtime emits one diagnostic per ordinal:
+
+    [XboxKernel] STATIC_XNET_KERNEL_CALL ordinal=202 (NtOpenFile) caller=0x........ XNET-library-build=....
+
+The trace candidates include the I/O-manager/device-control exports (59–87, 196, 200), XNet configuration file calls (NtClose, NtCreateFile, NtFlushBuffersFile, NtOpenFile, NtReadFile, NtWriteFile, and related query calls), and the PHY exports (252–253). This makes the first static-library boundary observable without guessing instruction signatures or patching executable bytes.
+
+### Source-backed call-path evidence
+
+The public Team Resurgent RXDK-Libs source tree contains the XNet stack source derived in part from Microsoft XDK source. In that tree:
+
+- XNetOpenConfigVolume calls NtOpenFile.
+- XNetLoadConfigSector calls NtReadFile.
+- XNetSaveConfigSector calls NtWriteFile.
+- XNetCloseConfigVolume calls NtClose.
+
+These are configuration-sector operations, not proof that the packet data path is implemented by those kernel calls. The RXDK tree also separates the Xbox NIC implementation (nicx.cpp) from its Windows-host software NIC (nicw.cpp). We use this source as an ABI/call-path research reference; no RXDK source files or proprietary XDK binaries are copied into XboxRuntime.
+
+Reference: https://github.com/Team-Resurgent/RXDK-Libs/tree/main/libs/libxnet/net
+
+### What this enables—and what it does not
+
+This is a diagnostic bridge, not yet a static XNet API detour. It identifies kernel services actually called from a title's XNET code section and records the XDK library build. It does not redirect a statically linked XNetStartup or XSocket* entry point to the Winsock wrappers, and it does not translate the Xbox NIC dataplane. A title whose linker folds XNET code into a generic .text section may not be covered by the named-section trace. The next implementation step must use a real XBE's trace plus matching XDK/library evidence to choose a safe interception boundary; no guessed byte-pattern patching is enabled.
+
+
+### Static XNet startup storage boundary
+
+The guest file layer now accepts the actual Xbox 12-byte OBJECT_ATTRIBUTES layout (RootDirectory, ANSI OBJECT_STRING pointer, Attributes) used by XNet's XNetOpenConfigVolume path, while retaining the older Unicode fixture layout for existing diagnostic tests. The virtual device path \\Device\\Harddisk0\\partition0 is backed by a persistent config.bin beside the title XBE. The backing file is initialized to the XDK config-volume size of 16 sectors × 512 bytes (8 KiB), matching the RXDK-Libs host HAL behavior. This supports the static XNet startup sequence that opens the config volume and reads/writes config sector 8; it is not a packet dataplane implementation.
+
+The generated diagnostic XBE now includes a separate executable section named XNET and an XNET library-version record (build 5849). Its synthetic static routine calls NtOpenFile with the real 12-byte Xbox OBJECT_ATTRIBUTES / ANSI OBJECT_STRING layout for \\Device\\Harddisk0\\partition0, then calls NtClose. The host report includes the static-XNET trace count; the CI log currently shows 2 observed calls (NtOpenFile and NtClose), proving that the section-range filter and runtime callback are connected end to end. This fixture is synthetic and does not replace testing against a real retail title.

@@ -1,139 +1,106 @@
-# Insignia connectivity acceptance plan
+# Windows-hosted Xbox API compatibility harness
 
-## Goal
+## Architecture rule
 
-XboxRuntime must run a supported original-Xbox title in the x86 guest and let its
-original Xbox Live code reach the real Insignia service. A successful build,
-a DNS lookup alone, or a mocked socket is not a passing result.
+XboxRuntime is a Windows harness for running Original Xbox XBE code. It preserves
+the 32-bit Xbox-facing ABI at the guest boundary and translates supported calls
+to native Windows functionality underneath.
 
-Insignia's documented normal setup uses primary DNS 46.101.64.175 and a
-public secondary resolver such as 8.8.8.8 or 1.1.1.1. Console registration
-and title support are separate prerequisites.
+- **Emulated Xbox-specific state:** the 256-byte EEPROM, persisted to the
+  configured host file. A blank EEPROM remains unprovisioned; the runtime must
+  not invent a console identity.
+- **Host-owned networking:** Windows adapter enumeration, DNS resolution,
+  TCP/UDP sockets, packet transport, and socket lifecycle use Windows APIs
+  (IP Helper and Winsock). Do not emulate an Xbox NIC, MCPX/NVNet hardware,
+  Ethernet controller, TCP/IP stack, or packet path.
+- **API compatibility:** Xbox kernel/XNet/XSocket entry points retain their
+  guest calling convention, structure layout, and 32-bit pointer/handle model.
+  Their implementations translate to Windows APIs where an equivalent exists.
+- **Service behavior:** Insignia or another Xbox service is an external endpoint.
+  The harness must not hard-code service DNS addresses or implement a service
+  server as part of the Windows transport layer.
 
-## Test stages
+The guiding rule is: emulate only the Xbox-specific state that Windows cannot
+supply (currently the EEPROM); use Windows for the actual host capabilities.
 
-1. **Host transport**
-   - Guest UDP and TCP sockets can send and receive real traffic through the
-     Windows host.
-   - DNS queries resolve through the configured resolver.
-   - TCP connect, timeout, shutdown, close, and error paths are tested.
-   - No test silently substitutes loopback or a fake server.
+## Current implementation
 
-2. **Xbox API compatibility**
-   - Implement the XNet and XSocket exports actually imported by retail XBEs.
-   - Match Xbox calling convention, structure layout, byte order, return values,
-     asynchronous completion behavior, and error translation.
-   - Keep guest pointers and handles inside the guest address/handle model;
-     never pass a guest pointer directly to a 64-bit host API.
-   - Validate import ordinals against known Xbox kernel/XNet import definitions
-     before adding dispatch entries. Do not guess ordinal values.
+### Windows networking backend
 
-3. **Address and service discovery**
-   - Implement XNet startup/cleanup and Xbox address structures.
-   - Support hostname resolution and the XNet address conversion routines
-     required by the selected title.
-   - Preserve the configured DNS path; do not hard-code Insignia server IPs
-     into individual API stubs.
+The guest32/network_compat.cpp file provides:
 
-4. **Connection test**
-   - Run an unmodified, supported original-Xbox title or Insignia Setup
-     Assistant in the guest.
-   - Capture the DNS and connection sequence.
-   - Confirm the guest reaches the real Insignia endpoints and receives
-     protocol-valid replies.
-   - Record the exact failing stage if the test does not complete.
+- Winsock 2.2 startup/cleanup with reference counting.
+- Host-configured DNS through getaddrinfo, inheriting Windows resolver policy,
+  DNS servers, and search suffixes.
+- IPv4 TCP and UDP socket creation and transport.
+- Bind/connect/listen/accept, send/receive, sendto/recvfrom, shutdown,
+  nonblocking mode, socket options, select, and timeouts.
+- 32-bit guest socket tokens mapped to native Windows SOCKET handles.
+  Native host handles are not exposed as guest values.
+- Socket leases so an in-flight operation can finish safely while a guest
+  closes its token.
 
-5. **Multiplayer**
-   - Verify peer-to-peer UDP traffic, NAT behavior, and title session discovery.
-   - A successful service sign-in is not by itself proof that multiplayer works.
+The guest32/xnet_compat.cpp file provides an initial Xbox-facing XNet/XSocket ABI
+layer over that backend, including startup/cleanup, DNS lookup, address
+helpers, link state, and core socket operations.
 
-## Current repository audit
+### EEPROM
 
-- `modules/insignia_dns` is a host-side DNS forwarding/hijacking helper. It
-  is not an implementation of the Xbox XNet/XSocket APIs.
-- The helper binds UDP and TCP port 53 and therefore has host privilege,
-  port-conflict, and lifecycle considerations.
-- `main/main.cpp` currently starts NV2A, FATX, input, XDVDFS, and XBE loader;
-  it does not load `insignia_dns.dll`.
-- The x86 guest's kernel import resolver currently dispatches kernel ordinals;
-  no verified XNet/XSocket compatibility layer has been found in the audited
-  files yet.
-- The current guest process is a separate 32-bit process. Networking must be
-  implemented at that guest boundary, not by exposing host pointers as guest
-  API parameters.
+XboxKernelInitializeEeprom loads or creates a persistent 256-byte EEPROM
+image. A newly created image is all 0xFF and explicitly unprovisioned.
+SMBus reads and writes access this image, and writes are persisted to the
+configured host file. Invalid-size existing EEPROM files are rejected rather
+than silently truncated or replaced.
 
-## Pass criteria
+### XBE import compatibility
 
-The milestone is **PASS** only when a real supported title in the x86 guest
-completes the Insignia connection/sign-in flow using real network traffic.
-DNS-only success, a successful Winsock startup, stubbed exports, and compile
-success are intermediate checks, not acceptance.
+The guest import resolver handles Xbox kernel thunk imports. The separate
+named-import registry resolves a supported set of XNET/XNET.DLL imports
+to guest ABI thunks. This is a compatibility bridge, not proof that every
+XNet export or every statically linked XNet call site is covered.
 
+Static-XNET instrumentation identifies executable XBE sections named XNET
+and traces selected kernel imports called from those ranges. It is diagnostic
+instrumentation only: it does not detour arbitrary statically linked XNet
+functions or itself implement the network dataplane.
 
-## Networking implementation progress
+## Validation
 
-The first guest-side transport foundation is now present in `guest32/network_compat.cpp`:
+The networking validation workflow builds the x86 guest and runs:
 
-- Winsock 2.2 startup with reference-counted initialization and cleanup.
-- IPv4 hostname resolution through the Windows resolver.
-- TCP and UDP socket creation.
-- TCP/connected-UDP connect, bind, listen, accept, send, receive, and socket timeouts.
-- 32-bit guest tokens map to host `SOCKET` values; raw host socket handles are never exposed as guest tokens.
-- Closing a guest token removes it from the handle table before closing the host socket.
+- XBE named-import registry smoke tests.
+- Static-XNET trace smoke tests.
+- Host Winsock startup, DNS, TCP/UDP, and XSocket-wrapper smoke tests.
 
-A `network_smoke` CTest target checks Winsock startup, resolving `localhost`, creating TCP/UDP sockets, and closing them.
+The main Windows build also runs the native x86 XBE execution test and a
+comprehensive diagnostic XBE. A passing build or loopback test is an
+intermediate check, not proof that a retail title can sign in to Insignia.
 
-**Important limitation:** this is a transport backend, not yet the Xbox XNet/XSocket ABI. The XBE loader currently resolves the Xbox kernel thunk table only; it does not yet parse non-kernel import libraries and bind XNet/XSocket imports to these functions. Therefore this commit does not make Insignia sign-in or multiplayer work yet. The next required step is implementing the XBE non-kernel import resolver and the correct Xbox XNet/XSocket ABI/structure mappings, then running a real title against Insignia.
+Final acceptance requires an unmodified supported title to execute its Xbox
+networking code through the compatibility boundary, resolve service names
+using the host's configured DNS path, and exchange real traffic with the
+intended external service. Multiplayer additionally requires real peer UDP
+traffic and NAT behavior to be validated.
 
+## Known limitations
 
-## Insignia-first DNS resolution (guest transport)
+- The XNet/XSocket API surface is incomplete; QoS, secure address/key
+  registration, NAT traversal, voice encryption, broadcast/system-link
+  behavior, overlapped I/O, and other title-specific exports still need work.
+- Static-XNET trace coverage depends on a discoverable executable section
+  named XNET; titles that fold static code into generic sections may not
+  be identified by this instrumentation.
+- The comprehensive diagnostic currently fails its synthetic static-XNET
+  NtOpenFile config-path case (observed status 0xC0000033). The host x86
+  guest build and networking validation workflow pass, but this failure must
+  be diagnosed before the branch can be called fully validated.
+- No successful retail-title Insignia sign-in or multiplayer acceptance run
+  has been recorded yet.
 
-The guest transport resolver now sends an IPv4 DNS A query for fully qualified
-hostnames to Insignia's documented primary resolver, `46.101.64.175`, before
-falling back to the Windows resolver. This avoids relying on an ISP's possibly
-intercepted DNS path for Xbox service hostnames. Loopback, `.local`, and
-single-label names stay on the normal resolver. Replies are checked for the
-expected transaction ID, source server, response flag, and successful RCODE;
-only an IPv4 A record is accepted.
+## Non-goals
 
-This does **not** redirect arbitrary HTTP requests to the Insignia website, and
-it does not forward ICMP ping packets. DNS changes only the IP address returned
-for a hostname; subsequent TCP/UDP traffic must still be implemented by the
-guest networking APIs. The resolver is currently used by the internal
-`XboxNetResolveIPv4` / socket-connect bridge, not by every statically linked
-XNet routine in retail titles. Full title integration still depends on the
-verified XNet/XSocket interception and ABI work above.
-
-Build/runtime status: implementation committed, but no Windows/MSVC build or
-live DNS query test has been run in this environment.
-
-
-## XNet/XSocket compatibility layer (initial API tranche)
-
-Added guest-side ABI declarations and implementations in
-`guest32/xnet_compat.h/.cpp`, based on documented/original-Xbox-compatible
-structure definitions and cross-checked against public XNet/XSocket
-implementations. The current tranche includes:
-
-- `XNetStartup` / `XNetCleanup` with the 13-byte startup-parameter layout,
-  reference counting, and Winsock transport lifecycle.
-- `XNetDnsLookup` / `XNetDnsRelease` with the 40-byte `XNDNS` result layout.
-  Lookup currently completes synchronously and signals the supplied WSA event.
-  It uses the guest resolver, which tries Insignia DNS first for fully qualified
-  names.
-- Address conversion helpers, host-adapter link status, and LAN-only `XNetGetTitleXnAddr` reporting (it does not invent an online XNADDR).
-- Core `XSocket` create/close, bind/connect/listen/accept, shutdown, nonblocking,
-  send/receive, sendto/recvfrom, socket options, local/peer address queries, and
-  byte-order helpers. Guest-visible socket values are 32-bit tokens, not raw
-  host `SOCKET` handles.
-
-The `network_smoke` target now includes an XNet startup/DNS-event check and a
-real UDP loopback send/receive test through the XSocket wrapper.
-
-**Not complete:** This is an initial API tranche, not a full XDK port. QoS,
-secure address/key registration, NAT traversal, VDP voice encryption,
-broadcast/system-link emulation, overlapped I/O, and the remaining XNet/XSocket
-functions are not implemented. The current XBE loader still does not hook
-statically linked XNet/XSocket code inside retail titles, so these routines
-are not yet automatically invoked by arbitrary XBEs. A passing build and
-runtime test are still required; no Windows/MSVC build has been run here.
+- No Xbox Ethernet/NIC hardware emulation.
+- No emulated Xbox TCP/IP or packet stack.
+- No hard-coded Insignia DNS resolver in the transport backend.
+- No Xbox Live/Insignia server implementation inside this compatibility layer.
+- No fabricated EEPROM identity or automatic console provisioning.
