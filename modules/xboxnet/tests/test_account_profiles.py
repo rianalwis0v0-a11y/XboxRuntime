@@ -64,7 +64,7 @@ class AccountProfileTests(unittest.TestCase):
     def test_unknown_update_fields_are_rejected(self):
         self.service.create_profile("principal-a", "PlayerA")
         with self.assertRaises(InvalidProfile):
-            self.service.update_profile("principal-a", principal_id="other")
+            self.service.update_profile("principal-a", is_admin=True)
 
     def test_profile_handler_create_get_update(self):
         context = AuthContext.from_decision(AuthDecision(True, "principal-a", "accepted"))
