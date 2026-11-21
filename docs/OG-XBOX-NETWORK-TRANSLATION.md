@@ -151,3 +151,8 @@ Reference: https://github.com/Team-Resurgent/RXDK-Libs/tree/main/libs/libxnet/ne
 ### What this enables—and what it does not
 
 This is a diagnostic bridge, not yet a static XNet API detour. It identifies kernel services actually called from a title's XNET code section and records the XDK library build. It does not redirect a statically linked XNetStartup or XSocket* entry point to the Winsock wrappers, and it does not translate the Xbox NIC dataplane. A title whose linker folds XNET code into a generic .text section may not be covered by the named-section trace. The next implementation step must use a real XBE's trace plus matching XDK/library evidence to choose a safe interception boundary; no guessed byte-pattern patching is enabled.
+
+
+### Static XNet startup storage boundary
+
+The guest file layer now accepts the actual Xbox 12-byte OBJECT_ATTRIBUTES layout (RootDirectory, ANSI OBJECT_STRING pointer, Attributes) used by XNet's XNetOpenConfigVolume path, while retaining the older Unicode fixture layout for existing diagnostic tests. The virtual device path \\Device\\Harddisk0\\partition0 is backed by a persistent config.bin beside the configured EEPROM file. The backing file is initialized to the XDK config-volume size of 16 sectors × 512 bytes (8 KiB), matching the RXDK-Libs host HAL behavior. This supports the static XNet startup sequence that opens the config volume and reads/writes config sector 8; it is not a packet dataplane implementation.
