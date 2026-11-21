@@ -6,7 +6,9 @@
 #include "xonline_compat.h"
 
 int main() {
-    if (XOnlineStartup(nullptr) != XONLINE_E_NOT_INITIALIZED) return 42;\n\n    XNetStartupParams params{};
+    if (XOnlineStartup(nullptr) != XONLINE_E_NOT_INITIALIZED) return 42;
+
+    XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
     params.cfgSockMaxSockets = 4;
     if (XNetStartup(&params) != 0) return 1;\n\n    // XOnline ABI and asynchronous task lifecycle. No remote verifier is
