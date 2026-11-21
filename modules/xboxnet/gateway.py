@@ -21,8 +21,9 @@ SERVICE_CATALOG = (
     {
         "id": "security_gateway",
         "name": "Security gateway",
-        "state": "not_implemented",
+        "state": "scaffold",
         "protocol": "research_required",
+        "note": "Internal bounded dispatcher only; no Xbox gateway framing or network endpoint is implemented.",
     },
     {
         "id": "profiles",
