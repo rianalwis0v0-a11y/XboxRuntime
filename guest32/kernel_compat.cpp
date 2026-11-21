@@ -1,5 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <iphlpapi.h>
+#include <vector>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -1827,6 +1829,41 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE sourceProcess, HANDLE sourc
         return LONG(0xC0000008u);
     return 0;
 }
+// Xbox PHY exports are translated to Windows adapter/link discovery.
+// This deliberately reports host link availability; it does not emulate an MCPX PHY.
+namespace {
+ULONG QueryHostAdapterList(std::vector<unsigned char>& storage) {
+    constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG bytes = 16 * 1024;
+    for (unsigned attempt = 0; attempt < 3; ++attempt) {
+        storage.resize(bytes);
+        auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(storage.data());
+        ULONG result = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, adapters, &bytes);
+        if (result == ERROR_BUFFER_OVERFLOW) continue;
+        return result;
+    }
+    return ERROR_BUFFER_OVERFLOW;
+}
+}
+extern "C" ULONG __stdcall K_PhyGetLinkState(BOOLEAN verify) {
+    (void)verify; // Windows reports current operational state; it has no Xbox MII repoll mode.
+    std::vector<unsigned char> storage;
+    const ULONG result = QueryHostAdapterList(storage);
+    if (result != NO_ERROR) return 0;
+    const auto* adapter = reinterpret_cast<const IP_ADAPTER_ADDRESSES*>(storage.data());
+    for (; adapter; adapter = adapter->Next) {
+        if (adapter->OperStatus == IfOperStatusUp) return 1u;
+    }
+    return 0u;
+}
+extern "C" LONG __stdcall K_PhyInitialize(BOOLEAN forceReset, void* parameter2) {
+    (void)forceReset; (void)parameter2;
+    // Windows owns NIC initialization. Enumeration validates that the host networking
+    // subsystem is queryable; no physical reset or raw hardware access is attempted.
+    std::vector<unsigned char> storage;
+    const ULONG result = QueryHostAdapterList(storage);
+    return (result == NO_ERROR || result == ERROR_NO_DATA) ? 0 : LONG(0xC0000001u);
+}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -2101,6 +2138,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_free_vm
         cmp eax, 238
         je nt_yield
+        cmp eax, 252
+        je phy_get_link_state
+        cmp eax, 253
+        je phy_initialize
         cmp eax, 218
         je nt_query_volume_information_file
         cmp eax, 229
@@ -2480,6 +2521,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    phy_get_link_state: jmp K_PhyGetLinkState
+    phy_initialize: jmp K_PhyInitialize
     }
 }
 namespace {
