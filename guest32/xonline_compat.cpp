@@ -1,9 +1,11 @@
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
 #include <windows.h>
 #include <algorithm>
 #include <mutex>
 #include <new>
 #include <unordered_set>
+#include "xnet_compat.h"
 #include "xonline_compat.h"
 
 struct XboxOnlineTask {
