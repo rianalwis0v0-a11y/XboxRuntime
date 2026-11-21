@@ -196,7 +196,7 @@ add_executable(kernel_io_group_a_guest_smoke
   ../tests/kernel_io_group_a_guest_smoke.cpp
   kernel_compat.cpp kernel_gpu_service.cpp kernel_gpu_mmio.cpp kernel_filesystem_bridge.cpp kernel_system.cpp kernel_time.cpp kernel_nvsettings.cpp kernel_memory.cpp
   kernel_object_manager.cpp kernel_object_reference.cpp kernel_thread_exports.cpp kernel_io_completion.cpp
-  kernel_io_exports.cpp kernel_directory_objects.cpp kernel_crypto.cpp network_compat.cpp xnet_compat.cpp guest_api_registry.cpp
+  kernel_io_exports.cpp kernel_directory_objects.cpp kernel_crypto.cpp network_compat.cpp xnet_compat.cpp directsound_compat.cpp guest_api_registry.cpp
   thread_compat.cpp privileged_instruction.cpp
   ../modules/fatx/include/fatx.cpp ../modules/fatx/fatx_provider.cpp
   ../modules/xdvdfs/xdvdfs.cpp ../modules/xdvdfs/xdvdfs_provider.cpp
