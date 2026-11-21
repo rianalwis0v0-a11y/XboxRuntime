@@ -3,8 +3,32 @@
 #include <cstring>
 #include "network_compat.h"
 #include "xnet_compat.h"
+#include "xonline_compat.h"
 
 int main() {
+    // XOnline ABI and asynchronous task lifecycle. No remote verifier is
+    // configured, so the task must finish with a fail-closed service error.
+    static_assert(sizeof(XONLINE_USER) == 116, "original Xbox XONLINE_USER ABI");
+    if (XOnlineStartup(nullptr) != S_OK) return 42;
+    DWORD storedUsers = XONLINE_MAX_STORED_ONLINE_USERS;
+    XONLINE_USER localUsers[XONLINE_MAX_STORED_ONLINE_USERS]{};
+    if (XOnlineGetUsers(localUsers, &storedUsers) != S_OK || storedUsers != 0)
+        return 43;
+    XONLINE_USER loginUser{};
+    loginUser.xuid.qwUserID = 1;
+    const DWORD requestedServices[] = { 6, 7 };
+    XONLINETASK_HANDLE logonTask = nullptr;
+    if (XOnlineLogon(&loginUser, requestedServices, 2, nullptr, &logonTask) != S_OK ||
+        !logonTask || XOnlineLogonTaskGetResults(logonTask) != XONLINETASK_S_RUNNING ||
+        XOnlineTaskContinue(logonTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
+        XOnlineLogonTaskGetResults(logonTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
+        XOnlineTaskClose(logonTask) != S_OK ||
+        XOnlineTaskClose(logonTask) != E_INVALIDARG ||
+        XOnlineCleanup() != S_OK) {
+        XOnlineCleanup();
+        return 44;
+    }
+
     XNetStartupParams params{};
     params.cfgSizeOfStruct = sizeof(params);
     params.cfgSockMaxSockets = 4;
