@@ -70,6 +70,7 @@ bool Resolve(const char* hostname, uint16_t port, int type, sockaddr_in& address
     freeaddrinfo(result);
     return true;
 }
+}
 
 extern "C" int __cdecl XboxNetStartup() {
     std::lock_guard<std::mutex> lock(g_mutex);
