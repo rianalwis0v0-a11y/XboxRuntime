@@ -1356,7 +1356,9 @@ int __cdecl XboxNV2A_GetTextureInfo(uint32_t channel, uint32_t subchannel,
 
     const XboxNV2A_DMA_INFO* dma =
         &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    const uint8_t* texture_start = NULL;
+    if (!dma->mapped_length || offset > dma->mapped_length ||
+        !dma_get_span(dma, offset, 1u, &texture_start))
         return 5;
 
     output->texture_offset = offset;
@@ -1390,15 +1392,15 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
     const uint32_t texture_slot=(info->context_method-0x0180u)/4u;
     const XboxNV2A_DMA_INFO* texture_dma=&g_dma_contexts[channel][subchannel][texture_slot];
     if(palette_method<0x0180u||!palette_dma->mapped_length||
-       palette_dma->dma_target!=0u||!texture_dma->mapped_length||
-       texture_dma->dma_target!=0u)return 2;
+       !texture_dma->mapped_length)return 2;
     if(palette_offset>palette_dma->mapped_length||
        palette_bytes>palette_dma->mapped_length-palette_offset||
        info->texture_offset>texture_dma->mapped_length)return 3;
-    const uint64_t palette_address=(uint64_t)palette_dma->base_address+palette_offset;
-    const uint64_t texture_address=(uint64_t)texture_dma->base_address+info->texture_offset;
-    if(palette_address>XBOX_VRAM_SIZE||palette_bytes>(uint64_t)XBOX_VRAM_SIZE-palette_address||
-       texture_address>XBOX_VRAM_SIZE)return 4;
+    const uint8_t* palette_data = NULL;
+    const uint8_t* texture_data = NULL;
+    if(!dma_get_span(palette_dma,palette_offset,palette_bytes,&palette_data)||
+       !dma_get_span(texture_dma,info->texture_offset,
+           texture_dma->mapped_length-info->texture_offset,&texture_data))return 4;
 
     uint64_t source_total=0,destination_total=0;
     uint32_t w=info->width,h=info->height;
@@ -1417,8 +1419,7 @@ static int decode_paletted_texture_stage(uint32_t channel,uint32_t subchannel,
     if(source_total>(uint64_t)XBOX_VRAM_SIZE-texture_address)return 6;
     uint8_t* linear=(uint8_t*)HeapAlloc(GetProcessHeap(),0,(SIZE_T)source_total);
     if(!linear)return 7;
-    const uint8_t* swizzled=g_vram+(size_t)texture_address;
-    const uint8_t* palette_data=g_vram+(size_t)palette_address;
+    const uint8_t* swizzled=texture_data;
     w=info->width;h=info->height;
     uint64_t source_offset=0;
     for(uint32_t level=0;level<info->level_count;++level){
@@ -1954,7 +1955,7 @@ int __cdecl XboxNV2A_ReadVertexArray(uint32_t channel, uint32_t subchannel,
     const uint32_t context_method = array_index < 8u ? 0x019Cu : 0x01A0u;
     const uint32_t context_slot = (context_method - 0x0180u) / 4u;
     const XboxNV2A_DMA_INFO* dma = &g_dma_contexts[channel][subchannel][context_slot];
-    if (!dma->mapped_length || dma->dma_target != 0u)
+    if (!dma->mapped_length)
         return 2;
 
     const uint32_t offset_method = 0x1720u + array_index * 4u;
