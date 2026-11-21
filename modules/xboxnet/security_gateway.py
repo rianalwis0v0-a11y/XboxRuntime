@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Optional, Protocol
 
-from auth_domain import AuthDecision
+from auth_domain import AuthDecision, AuthDomainService
 
 
 @dataclass(frozen=True)
@@ -83,3 +83,28 @@ class SecurityGatewayDispatcher:
         if len(response) > self._max_response_bytes:
             return DispatchResult(False, "response_too_large")
         return DispatchResult(True, "dispatched", response)
+
+
+
+class XboxNetSecurityGateway:
+    """Compose ticket authentication and service dispatch behind one boundary."""
+
+    def __init__(
+        self,
+        auth_domain: AuthDomainService,
+        dispatcher: SecurityGatewayDispatcher,
+    ) -> None:
+        self._auth_domain = auth_domain
+        self._dispatcher = dispatcher
+
+    def dispatch_ticket(
+        self,
+        ticket: bytes,
+        service_id: str,
+        payload: bytes,
+    ) -> DispatchResult:
+        decision = self._auth_domain.authenticate(ticket)
+        context = AuthContext.from_decision(decision)
+        if context is None:
+            return DispatchResult(False, "authentication_failed")
+        return self._dispatcher.dispatch(context, service_id, payload)
