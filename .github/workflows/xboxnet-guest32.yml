@@ -1,0 +1,27 @@
+name: XboxNet guest32 validation
+
+on:
+  push:
+    branches: [xboxnet]
+    paths:
+      - "guest32/**"
+      - "tests/network_smoke.cpp"
+      - ".github/workflows/xboxnet-guest32.yml"
+  pull_request:
+    paths:
+      - "guest32/**"
+      - "tests/network_smoke.cpp"
+      - ".github/workflows/xboxnet-guest32.yml"
+  workflow_dispatch:
+
+jobs:
+  win32-guest-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Win32 guest compatibility build
+        run: cmake -S guest32 -B build/guest32 -G "Visual Studio 17 2022" -A Win32
+      - name: Build guest networking and XOnline compatibility
+        run: cmake --build build/guest32 --config Release --parallel
+      - name: Run guest smoke test
+        run: ctest --test-dir build/guest32 -C Release --output-on-failure
