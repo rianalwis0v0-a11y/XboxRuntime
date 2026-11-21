@@ -2618,6 +2618,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_set_timer_ex
         cmp eax, 207
         je nt_query_directory_file
+        cmp eax, 208
+        je nt_query_directory_object
         cmp eax, 210
         je nt_query_full_attributes_file
         cmp eax, 211
@@ -2985,6 +2987,7 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_volume_information_file: jmp K_NtQueryVolumeInformationFile
     nt_set_timer_ex: jmp K_NtSetTimerEx
     nt_query_directory_file: jmp K_NtQueryDirectoryFile
+    nt_query_directory_object: jmp K_NtQueryDirectoryObject
     nt_query_full_attributes_file: jmp K_NtQueryFullAttributesFile
     nt_query_information_file: jmp K_NtQueryInformationFile
     nt_set_information_file: jmp K_NtSetInformationFile
