@@ -585,11 +585,11 @@ extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
-struct GuestAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+struct GuestXboxAnsiString { USHORT Length,MaximumLength; char* Buffer; };
 // Current Xbox kernel OBJECT_ATTRIBUTES is a 12-byte structure with an ANSI
 // OBJECT_STRING. Keep the older Windows-shaped Unicode fixture as a compatibility
 // path for the runtime's existing diagnostic XBE.
-struct GuestXboxObjectAttributes { HANDLE RootDirectory; GuestAnsiString* ObjectName; ULONG Attributes; };
+struct GuestXboxObjectAttributes { HANDLE RootDirectory; GuestXboxAnsiString* ObjectName; ULONG Attributes; };
 struct GuestLegacyObjectAttributes {
     ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes;
     void* SecurityDescriptor; void* SecurityQualityOfService;
