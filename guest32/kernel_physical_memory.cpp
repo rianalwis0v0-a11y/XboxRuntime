@@ -175,7 +175,8 @@ extern "C" BOOL __stdcall XboxKernelFreePhysicalMemory(void* allocation) {
     const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(allocation);
     const std::uintptr_t view = reinterpret_cast<std::uintptr_t>(g_view);
     const std::uint32_t offset = static_cast<std::uint32_t>(address - view);
-    std::uint32_t size = found->second;
+    const std::uint32_t allocatedSize = found->second;
+    std::uint32_t size = allocatedSize;
     g_allocations.erase(found);
     std::uint32_t mergedStart = offset;
     auto next = g_freeRanges.lower_bound(offset);
@@ -189,7 +190,7 @@ extern "C" BOOL __stdcall XboxKernelFreePhysicalMemory(void* allocation) {
     }
     next = g_freeRanges.lower_bound(offset);
     if (next != g_freeRanges.end() &&
-        static_cast<std::uint64_t>(offset) + found->second == next->first) {
+        static_cast<std::uint64_t>(offset) + allocatedSize == next->first) {
         size += next->second;
         g_freeRanges.erase(next);
     }
