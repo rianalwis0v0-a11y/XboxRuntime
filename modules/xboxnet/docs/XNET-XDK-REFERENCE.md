@@ -37,11 +37,13 @@ Games-for-Windows-Live ordinal list.
 
 XNet is the guest networking stack: sockets, DNS, secure peer addressing, and
 QoS. Account/profile operations are in the separate XOnline/XUser family.
-Relevant original-Xbox title imports include `XOnlineStartup`,
-`XOnlineCleanup`, `XUserReadProfileSettings`, and
-`XUserWriteProfileSettings`. XboxNet's SQLite profile service is currently
-an internal backend model for these concepts; it is **not** yet the original
-XOnline request/response protocol or a drop-in implementation of those APIs.
+Original-Xbox titles use the `XOnline` API family (for example
+`XOnlineStartup`, `XOnlineCleanup`, `XOnlineGetUsers`, `XOnlineLogon`, and
+the asynchronous task-pump APIs). Do not assume the Xbox 360/GFWL
+`XUserReadProfileSettings` and `XUserWriteProfileSettings` exports are the
+right original-Xbox interfaces. XboxNet's SQLite profile service is currently
+an internal backend model; it is **not** yet the original XOnline account
+storage, logon, or service protocol.
 
 ## Avoid mixing platforms
 
