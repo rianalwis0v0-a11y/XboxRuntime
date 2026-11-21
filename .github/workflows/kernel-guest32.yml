@@ -61,6 +61,31 @@ jobs:
           path: nxdk/samples/hello/bin/default.xbe
           if-no-files-found: error
 
+      - name: Build bounded GPU-only NV2A triangle XBE
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("nxdk/samples/triangle/main.c")
+          text = source.read_text()
+          old = "    while(1) {"
+          new = "    for (frames_total = 0; frames_total < 3; ++frames_total) {"
+          if text.count(old) != 1:
+              raise SystemExit("Expected exactly one triangle render loop")
+          source.write_text(text.replace(old, new))
+          PY
+          eval "$(./nxdk/bin/activate -s)"
+          make -C nxdk/samples/triangle -j2
+          test -s nxdk/samples/triangle/bin/default.xbe
+          sha256sum nxdk/samples/triangle/bin/default.xbe
+
+      - name: Upload GPU-only triangle XBE
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdk-gpu-only-triangle-xbe
+          path: nxdk/samples/triangle/bin/default.xbe
+          if-no-files-found: error
+
 
   kernel:
     needs: nxdk-homebrew-xbe
@@ -83,6 +108,12 @@ jobs:
         with:
           name: nxdk-kernel-smoke-xbe
           path: nxdk-fixture
+
+      - name: Download GPU-only triangle XBE
+        uses: actions/download-artifact@v4
+        with:
+          name: nxdk-gpu-only-triangle-xbe
+          path: nxdk-gpu-fixture
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -218,11 +249,17 @@ jobs:
           Copy-Item xbe_loader.dll integration/
           Copy-Item kernel_xbe_integration.exe integration/
           Copy-Item nxdk-fixture/default.xbe integration/
+          Copy-Item nxdk-gpu-fixture/default.xbe integration/gpu_only.xbe
           Get-FileHash integration/default.xbe -Algorithm SHA256 | Format-List
+          Get-FileHash integration/gpu_only.xbe -Algorithm SHA256 | Format-List
 
       - name: Execute NXDK XBE through real loader and kernel backend
         working-directory: integration
         run: ./kernel_xbe_integration.exe ./default.xbe
+
+      - name: Execute GPU-only NV2A triangle XBE
+        working-directory: integration
+        run: ./kernel_xbe_integration.exe ./gpu_only.xbe
 
       - name: Verify backend pair
         shell: pwsh
