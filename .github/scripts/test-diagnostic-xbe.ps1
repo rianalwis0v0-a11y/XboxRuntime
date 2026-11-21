@@ -1094,7 +1094,8 @@ Put16 0x20C 5849
 Put16 0x20E 0
 [Text.Encoding]::ASCII.GetBytes("XNET" + [char]0).CopyTo($b,0x2F0)
 
-# Build a tiny static-XNET routine: NtOpenFile(config volume), then NtClose.
+# Build a tiny static-XNET routine: NtOpenFile on a title file mapped
+# through the Windows host path, then NtClose.
 $xnetCode = [System.Collections.Generic.List[byte]]::new()
 function XnetByte([int]$v) { [void]$xnetCode.Add([byte]($v -band 255)) }
 function Xnet32([uint32]$v) { foreach ($x in [BitConverter]::GetBytes($v)) { [void]$xnetCode.Add($x) } }
@@ -1121,7 +1122,7 @@ if ($xnetCode.Count -gt 0x100) { throw "Static XNET fixture code is too large." 
 $xnetCode.ToArray().CopyTo($b,0x8000)
 
 # Xbox OBJECT_ATTRIBUTES (12 bytes) and ANSI OBJECT_STRING for partition0.
-$volumePath = "\Device\Harddisk0\partition0"
+$volumePath = "\Device\Cdrom0\\xbe-test.txt"
 $volumePathBytes = [Text.Encoding]::ASCII.GetBytes($volumePath + [char]0)
 Put32 0x8100 0
 Put32 0x8104 ([uint32]($base + 0x8120))
