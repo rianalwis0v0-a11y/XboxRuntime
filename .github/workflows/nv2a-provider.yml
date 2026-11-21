@@ -1,0 +1,33 @@
+name: NV2A provider build
+
+on:
+  push:
+    branches:
+      - work/nv2a-guest-physical-map
+  pull_request:
+    paths:
+      - "modules/nv2a/**"
+      - "tests/nv2a_vertex_shader_smoke.cpp"
+      - ".github/workflows/nv2a-provider.yml"
+      - ".gitmodules"
+
+permissions:
+  contents: read
+
+jobs:
+  build-win32:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository and pinned dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure 32-bit NV2A provider
+        run: cmake -S modules/nv2a -B build/nv2a -A Win32 -DBUILD_TESTING=ON
+
+      - name: Build provider and smoke test
+        run: cmake --build build/nv2a --config Release --parallel
+
+      - name: Run NV2A microcode validation smoke test
+        run: ctest --test-dir build/nv2a -C Release --output-on-failure
