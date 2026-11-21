@@ -7,6 +7,7 @@
 #include "kernel_gpu_service.h"
 #include "kernel_gpu_mmio.h"
 #include "kernel_memory.h"
+#include "kernel_physical_memory.h"
 #include "kernel_gpu_service_protocol.h"
 #include "guest_protocol.h"
 #include "kernel_storage_mounts.h"
@@ -55,7 +56,13 @@ struct GpuMemoryMappingGuard {
     HANDLE mapping = nullptr;
     void* view = nullptr;
     bool initialized = false;
+    HANDLE physicalMapping = nullptr;
+    void* physicalView = nullptr;
+    bool physicalInitialized = false;
     ~GpuMemoryMappingGuard() {
+        if (physicalInitialized) XboxKernelPhysicalMemoryShutdown();
+        if (physicalView) UnmapViewOfFile(physicalView);
+        if (physicalMapping) CloseHandle(physicalMapping);
         if (initialized) XboxKernelGpuMemoryShutdown();
         if (view) UnmapViewOfFile(view);
         if (mapping) CloseHandle(mapping);
@@ -68,12 +75,14 @@ int wmain(int argc, wchar_t** argv) {
     const wchar_t* pipeName = ArgumentValue(argc, argv, L"--pipe");
     const wchar_t* gpuPipeName = ArgumentValue(argc, argv, L"--gpu-pipe");
     const wchar_t* gpuMemoryName = ArgumentValue(argc, argv, L"--gpu-memory");
+    const wchar_t* physicalMemoryName = ArgumentValue(argc, argv, L"--physical-memory");
     const wchar_t* mappingName = ArgumentValue(argc, argv, L"--mapping");
     const wchar_t* eepromPath = ArgumentValue(argc, argv, L"--eeprom");
     const wchar_t* titlePath = ArgumentValue(argc, argv, L"--xbe");
     const std::uint32_t base = NumberArgument(argc, argv, L"--base");
     const std::uint32_t size = NumberArgument(argc, argv, L"--size");
-    if (!pipeName || !gpuPipeName || !gpuMemoryName || !mappingName || !eepromPath || !base || !size ||
+    if (!pipeName || !gpuPipeName || !gpuMemoryName || !physicalMemoryName ||
+        !mappingName || !eepromPath || !base || !size ||
         std::uint64_t(base) + size > 0x80000000ull)
         return ERROR_INVALID_PARAMETER;
 
@@ -110,6 +119,17 @@ int wmain(int argc, wchar_t** argv) {
         return ERROR_NOT_READY;
     }
     gpuMemory.initialized = true;
+
+    gpuMemory.physicalMapping = OpenFileMappingW(
+        FILE_MAP_ALL_ACCESS, FALSE, physicalMemoryName);
+    if (!gpuMemory.physicalMapping) return GetLastError();
+    gpuMemory.physicalView = MapViewOfFile(gpuMemory.physicalMapping,
+        FILE_MAP_ALL_ACCESS, 0, 0, XBOX_GUEST_PHYSICAL_RAM_SIZE);
+    if (!gpuMemory.physicalView) return GetLastError();
+    if (!XboxKernelPhysicalMemoryInitialize(gpuMemory.physicalView,
+            XBOX_GUEST_PHYSICAL_RAM_BASE, XBOX_GUEST_PHYSICAL_RAM_SIZE))
+        return ERROR_NOT_READY;
+    gpuMemory.physicalInitialized = true;
 
     HANDLE pipe = CreateFileW(pipeName, GENERIC_READ | GENERIC_WRITE, 0,
                               nullptr, OPEN_EXISTING, 0, nullptr);
