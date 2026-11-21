@@ -60,7 +60,7 @@ class GatewayTests(unittest.TestCase):
     def test_status_document_is_copy_safe(self):
         snapshot = status_document()
         snapshot["services"][0]["state"] = "changed"
-        self.assertEqual(SERVICE_CATALOG[0]["state"], "not_implemented")
+        self.assertEqual(SERVICE_CATALOG[0]["state"], "scaffold")
 
 
 if __name__ == "__main__":
