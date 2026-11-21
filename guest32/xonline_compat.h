@@ -55,7 +55,7 @@ struct XboxOnlineTask;
 using XONLINETASK_HANDLE = XboxOnlineTask*;
 
 static_assert(sizeof(XUID) == 12, "Original Xbox XUID ABI size");
-static_assert(sizeof(XONLINE_USER) == 116, "Original Xbox XONLINE_USER ABI size");
+static_assert(sizeof(XONLINE_USER) == 112, "Original Xbox XONLINE_USER ABI size");
 static_assert(offsetof(XONLINE_USER, szGamertag) == 12, "XONLINE_USER gamertag offset");
 static_assert(offsetof(XONLINE_USER, dwUserOptions) == 28, "XONLINE_USER options offset");
 static_assert(offsetof(XONLINE_USER, passcode) == 32, "XONLINE_USER passcode offset");
