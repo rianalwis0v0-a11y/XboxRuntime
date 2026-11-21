@@ -140,10 +140,36 @@ int main() {
 
     XNADDR titleAddress{};
     const DWORD titleAddressFlags = XNetGetTitleXnAddr(&titleAddress);
-    if (titleAddressFlags != XNET_GET_XNADDR_NONE &&
-        !(titleAddressFlags & XNET_GET_XNADDR_ETHERNET)) {
+    if (titleAddressFlags != XNET_GET_XNADDR_NONE) {
+        const DWORD addressMode = titleAddressFlags &
+            (XNET_GET_XNADDR_DHCP | XNET_GET_XNADDR_STATIC | XNET_GET_XNADDR_AUTO);
+        if (!(titleAddressFlags & XNET_GET_XNADDR_ETHERNET) ||
+            titleAddress.ina.s_addr == htonl(INADDR_ANY) ||
+            (ntohl(titleAddress.ina.s_addr) >> 24) == IN_LOOPBACKNET ||
+            (addressMode != XNET_GET_XNADDR_DHCP &&
+             addressMode != XNET_GET_XNADDR_STATIC &&
+             addressMode != XNET_GET_XNADDR_AUTO)) {
+            XNetCleanup();
+            return 29;
+        }
+    } else if (titleAddress.ina.s_addr != 0) {
         XNetCleanup();
-        return 29;
+        return 45;
+    }
+
+    const DWORD linkStatus = XNetGetEthernetLinkStatus();
+    const DWORD speedFlags = linkStatus &
+        (XNET_ETHERNET_LINK_10MBPS | XNET_ETHERNET_LINK_100MBPS);
+    if ((linkStatus & ~(XNET_ETHERNET_LINK_ACTIVE |
+                        XNET_ETHERNET_LINK_10MBPS |
+                        XNET_ETHERNET_LINK_100MBPS |
+                        XNET_ETHERNET_LINK_FULL_DUPLEX |
+                        XNET_ETHERNET_LINK_HALF_DUPLEX |
+                        XNET_ETHERNET_LINK_WIRELESS)) != 0 ||
+        speedFlags == (XNET_ETHERNET_LINK_10MBPS | XNET_ETHERNET_LINK_100MBPS) ||
+        (speedFlags && !(linkStatus & XNET_ETHERNET_LINK_ACTIVE))) {
+        XNetCleanup();
+        return 46;
     }
 
     uint32_t loopback = 0;
