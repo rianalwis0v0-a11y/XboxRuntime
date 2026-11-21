@@ -135,3 +135,8 @@ be claimed.
 Current build/test automation compiles the x64 kernel provider, main runtime
 module, x86 guest process, and both network/registry smoke tests. A successful
 compile does not prove a real XBE starts or connects to Insignia.
+
+
+## Directory object enumeration
+
+Ordinal 208, `NtQueryDirectoryObject`, enumerates immediate child directory objects created in the runtime-owned named-directory namespace. The x86 output uses the pinned 12-byte `OBJECT_DIRECTORY_INFORMATION` layout and returns a counted ANSI name whose buffer points inside the caller's output buffer. `RestartScan` resets the caller context; successful calls advance it, and undersized buffers report the required byte count without consuming the entry. Current limitations: one entry per call, `Type` is zero because Xbox object-type identifiers are not yet modeled, and only directory objects are enumerated. This is partial namespace support, not general object-directory compatibility.
