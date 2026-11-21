@@ -11,3 +11,4 @@ EXPORTS
     XboxNV2A_WriteVRAM
     XboxNV2A_ReadRAMIN
     XboxNV2A_WriteRAMIN
+    XboxNV2A_InitializeRenderer
