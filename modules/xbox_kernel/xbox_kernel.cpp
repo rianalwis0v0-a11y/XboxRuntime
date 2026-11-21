@@ -4,6 +4,7 @@
 #include "../xbe_loader/xbe_backend_api.h"
 #include "../../guest32/guest_protocol.h"
 #include "../../guest32/kernel_gpu_service_protocol.h"
+#include "../../guest32/kernel_physical_memory.h"
 
 #include <atomic>
 #include <cstdint>
@@ -20,6 +21,9 @@ struct BackendContext {
     HANDLE gpuThread = nullptr;
     HANDLE gpuMemoryMapping = nullptr;
     std::uint8_t* hostGpuMemoryView = nullptr;
+    HANDLE physicalMemoryMapping = nullptr;
+    std::uint8_t* hostPhysicalMemoryView = nullptr;
+    std::wstring physicalMemoryMappingName;
     PROCESS_INFORMATION process{};
     std::wstring mappingName;
     std::wstring pipeName;
@@ -160,17 +164,24 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         provider ? GetProcAddress(provider, "ModuleStartWithMemory") : nullptr);
     const auto providerStop = reinterpret_cast<void (__cdecl*)()>(
         provider ? GetProcAddress(provider, "ModuleStop") : nullptr);
+    using ProviderBindPhysicalMemoryFn = int (__cdecl*)(uint32_t, void*, uint32_t);
+    const auto bindPhysicalMemory = reinterpret_cast<ProviderBindPhysicalMemoryFn>(
+        provider ? GetProcAddress(provider, "XboxNV2A_BindGuestPhysicalMemory") : nullptr);
     using ProviderInitializeRendererFn = int (__cdecl*)(HWND, uint32_t, uint32_t);
     const auto initializeRenderer = reinterpret_cast<ProviderInitializeRendererFn>(
         provider ? GetProcAddress(provider, "XboxNV2A_InitializeRenderer") : nullptr);
     if (provider && providerStart && context->hostGpuMemoryView &&
         providerStart(context->hostGpuMemoryView, XBOX_GPU_SHARED_MEMORY_SIZE) == 0) {
         providerStarted = true;
-        /* The current XBE mapping is a guest virtual image view, not a
-         * guest-physical RAM aperture. Do not bind it as PCI/AGP DMA memory.
-         * The provider exposes an explicit bounded bind API for a future
-         * physical-memory section once the kernel owns that mapping. */
-        Log(L"NV2A provider started; PCI/AGP DMA remains disabled until guest physical RAM is mapped.");
+        if (!bindPhysicalMemory || !context->hostPhysicalMemoryView ||
+            bindPhysicalMemory(XBOX_GUEST_PHYSICAL_RAM_BASE,
+                context->hostPhysicalMemoryView, XBOX_GUEST_PHYSICAL_RAM_SIZE) != 0) {
+            Log(L"NV2A provider could not bind the kernel-owned guest physical RAM section.");
+            if (providerStop) providerStop();
+            providerStarted = false;
+        } else {
+            Log(L"NV2A provider bound the kernel-owned 64 MiB guest physical RAM section for PCI/AGP DMA.");
+        }
     } else if (provider) {
         Log(L"NV2A provider could not attach to the shared GPU memory section.");
     } else {
@@ -331,6 +342,8 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
     }
 cleanup:
+    if (providerStarted && bindPhysicalMemory)
+        (void)bindPhysicalMemory(0u, nullptr, 0u);
     if (providerStarted && providerStop) providerStop();
     if (rendererWindow) DestroyWindow(rendererWindow);
     if (provider) FreeLibrary(provider);
@@ -373,6 +386,14 @@ void ResetContextHandles(BackendContext& context) {
         UnmapViewOfFile(context.hostGpuMemoryView);
         context.hostGpuMemoryView = nullptr;
     }
+    if (context.hostPhysicalMemoryView) {
+        UnmapViewOfFile(context.hostPhysicalMemoryView);
+        context.hostPhysicalMemoryView = nullptr;
+    }
+    if (context.physicalMemoryMapping) {
+        CloseHandle(context.physicalMemoryMapping);
+        context.physicalMemoryMapping = nullptr;
+    }
     if (context.gpuMemoryMapping) {
         CloseHandle(context.gpuMemoryMapping);
         context.gpuMemoryMapping = nullptr;
@@ -385,6 +406,7 @@ void ResetContextHandles(BackendContext& context) {
     context.pipeName.clear();
     context.gpuPipeName.clear();
     context.gpuMemoryMappingName.clear();
+    context.physicalMemoryMappingName.clear();
     context.titlePath.clear();
     context.base = context.size = 0;
     context.importsResolved = false;
@@ -516,6 +538,29 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         return 5;
     }
 
+    // Dedicated 64 MiB guest physical RAM section; never alias the XBE image.
+    context.physicalMemoryMappingName = L"Local\\XboxRuntime_GUEST_RAM_" + suffix;
+    context.physicalMemoryMapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr,
+        PAGE_READWRITE, 0, XBOX_GUEST_PHYSICAL_RAM_SIZE,
+        context.physicalMemoryMappingName.c_str());
+    if (!context.physicalMemoryMapping) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 5;
+        context.lastReserveWin32Error = error;
+        ResetContextHandles(context);
+        return 5;
+    }
+    context.hostPhysicalMemoryView = static_cast<std::uint8_t*>(MapViewOfFile(
+        context.physicalMemoryMapping, FILE_MAP_ALL_ACCESS, 0, 0,
+        XBOX_GUEST_PHYSICAL_RAM_SIZE));
+    if (!context.hostPhysicalMemoryView) {
+        const DWORD error = GetLastError();
+        context.lastReserveResult = 5;
+        context.lastReserveWin32Error = error;
+        ResetContextHandles(context);
+        return 5;
+    }
+
     std::wstring directory;
     std::wstring eeprom;
     if (!ModuleDirectory(directory) || !RuntimeEepromPath(eeprom)) {
@@ -538,6 +583,7 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
         L" --pipe " + Quote(context.pipeName) +
         L" --gpu-pipe " + Quote(context.gpuPipeName) +
         L" --gpu-memory " + Quote(context.gpuMemoryMappingName) +
+        L" --physical-memory " + Quote(context.physicalMemoryMappingName) +
         L" --mapping " + Quote(context.mappingName) +
         L" --base " + Quote(std::to_wstring(guestBase)) +
         L" --size " + Quote(std::to_wstring(imageSize)) +
