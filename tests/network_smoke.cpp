@@ -145,7 +145,7 @@ int main() {
             (XNET_GET_XNADDR_DHCP | XNET_GET_XNADDR_STATIC | XNET_GET_XNADDR_AUTO);
         if (!(titleAddressFlags & XNET_GET_XNADDR_ETHERNET) ||
             titleAddress.ina.s_addr == htonl(INADDR_ANY) ||
-            (ntohl(titleAddress.ina.s_addr) >> 24) == IN_LOOPBACKNET ||
+            (ntohl(titleAddress.ina.s_addr) >> 24) == 127u ||
             (addressMode != XNET_GET_XNADDR_DHCP &&
              addressMode != XNET_GET_XNADDR_STATIC &&
              addressMode != XNET_GET_XNADDR_AUTO)) {
@@ -165,7 +165,7 @@ int main() {
                         XNET_ETHERNET_LINK_100MBPS |
                         XNET_ETHERNET_LINK_FULL_DUPLEX |
                         XNET_ETHERNET_LINK_HALF_DUPLEX |
-                        XNET_ETHERNET_LINK_WIRELESS)) != 0 ||
+                        0u)) != 0 ||
         speedFlags == (XNET_ETHERNET_LINK_10MBPS | XNET_ETHERNET_LINK_100MBPS) ||
         (speedFlags && !(linkStatus & XNET_ETHERNET_LINK_ACTIVE))) {
         XNetCleanup();
