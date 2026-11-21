@@ -1,5 +1,13 @@
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
 #include <windows.h>
+#include <iphlpapi.h>
+#include <vector>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -23,6 +31,7 @@
 #include <memory>
 #include <atomic>
 #include "kernel_compat.h"
+#include "guest_api_registry.h"
 
 extern "C" void KernelDispatch();
 namespace {
@@ -1890,6 +1899,42 @@ extern "C" LONG __stdcall K_NtDuplicateObject(HANDLE sourceProcess, HANDLE sourc
         return LONG(0xC0000008u);
     return 0;
 }
+// Xbox PHY exports are translated to Windows adapter/link discovery.
+// This deliberately reports host link availability; it does not emulate an MCPX PHY.
+namespace {
+ULONG QueryHostAdapterList(std::vector<unsigned char>& storage) {
+    constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG bytes = 16 * 1024;
+    for (unsigned attempt = 0; attempt < 3; ++attempt) {
+        try { storage.resize(bytes); }
+        catch (...) { return ERROR_NOT_ENOUGH_MEMORY; }
+        auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(storage.data());
+        ULONG result = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, adapters, &bytes);
+        if (result == ERROR_BUFFER_OVERFLOW) continue;
+        return result;
+    }
+    return ERROR_BUFFER_OVERFLOW;
+}
+}
+extern "C" ULONG __stdcall K_PhyGetLinkState(BOOLEAN verify) {
+    (void)verify; // Windows reports current operational state; it has no Xbox MII repoll mode.
+    std::vector<unsigned char> storage;
+    const ULONG result = QueryHostAdapterList(storage);
+    if (result != NO_ERROR) return 0;
+    const auto* adapter = reinterpret_cast<const IP_ADAPTER_ADDRESSES*>(storage.data());
+    for (; adapter; adapter = adapter->Next) {
+        if (adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK && adapter->OperStatus == IfOperStatusUp) return 1u;
+    }
+    return 0u;
+}
+extern "C" LONG __stdcall K_PhyInitialize(BOOLEAN forceReset, void* parameter2) {
+    (void)forceReset; (void)parameter2;
+    // Windows owns NIC initialization. Enumeration validates that the host networking
+    // subsystem is queryable; no physical reset or raw hardware access is attempted.
+    std::vector<unsigned char> storage;
+    const ULONG result = QueryHostAdapterList(storage);
+    return (result == NO_ERROR || result == ERROR_NO_DATA) ? 0 : LONG(0xC0000001u);
+}
 extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(b,"[XboxKernel] Unsupported import ordinal %u; aborting guest thread.\n",ordinal);OutputDebugStringA(b);ULONG_PTR parameter=ordinal;RaiseException(0xC000001D,EXCEPTION_NONCONTINUABLE,1,&parameter);}
 }
 extern "C" __declspec(naked) void KernelDispatch(){
@@ -2164,6 +2209,10 @@ extern "C" __declspec(naked) void KernelDispatch(){
         je nt_free_vm
         cmp eax, 238
         je nt_yield
+        cmp eax, 252
+        je phy_get_link_state
+        cmp eax, 253
+        je phy_initialize
         cmp eax, 218
         je nt_query_volume_information_file
         cmp eax, 229
@@ -2555,6 +2604,8 @@ extern "C" __declspec(naked) void KernelDispatch(){
     nt_query_mutant: jmp K_NtQueryMutant
     nt_query_semaphore: jmp K_NtQuerySemaphore
     nt_query_timer: jmp K_NtQueryTimer
+    phy_get_link_state: jmp K_PhyGetLinkState
+    phy_initialize: jmp K_PhyInitialize
     }
 }
 namespace {
@@ -2603,24 +2654,60 @@ void XboxKernelFlushEeprom() {
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
+static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
+    const char* name = nullptr;
+    switch (ordinal) {
+    case 59: name = "IoAllocateIrp"; break;
+    case 60: name = "IoBuildAsynchronousFsdRequest"; break;
+    case 61: name = "IoBuildDeviceIoControlRequest"; break;
+    case 62: name = "IoBuildSynchronousFsdRequest"; break;
+    case 65: name = "IoCreateDevice"; break;
+    case 66: name = "IoCreateFile"; break;
+    case 67: name = "IoCreateSymbolicLink"; break;
+    case 68: name = "IoDeleteDevice"; break;
+    case 69: name = "IoDeleteSymbolicLink"; break;
+    case 72: name = "IoFreeIrp"; break;
+    case 73: name = "IoInitializeIrp"; break;
+    case 77: name = "IoQueueThreadIrp"; break;
+    case 81: name = "IoStartNextPacket"; break;
+    case 82: name = "IoStartNextPacketByKey"; break;
+    case 83: name = "IoStartPacket"; break;
+    case 84: name = "IoSynchronousDeviceIoControlRequest"; break;
+    case 85: name = "IoSynchronousFsdRequest"; break;
+    case 86: name = "IofCallDriver"; break;
+    case 87: name = "IofCompleteRequest"; break;
+    case 196: name = "NtDeviceIoControlFile"; break;
+    case 200: name = "NtFsControlFile"; break;
+    case 252: name = "PhyGetLinkState"; break;
+    case 253: name = "PhyInitialize"; break;
+    default: return;
+    }
+    char message[160]{};
+    sprintf_s(message, "[XboxKernel] XBE imports network/I-O candidate: ordinal %u (%s)\n",
+        ordinal, name);
+    OutputDebugStringA(message);
+}
 bool XboxKernelResolveImports(const XboxKernelState& image){
     g_image=reinterpret_cast<uint8_t*>(uintptr_t(image.imageBase));g_base=image.imageBase;g_size=image.imageSize;g_entry=image.entryPoint;g_tls=image.tlsAddress;
-    if(!g_image||!InImage(g_entry))return false;
+    if(!g_image||!InImage(g_entry)||!InImage(g_base+0x15Cu,4))return false;
+    const uint32_t importDirectory=*reinterpret_cast<uint32_t*>(g_image+0x15C);
+    auto resolveNonKernel=[&](){return XboxGuestResolveNonKernelImports(g_base,g_size,importDirectory);};
     const uint32_t encoded=*reinterpret_cast<uint32_t*>(g_image+0x158);
     uint32_t thunk=0;if(!DecodeVa(encoded,kRetailThunk,thunk)&&!DecodeVa(encoded,kDebugThunk,thunk)){
-        // Some homebrew images have no kernel imports.
-        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return true;return false;
+        // Homebrew images may omit kernel imports; named XNET imports are still resolved.
+        if(encoded==0||encoded==kRetailThunk||encoded==kDebugThunk)return resolveNonKernel();
+        return false;
     }
     g_stubPage=VirtualAlloc(nullptr,0x2000,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
     if(!g_stubPage)return false;
     uint32_t* table=reinterpret_cast<uint32_t*>(uintptr_t(thunk));
     for(uint32_t i=0;i<kThunkMax;i++){
         if(!InImage(thunk+i*4,4))return false;
-        uint32_t v=table[i];if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return true;}
+        uint32_t v=table[i];
+        if(v==0){FlushInstructionCache(GetCurrentProcess(),g_stubPage,g_stubCount*10);return resolveNonKernel();}
         if((v&0x80000000u)==0)return false;
-        uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;
-        void* target=DataFor(ordinal);
-        if(!target)target=StubFor(ordinal);
+        uint32_t ordinal=v&0x7FFFFFFFu;if(ordinal>=kThunkMax)return false;LogNetworkRelatedKernelImport(ordinal);
+        void* target=DataFor(ordinal);if(!target)target=StubFor(ordinal);
         if(!target)return false;
         table[i]=uint32_t(reinterpret_cast<uintptr_t>(target));
     }
