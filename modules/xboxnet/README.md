@@ -76,7 +76,7 @@ python3 -m unittest discover -s tests -v
 
 ## Original Xbox XDK reference
 
-See [XNet and XOnline reference notes](docs/XNET-XDK-REFERENCE.md). The notes distinguish the guest-side XNet transport API from the separate XOnline account/profile APIs and point to the public RXDK-Libs implementation reference.
+See [XNet and XOnline reference notes](docs/XNET-XDK-REFERENCE.md) and the [original-Xbox XOnline API map](docs/XONLINE-API-MAP.md). The API map records the verified startup, local-user enumeration, logon, and asynchronous task boundaries from RXDK-Libs. It also warns against importing Xbox 360/GFWL XUser profile-setting ABIs into the original-Xbox path.
 
 ## Architecture research
 
