@@ -1154,17 +1154,21 @@ $guestPathBytes.CopyTo($b,0x6100)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
 $directoryPath = "\Device\Cdrom0"
 $directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
-$directoryPathLength = [uint32]($directoryPath.Length * 2)
-$directoryPathVa = [uint32]($base + 0x6540)
-Put32 0x6500 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
-Put32 0x6504 $directoryPathVa
-Put32 0x6510 24
-Put32 0x6514 0
-Put32 0x6518 $directoryUnicodeVa
-Put32 0x651C 0
-Put32 0x6520 0
-Put32 0x6524 0
-$directoryPathBytes.CopyTo($b,0x6540)
+$directoryPathLength = [uint16]($directoryPath.Length * 2)
+# Keep the directory OBJECT_ATTRIBUTES outside report+0x500..0x590, which
+# the later native-object diagnostics use as scratch storage.
+$directoryUnicodeVa = [uint32]($base + 0x6600)
+$directoryPathVa = [uint32]($base + 0x6640)
+Put16 0x6600 $directoryPathLength
+Put16 0x6602 ([uint16]($directoryPathLength + 2))
+Put32 0x6604 $directoryPathVa
+Put32 0x6610 24
+Put32 0x6614 0
+Put32 0x6618 $directoryUnicodeVa
+Put32 0x661C 0
+Put32 0x6620 0
+Put32 0x6624 0
+$directoryPathBytes.CopyTo($b,0x6640)
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
