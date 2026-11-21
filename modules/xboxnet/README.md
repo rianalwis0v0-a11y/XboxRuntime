@@ -74,6 +74,10 @@ Gateway tests are included in the existing Python test suite:
 python3 -m unittest discover -s tests -v
 ```
 
+## Original Xbox XDK reference
+
+See [XNet and XOnline reference notes](docs/XNET-XDK-REFERENCE.md). The notes distinguish the guest-side XNet transport API from the separate XOnline account/profile APIs and point to the public RXDK-Libs implementation reference.
+
 ## Architecture research
 
 See [docs/INSIGNIA-ARCHITECTURE-NOTES.md](../../docs/INSIGNIA-ARCHITECTURE-NOTES.md)
