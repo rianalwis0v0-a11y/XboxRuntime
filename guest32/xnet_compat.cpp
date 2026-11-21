@@ -36,7 +36,7 @@ void Log(const wchar_t* message) {
 }
 }
 
-extern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
+BOOL XboxNetIsStarted() {\n    std::lock_guard<std::mutex> lock(g_xnetMutex);\n    return g_xnetUsers != 0;\n}\n\nextern "C" int WINAPI XNetStartup(const XNetStartupParams* params) {
     std::lock_guard<std::mutex> lock(g_xnetMutex);
     if (params && params->cfgSizeOfStruct != sizeof(XNetStartupParams))
         return WSAEFAULT;
