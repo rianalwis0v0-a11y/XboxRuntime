@@ -28,8 +28,9 @@ SERVICE_CATALOG = (
     {
         "id": "profiles",
         "name": "Account and profile APIs",
-        "state": "not_implemented",
+        "state": "scaffold",
         "protocol": "research_required",
+        "note": "SQLite-backed internal account/profile service and authenticated dispatcher adapter; original Xbox service protocol is not implemented.",
     },
     {
         "id": "friends_presence",
