@@ -1121,8 +1121,8 @@ XnetByte 0xC3
 if ($xnetCode.Count -gt 0x100) { throw "Static XNET fixture code is too large." }
 $xnetCode.ToArray().CopyTo($b,0x8000)
 
-# Xbox OBJECT_ATTRIBUTES (12 bytes) and ANSI OBJECT_STRING for partition0.
-$volumePath = "\Device\Cdrom0\\xbe-test.txt"
+# Xbox OBJECT_ATTRIBUTES (12 bytes) and ANSI OBJECT_STRING for a title file.
+$volumePath = "\Device\Cdrom0\xbe-test.txt"
 $volumePathBytes = [Text.Encoding]::ASCII.GetBytes($volumePath + [char]0)
 Put32 0x8100 0
 Put32 0x8104 ([uint32]($base + 0x8120))
