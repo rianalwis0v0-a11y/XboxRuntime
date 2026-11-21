@@ -44,10 +44,10 @@ bool IsXNet(std::uint32_t b,std::uint32_t s,std::uint32_t a) noexcept {
   const std::uint64_t at=std::uint64_t(a)+i*sizeof(wchar_t);
   if(at>0xFFFFFFFFull||!Range(b,s,static_cast<std::uint32_t>(at),sizeof(wchar_t))) return false;
   const wchar_t c=p[i]; if(!c) break; if(c>0x7F) return false;
-  name[i]=static_cast<wchar_t>(std::towupper(c));
+  name[i]=(c>=L'a'&&c<=L'z')?static_cast<wchar_t>(c-(L'a'-L'A')):c;
  }
  if(i+1==std::size(name)||p[i]!=L'\0') return false;
- const std::wstring value(name); return value==L"XNET"||value==L"XNET.DLL";
+ return std::wcscmp(name,L"XNET")==0||std::wcscmp(name,L"XNET.DLL")==0;
 }
 }
 extern "C" std::uint32_t __cdecl XboxGuestApiLookup(const char* n){
@@ -82,7 +82,8 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(std::uint32_t base,std:
    if(!Range(base,size,nameVa,3))return false;
    const char* name=reinterpret_cast<const char*>(static_cast<std::uintptr_t>(nameVa+2));
    const std::uint64_t remaining=std::uint64_t(base)+size-(std::uint64_t(nameVa)+2);
-   if(remaining>0xFFFFFFFFull||!std::memchr(name,0,static_cast<std::size_t>(remaining)))return false;
+   const std::size_t boundedNameBytes=static_cast<std::size_t>((std::min)(remaining,256ull));
+   if(remaining>0xFFFFFFFFull||!std::memchr(name,0,boundedNameBytes))return false;
    const std::uint32_t target=XboxGuestApiLookup(name);if(!target)return false;
    // Import tables commonly live in read-only sections; restore page protection after patching.
    if(!WriteGuestThunk(taddr,target))return false;
