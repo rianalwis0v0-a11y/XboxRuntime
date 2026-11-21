@@ -154,9 +154,11 @@ class DNSService:
                 raise ValueError("DNS zone feed exceeds 1 MiB")
             feed_records = parse_zone_feed(payload)
             with self._lock:
-                # Preserve explicit local overrides; feed entries fill other names.
+                # Rebuild from the latest feed on every refresh. Merge only
+                # explicit local overrides; merging the previous snapshot would
+                # retain records that the upstream operator has removed.
                 merged = dict(feed_records)
-                merged.update(self._records)
+                merged.update(self._local_records)
                 self._records = merged
             return True
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
