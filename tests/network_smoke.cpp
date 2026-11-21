@@ -52,6 +52,25 @@ int main() {
     }
     CloseHandle(logonEvent);
 
+    // A zero-service logon is valid with a null service-ID array. A nonzero
+    // count with a null array must be rejected without creating a task.
+    XONLINETASK_HANDLE zeroServiceTask = nullptr;
+    if (XOnlineLogon(&loginUser, nullptr, 0, nullptr, &zeroServiceTask) != S_OK ||
+        !zeroServiceTask ||
+        XOnlineTaskContinue(zeroServiceTask) != XONLINE_E_LOGON_CANNOT_ACCESS_SERVICE ||
+        XOnlineTaskClose(zeroServiceTask) != S_OK) {
+        if (zeroServiceTask) XOnlineTaskClose(zeroServiceTask);
+        XOnlineCleanup();
+        return 50;
+    }
+    XONLINETASK_HANDLE invalidServicesTask = nullptr;
+    if (XOnlineLogon(&loginUser, nullptr, 1, nullptr, &invalidServicesTask) != E_INVALIDARG ||
+        invalidServicesTask != nullptr) {
+        if (invalidServicesTask) XOnlineTaskClose(invalidServicesTask);
+        XOnlineCleanup();
+        return 51;
+    }
+
     // Closing a still-pending task cancels it and invalidates the handle.
     XONLINETASK_HANDLE cancelledTask = nullptr;
     if (XOnlineLogon(&loginUser, requestedServices, 2, nullptr, &cancelledTask) != S_OK ||
