@@ -7,6 +7,7 @@ on:
       - work/kernel-execution-backend
       - work/kernel-combined-clean-import
       - work/filesystem-provider-integration-current
+      - work/nv2a-guest-physical-map
   pull_request:
     branches:
       - work/kernel-execution-backend
