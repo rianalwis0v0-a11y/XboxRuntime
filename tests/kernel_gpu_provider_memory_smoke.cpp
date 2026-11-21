@@ -11,6 +11,7 @@ using StartWithMemoryFn = int (__cdecl*)(void*, std::uint32_t);
 using StopFn = void (__cdecl*)();
 using MemoryReadFn = int (__cdecl*)(std::uint32_t, void*, std::uint32_t);
 using MemoryWriteFn = int (__cdecl*)(std::uint32_t, const void*, std::uint32_t);
+using BindGuestPhysicalMemoryFn = int (__cdecl*)(std::uint32_t, void*, std::uint32_t);
 
 int wmain() {
     wchar_t executable[MAX_PATH]{};
@@ -39,7 +40,11 @@ int wmain() {
         GetProcAddress(provider, "XboxNV2A_ReadRAMIN"));
     const auto writeRamin = reinterpret_cast<MemoryWriteFn>(
         GetProcAddress(provider, "XboxNV2A_WriteRAMIN"));
-    if (!start || !stop || !readVram || !writeVram || !readRamin || !writeRamin) {
+    const auto bindGuestPhysicalMemory =
+        reinterpret_cast<BindGuestPhysicalMemoryFn>(
+            GetProcAddress(provider, "XboxNV2A_BindGuestPhysicalMemory"));
+    if (!start || !stop || !readVram || !writeVram || !readRamin || !writeRamin ||
+        !bindGuestPhysicalMemory) {
         FreeLibrary(provider);
         return 4;
     }
@@ -69,12 +74,25 @@ int wmain() {
          std::memcmp(sharedMemory.data() + XBOX_GPU_SHARED_VRAM_SIZE + 0x400u,
                      update, sizeof(update)) == 0;
 
+    // The provider must accept an explicitly supplied, bounded physical RAM
+    // window, reject ranges outside the Xbox 128 MiB address space, and
+    // support deterministic unbinding. This tests the bind contract only;
+    // it does not claim that the kernel currently supplies physical RAM.
+    std::vector<std::uint8_t> guestPhysicalMemory(0x4000u, 0x5Au);
+    ok = ok && bindGuestPhysicalMemory(0x1000u, guestPhysicalMemory.data(),
+                                       static_cast<std::uint32_t>(guestPhysicalMemory.size())) == 0;
+    ok = ok && bindGuestPhysicalMemory(0x08000000u, guestPhysicalMemory.data(),
+                                       static_cast<std::uint32_t>(guestPhysicalMemory.size())) != 0;
+    ok = ok && bindGuestPhysicalMemory(0x07FFF000u, guestPhysicalMemory.data(),
+                                       static_cast<std::uint32_t>(guestPhysicalMemory.size())) != 0;
+    ok = ok && bindGuestPhysicalMemory(0u, nullptr, 0u) == 0;
+
     stop();
     FreeLibrary(provider);
     if (!ok) {
         std::fprintf(stderr, "NV2A provider did not use the shared VRAM/RAMIN view\n");
         return 6;
     }
-    std::puts("kernel_gpu_provider_memory_smoke: PASS (provider uses shared VRAM/RAMIN)");
+    std::puts("kernel_gpu_provider_memory_smoke: PASS (shared VRAM/RAMIN and bounded guest-physical bind contract)");
     return 0;
 }
