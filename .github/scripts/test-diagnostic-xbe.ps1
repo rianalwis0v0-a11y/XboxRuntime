@@ -1108,7 +1108,7 @@ XnetPush 0x10
 XnetPush 3
 XnetPush ([uint32]($base + 0x8164))
 XnetPush ([uint32]($base + 0x8100))
-XnetPush 0xC0100000
+XnetPush ([uint32]0xC0100000)
 XnetPush ([uint32]($base + 0x8160))
 XnetCallImport 202
 XnetByte 0x85; XnetByte 0xC0
