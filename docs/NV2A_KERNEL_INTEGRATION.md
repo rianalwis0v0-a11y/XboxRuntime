@@ -143,11 +143,21 @@ page-aligned, bounded bump allocator over the RAMIN portion. The allocator
 returns a guest-process pointer into the shared mapping and reports alignment
 padding.
 
-This is **not yet a complete physical-memory/DMA subsystem**: there is no
-general Xbox physical-address resolver, permission-aware DMA translation, or
-fence-aware free/reuse. The current allocation path is monotonic for the
-lifetime of the guest and is reset only when the shared mapping is initialized
-again.
+The guest memory module now exposes
+`XboxKernelResolveGpuPhysicalAddress(physicalAddress, bytes, access)` for
+bounded ranges in the 64 MiB shared unified-memory window. It rejects zero
+lengths, invalid access masks, and ranges that overflow the backing store; the
+returned pointer is into the guest's shared view, so host and guest observe the
+same bytes. The host-side memory test covers read/write translation, shared
+view coherence, and end-of-window rejection.
+
+This is a **first bounded address translation step, not a complete
+physical-memory/DMA subsystem**. The access mask currently validates the
+requested operation but does not enforce per-page permissions; there is no
+allocation metadata for arbitrary physical pages, fence-aware free/reuse,
+device interrupt delivery, or end-to-end guest DMA command test. The current
+instance allocator remains monotonic for the lifetime of the guest and is
+reset only when the shared mapping is initialized again.
 
 ### Required contract
 
