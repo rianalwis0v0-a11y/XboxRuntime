@@ -18,7 +18,8 @@ BOOL CALLBACK LoadSystemDirectSound(PINIT_ONCE, PVOID, PVOID*) {
     if (!length || length >= MAX_PATH) return TRUE;
 
     wchar_t path[MAX_PATH]{};
-    if (swprintf_s(path, MAX_PATH, L"%s\\dsound.dll", systemDirectory) < 0)
+    if (wcscpy_s(path, MAX_PATH, systemDirectory) != 0 ||
+        wcscat_s(path, MAX_PATH, L"\\dsound.dll") != 0)
         return TRUE;
 
     HMODULE module = LoadLibraryW(path);
@@ -47,18 +48,20 @@ bool EnsureDirectSound() {
 
 extern "C" HRESULT WINAPI DirectSoundCreate(
     LPCGUID device, void** sound, void* outer) {
-    if (!sound || outer) return E_INVALIDARG;
+    if (!sound) return E_INVALIDARG;
     *sound = nullptr;
+    if (outer) return static_cast<HRESULT>(0x8878000AL); /* DSERR_NOAGGREGATION */
     if (!EnsureDirectSound() || !g_create)
-        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+        return static_cast<HRESULT>(0x88780078L); /* DSERR_NODRIVER */
     return g_create(device, sound, outer);
 }
 
 extern "C" HRESULT WINAPI DirectSoundCreate8(
     LPCGUID device, void** sound, void* outer) {
-    if (!sound || outer) return E_INVALIDARG;
+    if (!sound) return E_INVALIDARG;
     *sound = nullptr;
+    if (outer) return static_cast<HRESULT>(0x8878000AL); /* DSERR_NOAGGREGATION */
     if (!EnsureDirectSound() || !g_create8)
-        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+        return static_cast<HRESULT>(0x88780078L); /* DSERR_NODRIVER */
     return g_create8(device, sound, outer);
 }
