@@ -132,6 +132,13 @@ extern "C" __declspec(naked) LONG __stdcall DispatchNtOpenDirectoryObject(HANDLE
         jmp KernelDispatch
     }
 }
+extern "C" __declspec(naked) LONG __stdcall DispatchNtQueryDirectoryObject(
+    HANDLE, void*, ULONG, BOOLEAN, ULONG*, ULONG*) {
+    __asm {
+        push 208
+        jmp KernelDispatch
+    }
+}
 extern "C" __declspec(naked) LONG __stdcall DispatchNtSetSystemTime(LARGE_INTEGER*, LARGE_INTEGER*) {
     __asm {
         push 228
@@ -501,6 +508,29 @@ int main() {
     HANDLE createdDirectory = nullptr;
     if (K_NtCreateDirectoryObject(&createdDirectory, &directoryAttributes) != 0 || !createdDirectory)
         return Fail(56, "NtCreateDirectoryObject fixture");
+    char childPath[] = "\\\\BaseNamedObjects\\\\XboxRuntimeDispatchSmoke\\\\Child";
+    GuestAnsiString childName{};
+    childName.Length = static_cast<USHORT>(std::strlen(childPath));
+    childName.MaximumLength = childName.Length;
+    childName.Buffer = childPath;
+    GuestObjectAttributes childAttributes{};
+    childAttributes.ObjectName = &childName;
+    HANDLE childDirectory = nullptr;
+    if (K_NtCreateDirectoryObject(&childDirectory, &childAttributes) != 0 ||
+        !childDirectory)
+        return Fail(64, "NtQueryDirectoryObject child fixture");
+    alignas(4) unsigned char directoryBuffer[128]{};
+    ULONG directoryContext = 0, directoryBytes = 0;
+    if (DispatchNtQueryDirectoryObject(createdDirectory, directoryBuffer,
+            sizeof(directoryBuffer), TRUE, &directoryContext, &directoryBytes) != 0)
+        return Fail(65, "NtQueryDirectoryObject ordinal dispatch");
+    auto* directoryEntry = reinterpret_cast<GuestAnsiString*>(directoryBuffer);
+    if (directoryEntry->Length != 5 ||
+        std::memcmp(directoryEntry->Buffer, "Child", 5) != 0 ||
+        directoryContext != 1 || directoryBytes < sizeof(GuestAnsiString) + 5u + 1u)
+        return Fail(66, "NtQueryDirectoryObject entry layout/context");
+    if (!XboxKernelCloseObjectHandle(childDirectory))
+        return Fail(67, "NtQueryDirectoryObject child cleanup");
     HANDLE openedDirectory = nullptr;
     if (DispatchNtOpenDirectoryObject(&openedDirectory, 0, &directoryAttributes) != 0 ||
         !openedDirectory || openedDirectory == createdDirectory)
