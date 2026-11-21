@@ -44,11 +44,11 @@ The integration branch already contains:
 
 These are a useful foundation. Do not rewrite them as an MCPX driver.
 
-## Main blocker: making retail XBE networking calls reach the translator
+## Remaining blocker: statically linked XNet call sites
 
 XNet is commonly statically linked into retail titles. Merely exporting functions named XNetStartup or XSocketSend from the guest executable does not automatically redirect a title's already-linked internal calls to those functions.
 
-The XBE loader currently parses and passes through the non-kernel import-directory address, while the execution backend owns import interpretation. The next task is to trace the backend's XBE import/thunk processing and determine a **verified** interception point for networking calls. Do not guess import ordinals, patch arbitrary byte patterns, or claim compatibility until the actual call path is identified.
+The x86 guest now resolves named imports from the XBE non-kernel import directory when the library is XNET / XNET.DLL, binding the implemented XNet/XSocket names to guest function addresses. This covers import-table calls only. Retail titles may also contain statically linked XNet code whose internal calls never appear in that directory; those call sites are still not redirected. Do not guess import ordinals, patch arbitrary byte patterns, or claim compatibility until a specific title's call path is identified.
 
 Preferred implementation order:
 
@@ -96,7 +96,7 @@ A source audit of `tools/kernel_exports.json` against `guest32/kernel_compat.cpp
 
 This is a verified source-level gap, **not proof that retail XNet uses every one of these exports**. The current `KernelDispatch` sends unmapped ordinals to `K_Unsupported`, which raises a guest exception. Therefore, even if a title's statically linked networking code reaches one of these lower-level APIs, the current guest cannot service that call.
 
-The current loader path in this branch also only calls `XboxKernelResolveImports` for the kernel thunk table; it does not parse and bind the non-kernel import directory or install XNet call-site hooks. The XNet/XSocket functions compiled into `xbe_guest32.exe` are therefore not automatically reachable from an arbitrary retail XBE.
+The guest import resolver now handles named XNET non-kernel imports through a bounded registry. It does not install hooks into statically linked XNet code, and it deliberately rejects unsupported libraries, names and ordinal imports. The XNet/XSocket functions are reachable only where the XBE exposes supported named imports.
 
 ### XBE import diagnostics added
 
@@ -106,7 +106,7 @@ This does not pretend to implement IRP/device semantics. It makes the next inves
 
 ### Next safe engineering step
 
-Do not invent ordinal aliases for XNet. First capture a real title's kernel import list and identify which I/O-manager APIs its networking path actually invokes. Then implement only the required Xbox ABI structures and IRP/device semantics at those verified entry points, backed by a Windows socket/DNS adapter. In parallel, design an explicit guest-callable API registration path for imports that are genuinely present in an XBE. Statically linked call sites remain a separate problem and must not be rewritten without instruction-boundary and per-title evidence.
+Do not invent ordinal aliases for XNet. Next, capture a real title's import directory and trace one selected title's networking path to determine whether it uses named XNET imports or statically linked calls. If static calls must be redirected, do so only with per-title instruction-boundary evidence and an opt-in hook. The named import registry is not proof that arbitrary retail titles reach Winsock.
 
 Audit scope: `tools/kernel_exports.json` export names/ordinals compared with the `cmp eax, <ordinal>` routes in `KernelDispatch`; source inspection only. No Windows build or runtime test was run as part of this audit.
 
