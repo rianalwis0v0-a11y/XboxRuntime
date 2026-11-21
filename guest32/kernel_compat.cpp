@@ -2601,7 +2601,7 @@ static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
     default: return;
     }
     char message[160]{};
-    sprintf_s(message, "[XboxKernel] XBE imports network/I-O candidate: ordinal %u (%s)\\n",
+    sprintf_s(message, "[XboxKernel] XBE imports network/I-O candidate: ordinal %u (%s)\n",
         ordinal, name);
     OutputDebugStringA(message);
 }
