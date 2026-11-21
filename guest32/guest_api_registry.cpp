@@ -1,6 +1,7 @@
 #include "guest_api_registry.h"
 #include "xnet_compat.h"
 #include <cstring>
+#include <algorithm>
 #include <cstdint>
 #include <iterator>
 #include <cwchar>
