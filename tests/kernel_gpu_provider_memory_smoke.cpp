@@ -90,7 +90,7 @@ int wmain() {
     stop();
     FreeLibrary(provider);
     if (!ok) {
-        std::fprintf(stderr, "NV2A provider shared-memory or statistics contract failed\\n");
+        std::fprintf(stderr, "NV2A provider shared-memory or statistics contract failed (stats=%u/%u/%u/%u/%u/%u)\\n", stats.frames, stats.draw_calls, stats.vertices_submitted, stats.methods_handled, stats.methods_ignored, stats.clears);
         return 6;
     }
     std::puts("kernel_gpu_provider_memory_smoke: PASS (shared VRAM/RAMIN and NV2A stats export)");
