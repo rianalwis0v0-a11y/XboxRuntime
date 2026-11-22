@@ -387,6 +387,9 @@ void StopGpuService(BackendContext& context) {
 
 void ResetContextHandles(BackendContext& context) {
     StopGpuService(context);
+    context.gpuDiagnosticsValid = false;
+    std::memset(context.gpuStats, 0, sizeof(context.gpuStats));
+    std::memset(context.gpuSurface, 0, sizeof(context.gpuSurface));
     if (context.pipe != INVALID_HANDLE_VALUE) {
         CloseHandle(context.pipe);
         context.pipe = INVALID_HANDLE_VALUE;
