@@ -226,6 +226,9 @@ typedef struct XboxNV2A_STATS {
     uint32_t methods_handled;
     uint32_t methods_ignored;
     uint32_t clears;
+    uint32_t mmio_reads;
+    uint32_t mmio_writes;
+    uint32_t dma_pushes;
 } XboxNV2A_STATS;
 
 __declspec(dllexport) int __cdecl XboxNV2A_GetStats(
