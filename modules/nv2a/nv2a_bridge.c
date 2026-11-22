@@ -2771,6 +2771,14 @@ void __cdecl XboxNV2A_Flush(void)
     }
 }
 
+int __cdecl XboxNV2A_GetSurfaceInfo(XboxNV2A_SURFACE_INFO* output)
+{
+    if (!g_started || !output || !g_surface_bound)
+        return 1;
+    *output = g_bound_surface_info;
+    return 0;
+}
+
 int __cdecl XboxNV2A_GetStats(XboxNV2A_STATS* output)
 {
     PgraphD3D11Stats stats;
