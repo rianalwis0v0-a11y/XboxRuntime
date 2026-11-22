@@ -52,6 +52,26 @@ std::uint32_t NumberArgument(int argc, wchar_t** argv, const wchar_t* name) {
 XboxGuestCommandReply Reply(std::uint32_t command, std::uint32_t status) {
     return { XBOX_GUEST_PROTOCOL_MAGIC, command, status };
 }
+void* MapGuestPhysicalMemoryView(HANDLE mapping) {
+    // NXDK/pbkit treats contiguous-memory pointers as physical addresses:
+    // it masks them with 0x03FFFFFF and ORs them with the 0xF0000000 AGP
+    // remap aperture. Map the 64 MiB section at a 256 MiB-aligned guest VA
+    // so both transformations preserve the section-relative physical offset.
+    constexpr std::uintptr_t alignment = 0x10000000u;
+    constexpr std::uintptr_t firstCandidate = alignment;
+    constexpr std::uintptr_t lastCandidate = 0x70000000u;
+    for (std::uintptr_t base = firstCandidate; base <= lastCandidate;
+         base += alignment) {
+        void* requested = reinterpret_cast<void*>(base);
+        void* view = MapViewOfFileEx(mapping, FILE_MAP_ALL_ACCESS, 0, 0,
+            XBOX_GUEST_PHYSICAL_RAM_SIZE, requested);
+        if (view == requested)
+            return view;
+        if (view)
+            UnmapViewOfFile(view);
+    }
+    return nullptr;
+}
 struct GpuMemoryMappingGuard {
     HANDLE mapping = nullptr;
     void* view = nullptr;
@@ -123,13 +143,24 @@ int wmain(int argc, wchar_t** argv) {
     gpuMemory.physicalMapping = OpenFileMappingW(
         FILE_MAP_ALL_ACCESS, FALSE, physicalMemoryName);
     if (!gpuMemory.physicalMapping) return GetLastError();
-    gpuMemory.physicalView = MapViewOfFile(gpuMemory.physicalMapping,
-        FILE_MAP_ALL_ACCESS, 0, 0, XBOX_GUEST_PHYSICAL_RAM_SIZE);
+    gpuMemory.physicalView = MapGuestPhysicalMemoryView(gpuMemory.physicalMapping);
     if (!gpuMemory.physicalView) return GetLastError();
+    if ((reinterpret_cast<std::uintptr_t>(gpuMemory.physicalView) & 0x0FFFFFFFu) != 0)
+        return ERROR_INVALID_ADDRESS;
     if (!XboxKernelPhysicalMemoryInitialize(gpuMemory.physicalView,
             XBOX_GUEST_PHYSICAL_RAM_BASE, XBOX_GUEST_PHYSICAL_RAM_SIZE))
         return ERROR_NOT_READY;
     gpuMemory.physicalInitialized = true;
+    std::uint32_t translatedPhysicalBase = 0xFFFFFFFFu;
+    if (!XboxKernelTranslateGuestVirtualToPhysical(gpuMemory.physicalView, 4u,
+            XboxGuestMemoryRead | XboxGuestMemoryWrite, &translatedPhysicalBase) ||
+        translatedPhysicalBase != XBOX_GUEST_PHYSICAL_RAM_BASE)
+        return ERROR_INVALID_ADDRESS;
+    wchar_t physicalMapLog[128]{};
+    swprintf_s(physicalMapLog, _countof(physicalMapLog),
+        L"[XboxRuntime] Guest physical RAM mapped at 0x%08X (64 MiB, pbkit-compatible).\\n",
+        static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(gpuMemory.physicalView)));
+    OutputDebugStringW(physicalMapLog);
 
     HANDLE pipe = CreateFileW(pipeName, GENERIC_READ | GENERIC_WRITE, 0,
                               nullptr, OPEN_EXISTING, 0, nullptr);
