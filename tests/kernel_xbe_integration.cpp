@@ -39,8 +39,9 @@ static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes)
 }
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2) {
-        std::fwprintf(stderr, L"usage: kernel_xbe_integration.exe <default.xbe>\n");
+    const bool expectGpu = argc == 3 && std::wcscmp(argv[2], L"--expect-gpu") == 0;
+    if (argc != 2 && !expectGpu) {
+        std::fwprintf(stderr, L"usage: kernel_xbe_integration.exe <default.xbe> [--expect-gpu]\n");
         return 2;
     }
 
