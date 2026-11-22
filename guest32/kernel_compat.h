@@ -18,6 +18,7 @@ void XboxKernelSetTitlePath(const wchar_t* path);
 bool XboxKernelResolveImports(const XboxKernelState& image);
 bool XboxKernelProtectImage();
 void XboxKernelSetStartupEvent(HANDLE eventHandle);
+void XboxKernelSetGuestExitEvent(HANDLE eventHandle);
 void XboxKernelShutdownTitle();
 DWORD WINAPI XboxKernelStartXbe(void* context);
 void XboxKernelGetLastExceptionDiagnostic(std::uint32_t* code,
