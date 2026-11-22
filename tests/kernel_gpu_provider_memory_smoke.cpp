@@ -164,7 +164,7 @@ int wmain() {
     // A DMA object's span must be rejected if its physical limit crosses
     // the end of the bound guest RAM section.
     const std::uint32_t invalidDmaObject[3] = {
-        0x00010002u, 0x100u, guestRamBytes - 0x10u
+        0x00010002u, 0x2000u, guestRamBytes - 0x1000u
     };
     CHECK_STAGE("write out-of-range DMA object",
         writeRamin(dmaInstance, invalidDmaObject, sizeof(invalidDmaObject)) == 0);
