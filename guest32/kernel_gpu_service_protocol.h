@@ -36,6 +36,12 @@ typedef struct XboxGpuStatsSnapshot {
     uint32_t methods_handled;
     uint32_t methods_ignored;
     uint32_t clears;
+    uint32_t rpc_requests;
+    uint32_t register_reads;
+    uint32_t register_writes;
+    uint32_t submit_method_calls;
+    uint32_t flush_calls;
+    uint32_t rpc_errors;
 } XboxGpuStatsSnapshot;
 
 #pragma pack(push, 1)
@@ -63,5 +69,5 @@ typedef struct XboxGpuRpcResponse {
 #ifdef __cplusplus
 static_assert(sizeof(XboxGpuRpcRequest) == 36, "GPU RPC request ABI drift");
 static_assert(sizeof(XboxGpuRpcResponse) == 24, "GPU RPC response ABI drift");
-static_assert(sizeof(XboxGpuStatsSnapshot) == 24, "GPU stats snapshot ABI drift");
+static_assert(sizeof(XboxGpuStatsSnapshot) == 48, "GPU stats snapshot ABI drift");
 #endif
