@@ -291,7 +291,7 @@ int wmain(int argc, wchar_t** argv) {
         } else {
             std::puts("PASS: real guest entrypoint returned and TLS index slot was cleared.");
             if (wcsstr(argv[1], L"gpu_only") != nullptr) {
-                std::uint32_t stats[6]{};
+                std::uint32_t stats[9]{};
                 std::uint32_t surface[10]{};
                 if (getGpuDiagnostics(stats, surface) != ERROR_SUCCESS) {
                     std::fprintf(stderr, "FAIL: NV2A renderer did not expose a synchronized surface snapshot.\n");
@@ -300,8 +300,9 @@ int wmain(int argc, wchar_t** argv) {
                     const std::uint32_t width = surface[0], height = surface[1];
                     const std::uint32_t bytesPerPixel = surface[4];
                     const std::uint32_t pitch = surface[6], colorOffset = surface[8];
-                    std::printf("NV2A stats: frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\n",
-                        stats[0], stats[1], stats[2], stats[3], stats[4], stats[5]);
+                    std::printf("NV2A stats: frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u mmioReads=%u mmioWrites=%u dmaPushes=%u\n",
+                        stats[0], stats[1], stats[2], stats[3], stats[4], stats[5],
+                        stats[6], stats[7], stats[8]);
                     std::printf("NV2A surface: %ux%u bpp=%u pitch=%u colorOffset=0x%08X\n",
                         width, height, bytesPerPixel, pitch, colorOffset);
                     if (stats[1] == 0 || stats[2] < 3 || width < 32 || height < 32 ||
