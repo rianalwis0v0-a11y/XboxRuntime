@@ -20,6 +20,46 @@ using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
 using GetLastGpuStats = int (__cdecl*)(XboxGpuStatsSnapshot*);
 
+static bool FindDataSectionWord(const XboxXbe::Image& image, std::uint32_t marker) {
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const auto& section = image.sections[i];
+        if ((section.flags & 0x4u) != 0 || section.virtualSize < sizeof(marker))
+            continue;
+        for (std::uint32_t offset = 0;
+             offset <= section.virtualSize - sizeof(marker); offset += sizeof(marker)) {
+            std::uint32_t value = 0;
+            SIZE_T copied = 0;
+            const auto address = static_cast<std::uintptr_t>(section.virtualAddress) + offset;
+            if (ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(address),
+                    &value, sizeof(value), &copied) && copied == sizeof(value) && value == marker)
+                return true;
+        }
+    }
+    return false;
+}
+
+static std::uint32_t FindGpuMainStage(const XboxXbe::Image& image) {
+    constexpr std::uint32_t first = 0x47505531u;
+    constexpr std::uint32_t last = 0x47505534u;
+    std::uint32_t stage = 0;
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const auto& section = image.sections[i];
+        if ((section.flags & 0x4u) != 0 || section.virtualSize < sizeof(stage))
+            continue;
+        for (std::uint32_t offset = 0;
+             offset <= section.virtualSize - sizeof(stage); offset += sizeof(stage)) {
+            std::uint32_t value = 0;
+            SIZE_T copied = 0;
+            const auto address = static_cast<std::uintptr_t>(section.virtualAddress) + offset;
+            if (ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(address),
+                    &value, sizeof(value), &copied) && copied == sizeof(value) &&
+                value >= first && value <= last && value > stage)
+                stage = value;
+        }
+    }
+    return stage;
+}
+
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -291,6 +331,21 @@ int wmain(int argc, wchar_t** argv) {
             result = 13;
         } else {
             std::puts("PASS: real guest entrypoint returned and TLS index slot was cleared.");
+            if (expectGpu) {
+                const std::uint32_t stage = FindGpuMainStage(image);
+                std::printf("Triangle XBE main stage: 0x%08X\\n", stage);
+                if (stage != 0x47505534u) {
+                    std::fprintf(stderr, "FAIL: triangle main did not complete its first frame (stage=0x%08X).\\n", stage);
+                    if (!result) result = 19;
+                } else {
+                    std::puts("PASS: triangle XBE main ran through one complete frame.");
+                }
+            } else if (!FindDataSectionWord(image, 0x58424533u)) {
+                std::fprintf(stderr, "FAIL: NXDK main did not write its guest execution marker.\\n");
+                if (!result) result = 20;
+            } else {
+                std::puts("PASS: NXDK main executed and updated its shared data marker.");
+            }
         }
     }
 
