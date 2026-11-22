@@ -161,6 +161,10 @@ typedef struct XboxNV2A_DMA_INFO {
     uint32_t mapped_length;
 } XboxNV2A_DMA_INFO;
 
+/* Return the currently bound render-target surface description. */
+__declspec(dllexport) int __cdecl XboxNV2A_GetSurfaceInfo(
+    XboxNV2A_SURFACE_INFO* output);
+
 /* Bind a bounded guest physical RAM window for PCI/AGP DMA. Pass null/zero to unbind. */
 __declspec(dllexport) int __cdecl XboxNV2A_BindGuestPhysicalMemory(
     uint32_t guest_physical_base, void* memory, uint32_t length);
