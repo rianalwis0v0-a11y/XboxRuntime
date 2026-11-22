@@ -46,6 +46,7 @@ constexpr uint32_t kThunkMax=379;
 static uint8_t* g_image=nullptr;
 static uint32_t g_base=0,g_size=0,g_entry=0,g_tls=0,g_headerSize=0,g_sectionCount=0;
 static HANDLE g_startupEvent=nullptr;
+static HANDLE g_guestExitEvent=nullptr;
 static void* g_stubPage=nullptr;
 static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
@@ -2094,9 +2095,21 @@ extern "C" void __stdcall K_RtlRip(const char* message, const char* file, ULONG 
 }
 extern "C" void __stdcall K_KeBugCheck(ULONG code) { ExitProcess(code); }
 extern "C" void __stdcall K_KeBugCheckEx(ULONG code, ULONG, ULONG, ULONG, ULONG) { ExitProcess(code); }
-extern "C" void __stdcall K_HalReturnToFirmware(ULONG) { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
+extern "C" void __stdcall K_HalReturnToFirmware(ULONG) {
+    if (g_guestExitEvent) {
+        SetEvent(g_guestExitEvent);
+        ExitThread(ERROR_SUCCESS);
+    }
+    ExitProcess(ERROR_SUCCESS);
+}
 extern "C" BOOL __stdcall K_HalIsResetOrShutdownPending() { return FALSE; }
-extern "C" void __stdcall K_HalInitiateShutdown() { XboxKernelInvokeShutdownNotifications(); ExitProcess(0); }
+extern "C" void __stdcall K_HalInitiateShutdown() {
+    if (g_guestExitEvent) {
+        SetEvent(g_guestExitEvent);
+        ExitThread(ERROR_SUCCESS);
+    }
+    ExitProcess(ERROR_SUCCESS);
+}
 extern "C" ULONG __stdcall K_DbgPrompt(const char* prompt, char* response, ULONG length) {
     if (prompt) OutputDebugStringA(prompt);
     if (response && length) response[0] = 0;
@@ -3228,12 +3241,16 @@ void XboxKernelSetStartupEvent(HANDLE eventHandle) {
     if (eventHandle) XboxKernelResetShutdownNotifications();
     g_startupEvent = eventHandle;
 }
+void XboxKernelSetGuestExitEvent(HANDLE eventHandle) {
+    g_guestExitEvent = eventHandle;
+}
 
 void XboxKernelShutdownTitle() {
     XboxKernelInvokeShutdownNotifications();
     CloseAllFilesystemHandles();
     XboxKernelResetThreadExports();
     g_startupEvent = nullptr;
+    g_guestExitEvent = nullptr;
     XboxKernelCloseAllObjectHandles();
     if (g_stubPage) {
         VirtualFree(g_stubPage, 0, MEM_RELEASE);
@@ -3490,6 +3507,19 @@ DWORD WINAPI XboxKernelStartXbe(void*) {
         reinterpret_cast<Entry>(uintptr_t(g_entry))();
     } __except(GuestExceptionFilter(GetExceptionInformation())) {
         result = GetExceptionCode();
+    }
+
+    // NXDK's CRT startup creates main() on a detached thread and returns.
+    // Keep the image and TLS alive until that real title thread exits through
+    // HalReturnToFirmware.
+    if (result == ERROR_SUCCESS) {
+        if (!g_guestExitEvent) {
+            result = ERROR_INVALID_STATE;
+        } else {
+            const DWORD wait = WaitForSingleObject(g_guestExitEvent, INFINITE);
+            if (wait != WAIT_OBJECT_0)
+                result = GetLastError();
+        }
     }
 
     // Detach only callbacks whose attach invocation completed, in reverse order.
