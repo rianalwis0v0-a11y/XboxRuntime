@@ -27,6 +27,9 @@ static uint32_t g_bound_engine[32][8];
 static uint32_t g_ref_counter[32];
 static XboxNV2A_DMA_INFO g_dma_contexts[32][8][32];
 static int g_started;
+static uint32_t g_mmio_read_count;
+static uint32_t g_mmio_write_count;
+static uint32_t g_dma_push_count;
 static IDirect3D8* g_d3d8_factory;
 static IDirect3DDevice8* g_d3d8_device;
 static uint32_t g_transform_execution_mode;
@@ -655,6 +658,9 @@ int __cdecl ModuleStartWithMemory(void* sharedMemory, uint32_t sharedMemorySize)
     if (g_started)
         return sharedMemory && g_gpu_memory != (uint8_t*)sharedMemory ? 3 : 0;
 
+    g_mmio_read_count = 0;
+    g_mmio_write_count = 0;
+    g_dma_push_count = 0;
     // The combined kernel maps one named section into both the host and x86
     // guest. The provider must use that exact backing store: a private VRAM
     // allocation would make guest CPU writes invisible to NV2A DMA/PGRAPH.
@@ -764,6 +770,7 @@ uint64_t __cdecl XboxNV2A_ReadRegister(
     if (access_size != 1 && access_size != 2 && access_size != 4)
         return 0;
 
+    ++g_mmio_read_count;
     return nv2a_mmio_read(g_gpu, (hwaddr)register_offset, access_size);
 }
 
@@ -779,6 +786,7 @@ int __cdecl XboxNV2A_WriteRegister(
     if (access_size != 1 && access_size != 2 && access_size != 4)
         return 2;
 
+    ++g_mmio_write_count;
     nv2a_mmio_write(g_gpu, (hwaddr)register_offset, value, access_size);
 
     /* PFIFO CACHE1 DMA mode: a PUT write kicks the validated software pusher. */
@@ -794,6 +802,7 @@ int __cdecl XboxNV2A_WriteRegister(
             const uint32_t get = (uint32_t)nv2a_mmio_read(g_gpu, 0x3244u, 4u);
             const uint32_t put = (uint32_t)value;
             if (get != put) {
+                ++g_dma_push_count;
                 uint32_t new_get = get, methods = 0;
                 const int pusher_result = XboxNV2A_SubmitDMAInstance(
                     channel, instance, get, put, &new_get, &methods);
@@ -2794,6 +2803,9 @@ int __cdecl XboxNV2A_GetStats(XboxNV2A_STATS* output)
     output->methods_ignored = stats.methods_ignored >= g_pgraph_fallback_methods
         ? stats.methods_ignored - g_pgraph_fallback_methods : 0;
     output->clears = stats.clears;
+    output->mmio_reads = g_mmio_read_count;
+    output->mmio_writes = g_mmio_write_count;
+    output->dma_pushes = g_dma_push_count;
     return 0;
 }
 
