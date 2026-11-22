@@ -29,6 +29,21 @@ enum XboxGpuRpcOpcode {
     XboxGpuRpcWriteRamin = 8
 };
 
+typedef struct XboxGpuStatsSnapshot {
+    uint32_t frames;
+    uint32_t draw_calls;
+    uint32_t vertices_submitted;
+    uint32_t methods_handled;
+    uint32_t methods_ignored;
+    uint32_t clears;
+    uint32_t rpc_requests;
+    uint32_t register_reads;
+    uint32_t register_writes;
+    uint32_t submit_method_calls;
+    uint32_t flush_calls;
+    uint32_t rpc_errors;
+} XboxGpuStatsSnapshot;
+
 #pragma pack(push, 1)
 typedef struct XboxGpuRpcRequest {
     uint32_t magic;
@@ -54,4 +69,5 @@ typedef struct XboxGpuRpcResponse {
 #ifdef __cplusplus
 static_assert(sizeof(XboxGpuRpcRequest) == 36, "GPU RPC request ABI drift");
 static_assert(sizeof(XboxGpuRpcResponse) == 24, "GPU RPC response ABI drift");
+static_assert(sizeof(XboxGpuStatsSnapshot) == 48, "GPU stats snapshot ABI drift");
 #endif

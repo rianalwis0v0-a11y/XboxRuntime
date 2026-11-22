@@ -3,9 +3,11 @@
 
 #include "../loader-src/modules/xbe_loader/xbe_backend_api.h"
 #include "../loader-src/modules/xbe_loader/xbe_format.h"
+#include "../guest32/kernel_gpu_service_protocol.h"
 
 #include <cstdint>
 #include <cstdio>
+#include <cwchar>
 #include <vector>
 
 using ModuleStart = int (__cdecl*)();
@@ -16,6 +18,47 @@ using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
 using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
+using GetLastGpuStats = int (__cdecl*)(XboxGpuStatsSnapshot*);
+
+static bool FindDataSectionWord(const XboxXbe::Image& image, std::uint32_t marker) {
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const auto& section = image.sections[i];
+        if ((section.flags & 0x1u) == 0 || (section.flags & 0x4u) != 0 || section.virtualSize < sizeof(marker))
+            continue;
+        for (std::uint32_t offset = 0;
+             offset <= section.virtualSize - sizeof(marker); offset += sizeof(marker)) {
+            std::uint32_t value = 0;
+            SIZE_T copied = 0;
+            const auto address = static_cast<std::uintptr_t>(section.virtualAddress) + offset;
+            if (ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(address),
+                    &value, sizeof(value), &copied) && copied == sizeof(value) && value == marker)
+                return true;
+        }
+    }
+    return false;
+}
+
+static std::uint32_t FindGpuMainStage(const XboxXbe::Image& image) {
+    constexpr std::uint32_t first = 0x47505531u;
+    constexpr std::uint32_t last = 0x47505534u;
+    std::uint32_t stage = 0;
+    for (std::uint32_t i = 0; i < image.sectionCount; ++i) {
+        const auto& section = image.sections[i];
+        if ((section.flags & 0x1u) == 0 || (section.flags & 0x4u) != 0 || section.virtualSize < sizeof(stage))
+            continue;
+        for (std::uint32_t offset = 0;
+             offset <= section.virtualSize - sizeof(stage); offset += sizeof(stage)) {
+            std::uint32_t value = 0;
+            SIZE_T copied = 0;
+            const auto address = static_cast<std::uintptr_t>(section.virtualAddress) + offset;
+            if (ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(address),
+                    &value, sizeof(value), &copied) && copied == sizeof(value) &&
+                value >= first && value <= last && value > stage)
+                stage = value;
+        }
+    }
+    return stage;
+}
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
@@ -36,8 +79,9 @@ static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes)
 }
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2) {
-        std::fwprintf(stderr, L"usage: kernel_xbe_integration.exe <default.xbe>\n");
+    const bool expectGpu = argc == 3 && std::wcscmp(argv[2], L"--expect-gpu") == 0;
+    if (argc != 2 && !expectGpu) {
+        std::fwprintf(stderr, L"usage: kernel_xbe_integration.exe <default.xbe> [--expect-gpu]\n");
         return 2;
     }
 
@@ -92,6 +136,8 @@ int wmain(int argc, wchar_t** argv) {
         GetProcAddress(kernel, "XboxKernelWaitForGuestExit"));
     auto getReserveDiagnostic = reinterpret_cast<GetReserveDiagnostic>(
         GetProcAddress(kernel, "XboxKernelGetLastReserveDiagnostic"));
+    auto getLastGpuStats = reinterpret_cast<GetLastGpuStats>(
+        GetProcAddress(kernel, "XboxKernelGetLastGpuStats"));
     auto loaderStart = reinterpret_cast<ModuleStart>(GetProcAddress(loader, "ModuleStart"));
     auto loaderStop = reinterpret_cast<ModuleStop>(GetProcAddress(loader, "ModuleStop"));
     auto registerBackend = reinterpret_cast<RegisterBackendV2>(
@@ -99,7 +145,8 @@ int wmain(int argc, wchar_t** argv) {
     auto loadXbe = reinterpret_cast<LoadXbe>(GetProcAddress(loader, "LoadXbe"));
     auto unloadXbe = reinterpret_cast<UnloadXbe>(GetProcAddress(loader, "UnloadXbe"));
     if (!kernelStart || !kernelStop || !getBackend || !waitForExit ||
-        !getReserveDiagnostic || !loaderStart || !loaderStop || !registerBackend || !loadXbe || !unloadXbe) {
+        !getReserveDiagnostic || !getLastGpuStats || !loaderStart || !loaderStop ||
+        !registerBackend || !loadXbe || !unloadXbe) {
         std::fprintf(stderr, "FAIL: required kernel/loader export missing\n");
         FreeLibrary(loader);
         FreeLibrary(kernel);
@@ -154,12 +201,12 @@ int wmain(int argc, wchar_t** argv) {
                         static_cast<std::uintptr_t>(section.virtualAddress)),
                         &sectionMemory, sizeof(sectionMemory)) == sizeof(sectionMemory)) {
                     std::printf("Mapped section %u: flags=0x%08X VA=0x%08X size=0x%08X "
-                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\\n",
+                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\n",
                                 i, section.flags, section.virtualAddress, section.virtualSize,
                                 sectionMemory.BaseAddress, sectionMemory.State,
                                 sectionMemory.Protect, sectionMemory.Type);
                 } else {
-                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\\n",
+                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\n",
                                 i, GetLastError());
                 }
             }
@@ -174,7 +221,7 @@ int wmain(int argc, wchar_t** argv) {
         if (ReadProcessMemory(GetCurrentProcess(),
                 reinterpret_cast<const void*>(static_cast<std::uintptr_t>(image.tlsAddress)),
                 &tls, sizeof(tls), &copied) && copied == sizeof(tls)) {
-            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\\n",
+            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\n",
                 tls.start, tls.end, tls.index, tls.callbacks, tls.zeroFill, tls.characteristics);
             if (tls.callbacks) {
                 for (std::uint32_t n = 0; n < 16; ++n) {
@@ -183,11 +230,11 @@ int wmain(int argc, wchar_t** argv) {
                     const auto slot = static_cast<std::uintptr_t>(tls.callbacks) + n * sizeof(callback);
                     if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(slot),
                             &callback, sizeof(callback), &copied) || copied != sizeof(callback)) {
-                        std::printf("TLS callback[%u]: unreadable\\n", n);
+                        std::printf("TLS callback[%u]: unreadable\n", n);
                         break;
                     }
                     if (!callback) {
-                        std::printf("TLS callback[%u]: <terminator>\\n", n);
+                        std::printf("TLS callback[%u]: <terminator>\n", n);
                         break;
                     }
                     const XboxXbe::Section* owner = nullptr;
@@ -199,8 +246,8 @@ int wmain(int argc, wchar_t** argv) {
                         }
                     }
                     std::printf("TLS callback[%u]=0x%08X sectionFlags=%s",
-                        n, callback, owner ? "" : "<outside image>\\n");
-                    if (owner) std::printf("0x%08X\\n", owner->flags);
+                        n, callback, owner ? "" : "<outside image>\n");
+                    if (owner) std::printf("0x%08X\n", owner->flags);
                     std::uint8_t bytes[16]{};
                     copied = 0;
                     if (ReadProcessMemory(GetCurrentProcess(),
@@ -208,12 +255,12 @@ int wmain(int argc, wchar_t** argv) {
                             bytes, sizeof(bytes), &copied) && copied) {
                         std::printf("  callback bytes:");
                         for (SIZE_T b = 0; b < copied; ++b) std::printf(" %02X", bytes[b]);
-                        std::printf("\\n");
+                        std::printf("\n");
                     }
                 }
             }
         } else {
-            std::printf("TLS directory diagnostic read failed: %lu\\n", GetLastError());
+            std::printf("TLS directory diagnostic read failed: %lu\n", GetLastError());
         }
     }
 
@@ -253,14 +300,14 @@ int wmain(int argc, wchar_t** argv) {
                 std::printf("Fault instruction bytes at 0x%08X:", exceptionInstruction);
                 for (SIZE_T i = 0; i < faultCopied; ++i)
                     std::printf(" %02X", faultBytes[i]);
-                std::printf("\\n");
+                std::printf("\n");
             } else {
-                std::printf("Fault instruction bytes unavailable: %lu\\n", GetLastError());
+                std::printf("Fault instruction bytes unavailable: %lu\n", GetLastError());
             }
             MEMORY_BASIC_INFORMATION faultMemory{};
             if (VirtualQuery(reinterpret_cast<const void*>(static_cast<std::uintptr_t>(exceptionInstruction)),
                     &faultMemory, sizeof(faultMemory)) == sizeof(faultMemory)) {
-                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\\n",
+                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\n",
                     faultMemory.BaseAddress, faultMemory.RegionSize, faultMemory.State,
                     faultMemory.Protect, faultMemory.Type);
             }
@@ -284,12 +331,44 @@ int wmain(int argc, wchar_t** argv) {
             result = 13;
         } else {
             std::puts("PASS: real guest entrypoint returned and TLS index slot was cleared.");
+            if (expectGpu) {
+                const std::uint32_t stage = FindGpuMainStage(image);
+                std::printf("Triangle XBE main stage: 0x%08X\n", stage);
+                if (stage != 0x47505534u) {
+                    std::fprintf(stderr, "FAIL: triangle main did not complete its first frame (stage=0x%08X).\n", stage);
+                    if (!result) result = 19;
+                } else {
+                    std::puts("PASS: triangle XBE main ran through one complete frame.");
+                }
+            } else if (!FindDataSectionWord(image, 0x58424533u)) {
+                std::fprintf(stderr, "FAIL: NXDK main did not write its guest execution marker.\n");
+                if (!result) result = 20;
+            } else {
+                std::puts("PASS: NXDK main executed and updated its shared data marker.");
+            }
         }
     }
 
     if (xbeActive) {
         unloadXbe();
         xbeActive = false;
+    }
+    if (expectGpu) {
+        XboxGpuStatsSnapshot stats{};
+        const int statsResult = getLastGpuStats(&stats);
+        std::printf("GPU stats: result=%d frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u rpc=%u reads=%u writes=%u submits=%u flushes=%u errors=%u\n",
+            statsResult, stats.frames, stats.draw_calls, stats.vertices_submitted,
+            stats.methods_handled, stats.methods_ignored, stats.clears,
+            stats.rpc_requests, stats.register_reads, stats.register_writes,
+            stats.submit_method_calls, stats.flush_calls, stats.rpc_errors);
+        if (statsResult != ERROR_SUCCESS || !stats.draw_calls ||
+            !stats.vertices_submitted || !stats.methods_handled) {
+            std::fprintf(stderr,
+                "FAIL: triangle XBE did not produce a verified NV2A draw.\n");
+            if (!result) result = 15;
+        } else {
+            std::puts("PASS: guest triangle XBE submitted NV2A methods and produced draw calls.");
+        }
     }
     MEMORY_BASIC_INFORMATION memory{};
     if (VirtualQuery(reinterpret_cast<const void*>(

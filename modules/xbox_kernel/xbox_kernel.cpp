@@ -33,6 +33,14 @@ struct BackendContext {
     int lastReserveResult = 0;
     DWORD lastReserveWin32Error = ERROR_SUCCESS;
     DWORD lastReserveChildExitCode = 0;
+    XboxGpuStatsSnapshot gpuStats{};
+    bool gpuStatsValid = false;
+    std::uint32_t gpuRpcRequests = 0;
+    std::uint32_t gpuRegisterReads = 0;
+    std::uint32_t gpuRegisterWrites = 0;
+    std::uint32_t gpuSubmitMethodCalls = 0;
+    std::uint32_t gpuFlushCalls = 0;
+    std::uint32_t gpuRpcErrors = 0;
 };
 BackendContext g_context;
 std::mutex g_mutex;
@@ -104,6 +112,7 @@ using GpuSubmitMethodFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t);
 using GpuFlushFn = void (__cdecl*)();
 using GpuMemoryReadFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using GpuMemoryWriteFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
+using GpuGetStatsFn = int (__cdecl*)(XboxGpuStatsSnapshot*);
 
 bool GpuRangeFits(uint32_t offset, uint32_t length) {
     return uint64_t(offset) + uint64_t(length) <= 0x100000000ull;
@@ -203,8 +212,10 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
     const auto writeRamin = reinterpret_cast<GpuMemoryWriteFn>(
         providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
+    const auto getStats = reinterpret_cast<GpuGetStatsFn>(
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_GetStats") : nullptr);
     const bool providerReady = providerStarted && rendererReady && readRegister && writeRegister &&
-        submitMethod && flush && readVram && writeVram && readRamin && writeRamin;
+        submitMethod && flush && readVram && writeVram && readRamin && writeRamin && getStats;
     if (providerStarted && !providerReady) {
         Log(L"NV2A provider is missing one or more required C ABI exports.");
         if (providerStop) providerStop();
@@ -217,6 +228,12 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         if (request.magic != XBOX_GPU_RPC_MAGIC ||
             request.version != XBOX_GPU_RPC_VERSION)
             break;
+
+        ++context->gpuRpcRequests;
+        if (request.opcode == XboxGpuRpcReadRegister) ++context->gpuRegisterReads;
+        else if (request.opcode == XboxGpuRpcWriteRegister) ++context->gpuRegisterWrites;
+        else if (request.opcode == XboxGpuRpcSubmitMethod) ++context->gpuSubmitMethodCalls;
+        else if (request.opcode == XboxGpuRpcFlush) ++context->gpuFlushCalls;
 
         XboxGpuRpcResponse response{
             XBOX_GPU_RPC_MAGIC, XBOX_GPU_RPC_VERSION,
@@ -321,11 +338,25 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         }
 
+        if (response.status != ERROR_SUCCESS) ++context->gpuRpcErrors;
         if (!WriteExact(pipe, &response, sizeof(response))) break;
         if (sendReadPayload && !WriteExact(pipe, transfer.data(), request.arg1))
             break;
     }
 cleanup:
+    if (providerStarted && getStats) {
+        XboxGpuStatsSnapshot snapshot{};
+        if (getStats(&snapshot) == 0) {
+            snapshot.rpc_requests = context->gpuRpcRequests;
+            snapshot.register_reads = context->gpuRegisterReads;
+            snapshot.register_writes = context->gpuRegisterWrites;
+            snapshot.submit_method_calls = context->gpuSubmitMethodCalls;
+            snapshot.flush_calls = context->gpuFlushCalls;
+            snapshot.rpc_errors = context->gpuRpcErrors;
+            context->gpuStats = snapshot;
+            context->gpuStatsValid = true;
+        }
+    }
     if (providerStarted && providerStop) providerStop();
     if (rendererWindow) DestroyWindow(rendererWindow);
     if (provider) FreeLibrary(provider);
@@ -428,6 +459,14 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     context.lastReserveResult = 0;
     context.lastReserveWin32Error = ERROR_SUCCESS;
     context.lastReserveChildExitCode = 0;
+    context.gpuStats = {};
+    context.gpuStatsValid = false;
+    context.gpuRpcRequests = 0;
+    context.gpuRegisterReads = 0;
+    context.gpuRegisterWrites = 0;
+    context.gpuSubmitMethodCalls = 0;
+    context.gpuFlushCalls = 0;
+    context.gpuRpcErrors = 0;
     if (context.mapping || context.process.hProcess || !guestBase || !imageSize ||
         (guestBase & 0xFFFFu) != 0 ||
         std::uint64_t(guestBase) + imageSize > 0x80000000ull) {
@@ -823,6 +862,13 @@ extern "C" int __cdecl XboxKernelGetLastReserveDiagnostic(
     *reserveResult = g_context.lastReserveResult;
     *win32Error = g_context.lastReserveWin32Error;
     *childExitCode = g_context.lastReserveChildExitCode;
+    return ERROR_SUCCESS;
+}
+extern "C" int __cdecl XboxKernelGetLastGpuStats(XboxGpuStatsSnapshot* output) {
+    if (!output) return ERROR_INVALID_PARAMETER;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_context.gpuStatsValid) return ERROR_NOT_READY;
+    *output = g_context.gpuStats;
     return ERROR_SUCCESS;
 }
 extern "C" int __cdecl XBE_GetExecutionBackendV2(XBE_EXECUTION_BACKEND_V2* backend) {
