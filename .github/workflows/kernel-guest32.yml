@@ -69,6 +69,11 @@ jobs:
           from pathlib import Path
           source = Path("nxdk/samples/triangle/main.c")
           text = source.read_text()
+          # Diagnostic only: prove the actual XBE entrypoint reaches main().
+          main_marker = "int main(void)\\n{"
+          if text.count(main_marker) != 1:
+              raise SystemExit("Expected exactly one triangle main entry")
+          text = text.replace(main_marker, main_marker + "\\n    __builtin_trap();")
           old = "    while(1) {"
           new = "    for (frames_total = 0; frames_total < 3; ++frames_total) {"
           if text.count(old) != 1:
