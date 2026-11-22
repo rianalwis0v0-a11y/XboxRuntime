@@ -32,8 +32,10 @@
 #include <atomic>
 #include "kernel_compat.h"
 #include "guest_api_registry.h"
+#include "static_xnet_trace.h"
 
 extern "C" void KernelDispatch();
+extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t returnAddress);
 namespace {
 constexpr uint32_t kRetailThunk=0x5B6D40B6u, kDebugThunk=0xEFB1F152u;
 constexpr uint32_t kThunkMax=379;
@@ -44,6 +46,11 @@ static uint32_t g_stubCount=0;
 static void* g_savedAv=nullptr;
 static std::array<std::array<uint8_t, 512>, 379> g_data{};
 static std::wstring g_titleDirectory;
+static std::array<XboxStaticXnetRange, 16> g_staticXnetRanges{};
+static uint32_t g_staticXnetRangeCount = 0;
+static uint32_t g_staticXnetLibraryBuild = 0;
+static std::atomic<uint32_t> g_staticXnetTraceCount{0};
+static std::array<std::atomic<bool>, kThunkMax> g_staticXnetLogged{};
 ULONG g_fileCacheSize = 1024 * 1024;
 std::array<uint8_t, 256> g_eeprom{};
 std::wstring g_eepromPath;
@@ -578,34 +585,105 @@ extern "C" void __stdcall K_MmFreeContiguousMemory(void*p){if(p)VirtualFree(p,0,
 extern "C" void* __stdcall K_MmGetPhysicalAddress(void*p){return p;}
 extern "C" BOOL __stdcall K_MmIsAddressValid(void*p){MEMORY_BASIC_INFORMATION m{};return p&&VirtualQuery(p,&m,sizeof(m))&&m.State==MEM_COMMIT;}
 struct GuestUnicodeString { USHORT Length,MaximumLength; wchar_t* Buffer; };
-struct GuestObjectAttributes { ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes; void* SecurityDescriptor; void* SecurityQualityOfService; };
+struct GuestXboxAnsiString { USHORT Length,MaximumLength; char* Buffer; };
+// Current Xbox kernel OBJECT_ATTRIBUTES is a 12-byte structure with an ANSI
+// OBJECT_STRING. Keep the older Windows-shaped Unicode fixture as a compatibility
+// path for the runtime's existing diagnostic XBE.
+struct GuestXboxObjectAttributes { HANDLE RootDirectory; GuestXboxAnsiString* ObjectName; ULONG Attributes; };
+struct GuestLegacyObjectAttributes {
+    ULONG Length; HANDLE RootDirectory; GuestUnicodeString* ObjectName; ULONG Attributes;
+    void* SecurityDescriptor; void* SecurityQualityOfService;
+};
 struct GuestIoStatusBlock { union { LONG Status; void* Pointer; }; ULONG Information; };
-std::wstring TranslateXboxPath(const GuestUnicodeString* name){
-    if(!name||!name->Buffer||!name->Length)return {};
-    std::wstring p(name->Buffer,name->Length/sizeof(wchar_t));
-    const std::wstring cd=L"\\Device\\Cdrom0";
-    const std::wstring hd=L"\\Device\\Harddisk0\\Partition1";
-    if(p.rfind(cd,0)==0)p=g_titleDirectory+p.substr(cd.size());
-    else if(p.rfind(hd,0)==0)p=g_titleDirectory+p.substr(hd.size());
-    else if(p.rfind(L"\\??\\",0)==0)p=p.substr(4);
-    else if(p.size()>2&&p[1]==L':'&&(p[2]==L'\\'||p[2]==L'/')){
-        if(p[0]==L'D'||p[0]==L'd')p=g_titleDirectory+p.substr(2);
-    }else if(p[0]==L'\\')p=g_titleDirectory+p;
+
+std::wstring MapXboxPath(std::wstring p) {
+    const std::wstring cd = L"\\Device\\Cdrom0";
+    const std::wstring hd = L"\\Device\\Harddisk0\\Partition1";
+    const std::wstring configVolume = L"\\Device\\Harddisk0\\partition0";
+    if (_wcsnicmp(p.c_str(), cd.c_str(), cd.size()) == 0)
+        p = g_titleDirectory + p.substr(cd.size());
+    else if (_wcsnicmp(p.c_str(), hd.c_str(), hd.size()) == 0)
+        p = g_titleDirectory + p.substr(hd.size());
+    else if (_wcsicmp(p.c_str(), configVolume.c_str()) == 0) {
+        // Keep the emulated config volume beside the title. The EEPROM may be
+        // stored elsewhere (for example in a shared user-data directory), so
+        // deriving the config-volume root from the EEPROM path can point at an
+        // unrelated or unavailable directory.
+        std::wstring root = g_titleDirectory;
+        if (root.empty()) {
+            root = g_eepromPath;
+            const size_t separator = root.find_last_of(L"\\/");
+            if (separator != std::wstring::npos) root.resize(separator);
+            else root.clear();
+        }
+        if (root.empty()) return {};
+
+        const std::wstring configPath = root + L"\\config.bin";
+        HANDLE file = CreateFileW(configPath.c_str(), GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file == INVALID_HANDLE_VALUE) return {};
+        LARGE_INTEGER current{};
+        const bool haveSize = GetFileSizeEx(file, &current) != FALSE;
+        constexpr LONGLONG expectedSize = 16ll * 512ll; // sectors 0..15; XNET config occupies 8..15.
+        bool valid = haveSize;
+        if (valid && current.QuadPart != expectedSize) {
+            LARGE_INTEGER zero{};
+            LARGE_INTEGER end{}; end.QuadPart = expectedSize;
+            valid = SetFilePointerEx(file, zero, nullptr, FILE_BEGIN) &&
+                    SetEndOfFile(file) &&
+                    SetFilePointerEx(file, end, nullptr, FILE_BEGIN) &&
+                    SetEndOfFile(file);
+        }
+        CloseHandle(file);
+        if (!valid) return {};
+        return configPath;
+    } else if (p.rfind(L"\\??\\", 0) == 0)
+        p = p.substr(4);
+    else if (p.size() > 2 && p[1] == L':' && (p[2] == L'\\' || p[2] == L'/')) {
+        if (p[0] == L'D' || p[0] == L'd') p = g_titleDirectory + p.substr(2);
+    } else if (!p.empty() && p[0] == L'\\')
+        p = g_titleDirectory + p;
     return p;
+}
+std::wstring TranslateXboxPath(const GuestUnicodeString* name) {
+    if (!name || !name->Buffer || !name->Length ||
+        name->Length > name->MaximumLength || (name->Length & 1u)) return {};
+    return MapXboxPath(std::wstring(name->Buffer, name->Length / sizeof(wchar_t)));
+}
+std::wstring TranslateXboxObjectPath(const void* rawAttributes) {
+    if (!rawAttributes) return {};
+    uint32_t first = 0;
+    std::memcpy(&first, rawAttributes, sizeof(first));
+    if (first == sizeof(GuestLegacyObjectAttributes)) {
+        const auto* oa = static_cast<const GuestLegacyObjectAttributes*>(rawAttributes);
+        if (oa->RootDirectory || !oa->ObjectName) return {};
+        return TranslateXboxPath(oa->ObjectName);
+    }
+
+    const auto* oa = static_cast<const GuestXboxObjectAttributes*>(rawAttributes);
+    if (oa->RootDirectory || !oa->ObjectName || !oa->ObjectName->Buffer ||
+        !oa->ObjectName->Length || oa->ObjectName->Length > oa->ObjectName->MaximumLength) return {};
+    const int chars = MultiByteToWideChar(CP_ACP, 0, oa->ObjectName->Buffer,
+        oa->ObjectName->Length, nullptr, 0);
+    if (chars <= 0) return {};
+    std::wstring path(static_cast<size_t>(chars), L'\0');
+    if (!MultiByteToWideChar(CP_ACP, 0, oa->ObjectName->Buffer,
+        oa->ObjectName->Length, path.data(), chars)) return {};
+    return MapXboxPath(path);
 }
 DWORD FileAccess(uint32_t a){DWORD r=0;if(a&0x80000000u)r|=GENERIC_READ;if(a&0x40000000u)r|=GENERIC_WRITE;if(a&1)r|=GENERIC_READ;if(a&2)r|=GENERIC_WRITE;return r?r:GENERIC_READ;}
 DWORD FileDisposition(uint32_t d){switch(d){case 0:return CREATE_ALWAYS;case 1:return OPEN_EXISTING;case 2:return CREATE_NEW;case 3:return OPEN_ALWAYS;case 4:return TRUNCATE_EXISTING;case 5:return CREATE_ALWAYS;default:return OPEN_EXISTING;}}
-LONG NtCreateFileImpl(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
-    if(!out||!oa||!oa->ObjectName)return LONG(0xC000000Du);
-    std::wstring path=TranslateXboxPath(oa->ObjectName);if(path.empty())return LONG(0xC0000033u);
+LONG NtCreateFileImpl(HANDLE*out,uint32_t access,const void*oa,GuestIoStatusBlock*io,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){
+    if(!out||!oa)return LONG(0xC000000Du);
+    std::wstring path=TranslateXboxObjectPath(oa);if(path.empty())return LONG(0xC0000033u);
     DWORD flags=attrs?attrs:FILE_ATTRIBUTE_NORMAL;
     if(options&1)flags|=FILE_FLAG_BACKUP_SEMANTICS;
     HANDLE h=CreateFileW(path.c_str(),FileAccess(access),((share&1)?FILE_SHARE_READ:0)|((share&2)?FILE_SHARE_WRITE:0)|((share&4)?FILE_SHARE_DELETE:0),nullptr,FileDisposition(disposition),flags,nullptr);
     if(h==INVALID_HANDLE_VALUE){DWORD e=GetLastError();if(io){io->Status=LONG(0xC0000001u);io->Information=0;}return e==ERROR_FILE_NOT_FOUND||e==ERROR_PATH_NOT_FOUND?LONG(0xC0000034u):e==ERROR_ACCESS_DENIED?LONG(0xC0000022u):LONG(0xC0000001u);}
     *out=h;if(io){io->Status=0;io->Information=1;}return 0;
 }
-extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
-extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,GuestObjectAttributes*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
+extern "C" LONG __stdcall K_NtCreateFile(HANDLE*out,uint32_t access,const void*oa,GuestIoStatusBlock*io,const LARGE_INTEGER*,uint32_t attrs,uint32_t share,uint32_t disposition,uint32_t options){return NtCreateFileImpl(out,access,oa,io,attrs,share,disposition,options);}
+extern "C" LONG __stdcall K_NtOpenFile(HANDLE*out,uint32_t access,const void*oa,GuestIoStatusBlock*io,uint32_t share,uint32_t options){return NtCreateFileImpl(out,access,oa,io,FILE_ATTRIBUTE_NORMAL,share,1,options);}
 struct GuestFileNetworkOpenInformation {
     LARGE_INTEGER CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
     LARGE_INTEGER AllocationSize, EndOfFile;
@@ -620,11 +698,9 @@ static LARGE_INTEGER FileTimeToLarge(const FILETIME& value) {
     return result;
 }
 extern "C" LONG __stdcall K_NtQueryFullAttributesFile(
-    GuestObjectAttributes* oa, GuestFileNetworkOpenInformation* out) {
-    if (!oa || !oa->ObjectName || !out || oa->Length < sizeof(GuestObjectAttributes))
-        return LONG(0xC000000Du);
-    if (oa->RootDirectory) return LONG(0xC00000BBu);
-    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+    const void* oa, GuestFileNetworkOpenInformation* out) {
+    if (!oa || !out) return LONG(0xC000000Du);
+    const std::wstring path = TranslateXboxObjectPath(oa);
     if (path.empty()) return LONG(0xC0000033u);
     WIN32_FILE_ATTRIBUTE_DATA data{};
     if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) {
@@ -657,9 +733,9 @@ extern "C" void __stdcall K_RtlCaptureContext(CONTEXT* context) {
     if (context) RtlCaptureContext(context);
 }
 
-extern "C" LONG __stdcall K_NtDeleteFile(GuestObjectAttributes* oa) {
-    if (!oa || !oa->ObjectName) return LONG(0xC000000Du);
-    const std::wstring path = TranslateXboxPath(oa->ObjectName);
+extern "C" LONG __stdcall K_NtDeleteFile(const void* oa) {
+    if (!oa) return LONG(0xC000000Du);
+    const std::wstring path = TranslateXboxObjectPath(oa);
     if (path.empty()) return LONG(0xC0000033u);
     if (DeleteFileW(path.c_str())) return 0;
     const DWORD error = GetLastError();
@@ -1876,6 +1952,58 @@ extern "C" void __stdcall K_Unsupported(uint32_t ordinal){char b[128];sprintf_s(
 }
 extern "C" __declspec(naked) void KernelDispatch(){
     __asm {
+        pushfd
+        push edx
+        mov edx, [esp+8]
+        cmp edx, 59
+        jb trace_static_xnet_done
+        cmp edx, 87
+        jbe trace_static_xnet_entry
+        cmp edx, 187
+        je trace_static_xnet_entry
+        cmp edx, 190
+        je trace_static_xnet_entry
+        cmp edx, 196
+        je trace_static_xnet_entry
+        cmp edx, 198
+        je trace_static_xnet_entry
+        cmp edx, 200
+        je trace_static_xnet_entry
+        cmp edx, 202
+        je trace_static_xnet_entry
+        cmp edx, 207
+        je trace_static_xnet_entry
+        cmp edx, 211
+        je trace_static_xnet_entry
+        cmp edx, 218
+        je trace_static_xnet_entry
+        cmp edx, 219
+        je trace_static_xnet_entry
+        cmp edx, 236
+        je trace_static_xnet_entry
+        cmp edx, 252
+        je trace_static_xnet_entry
+        cmp edx, 253
+        jne trace_static_xnet_done
+        trace_static_xnet_entry: jmp trace_static_xnet
+        trace_static_xnet:
+        pop edx
+        popfd
+        pushfd
+        pushad
+        mov eax, [esp+40]
+        mov ecx, [esp+36]
+        push eax
+        push ecx
+        call XboxKernelTraceStaticXnetCall
+        add esp, 8
+        popad
+        popfd
+        jmp trace_static_xnet_exit
+        trace_static_xnet_done:
+        pop edx
+        popfd
+        trace_static_xnet_exit:
         mov eax, [esp]
         add esp, 4
         cmp eax, 1
@@ -2579,34 +2707,44 @@ void XboxKernelFlushEeprom() {
 void XboxKernelSetTitlePath(const wchar_t* path){
     g_titleDirectory.clear();if(!path)return;g_titleDirectory=path;size_t p=g_titleDirectory.find_last_of(L"\\/");if(p!=std::wstring::npos)g_titleDirectory.resize(p);
 }
+void XboxKernelResetStaticXnetTrace() {
+    g_staticXnetRanges.fill({0, 0});
+    g_staticXnetRangeCount = 0;
+    g_staticXnetLibraryBuild = 0;
+    g_staticXnetTraceCount.store(0);
+    for (auto& logged : g_staticXnetLogged) logged.store(false);
+}
+void XboxKernelAddStaticXnetCodeRange(uint32_t address, uint32_t size, uint32_t libraryBuild) {
+    if (!address || !size || uint64_t(address) + size > 0x100000000ull ||
+        g_staticXnetRangeCount >= g_staticXnetRanges.size()) return;
+    g_staticXnetRanges[g_staticXnetRangeCount++] = {address, size};
+    if (libraryBuild) g_staticXnetLibraryBuild = libraryBuild;
+    char message[192]{};
+    sprintf_s(message, "[XboxKernel] Static XNET code section: VA=0x%08X size=0x%08X XNET-library-build=%u\n",
+        address, size, g_staticXnetLibraryBuild);
+    OutputDebugStringA(message);
+    std::fputs(message, stderr);
+}
+extern "C" void __cdecl XboxKernelTraceStaticXnetCall(uint32_t ordinal, uint32_t returnAddress) {
+    if (ordinal >= kThunkMax) return;
+    const char* name = XboxStaticXnetKernelCandidateName(ordinal);
+    if (!name || !XboxStaticXnetContains(g_staticXnetRanges.data(), g_staticXnetRangeCount, returnAddress))
+        return;
+    bool expected = false;
+    if (!g_staticXnetLogged[ordinal].compare_exchange_strong(expected, true)) return;
+    g_staticXnetTraceCount.fetch_add(1);
+    char message[224]{};
+    sprintf_s(message, "[XboxKernel] STATIC_XNET_KERNEL_CALL ordinal=%u (%s) caller=0x%08X XNET-library-build=%u\n",
+        ordinal, name, returnAddress, g_staticXnetLibraryBuild);
+    OutputDebugStringA(message);
+    std::fputs(message, stderr);
+}
+uint32_t XboxKernelGetStaticXnetTraceCount() {
+    return g_staticXnetTraceCount.load();
+}
 static void LogNetworkRelatedKernelImport(uint32_t ordinal) {
-    const char* name = nullptr;
-    switch (ordinal) {
-    case 59: name = "IoAllocateIrp"; break;
-    case 60: name = "IoBuildAsynchronousFsdRequest"; break;
-    case 61: name = "IoBuildDeviceIoControlRequest"; break;
-    case 62: name = "IoBuildSynchronousFsdRequest"; break;
-    case 65: name = "IoCreateDevice"; break;
-    case 66: name = "IoCreateFile"; break;
-    case 67: name = "IoCreateSymbolicLink"; break;
-    case 68: name = "IoDeleteDevice"; break;
-    case 69: name = "IoDeleteSymbolicLink"; break;
-    case 72: name = "IoFreeIrp"; break;
-    case 73: name = "IoInitializeIrp"; break;
-    case 77: name = "IoQueueThreadIrp"; break;
-    case 81: name = "IoStartNextPacket"; break;
-    case 82: name = "IoStartNextPacketByKey"; break;
-    case 83: name = "IoStartPacket"; break;
-    case 84: name = "IoSynchronousDeviceIoControlRequest"; break;
-    case 85: name = "IoSynchronousFsdRequest"; break;
-    case 86: name = "IofCallDriver"; break;
-    case 87: name = "IofCompleteRequest"; break;
-    case 196: name = "NtDeviceIoControlFile"; break;
-    case 200: name = "NtFsControlFile"; break;
-    case 252: name = "PhyGetLinkState"; break;
-    case 253: name = "PhyInitialize"; break;
-    default: return;
-    }
+    const char* name = XboxStaticXnetKernelCandidateName(ordinal);
+    if (!name) return;
     char message[160]{};
     sprintf_s(message, "[XboxKernel] XBE imports network/I-O candidate: ordinal %u (%s)\n",
         ordinal, name);

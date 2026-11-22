@@ -55,6 +55,10 @@ function EmitCallImport([int]$ordinal) {
     EmitLoadEax $slot
     EmitByte 0xFF; EmitByte 0xD0
 }
+function EmitCallStaticXnet {
+    EmitByte 0xB8; Emit32 ([uint32]($base + 0x8000))
+    EmitByte 0xFF; EmitByte 0xD0
+}
 function EmitCheckEqual([uint32]$expected) {
     $script:checkIndex++
     EmitByte 0x3D; Emit32 $expected
@@ -930,21 +934,23 @@ EmitCheckEqual 258
 EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
-# Validate the guest OBJECT_ATTRIBUTES and UNICODE_STRING fixture before NtOpenFile.
-$directoryUnicodeVa = [uint32]($base + 0x6500)
-$directoryObjectAttributesVa = [uint32]($base + 0x6510)
-$directoryPathVa = [uint32]($base + 0x6540)
-$directoryHandleVa = [uint32]($base + 0x6710)
-$directoryInfoVa = [uint32]($base + 0x6600)
-$directoryIoVa = [uint32]($base + 0x6700)
-EmitLoadEax ([uint32]($directoryObjectAttributesVa + 8))
-EmitCheckEqual $directoryUnicodeVa
-EmitLoadEax $directoryUnicodeVa
-EmitCheckEqual 0x001E001C
-EmitLoadEax ([uint32]($directoryUnicodeVa + 4))
+# Validate the Xbox-native 12-byte OBJECT_ATTRIBUTES + ANSI OBJECT_STRING
+# fixture before NtOpenFile.
+$directoryAnsiVa = [uint32]($base + 0x6600)
+$directoryObjectAttributesVa = [uint32]($base + 0x6610)
+$directoryPathVa = [uint32]($base + 0x6640)
+$directoryHandleVa = [uint32]($base + 0x6790)
+$directoryInfoVa = [uint32]($base + 0x6680)
+$directoryIoVa = [uint32]($base + 0x6780)
+$directoryPathLength = [uint16]("\Device\Cdrom0".Length)
+$directoryStringLengths = [uint32]($directoryPathLength -bor (($directoryPathLength + 1) -shl 16))
+EmitLoadEax ([uint32]($directoryObjectAttributesVa + 4))
+EmitCheckEqual $directoryAnsiVa
+EmitLoadEax $directoryAnsiVa
+EmitCheckEqual $directoryStringLengths
+EmitLoadEax ([uint32]($directoryAnsiVa + 4))
 EmitCheckEqual $directoryPathVa
-EmitLoadEax $directoryPathVa
-EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x00
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0x05; Emit32 $directoryPathVa
 EmitCheckEqual 92
 EmitPush 1
 EmitPush 7
@@ -1038,19 +1044,34 @@ EmitIncrement $skippedVa
 EmitMovMemoryImmediate $progressVa 255
 EmitByte 0x31; EmitByte 0xC0
 EmitCheckEqual 0
+# Execute a call from a synthetic statically linked XNET section. That code
+# opens the Xbox config volume with the real ANSI OBJECT_ATTRIBUTES ABI.
+EmitCallStaticXnet
+EmitCheckEqual 0
+
+# Exercise the guest DbgPrint kernel import. The message is stored in the
+# mapped diagnostic data section, and the returned character count is checked.
+$dbgPrintMessage = "THIS IS WORKING - XboxRuntime guest kernel reached DbgPrint`n"
+$dbgPrintMessageVa = [uint32]($base + 0x6600)
+EmitPush $dbgPrintMessageVa
+EmitCallImport 8
+EmitByte 0x83; EmitByte 0xC4; EmitByte 0x04
+EmitCheckEqual ([uint32]$dbgPrintMessage.Length)
+
 Write-Host "Generated diagnostic assertions: $script:checkIndex"
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
 $dataOffset = 0x6000
 if ($script:code.Count -gt ($dataOffset - 0x1000)) { throw "Diagnostic XBE code overlaps its data region." }
-$b = [byte[]]::new(0x8000)
+$b = [byte[]]::new(0x9000)
 function Put32([int]$offset,[uint32]$value) { [BitConverter]::GetBytes($value).CopyTo($b,$offset) }
+function Put16([int]$offset,[uint16]$value) { [BitConverter]::GetBytes($value).CopyTo($b,$offset) }
 [Text.Encoding]::ASCII.GetBytes("XBEH").CopyTo($b,0)
 Put32 0x104 $base
 Put32 0x108 0x1000
-Put32 0x10C 0x8000
+Put32 0x10C 0x9000
 Put32 0x110 0x178
-Put32 0x11C 1
+Put32 0x11C 2
 Put32 0x120 0x10000178
 Put32 0x128 ($entryVa -bxor [Convert]::ToUInt32('A8FC57AB',16))
 Put32 0x158 ([uint32]($thunkVa -bxor [uint32]0x5B6D40B6))
@@ -1060,44 +1081,105 @@ Put32 0x17C $entryVa
 Put32 0x180 0x7000
 Put32 0x184 0x1000
 Put32 0x188 0x7000
+# Second executable section represents statically linked XNET code.
+Put32 0x1B0 5
+Put32 0x1B4 ([uint32]($base + 0x8000))
+Put32 0x1B8 0x1000
+Put32 0x1BC 0x8000
+Put32 0x1C0 0x1000
+Put32 0x1C4 ([uint32]($base + 0x2F0))
+# One XNET library version record, including a recognizable build number.
+Put32 0x160 1
+Put32 0x164 ([uint32]($base + 0x200))
+
 $script:code.ToArray().CopyTo($b,0x1000)
 # The guest import resolver replaces these encoded ordinal slots with thunks.
 for ($i=0; $i -lt $ordinals.Count; $i++) {
     Put32 (0x6800 + 4*$i) ([uint32](2147483648 + [int64]$ordinals[$i]))
 }
 Put32 (0x6800 + 4*$ordinals.Count) 0
+# XBE library-version record and the section-name string used by the loader.
+[Text.Encoding]::ASCII.GetBytes("XNET" + [char]0 + [char]0 + [char]0 + [char]0).CopyTo($b,0x200)
+Put16 0x208 1
+Put16 0x20A 0
+Put16 0x20C 5849
+Put16 0x20E 0
+[Text.Encoding]::ASCII.GetBytes("XNET" + [char]0).CopyTo($b,0x2F0)
+[Text.Encoding]::ASCII.GetBytes($dbgPrintMessage + [char]0).CopyTo($b,0x6600)
+
+# Build a tiny static-XNET routine: NtOpenFile on a title file mapped
+# through the Windows host path, then NtClose.
+$xnetCode = [System.Collections.Generic.List[byte]]::new()
+function XnetByte([int]$v) { [void]$xnetCode.Add([byte]($v -band 255)) }
+function Xnet32([uint32]$v) { foreach ($x in [BitConverter]::GetBytes($v)) { [void]$xnetCode.Add($x) } }
+function XnetPush([uint32]$v) { XnetByte 0x68; Xnet32 $v }
+function XnetCallImport([int]$ordinal) {
+    $slot = [uint32]($thunkVa + 4 * [int]$ordIndex[$ordinal])
+    XnetByte 0xA1; Xnet32 $slot
+    XnetByte 0xFF; XnetByte 0xD0
+}
+XnetPush 0x10
+XnetPush 3
+XnetPush ([uint32]($base + 0x8164))
+XnetPush ([uint32]($base + 0x8100))
+XnetPush ([Convert]::ToUInt32('C0100000',16))
+XnetPush ([uint32]($base + 0x8160))
+XnetCallImport 202
+XnetByte 0x85; XnetByte 0xC0
+XnetByte 0x75; XnetByte 0x0E
+XnetByte 0xFF; XnetByte 0x35; Xnet32 ([uint32]($base + 0x8160))
+XnetCallImport 187
+XnetByte 0xC3
+XnetByte 0xC3
+if ($xnetCode.Count -gt 0x100) { throw "Static XNET fixture code is too large." }
+$xnetCode.ToArray().CopyTo($b,0x8000)
+
+# Xbox OBJECT_ATTRIBUTES (12 bytes) and ANSI OBJECT_STRING for a title file.
+$volumePath = "\Device\Cdrom0\xbe-test.txt"
+$volumePathBytes = [Text.Encoding]::ASCII.GetBytes($volumePath + [char]0)
+Put32 0x8100 0
+Put32 0x8104 ([uint32]($base + 0x8120))
+Put32 0x8108 0x40
+Put16 0x8120 ([uint16]$volumePath.Length)
+Put16 0x8122 ([uint16]($volumePath.Length + 1))
+Put32 0x8124 ([uint32]($base + 0x8140))
+$volumePathBytes.CopyTo($b,0x8140)
+Put32 0x8160 0
+Put32 0x8164 0
+Put32 0x8168 0
+
 Put32 0x6000 0x54535258
 Put32 0x6028 4096
-# Guest-side OBJECT_ATTRIBUTES + UNICODE_STRING for \Device\Cdrom0\xbe-test.txt.
+# Xbox-native OBJECT_ATTRIBUTES + ANSI OBJECT_STRING for the title file.
+# OBJECT_ATTRIBUTES is { RootDirectory, ObjectName, Attributes }; OBJECT_STRING
+# is { Length, MaximumLength, Buffer }. Keep this fixture on the Xbox ABI rather
+# than relying on the older Windows-shaped Unicode compatibility path.
 $guestPath = "\Device\Cdrom0\xbe-test.txt"
-$guestPathBytes = [Text.Encoding]::Unicode.GetBytes($guestPath + [char]0)
-$guestPathLength = [uint32]($guestPath.Length * 2)
-Put32 0x6080 ([uint32]($guestPathLength -bor (($guestPathLength + 2) -shl 16)))
+$guestPathBytes = [Text.Encoding]::ASCII.GetBytes($guestPath + [char]0)
+$guestPathLength = [uint16]$guestPath.Length
+Put16 0x6080 $guestPathLength
+Put16 0x6082 ([uint16]($guestPathLength + 1))
 Put32 0x6084 $testPathVa
-Put32 0x6090 24
-Put32 0x6094 0
-Put32 0x6098 $unicodeVa
-Put32 0x609C 0
-Put32 0x60A0 0
-Put32 0x60A4 0
-Put32 0x60B0 0
-Put32 0x60B4 0
-Put32 0x60B8 0
+Put32 0x6090 0
+Put32 0x6094 $unicodeVa
+Put32 0x6098 0x40
 $guestPathBytes.CopyTo($b,0x6100)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
 $directoryPath = "\Device\Cdrom0"
-$directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
-$directoryPathLength = [uint32]($directoryPath.Length * 2)
-$directoryPathVa = [uint32]($base + 0x6540)
-Put32 0x6500 ([uint32]($directoryPathLength -bor (($directoryPathLength + 2) -shl 16)))
-Put32 0x6504 $directoryPathVa
-Put32 0x6510 24
-Put32 0x6514 0
-Put32 0x6518 $directoryUnicodeVa
-Put32 0x651C 0
-Put32 0x6520 0
-Put32 0x6524 0
-$directoryPathBytes.CopyTo($b,0x6540)
+$directoryPathBytes = [Text.Encoding]::ASCII.GetBytes($directoryPath + [char]0)
+$directoryPathLength = [uint16]$directoryPath.Length
+# Reserve a non-overlapping slice below the import thunk table for this fixture.
+$directoryAnsiVa = [uint32]($base + 0x6600)
+$directoryObjectAttributesVa = [uint32]($base + 0x6610)
+$directoryPathVa = [uint32]($base + 0x6640)
+Put16 0x6600 $directoryPathLength
+Put16 0x6602 ([uint16]($directoryPathLength + 1))
+Put32 0x6604 $directoryPathVa
+# Xbox OBJECT_ATTRIBUTES: RootDirectory, ObjectName, Attributes.
+Put32 0x6610 0
+Put32 0x6614 $directoryAnsiVa
+Put32 0x6618 0x40
+$directoryPathBytes.CopyTo($b,0x6640)
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
 $testDir = Join-Path $env:RUNNER_TEMP "XboxRuntimeDiagnosticXbe"
@@ -1144,7 +1226,7 @@ try {
         $exit = if ($proc.HasExited) { $proc.ExitCode } else { "still running" }
         throw "Guest pipe closed before diagnostic release; process exit=$exit. $($_.Exception.Message)"
     }
-    $report = [byte[]]::new(28)
+    $report = [byte[]]::new(32)
     $read = 0
     while ($read -lt $report.Length) {
         $n = $pipe.Read($report,$read,$report.Length-$read)
@@ -1162,11 +1244,15 @@ try {
     $failedCheck = [BitConverter]::ToUInt32($report,16)
     $progress = [BitConverter]::ToUInt32($report,20)
     $directoryOpenStatus = [BitConverter]::ToUInt32($report,24)
+    $staticXnetTraceCount = [BitConverter]::ToUInt32($report,28)
     if ($reportMagic -ne 0x54535258) { throw "Invalid diagnostic report marker." }
-    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus)"
+    Write-Host "XboxRuntime Diagnostic XBE: $passed PASS, $failed FAIL, $skipped NOT SUPPORTED; first failed check #$failedCheck; progress marker $progress; NtOpenFile status 0x$('{0:X8}' -f $directoryOpenStatus); static XNET trace calls $staticXnetTraceCount"
     if ($progress -ne 255) { throw "Diagnostic XBE stopped before the final test group (progress marker $progress)." }
     if ($failed -ne 0 -or $passed -lt 20 -or $skipped -gt 3) {
         throw "Diagnostic XBE reported an unexpected result."
+    }
+    if ($staticXnetTraceCount -lt 2) {
+        throw "Static XNET code did not produce both NtOpenFile and NtClose trace events."
     }
     if (!$proc.WaitForExit(10000)) { throw "x86 guest did not exit after diagnostic completion." }
     if ($proc.ExitCode -ne 0) { throw "x86 guest exited with code $($proc.ExitCode)." }
