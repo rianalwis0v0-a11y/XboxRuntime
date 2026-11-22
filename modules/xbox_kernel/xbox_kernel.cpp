@@ -35,6 +35,12 @@ struct BackendContext {
     DWORD lastReserveChildExitCode = 0;
     XboxGpuStatsSnapshot gpuStats{};
     bool gpuStatsValid = false;
+    std::uint32_t gpuRpcRequests = 0;
+    std::uint32_t gpuRegisterReads = 0;
+    std::uint32_t gpuRegisterWrites = 0;
+    std::uint32_t gpuSubmitMethodCalls = 0;
+    std::uint32_t gpuFlushCalls = 0;
+    std::uint32_t gpuRpcErrors = 0;
 };
 BackendContext g_context;
 std::mutex g_mutex;
@@ -223,6 +229,12 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             request.version != XBOX_GPU_RPC_VERSION)
             break;
 
+        ++context->gpuRpcRequests;
+        if (request.opcode == XboxGpuRpcReadRegister) ++context->gpuRegisterReads;
+        else if (request.opcode == XboxGpuRpcWriteRegister) ++context->gpuRegisterWrites;
+        else if (request.opcode == XboxGpuRpcSubmitMethod) ++context->gpuSubmitMethodCalls;
+        else if (request.opcode == XboxGpuRpcFlush) ++context->gpuFlushCalls;
+
         XboxGpuRpcResponse response{
             XBOX_GPU_RPC_MAGIC, XBOX_GPU_RPC_VERSION,
             request.request_id, ERROR_NOT_SUPPORTED, 0
@@ -326,6 +338,7 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
         }
 
+        if (response.status != ERROR_SUCCESS) ++context->gpuRpcErrors;
         if (!WriteExact(pipe, &response, sizeof(response))) break;
         if (sendReadPayload && !WriteExact(pipe, transfer.data(), request.arg1))
             break;
@@ -334,6 +347,12 @@ cleanup:
     if (providerStarted && getStats) {
         XboxGpuStatsSnapshot snapshot{};
         if (getStats(&snapshot) == 0) {
+            snapshot.rpc_requests = context->gpuRpcRequests;
+            snapshot.register_reads = context->gpuRegisterReads;
+            snapshot.register_writes = context->gpuRegisterWrites;
+            snapshot.submit_method_calls = context->gpuSubmitMethodCalls;
+            snapshot.flush_calls = context->gpuFlushCalls;
+            snapshot.rpc_errors = context->gpuRpcErrors;
             context->gpuStats = snapshot;
             context->gpuStatsValid = true;
         }
@@ -442,6 +461,12 @@ int __cdecl ReserveImage(std::uint32_t guestBase, std::uint32_t imageSize,
     context.lastReserveChildExitCode = 0;
     context.gpuStats = {};
     context.gpuStatsValid = false;
+    context.gpuRpcRequests = 0;
+    context.gpuRegisterReads = 0;
+    context.gpuRegisterWrites = 0;
+    context.gpuSubmitMethodCalls = 0;
+    context.gpuFlushCalls = 0;
+    context.gpuRpcErrors = 0;
     if (context.mapping || context.process.hProcess || !guestBase || !imageSize ||
         (guestBase & 0xFFFFu) != 0 ||
         std::uint64_t(guestBase) + imageSize > 0x80000000ull) {
