@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cwchar>
 #include <vector>
 
 using ModuleStart = int (__cdecl*)();
@@ -159,12 +160,12 @@ int wmain(int argc, wchar_t** argv) {
                         static_cast<std::uintptr_t>(section.virtualAddress)),
                         &sectionMemory, sizeof(sectionMemory)) == sizeof(sectionMemory)) {
                     std::printf("Mapped section %u: flags=0x%08X VA=0x%08X size=0x%08X "
-                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\\n",
+                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\n",
                                 i, section.flags, section.virtualAddress, section.virtualSize,
                                 sectionMemory.BaseAddress, sectionMemory.State,
                                 sectionMemory.Protect, sectionMemory.Type);
                 } else {
-                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\\n",
+                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\n",
                                 i, GetLastError());
                 }
             }
@@ -179,7 +180,7 @@ int wmain(int argc, wchar_t** argv) {
         if (ReadProcessMemory(GetCurrentProcess(),
                 reinterpret_cast<const void*>(static_cast<std::uintptr_t>(image.tlsAddress)),
                 &tls, sizeof(tls), &copied) && copied == sizeof(tls)) {
-            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\\n",
+            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\n",
                 tls.start, tls.end, tls.index, tls.callbacks, tls.zeroFill, tls.characteristics);
             if (tls.callbacks) {
                 for (std::uint32_t n = 0; n < 16; ++n) {
@@ -188,11 +189,11 @@ int wmain(int argc, wchar_t** argv) {
                     const auto slot = static_cast<std::uintptr_t>(tls.callbacks) + n * sizeof(callback);
                     if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(slot),
                             &callback, sizeof(callback), &copied) || copied != sizeof(callback)) {
-                        std::printf("TLS callback[%u]: unreadable\\n", n);
+                        std::printf("TLS callback[%u]: unreadable\n", n);
                         break;
                     }
                     if (!callback) {
-                        std::printf("TLS callback[%u]: <terminator>\\n", n);
+                        std::printf("TLS callback[%u]: <terminator>\n", n);
                         break;
                     }
                     const XboxXbe::Section* owner = nullptr;
@@ -204,8 +205,8 @@ int wmain(int argc, wchar_t** argv) {
                         }
                     }
                     std::printf("TLS callback[%u]=0x%08X sectionFlags=%s",
-                        n, callback, owner ? "" : "<outside image>\\n");
-                    if (owner) std::printf("0x%08X\\n", owner->flags);
+                        n, callback, owner ? "" : "<outside image>\n");
+                    if (owner) std::printf("0x%08X\n", owner->flags);
                     std::uint8_t bytes[16]{};
                     copied = 0;
                     if (ReadProcessMemory(GetCurrentProcess(),
@@ -213,12 +214,12 @@ int wmain(int argc, wchar_t** argv) {
                             bytes, sizeof(bytes), &copied) && copied) {
                         std::printf("  callback bytes:");
                         for (SIZE_T b = 0; b < copied; ++b) std::printf(" %02X", bytes[b]);
-                        std::printf("\\n");
+                        std::printf("\n");
                     }
                 }
             }
         } else {
-            std::printf("TLS directory diagnostic read failed: %lu\\n", GetLastError());
+            std::printf("TLS directory diagnostic read failed: %lu\n", GetLastError());
         }
     }
 
@@ -258,14 +259,14 @@ int wmain(int argc, wchar_t** argv) {
                 std::printf("Fault instruction bytes at 0x%08X:", exceptionInstruction);
                 for (SIZE_T i = 0; i < faultCopied; ++i)
                     std::printf(" %02X", faultBytes[i]);
-                std::printf("\\n");
+                std::printf("\n");
             } else {
-                std::printf("Fault instruction bytes unavailable: %lu\\n", GetLastError());
+                std::printf("Fault instruction bytes unavailable: %lu\n", GetLastError());
             }
             MEMORY_BASIC_INFORMATION faultMemory{};
             if (VirtualQuery(reinterpret_cast<const void*>(static_cast<std::uintptr_t>(exceptionInstruction)),
                     &faultMemory, sizeof(faultMemory)) == sizeof(faultMemory)) {
-                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\\n",
+                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\n",
                     faultMemory.BaseAddress, faultMemory.RegionSize, faultMemory.State,
                     faultMemory.Protect, faultMemory.Type);
             }
@@ -299,13 +300,13 @@ int wmain(int argc, wchar_t** argv) {
     if (expectGpu) {
         XboxGpuStatsSnapshot stats{};
         const int statsResult = getLastGpuStats(&stats);
-        std::printf("GPU stats: result=%d frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\\n",
+        std::printf("GPU stats: result=%d frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\n",
             statsResult, stats.frames, stats.draw_calls, stats.vertices_submitted,
             stats.methods_handled, stats.methods_ignored, stats.clears);
         if (statsResult != ERROR_SUCCESS || !stats.draw_calls ||
             !stats.vertices_submitted || !stats.methods_handled) {
             std::fprintf(stderr,
-                "FAIL: triangle XBE did not produce a verified NV2A draw.\\n");
+                "FAIL: triangle XBE did not produce a verified NV2A draw.\n");
             if (!result) result = 15;
         } else {
             std::puts("PASS: guest triangle XBE submitted NV2A methods and produced draw calls.");
