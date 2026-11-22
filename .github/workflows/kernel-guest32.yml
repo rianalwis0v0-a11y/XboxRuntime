@@ -75,14 +75,14 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit("Expected exactly one triangle render loop")
           replacements = [
-              ("int main(void)\\n{\\n",
-               "volatile uint32_t xbe_gpu_stage = 0x47505530u;\\n\\nint main(void)\\n{\\n    xbe_gpu_stage = 0x47505531u;\\n"),
-              ("    pb_show_front_screen();\\n",
-               "    xbe_gpu_stage = 0x47505532u;\\n    pb_show_front_screen();\\n"),
-              ("    matrix_viewport(m_viewport, 0, 0, width, height, 0, 65536.0f);\\n",
-               "    matrix_viewport(m_viewport, 0, 0, width, height, 0, 65536.0f);\\n    xbe_gpu_stage = 0x47505533u;\\n"),
-              ("        frames_total++;\\n",
-               "        frames_total++;\\n        xbe_gpu_stage = 0x47505534u;\\n")
+              ("int main(void)\n{\n",
+               "volatile uint32_t xbe_gpu_stage = 0x47505530u;\n\nint main(void)\n{\n    xbe_gpu_stage = 0x47505531u;\n"),
+              ("    pb_show_front_screen();\n",
+               "    xbe_gpu_stage = 0x47505532u;\n    pb_show_front_screen();\n"),
+              ("    matrix_viewport(m_viewport, 0, 0, width, height, 0, 65536.0f);\n",
+               "    matrix_viewport(m_viewport, 0, 0, width, height, 0, 65536.0f);\n    xbe_gpu_stage = 0x47505533u;\n"),
+              ("        frames_total++;\n",
+               "        frames_total++;\n        xbe_gpu_stage = 0x47505534u;\n")
           ]
           for old_text, new_text in replacements:
               if text.count(old_text) != 1:
