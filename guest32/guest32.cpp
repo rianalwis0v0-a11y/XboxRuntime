@@ -211,6 +211,7 @@ int wmain(int argc, wchar_t** argv) {
     bool ok = WriteExact(pipe, &hello, sizeof(hello));
     bool importsResolved = false;
     HANDLE guestThread = nullptr;
+    HANDLE guestExitEvent = nullptr;
 
     while (ok) {
         XboxGuestCommandMessage message{};
@@ -250,27 +251,40 @@ int wmain(int argc, wchar_t** argv) {
                 if (!ready) {
                     status = GetLastError();
                 } else {
-                    XboxKernelSetStartupEvent(ready);
-                    guestThread = CreateThread(nullptr, 0, XboxKernelStartXbe,
-                                               nullptr, 0, nullptr);
-                    if (!guestThread) {
+                    if (!guestExitEvent)
+                        guestExitEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+                    if (!guestExitEvent) {
                         status = GetLastError();
                     } else {
-                        HANDLE waits[2] = { ready, guestThread };
-                        const DWORD wait = WaitForMultipleObjects(2, waits, FALSE, 10000);
-                        if (wait == WAIT_OBJECT_0) {
-                            status = ERROR_SUCCESS;
-                        } else if (wait == WAIT_OBJECT_0 + 1) {
-                            DWORD exitCode = ERROR_GEN_FAILURE;
-                            GetExitCodeThread(guestThread, &exitCode);
-                            status = exitCode ? exitCode : ERROR_PROCESS_ABORTED;
-                            CloseHandle(guestThread);
-                            guestThread = nullptr;
+                        ResetEvent(guestExitEvent);
+                        XboxKernelSetGuestExitEvent(guestExitEvent);
+                        XboxKernelSetStartupEvent(ready);
+                        guestThread = CreateThread(nullptr, 0, XboxKernelStartXbe,
+                                                   nullptr, 0, nullptr);
+                        if (!guestThread) {
+                            status = GetLastError();
                         } else {
-                            status = wait == WAIT_TIMEOUT ? ERROR_TIMEOUT : GetLastError();
+                            HANDLE waits[2] = { ready, guestThread };
+                            const DWORD wait = WaitForMultipleObjects(2, waits, FALSE, 10000);
+                            if (wait == WAIT_OBJECT_0) {
+                                status = ERROR_SUCCESS;
+                            } else if (wait == WAIT_OBJECT_0 + 1) {
+                                DWORD exitCode = ERROR_GEN_FAILURE;
+                                GetExitCodeThread(guestThread, &exitCode);
+                                status = exitCode ? exitCode : ERROR_PROCESS_ABORTED;
+                                CloseHandle(guestThread);
+                                guestThread = nullptr;
+                            } else {
+                                status = wait == WAIT_TIMEOUT ? ERROR_TIMEOUT : GetLastError();
+                            }
+                        }
+                        XboxKernelSetStartupEvent(nullptr);
+                        if (status != ERROR_SUCCESS) {
+                            XboxKernelSetGuestExitEvent(nullptr);
+                            CloseHandle(guestExitEvent);
+                            guestExitEvent = nullptr;
                         }
                     }
-                    XboxKernelSetStartupEvent(nullptr);
                     CloseHandle(ready);
                 }
             }
@@ -320,6 +334,11 @@ int wmain(int argc, wchar_t** argv) {
                             &exitReply.faultProtection, &exitReply.faultState,
                             &exitReply.eax, &exitReply.ebx, &exitReply.ecx, &exitReply.edx,
                             &exitReply.esi, &exitReply.edi, &exitReply.ebp, &exitReply.esp);
+                        XboxKernelSetGuestExitEvent(nullptr);
+                        if (guestExitEvent) {
+                            CloseHandle(guestExitEvent);
+                            guestExitEvent = nullptr;
+                        }
                         XboxKernelShutdownTitle();
                     } else {
                         exitReply.status = GetLastError();
@@ -345,6 +364,11 @@ int wmain(int argc, wchar_t** argv) {
                 CloseHandle(guestThread);
                 guestThread = nullptr;
             }
+            XboxKernelSetGuestExitEvent(nullptr);
+            if (guestExitEvent) {
+                CloseHandle(guestExitEvent);
+                guestExitEvent = nullptr;
+            }
             XboxKernelShutdownTitle();
             XboxKernelGpuMmioShutdown();
             XboxKernelGpuServiceShutdown();
@@ -365,6 +389,8 @@ int wmain(int argc, wchar_t** argv) {
         else
             ExitProcess(ERROR_OPERATION_ABORTED);
     }
+    XboxKernelSetGuestExitEvent(nullptr);
+    if (guestExitEvent) CloseHandle(guestExitEvent);
     XboxKernelShutdownTitle();
     XboxKernelGpuMmioShutdown();
     XboxKernelGpuServiceShutdown();
