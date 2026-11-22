@@ -12,4 +12,6 @@ EXPORTS
     XboxNV2A_ReadRAMIN
     XboxNV2A_WriteRAMIN
     XboxNV2A_InitializeRenderer
+    XboxNV2A_GetStats
+    XboxNV2A_GetSurfaceInfo
     XboxNV2A_BindGuestPhysicalMemory
