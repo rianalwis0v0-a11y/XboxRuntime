@@ -14,17 +14,36 @@ template<class F> std::uint32_t GuestAddress(F f) noexcept {
 }
 struct Entry { const char* name; std::uint32_t address; };
 #define GUEST_API(s) {#s,GuestAddress(&s)}
+#define GUEST_API_ALIAS(n,s) {n,GuestAddress(&s)}
 const Entry kApis[]={
- GUEST_API(XNetStartup),GUEST_API(XNetCleanup),GUEST_API(XNetDnsLookup),GUEST_API(XNetDnsRelease),
- GUEST_API(XNetInAddrToString),GUEST_API(XNetServerToInAddr),GUEST_API(XNetInAddrToXnAddr),
- GUEST_API(XNetGetEthernetLinkStatus),GUEST_API(XNetGetTitleXnAddr),
- GUEST_API(XSocketCreate),GUEST_API(XSocketClose),GUEST_API(XSocketBind),GUEST_API(XSocketConnect),
- GUEST_API(XSocketListen),GUEST_API(XSocketAccept),GUEST_API(XSocketShutdown),GUEST_API(XSocketIOCTLSocket),
- GUEST_API(XSocketSetSockOpt),GUEST_API(XSocketGetSockOpt),GUEST_API(XSocketGetSockName),
- GUEST_API(XSocketGetPeerName),GUEST_API(XSocketSend),GUEST_API(XSocketRecv),GUEST_API(XSocketSendTo),
- GUEST_API(XSocketRecvFrom),GUEST_API(XSocketHTONL),GUEST_API(XSocketNTOHL),GUEST_API(XSocketHTONS),
- GUEST_API(XSocketNTOHS)
+ GUEST_API(XNetStartup),GUEST_API(XNetCleanup),GUEST_API(XNetCreateKey),
+ GUEST_API(XNetRegisterKey),GUEST_API(XNetUnregisterKey),
+ GUEST_API(XNetDnsLookup),GUEST_API(XNetDnsRelease),GUEST_API(XNetRandom),
+ GUEST_API(XNetInAddrToString),GUEST_API(XNetXnAddrToInAddr),
+ GUEST_API(XNetServerToInAddr),GUEST_API(XNetInAddrToXnAddr),
+ GUEST_API(XNetUnregisterInAddr),GUEST_API(XNetGetEthernetLinkStatus),
+ GUEST_API(XNetGetTitleXnAddr),GUEST_API(XNetGetDebugXnAddr),
+ GUEST_API(XSocketCreate),GUEST_API(XSocketClose),GUEST_API(XSocketBind),
+ GUEST_API(XSocketConnect),GUEST_API(XSocketListen),GUEST_API(XSocketAccept),
+ GUEST_API(XSocketShutdown),GUEST_API(XSocketIOCTLSocket),GUEST_API(XSocketSelect),
+ GUEST_API(XSocketSetSockOpt),GUEST_API(XSocketGetSockOpt),
+ GUEST_API(XSocketGetSockName),GUEST_API(XSocketGetPeerName),
+ GUEST_API(XSocketSend),GUEST_API(XSocketRecv),GUEST_API(XSocketSendTo),
+ GUEST_API(XSocketRecvFrom),GUEST_API(XSocketHTONL),GUEST_API(XSocketNTOHL),
+ GUEST_API(XSocketHTONS),GUEST_API(XSocketNTOHS),
+ // The XDK SOCKAPILIST imports these Winsock helpers from the XNET library.
+ GUEST_API_ALIAS("WSAStartup",XboxWSAStartup),
+ GUEST_API_ALIAS("WSACleanup",XboxWSACleanup),
+ GUEST_API_ALIAS("WSACreateEvent",XboxWSACreateEvent),
+ GUEST_API_ALIAS("WSACloseEvent",XboxWSACloseEvent),
+ GUEST_API_ALIAS("WSASetEvent",XboxWSASetEvent),
+ GUEST_API_ALIAS("WSAResetEvent",XboxWSAResetEvent),
+ GUEST_API_ALIAS("WSAWaitForMultipleEvents",XboxWSAWaitForMultipleEvents),
+ GUEST_API_ALIAS("WSAGetLastError",XboxWSAGetLastError),
+ GUEST_API_ALIAS("WSASetLastError",XboxWSASetLastError),
+ GUEST_API_ALIAS("inet_addr",XboxWSAInetAddr)
 };
+#undef GUEST_API_ALIAS
 #undef GUEST_API
 bool Range(std::uint32_t b,std::uint32_t s,std::uint32_t a,std::uint32_t n) noexcept {
  return a>=b && std::uint64_t(a)+n<=std::uint64_t(b)+s;
@@ -86,7 +105,6 @@ extern "C" bool __cdecl XboxGuestResolveNonKernelImports(std::uint32_t base,std:
    const std::size_t boundedNameBytes=static_cast<std::size_t>((std::min)(remaining,256ull));
    if(remaining>0xFFFFFFFFull||!std::memchr(name,0,boundedNameBytes))return false;
    const std::uint32_t target=XboxGuestApiLookup(name);if(!target)return false;
-   // Import tables commonly live in read-only sections; restore page protection after patching.
    if(!WriteGuestThunk(taddr,target))return false;
   }
   if(!thunkEnded)return false;
