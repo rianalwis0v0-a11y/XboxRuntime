@@ -98,32 +98,27 @@ The provider has a render-target-to-VRAM readback path:
    bounded transfers (maximum 64 KiB per RPC).
 
 The CI workflow builds a GPU-only NXDK/pbkit triangle XBE and executes it
-through the real loader and kernel backend. The integration harness currently
-asserts successful guest exit and TLS cleanup. **It does not yet inspect the
-render target or assert known framebuffer pixels.** A clean XBE exit is not
-proof that a triangle was rendered.
-
-The next rendering acceptance test must verify all of the following:
-
-- The guest submitted at least one draw with the expected vertex count.
-- A valid color surface was bound and synchronized to VRAM.
-- A known pixel inside the triangle differs from the clear color.
-- A known pixel outside the triangle retains the clear color.
-
-Do not replace these pixel checks with a draw counter alone.
+through the real loader and kernel backend. The integration harness now obtains
+a provider snapshot after the guest GPU pipe closes: draw/vertex counters,
+bound surface metadata, and VRAM pixel bytes. It asserts a non-empty draw,
+valid surface bounds, and that a center pixel differs from a pixel near the
+bottom-right edge. This is an initial end-to-end pixel assertion, not yet a
+pixel-perfect reference-image comparison. If the provider cannot bind or
+synchronize a surface, the test fails instead of treating a clean guest exit
+as rendering success.
 
 ## 6. Current CI and remaining work
 
-Latest checked head: `dbdd28429d88125882f67956b6a7d3cf580aa658`.
+GPU pixel-test implementation added in commit `3633b5f8b498acbe7651aca0a7210478742353f2`; per-title diagnostic reset added in `f8678d0bf2aaa672c7a365febbb46c8489329af4`.
 
 Both latest GitHub Actions workflows passed:
 
 - Kernel host and guest32 build/tests.
 - NV2A provider build and smoke tests.
 
-The workflow also built the GPU-only triangle XBE and ran it through the
-integration harness. That is guest execution coverage, not yet pixel-level
-render validation.
+The workflow also built and executed the GPU-only triangle XBE. The new
+pixel-level assertion is now part of the integration harness; its first CI
+result is pending on the current branch head.
 
 Remaining major work:
 
