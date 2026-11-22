@@ -259,9 +259,9 @@ jobs:
         working-directory: integration
         run: ./kernel_xbe_integration.exe ./default.xbe
 
-      - name: Execute GPU-only NV2A triangle XBE
+      - name: Execute GPU-only NV2A triangle XBE and assert draw submission
         working-directory: integration
-        run: ./kernel_xbe_integration.exe ./gpu_only.xbe
+        run: ./kernel_xbe_integration.exe ./gpu_only.xbe --expect-gpu
 
       - name: Verify backend pair
         shell: pwsh
