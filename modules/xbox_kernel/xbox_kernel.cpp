@@ -38,7 +38,7 @@ struct BackendContext {
     int lastReserveResult = 0;
     DWORD lastReserveWin32Error = ERROR_SUCCESS;
     DWORD lastReserveChildExitCode = 0;
-    std::uint32_t gpuStats[6]{};
+    std::uint32_t gpuStats[9]{};
     std::uint32_t gpuSurface[10]{};
     bool gpuDiagnosticsValid = false;
 };
@@ -354,10 +354,11 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
 cleanup:
     if (providerStarted && flush)
         flush();
-    if (providerStarted && getStats && getSurfaceInfo) {
-        std::uint32_t stats[6]{};
+    if (providerStarted && getStats) {
+        std::uint32_t stats[9]{};
         std::uint32_t surface[10]{};
-        if (getStats(stats) == 0 && getSurfaceInfo(surface) == 0) {
+        if (getStats(stats) == 0) {
+            (void)(getSurfaceInfo && getSurfaceInfo(surface) == 0);
             std::memcpy(context->gpuStats, stats, sizeof(stats));
             std::memcpy(context->gpuSurface, surface, sizeof(surface));
             context->gpuDiagnosticsValid = true;
