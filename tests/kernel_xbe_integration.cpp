@@ -160,12 +160,12 @@ int wmain(int argc, wchar_t** argv) {
                         static_cast<std::uintptr_t>(section.virtualAddress)),
                         &sectionMemory, sizeof(sectionMemory)) == sizeof(sectionMemory)) {
                     std::printf("Mapped section %u: flags=0x%08X VA=0x%08X size=0x%08X "
-                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\\n",
+                                "pageBase=%p state=0x%lX protect=0x%lX type=0x%lX\n",
                                 i, section.flags, section.virtualAddress, section.virtualSize,
                                 sectionMemory.BaseAddress, sectionMemory.State,
                                 sectionMemory.Protect, sectionMemory.Type);
                 } else {
-                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\\n",
+                    std::printf("Mapped section %u: VirtualQuery failed error=%lu\n",
                                 i, GetLastError());
                 }
             }
@@ -180,7 +180,7 @@ int wmain(int argc, wchar_t** argv) {
         if (ReadProcessMemory(GetCurrentProcess(),
                 reinterpret_cast<const void*>(static_cast<std::uintptr_t>(image.tlsAddress)),
                 &tls, sizeof(tls), &copied) && copied == sizeof(tls)) {
-            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\\n",
+            std::printf("TLS directory: start=0x%08X end=0x%08X index=0x%08X callbacks=0x%08X zeroFill=0x%08X characteristics=0x%08X\n",
                 tls.start, tls.end, tls.index, tls.callbacks, tls.zeroFill, tls.characteristics);
             if (tls.callbacks) {
                 for (std::uint32_t n = 0; n < 16; ++n) {
@@ -189,11 +189,11 @@ int wmain(int argc, wchar_t** argv) {
                     const auto slot = static_cast<std::uintptr_t>(tls.callbacks) + n * sizeof(callback);
                     if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(slot),
                             &callback, sizeof(callback), &copied) || copied != sizeof(callback)) {
-                        std::printf("TLS callback[%u]: unreadable\\n", n);
+                        std::printf("TLS callback[%u]: unreadable\n", n);
                         break;
                     }
                     if (!callback) {
-                        std::printf("TLS callback[%u]: <terminator>\\n", n);
+                        std::printf("TLS callback[%u]: <terminator>\n", n);
                         break;
                     }
                     const XboxXbe::Section* owner = nullptr;
@@ -205,8 +205,8 @@ int wmain(int argc, wchar_t** argv) {
                         }
                     }
                     std::printf("TLS callback[%u]=0x%08X sectionFlags=%s",
-                        n, callback, owner ? "" : "<outside image>\\n");
-                    if (owner) std::printf("0x%08X\\n", owner->flags);
+                        n, callback, owner ? "" : "<outside image>\n");
+                    if (owner) std::printf("0x%08X\n", owner->flags);
                     std::uint8_t bytes[16]{};
                     copied = 0;
                     if (ReadProcessMemory(GetCurrentProcess(),
@@ -214,12 +214,12 @@ int wmain(int argc, wchar_t** argv) {
                             bytes, sizeof(bytes), &copied) && copied) {
                         std::printf("  callback bytes:");
                         for (SIZE_T b = 0; b < copied; ++b) std::printf(" %02X", bytes[b]);
-                        std::printf("\\n");
+                        std::printf("\n");
                     }
                 }
             }
         } else {
-            std::printf("TLS directory diagnostic read failed: %lu\\n", GetLastError());
+            std::printf("TLS directory diagnostic read failed: %lu\n", GetLastError());
         }
     }
 
@@ -259,14 +259,14 @@ int wmain(int argc, wchar_t** argv) {
                 std::printf("Fault instruction bytes at 0x%08X:", exceptionInstruction);
                 for (SIZE_T i = 0; i < faultCopied; ++i)
                     std::printf(" %02X", faultBytes[i]);
-                std::printf("\\n");
+                std::printf("\n");
             } else {
-                std::printf("Fault instruction bytes unavailable: %lu\\n", GetLastError());
+                std::printf("Fault instruction bytes unavailable: %lu\n", GetLastError());
             }
             MEMORY_BASIC_INFORMATION faultMemory{};
             if (VirtualQuery(reinterpret_cast<const void*>(static_cast<std::uintptr_t>(exceptionInstruction)),
                     &faultMemory, sizeof(faultMemory)) == sizeof(faultMemory)) {
-                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\\n",
+                std::printf("Fault page: base=%p size=0x%Ix state=0x%lX protect=0x%lX type=0x%lX\n",
                     faultMemory.BaseAddress, faultMemory.RegionSize, faultMemory.State,
                     faultMemory.Protect, faultMemory.Type);
             }
@@ -294,20 +294,20 @@ int wmain(int argc, wchar_t** argv) {
                 std::uint32_t stats[6]{};
                 std::uint32_t surface[10]{};
                 if (getGpuDiagnostics(stats, surface) != ERROR_SUCCESS) {
-                    std::fprintf(stderr, "FAIL: NV2A renderer did not expose a synchronized surface snapshot.\\n");
+                    std::fprintf(stderr, "FAIL: NV2A renderer did not expose a synchronized surface snapshot.\n");
                     result = 15;
                 } else {
                     const std::uint32_t width = surface[0], height = surface[1];
                     const std::uint32_t bytesPerPixel = surface[4];
                     const std::uint32_t pitch = surface[6], colorOffset = surface[8];
-                    std::printf("NV2A stats: frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\\n",
+                    std::printf("NV2A stats: frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\n",
                         stats[0], stats[1], stats[2], stats[3], stats[4], stats[5]);
-                    std::printf("NV2A surface: %ux%u bpp=%u pitch=%u colorOffset=0x%08X\\n",
+                    std::printf("NV2A surface: %ux%u bpp=%u pitch=%u colorOffset=0x%08X\n",
                         width, height, bytesPerPixel, pitch, colorOffset);
                     if (stats[1] == 0 || stats[2] < 3 || width < 32 || height < 32 ||
                         bytesPerPixel != 4 || pitch < width * bytesPerPixel ||
                         std::uint64_t(colorOffset) + std::uint64_t(pitch) * height > 64ull * 1024ull * 1024ull) {
-                        std::fprintf(stderr, "FAIL: triangle did not produce a valid submitted draw/surface.\\n");
+                        std::fprintf(stderr, "FAIL: triangle did not produce a valid submitted draw/surface.\n");
                         result = 16;
                     } else {
                         const std::uint32_t insideOffset = colorOffset +
@@ -317,16 +317,16 @@ int wmain(int argc, wchar_t** argv) {
                         std::uint8_t inside[4]{}, outside[4]{};
                         if (readGpuVram(insideOffset, inside, sizeof(inside)) != ERROR_SUCCESS ||
                             readGpuVram(outsideOffset, outside, sizeof(outside)) != ERROR_SUCCESS) {
-                            std::fprintf(stderr, "FAIL: framebuffer pixel readback failed.\\n");
+                            std::fprintf(stderr, "FAIL: framebuffer pixel readback failed.\n");
                             result = 17;
                         } else {
-                            std::printf("Framebuffer center RGBA bytes: %02X %02X %02X %02X\\n",
+                            std::printf("Framebuffer center RGBA bytes: %02X %02X %02X %02X\n",
                                 inside[0], inside[1], inside[2], inside[3]);
-                            std::printf("Framebuffer outside RGBA bytes: %02X %02X %02X %02X\\n",
+                            std::printf("Framebuffer outside RGBA bytes: %02X %02X %02X %02X\n",
                                 outside[0], outside[1], outside[2], outside[3]);
                             const bool centerNonzero = inside[0] || inside[1] || inside[2];
                             if (!centerNonzero || std::memcmp(inside, outside, sizeof(inside)) == 0) {
-                                std::fprintf(stderr, "FAIL: expected inside-triangle pixel to differ from outside pixel.\\n");
+                                std::fprintf(stderr, "FAIL: expected inside-triangle pixel to differ from outside pixel.\n");
                                 result = 18;
                             } else {
                                 std::puts("PASS: framebuffer readback contains distinct inside/outside triangle pixels.");
