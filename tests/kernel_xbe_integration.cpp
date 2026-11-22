@@ -16,6 +16,8 @@ using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
 using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
+using GetGpuDiagnostics = int (__cdecl*)(std::uint32_t*, std::uint32_t*);
+using ReadGpuVram = int (__cdecl*)(std::uint32_t, void*, std::uint32_t);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
@@ -92,6 +94,10 @@ int wmain(int argc, wchar_t** argv) {
         GetProcAddress(kernel, "XboxKernelWaitForGuestExit"));
     auto getReserveDiagnostic = reinterpret_cast<GetReserveDiagnostic>(
         GetProcAddress(kernel, "XboxKernelGetLastReserveDiagnostic"));
+    auto getGpuDiagnostics = reinterpret_cast<GetGpuDiagnostics>(
+        GetProcAddress(kernel, "XboxKernelGetGpuDiagnostics"));
+    auto readGpuVram = reinterpret_cast<ReadGpuVram>(
+        GetProcAddress(kernel, "XboxKernelReadGpuVram"));
     auto loaderStart = reinterpret_cast<ModuleStart>(GetProcAddress(loader, "ModuleStart"));
     auto loaderStop = reinterpret_cast<ModuleStop>(GetProcAddress(loader, "ModuleStop"));
     auto registerBackend = reinterpret_cast<RegisterBackendV2>(
@@ -99,7 +105,7 @@ int wmain(int argc, wchar_t** argv) {
     auto loadXbe = reinterpret_cast<LoadXbe>(GetProcAddress(loader, "LoadXbe"));
     auto unloadXbe = reinterpret_cast<UnloadXbe>(GetProcAddress(loader, "UnloadXbe"));
     if (!kernelStart || !kernelStop || !getBackend || !waitForExit ||
-        !getReserveDiagnostic || !loaderStart || !loaderStop || !registerBackend || !loadXbe || !unloadXbe) {
+        !getReserveDiagnostic || !getGpuDiagnostics || !readGpuVram || !loaderStart || !loaderStop || !registerBackend || !loadXbe || !unloadXbe) {
         std::fprintf(stderr, "FAIL: required kernel/loader export missing\n");
         FreeLibrary(loader);
         FreeLibrary(kernel);
@@ -284,6 +290,51 @@ int wmain(int argc, wchar_t** argv) {
             result = 13;
         } else {
             std::puts("PASS: real guest entrypoint returned and TLS index slot was cleared.");
+            if (wcsstr(argv[1], L"gpu_only") != nullptr) {
+                std::uint32_t stats[6]{};
+                std::uint32_t surface[10]{};
+                if (getGpuDiagnostics(stats, surface) != ERROR_SUCCESS) {
+                    std::fprintf(stderr, "FAIL: NV2A renderer did not expose a synchronized surface snapshot.\\n");
+                    result = 15;
+                } else {
+                    const std::uint32_t width = surface[0], height = surface[1];
+                    const std::uint32_t bytesPerPixel = surface[4];
+                    const std::uint32_t pitch = surface[6], colorOffset = surface[8];
+                    std::printf("NV2A stats: frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\\n",
+                        stats[0], stats[1], stats[2], stats[3], stats[4], stats[5]);
+                    std::printf("NV2A surface: %ux%u bpp=%u pitch=%u colorOffset=0x%08X\\n",
+                        width, height, bytesPerPixel, pitch, colorOffset);
+                    if (stats[1] == 0 || stats[2] < 3 || width < 32 || height < 32 ||
+                        bytesPerPixel != 4 || pitch < width * bytesPerPixel ||
+                        std::uint64_t(colorOffset) + std::uint64_t(pitch) * height > 64ull * 1024ull * 1024ull) {
+                        std::fprintf(stderr, "FAIL: triangle did not produce a valid submitted draw/surface.\\n");
+                        result = 16;
+                    } else {
+                        const std::uint32_t insideOffset = colorOffset +
+                            (height / 2u) * pitch + (width / 2u) * bytesPerPixel;
+                        const std::uint32_t outsideOffset = colorOffset +
+                            (height - 8u) * pitch + (width - 8u) * bytesPerPixel;
+                        std::uint8_t inside[4]{}, outside[4]{};
+                        if (readGpuVram(insideOffset, inside, sizeof(inside)) != ERROR_SUCCESS ||
+                            readGpuVram(outsideOffset, outside, sizeof(outside)) != ERROR_SUCCESS) {
+                            std::fprintf(stderr, "FAIL: framebuffer pixel readback failed.\\n");
+                            result = 17;
+                        } else {
+                            std::printf("Framebuffer center RGBA bytes: %02X %02X %02X %02X\\n",
+                                inside[0], inside[1], inside[2], inside[3]);
+                            std::printf("Framebuffer outside RGBA bytes: %02X %02X %02X %02X\\n",
+                                outside[0], outside[1], outside[2], outside[3]);
+                            const bool centerNonzero = inside[0] || inside[1] || inside[2];
+                            if (!centerNonzero || std::memcmp(inside, outside, sizeof(inside)) == 0) {
+                                std::fprintf(stderr, "FAIL: expected inside-triangle pixel to differ from outside pixel.\\n");
+                                result = 18;
+                            } else {
+                                std::puts("PASS: framebuffer readback contains distinct inside/outside triangle pixels.");
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
