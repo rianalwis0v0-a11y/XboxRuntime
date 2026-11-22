@@ -16,10 +16,26 @@ bool Fixture(bool ordinal,bool knownName,bool knownLibrary){
  return XboxGuestResolveNonKernelImports(b,sizeof(image),b+0x100);
 }
 int main(){
- if(!XboxGuestApiLookup("XNetStartup")||XboxGuestApiLookup("NotAnApi")||XboxGuestApiCount()!=29)return 1;
- if(!Fixture(false,true,true))return 2;
- if(Fixture(true,true,true))return 3;
- if(Fixture(false,false,true))return 4;
- if(Fixture(false,true,false))return 5;
- std::puts("guest_api_registry_smoke: named XNET import binding and rejection paths passed");return 0;
+ const char* required[]={
+  "XNetStartup","XNetCleanup","XNetCreateKey","XNetRegisterKey","XNetUnregisterKey",
+  "XNetDnsLookup","XNetDnsRelease","XNetRandom","XNetInAddrToString",
+  "XNetXnAddrToInAddr","XNetServerToInAddr","XNetInAddrToXnAddr",
+  "XNetUnregisterInAddr","XNetGetEthernetLinkStatus","XNetGetTitleXnAddr","XNetGetDebugXnAddr",
+  "XSocketCreate","XSocketClose","XSocketBind","XSocketConnect","XSocketListen",
+  "XSocketAccept","XSocketShutdown","XSocketIOCTLSocket","XSocketSelect",
+  "XSocketSetSockOpt","XSocketGetSockOpt","XSocketGetSockName","XSocketGetPeerName",
+  "XSocketSend","XSocketRecv","XSocketSendTo","XSocketRecvFrom","XSocketHTONL",
+  "XSocketNTOHL","XSocketHTONS","XSocketNTOHS",
+  "WSAStartup","WSACleanup","WSACreateEvent","WSACloseEvent","WSASetEvent",
+  "WSAResetEvent","WSAWaitForMultipleEvents","WSAGetLastError","WSASetLastError","inet_addr"
+ };
+ if(XboxGuestApiCount()!=sizeof(required)/sizeof(required[0]))return 1;
+ for(const char* name:required)if(!XboxGuestApiLookup(name)){std::printf("missing XNET guest API: %s\n",name);return 2;}
+ if(XboxGuestApiLookup("NotAnApi"))return 3;
+ if(!Fixture(false,true,true))return 4;
+ if(Fixture(true,true,true))return 5;
+ if(Fixture(false,false,true))return 6;
+ if(Fixture(false,true,false))return 7;
+ std::puts("guest_api_registry_smoke: all implemented XNet/XSocket/WSA imports bind; rejection paths passed");
+ return 0;
 }
