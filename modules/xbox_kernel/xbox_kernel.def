@@ -7,3 +7,5 @@ EXPORTS
     XboxKernelSetGuestTitlePath
     XboxKernelWaitForGuestExit
     XboxKernelGetLastReserveDiagnostic
+    XboxKernelGetGpuDiagnostics
+    XboxKernelReadGpuVram
