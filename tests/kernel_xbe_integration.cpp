@@ -3,6 +3,7 @@
 
 #include "../loader-src/modules/xbe_loader/xbe_backend_api.h"
 #include "../loader-src/modules/xbe_loader/xbe_format.h"
+#include "../guest32/kernel_gpu_service_protocol.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -16,6 +17,7 @@ using LoadXbe = int (__cdecl*)(const wchar_t*);
 using UnloadXbe = void (__cdecl*)();
 using WaitForGuestExit = int (__cdecl*)(std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*, std::uint32_t*);
 using GetReserveDiagnostic = int (__cdecl*)(int*, DWORD*, DWORD*);
+using GetLastGpuStats = int (__cdecl*)(XboxGpuStatsSnapshot*);
 
 static bool ReadFileBytes(const wchar_t* path, std::vector<std::uint8_t>& bytes) {
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
@@ -92,6 +94,8 @@ int wmain(int argc, wchar_t** argv) {
         GetProcAddress(kernel, "XboxKernelWaitForGuestExit"));
     auto getReserveDiagnostic = reinterpret_cast<GetReserveDiagnostic>(
         GetProcAddress(kernel, "XboxKernelGetLastReserveDiagnostic"));
+    auto getLastGpuStats = reinterpret_cast<GetLastGpuStats>(
+        GetProcAddress(kernel, "XboxKernelGetLastGpuStats"));
     auto loaderStart = reinterpret_cast<ModuleStart>(GetProcAddress(loader, "ModuleStart"));
     auto loaderStop = reinterpret_cast<ModuleStop>(GetProcAddress(loader, "ModuleStop"));
     auto registerBackend = reinterpret_cast<RegisterBackendV2>(
@@ -99,7 +103,8 @@ int wmain(int argc, wchar_t** argv) {
     auto loadXbe = reinterpret_cast<LoadXbe>(GetProcAddress(loader, "LoadXbe"));
     auto unloadXbe = reinterpret_cast<UnloadXbe>(GetProcAddress(loader, "UnloadXbe"));
     if (!kernelStart || !kernelStop || !getBackend || !waitForExit ||
-        !getReserveDiagnostic || !loaderStart || !loaderStop || !registerBackend || !loadXbe || !unloadXbe) {
+        !getReserveDiagnostic || !getLastGpuStats || !loaderStart || !loaderStop ||
+        !registerBackend || !loadXbe || !unloadXbe) {
         std::fprintf(stderr, "FAIL: required kernel/loader export missing\n");
         FreeLibrary(loader);
         FreeLibrary(kernel);
@@ -290,6 +295,21 @@ int wmain(int argc, wchar_t** argv) {
     if (xbeActive) {
         unloadXbe();
         xbeActive = false;
+    }
+    if (expectGpu) {
+        XboxGpuStatsSnapshot stats{};
+        const int statsResult = getLastGpuStats(&stats);
+        std::printf("GPU stats: result=%d frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\\n",
+            statsResult, stats.frames, stats.draw_calls, stats.vertices_submitted,
+            stats.methods_handled, stats.methods_ignored, stats.clears);
+        if (statsResult != ERROR_SUCCESS || !stats.draw_calls ||
+            !stats.vertices_submitted || !stats.methods_handled) {
+            std::fprintf(stderr,
+                "FAIL: triangle XBE did not produce a verified NV2A draw.\\n");
+            if (!result) result = 15;
+        } else {
+            std::puts("PASS: guest triangle XBE submitted NV2A methods and produced draw calls.");
+        }
     }
     MEMORY_BASIC_INFORMATION memory{};
     if (VirtualQuery(reinterpret_cast<const void*>(
