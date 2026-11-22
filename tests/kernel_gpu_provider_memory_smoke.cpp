@@ -98,23 +98,24 @@ int wmain() {
                      update, sizeof(update)) == 0;
 
     // Mirror the kernel's dedicated 64 MiB guest physical RAM section and
-    // prove the provider actually fetches a pushbuffer from its PCI/AGP DMA
-    // mapping, rather than merely accepting a bind call.
+    // report the exact failing stage so CI failures are actionable.
     constexpr std::uint32_t guestRamBytes = 64u * 1024u * 1024u;
     constexpr std::uint32_t dmaHandle = 0x12345678u;
     constexpr std::uint32_t dmaInstance = 0x1000u;
     constexpr std::uint32_t pushbufferPhysical = 0x2000u;
     std::vector<std::uint8_t> guestPhysicalMemory(guestRamBytes, 0);
-    ok = ok && bindGuestPhysicalMemory(0u, guestPhysicalMemory.data(),
-                                       guestRamBytes) == 0;
-    ok = ok && bindGuestPhysicalMemory(0x08000000u, guestPhysicalMemory.data(),
-                                       guestRamBytes) != 0;
-    ok = ok && bindGuestPhysicalMemory(0x07FFF000u, guestPhysicalMemory.data(),
-                                       guestRamBytes) != 0;
+#define CHECK_STAGE(name, expression) do { \
+        const int stage_ok = !!(expression); \
+        if (!stage_ok) { std::fprintf(stderr, "FAIL: %s (line %d)\\n", name, __LINE__); ok = false; } \
+    } while (0)
+    CHECK_STAGE("bind 64 MiB guest RAM",
+        bindGuestPhysicalMemory(0u, guestPhysicalMemory.data(), guestRamBytes) == 0);
+    CHECK_STAGE("reject physical base at 128 MiB",
+        bindGuestPhysicalMemory(0x08000000u, guestPhysicalMemory.data(), guestRamBytes) != 0);
+    CHECK_STAGE("reject RAM range crossing 128 MiB",
+        bindGuestPhysicalMemory(0x07FFF000u, guestPhysicalMemory.data(), guestRamBytes) != 0);
 
     // RAMHT: 4 KiB table at RAMIN offset zero, 16-entry search window.
-    // The table's 9-bit handle hash is the same fold used by the provider.
-    ok = ok && writeRegister(0x2210u, 0u, 4u) == 0;
     std::uint32_t hash = 0;
     for (std::uint32_t value = dmaHandle; value; value >>= 9)
         hash ^= value & 0x1FFu;
@@ -128,31 +129,52 @@ int wmain() {
     const std::uint32_t pushbuffer[2] = {
         (1u << 18) | (0x50u / 4u << 2), 0x12345678u
     };
-    ok = ok && writeRamin(hash * 8u, ramhtEntry, sizeof(ramhtEntry)) == 0;
-    ok = ok && writeRamin(dmaInstance, dmaObject, sizeof(dmaObject)) == 0;
+    CHECK_STAGE("configure RAMHT",
+        writeRegister(0x2210u, 0u, 4u) == 0);
+    CHECK_STAGE("write RAMHT entry",
+        writeRamin(hash * 8u, ramhtEntry, sizeof(ramhtEntry)) == 0);
+    CHECK_STAGE("write PCI DMA object",
+        writeRamin(dmaInstance, dmaObject, sizeof(dmaObject)) == 0);
     std::memcpy(guestPhysicalMemory.data() + pushbufferPhysical,
                 pushbuffer, sizeof(pushbuffer));
 
     DmaInfo dma{};
-    ok = ok && resolveDmaHandle(0u, dmaHandle, &dma) == 0 &&
-         dma.dma_target == 0x00010000u &&
-         dma.base_address == pushbufferPhysical &&
-         dma.mapped_length == 0x100u;
+    const int resolve_result = resolveDmaHandle(0u, dmaHandle, &dma);
+    if (resolve_result != 0) {
+        std::fprintf(stderr, "FAIL: resolve PCI DMA handle (result %d)\\n", resolve_result);
+        ok = false;
+    } else if (dma.dma_target != 0x00010000u ||
+               dma.base_address != pushbufferPhysical ||
+               dma.mapped_length != 0x100u) {
+        std::fprintf(stderr, "FAIL: resolved DMA fields target=%08x base=%08x length=%08x\\n",
+            dma.dma_target, dma.base_address, dma.mapped_length);
+        ok = false;
+    }
+
     std::uint32_t newGet = 0, methodsSubmitted = 0;
-    ok = ok && submitDmaPushBuffer(0u, dmaHandle, 0u, sizeof(pushbuffer),
-                                    &newGet, &methodsSubmitted) == 0 &&
-         newGet == sizeof(pushbuffer) && methodsSubmitted == 1u;
+    const int submit_result = submitDmaPushBuffer(
+        0u, dmaHandle, 0u, sizeof(pushbuffer), &newGet, &methodsSubmitted);
+    if (submit_result != 0 || newGet != sizeof(pushbuffer) || methodsSubmitted != 1u) {
+        std::fprintf(stderr,
+            "FAIL: submit PCI DMA pushbuffer (result %d, get %u, methods %u)\\n",
+            submit_result, newGet, methodsSubmitted);
+        ok = false;
+    }
 
     // A DMA object's span must be rejected if its physical limit crosses
     // the end of the bound guest RAM section.
     const std::uint32_t invalidDmaObject[3] = {
         0x00010002u, 0x100u, guestRamBytes - 0x10u
     };
-    ok = ok && writeRamin(dmaInstance, invalidDmaObject,
-                          sizeof(invalidDmaObject)) == 0;
-    ok = ok && resolveDmaHandle(0u, dmaHandle, &dma) != 0;
-    ok = ok && bindGuestPhysicalMemory(0u, nullptr, 0u) == 0;
-    ok = ok && resolveDmaHandle(0u, dmaHandle, &dma) != 0;
+    CHECK_STAGE("write out-of-range DMA object",
+        writeRamin(dmaInstance, invalidDmaObject, sizeof(invalidDmaObject)) == 0);
+    CHECK_STAGE("reject out-of-range DMA object",
+        resolveDmaHandle(0u, dmaHandle, &dma) != 0);
+    CHECK_STAGE("unbind guest physical RAM",
+        bindGuestPhysicalMemory(0u, nullptr, 0u) == 0);
+    CHECK_STAGE("reject DMA after unbind",
+        resolveDmaHandle(0u, dmaHandle, &dma) != 0);
+#undef CHECK_STAGE
 
     stop();
     FreeLibrary(provider);
