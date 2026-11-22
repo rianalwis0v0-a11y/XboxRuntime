@@ -934,20 +934,23 @@ EmitCheckEqual 258
 EmitMovMemoryImmediate $progressVa 15
 
 EmitMovMemoryImmediate $progressVa 2
-# Validate the guest OBJECT_ATTRIBUTES and UNICODE_STRING fixture before NtOpenFile.
-$directoryUnicodeVa = [uint32]($base + 0x6600)
+# Validate the Xbox-native 12-byte OBJECT_ATTRIBUTES + ANSI OBJECT_STRING
+# fixture before NtOpenFile.
+$directoryAnsiVa = [uint32]($base + 0x6600)
 $directoryObjectAttributesVa = [uint32]($base + 0x6610)
 $directoryPathVa = [uint32]($base + 0x6640)
 $directoryHandleVa = [uint32]($base + 0x6790)
 $directoryInfoVa = [uint32]($base + 0x6680)
 $directoryIoVa = [uint32]($base + 0x6780)
-EmitLoadEax ([uint32]($directoryObjectAttributesVa + 8))
-EmitCheckEqual $directoryUnicodeVa
-EmitLoadEax $directoryUnicodeVa
-EmitCheckEqual 0x001E001C
-EmitLoadEax ([uint32]($directoryUnicodeVa + 4))
+$directoryPathLength = [uint16]("\Device\Cdrom0".Length)
+$directoryStringLengths = [uint32]($directoryPathLength -bor (($directoryPathLength + 1) -shl 16))
+EmitLoadEax ([uint32]($directoryObjectAttributesVa + 4))
+EmitCheckEqual $directoryAnsiVa
+EmitLoadEax $directoryAnsiVa
+EmitCheckEqual $directoryStringLengths
+EmitLoadEax ([uint32]($directoryAnsiVa + 4))
 EmitCheckEqual $directoryPathVa
-EmitByte 0x0F; EmitByte 0xB7; EmitByte 0x05; Emit32 $directoryPathVa
+EmitByte 0x0F; EmitByte 0xB6; EmitByte 0x05; Emit32 $directoryPathVa
 EmitCheckEqual 92
 EmitPush 1
 EmitPush 7
@@ -1152,23 +1155,19 @@ Put32 0x6098 0x40
 $guestPathBytes.CopyTo($b,0x6100)
 [Text.Encoding]::ASCII.GetBytes("1234" + [char]0).CopyTo($b,0x6140)
 $directoryPath = "\Device\Cdrom0"
-$directoryPathBytes = [Text.Encoding]::Unicode.GetBytes($directoryPath + [char]0)
-$directoryPathLength = [uint16]($directoryPath.Length * 2)
-# Reserve a non-overlapping slice below the import thunk table. The report's
-# 0x6500..0x6590 area is reused by later tests; 0x6600..0x67FF is dedicated
-# to this directory-open/query fixture.
-$directoryUnicodeVa = [uint32]($base + 0x6600)
+$directoryPathBytes = [Text.Encoding]::ASCII.GetBytes($directoryPath + [char]0)
+$directoryPathLength = [uint16]$directoryPath.Length
+# Reserve a non-overlapping slice below the import thunk table for this fixture.
+$directoryAnsiVa = [uint32]($base + 0x6600)
 $directoryObjectAttributesVa = [uint32]($base + 0x6610)
 $directoryPathVa = [uint32]($base + 0x6640)
 Put16 0x6600 $directoryPathLength
-Put16 0x6602 ([uint16]($directoryPathLength + 2))
+Put16 0x6602 ([uint16]($directoryPathLength + 1))
 Put32 0x6604 $directoryPathVa
-Put32 0x6610 24
-Put32 0x6614 0
-Put32 0x6618 $directoryUnicodeVa
-Put32 0x661C 0
-Put32 0x6620 0
-Put32 0x6624 0
+# Xbox OBJECT_ATTRIBUTES: RootDirectory, ObjectName, Attributes.
+Put32 0x6610 0
+Put32 0x6614 $directoryAnsiVa
+Put32 0x6618 0x40
 $directoryPathBytes.CopyTo($b,0x6640)
 
 [Text.Encoding]::ASCII.GetBytes("A").CopyTo($b,0x6180)
