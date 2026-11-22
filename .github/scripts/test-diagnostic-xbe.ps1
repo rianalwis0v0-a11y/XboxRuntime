@@ -1048,6 +1048,16 @@ EmitCheckEqual 0
 # opens the Xbox config volume with the real ANSI OBJECT_ATTRIBUTES ABI.
 EmitCallStaticXnet
 EmitCheckEqual 0
+
+# Exercise the guest DbgPrint kernel import. The message is stored in the
+# mapped diagnostic data section, and the returned character count is checked.
+$dbgPrintMessage = "THIS IS WORKING - XboxRuntime guest kernel reached DbgPrint`n"
+$dbgPrintMessageVa = [uint32]($base + 0x6600)
+EmitPush $dbgPrintMessageVa
+EmitCallImport 8
+EmitByte 0x83; EmitByte 0xC4; EmitByte 0x04
+EmitCheckEqual ([uint32]$dbgPrintMessage.Length)
+
 Write-Host "Generated diagnostic assertions: $script:checkIndex"
 EmitByte 0x31; EmitByte 0xC0; EmitByte 0xC3
 
@@ -1095,6 +1105,7 @@ Put16 0x20A 0
 Put16 0x20C 5849
 Put16 0x20E 0
 [Text.Encoding]::ASCII.GetBytes("XNET" + [char]0).CopyTo($b,0x2F0)
+[Text.Encoding]::ASCII.GetBytes($dbgPrintMessage + [char]0).CopyTo($b,0x6600)
 
 # Build a tiny static-XNET routine: NtOpenFile on a title file mapped
 # through the Windows host path, then NtClose.
