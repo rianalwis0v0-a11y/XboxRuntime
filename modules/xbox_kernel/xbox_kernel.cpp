@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -37,6 +38,9 @@ struct BackendContext {
     int lastReserveResult = 0;
     DWORD lastReserveWin32Error = ERROR_SUCCESS;
     DWORD lastReserveChildExitCode = 0;
+    std::uint32_t gpuStats[6]{};
+    std::uint32_t gpuSurface[10]{};
+    bool gpuDiagnosticsValid = false;
 };
 BackendContext g_context;
 std::mutex g_mutex;
@@ -108,6 +112,8 @@ using GpuSubmitMethodFn = int (__cdecl*)(uint32_t, uint32_t, uint32_t);
 using GpuFlushFn = void (__cdecl*)();
 using GpuMemoryReadFn = int (__cdecl*)(uint32_t, void*, uint32_t);
 using GpuMemoryWriteFn = int (__cdecl*)(uint32_t, const void*, uint32_t);
+using GpuGetStatsFn = int (__cdecl*)(void*);
+using GpuGetSurfaceInfoFn = int (__cdecl*)(void*);
 
 bool GpuRangeFits(uint32_t offset, uint32_t length) {
     return uint64_t(offset) + uint64_t(length) <= 0x100000000ull;
@@ -219,6 +225,10 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
         providerStarted ? GetProcAddress(provider, "XboxNV2A_ReadRAMIN") : nullptr);
     const auto writeRamin = reinterpret_cast<GpuMemoryWriteFn>(
         providerStarted ? GetProcAddress(provider, "XboxNV2A_WriteRAMIN") : nullptr);
+    const auto getStats = reinterpret_cast<GpuGetStatsFn>(
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_GetStats") : nullptr);
+    const auto getSurfaceInfo = reinterpret_cast<GpuGetSurfaceInfoFn>(
+        providerStarted ? GetProcAddress(provider, "XboxNV2A_GetSurfaceInfo") : nullptr);
     const bool providerReady = providerStarted && rendererReady && readRegister && writeRegister &&
         submitMethod && flush && readVram && writeVram && readRamin && writeRamin;
     if (providerStarted && !providerReady) {
@@ -342,6 +352,17 @@ DWORD WINAPI GpuServiceWorker(void* parameter) {
             break;
     }
 cleanup:
+    if (providerStarted && flush)
+        flush();
+    if (providerStarted && getStats && getSurfaceInfo) {
+        std::uint32_t stats[6]{};
+        std::uint32_t surface[10]{};
+        if (getStats(stats) == 0 && getSurfaceInfo(surface) == 0) {
+            std::memcpy(context->gpuStats, stats, sizeof(stats));
+            std::memcpy(context->gpuSurface, surface, sizeof(surface));
+            context->gpuDiagnosticsValid = true;
+        }
+    }
     if (providerStarted && bindPhysicalMemory)
         (void)bindPhysicalMemory(0u, nullptr, 0u);
     if (providerStarted && providerStop) providerStop();
@@ -840,6 +861,12 @@ extern "C" int __cdecl XboxKernelWaitForGuestExit(
     *eax = reply.eax; *ebx = reply.ebx; *ecx = reply.ecx; *edx = reply.edx;
     *esi = reply.esi; *edi = reply.edi; *ebp = reply.ebp; *esp = reply.esp;
     context.started = false;
+    // The guest closes its GPU pipe as it exits. Let the worker flush and
+    // snapshot the provider before the integration harness asks for pixels.
+    if (context.process.hProcess)
+        (void)WaitForSingleObject(context.process.hProcess, 10000);
+    if (context.gpuThread)
+        (void)WaitForSingleObject(context.gpuThread, 10000);
     return ERROR_SUCCESS;
 }
 
@@ -865,6 +892,25 @@ extern "C" int __cdecl XboxKernelSetGuestTitlePath(const wchar_t* path) {
     if (g_context.process.hProcess || g_context.mapping) return 2;
     g_context.titlePath = path;
     return 0;
+}
+extern "C" int __cdecl XboxKernelGetGpuDiagnostics(
+    std::uint32_t* stats, std::uint32_t* surface) {
+    if (!stats || !surface) return ERROR_INVALID_PARAMETER;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_context.gpuDiagnosticsValid) return ERROR_NOT_READY;
+    std::memcpy(stats, g_context.gpuStats, sizeof(g_context.gpuStats));
+    std::memcpy(surface, g_context.gpuSurface, sizeof(g_context.gpuSurface));
+    return ERROR_SUCCESS;
+}
+extern "C" int __cdecl XboxKernelReadGpuVram(
+    std::uint32_t offset, void* destination, std::uint32_t length) {
+    if (!destination || !length ||
+        std::uint64_t(offset) + length > XBOX_GPU_SHARED_VRAM_SIZE)
+        return ERROR_INVALID_PARAMETER;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_context.hostGpuMemoryView) return ERROR_INVALID_STATE;
+    std::memcpy(destination, g_context.hostGpuMemoryView + offset, length);
+    return ERROR_SUCCESS;
 }
 extern "C" int __cdecl XboxKernelGetLastReserveDiagnostic(
     int* reserveResult, DWORD* win32Error, DWORD* childExitCode) {
