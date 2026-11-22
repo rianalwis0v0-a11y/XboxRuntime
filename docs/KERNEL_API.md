@@ -100,6 +100,11 @@ These implementations are newly routed, but still need guest-side behavioural co
 - The diagnostic XBE checks all four information classes against its mounted test volume, including sector geometry, disk device type, and non-empty filesystem metadata.
 - Windows does not expose the original Xbox volume creation timestamp through these APIs; the returned creation-time field is zero. This is a documented compatibility limitation, not full Xbox volume emulation.
 
+## Kernel debug-print execution test
+
+- Ordinal 8, `DbgPrint`, is called directly by the comprehensive diagnostic XBE with the message `THIS IS WORKING - XboxRuntime guest kernel reached DbgPrint`.
+- The fixture checks the returned character count and emits the message through the guest process debug-output channel. This validates the guest import thunk, x86 call boundary, variadic formatting path, and return value; it is not a graphics/framebuffer test.
+
 ## Still incomplete
 
 Many catalogued APIs remain unsupported, including substantial parts of the I/O manager, object manager, device/interrupt queues, physical hardware access, crypto, and kernel debugging/memory diagnostics. These need real implementations and behavioural tests before they can be advertised as supported. A mapped ordinal is not equivalent to a working game-facing API.
