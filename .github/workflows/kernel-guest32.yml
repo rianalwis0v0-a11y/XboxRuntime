@@ -45,7 +45,9 @@ jobs:
           grep -q 'm_Header.dwBaseAddr = 0x10000000;' nxdk/tools/cxbe/Xbe.cpp
           cat > nxdk/samples/hello/main.c <<'EOF'
           __declspec(thread) static volatile unsigned int kernel_smoke_tls = 0x58424532u;
+          volatile unsigned int kernel_smoke_marker = 0x58424530u;
           int main(void) {
+              kernel_smoke_marker = 0x58424533u;
               kernel_smoke_tls ^= 0x00000001u;
               return kernel_smoke_tls == 0x58424533u ? 0 : 1;
           }
@@ -72,6 +74,20 @@ jobs:
           new = "    for (frames_total = 0; frames_total < 3; ++frames_total) {"
           if text.count(old) != 1:
               raise SystemExit("Expected exactly one triangle render loop")
+          replacements = [
+              ("int main(void)\\n{\\n",
+               "volatile uint32_t xbe_gpu_stage = 0x47505530u;\\n\\nint main(void)\\n{\\n    xbe_gpu_stage = 0x47505531u;\\n"),
+              ("    pb_show_front_screen();\\n",
+               "    xbe_gpu_stage = 0x47505532u;\\n    pb_show_front_screen();\\n"),
+              ("    matrix_viewport(m_viewport, 0, 0, width, height, 0, 65536.0f);\\n",
+               "    matrix_viewport(m_viewport, 0, 0, width, height, 0, 65536.0f);\\n    xbe_gpu_stage = 0x47505533u;\\n"),
+              ("        frames_total++;\\n",
+               "        frames_total++;\\n        xbe_gpu_stage = 0x47505534u;\\n")
+          ]
+          for old_text, new_text in replacements:
+              if text.count(old_text) != 1:
+                  raise SystemExit(f"Expected exactly one source marker: {old_text!r}")
+              text = text.replace(old_text, new_text)
           source.write_text(text.replace(old, new))
           PY
           eval "$(./nxdk/bin/activate -s)"
