@@ -865,12 +865,9 @@ extern "C" int __cdecl XboxKernelWaitForGuestExit(
     *eax = reply.eax; *ebx = reply.ebx; *ecx = reply.ecx; *edx = reply.edx;
     *esi = reply.esi; *edi = reply.edi; *ebp = reply.ebp; *esp = reply.esp;
     context.started = false;
-    // The guest closes its GPU pipe as it exits. Let the worker flush and
-    // snapshot the provider before the integration harness asks for pixels.
-    if (context.process.hProcess)
-        (void)WaitForSingleObject(context.process.hProcess, 10000);
-    if (context.gpuThread)
-        (void)WaitForSingleObject(context.gpuThread, 10000);
+    // The guest process remains alive after title exit. Stop the provider
+    // explicitly now that the title thread is finished, flushing readback.
+    StopGpuService(context);
     return ERROR_SUCCESS;
 }
 
