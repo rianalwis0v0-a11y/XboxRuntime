@@ -53,7 +53,7 @@ jobs:
           }
           EOF
           eval "$(./nxdk/bin/activate -s)"
-          make -C nxdk/samples/hello -j2
+          NXDK_LDFLAGS="-entry:main" make -C nxdk/samples/hello -j2
           test -s nxdk/samples/hello/bin/default.xbe
           sha256sum nxdk/samples/hello/bin/default.xbe
       - name: Upload NXDK XBE fixture
@@ -91,7 +91,7 @@ jobs:
           source.write_text(text.replace(old, new))
           PY
           eval "$(./nxdk/bin/activate -s)"
-          make -C nxdk/samples/triangle -j2
+          NXDK_LDFLAGS="-entry:main" make -C nxdk/samples/triangle -j2
           test -s nxdk/samples/triangle/bin/default.xbe
           sha256sum nxdk/samples/triangle/bin/default.xbe
 
