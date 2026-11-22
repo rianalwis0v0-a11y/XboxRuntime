@@ -77,8 +77,8 @@ jobs:
           # The XBE entrypoint ABI is void, so main()'s return value is not
           # reflected in the guest thread exit code. Trap on pb_init failure
           # so CI cannot mistake an early return for a successful GPU test.
-          init_error = '        debugPrint("pb_init Error %d\\n", status);\\n        Sleep(2000);\\n        return 1;'
-          init_failure = '        debugPrint("pb_init Error %d\\n", status);\\n        __builtin_trap();\\n        return 1;'
+          init_error = '        debugPrint("pb_init Error %d\\n", status);\n        Sleep(2000);\n        return 1;'
+          init_failure = '        debugPrint("pb_init Error %d\\n", status);\n        __builtin_trap();\n        return 1;'
           if text.count(init_error) != 1:
               raise SystemExit("Expected exactly one pb_init failure path")
           text = text.replace(init_error, init_failure)
