@@ -301,9 +301,11 @@ int wmain(int argc, wchar_t** argv) {
     if (expectGpu) {
         XboxGpuStatsSnapshot stats{};
         const int statsResult = getLastGpuStats(&stats);
-        std::printf("GPU stats: result=%d frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u\n",
+        std::printf("GPU stats: result=%d frames=%u draws=%u vertices=%u methods=%u ignored=%u clears=%u rpc=%u reads=%u writes=%u submits=%u flushes=%u errors=%u\n",
             statsResult, stats.frames, stats.draw_calls, stats.vertices_submitted,
-            stats.methods_handled, stats.methods_ignored, stats.clears);
+            stats.methods_handled, stats.methods_ignored, stats.clears,
+            stats.rpc_requests, stats.register_reads, stats.register_writes,
+            stats.submit_method_calls, stats.flush_calls, stats.rpc_errors);
         if (statsResult != ERROR_SUCCESS || !stats.draw_calls ||
             !stats.vertices_submitted || !stats.methods_handled) {
             std::fprintf(stderr,
