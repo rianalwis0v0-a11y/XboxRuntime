@@ -113,14 +113,14 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
     NTSTATUS status;
     PDEVICE_OBJECT deviceObject = NULL;
-    UNICODE_STRING deviceName, dosName;
+    UNICODE_STRING deviceName, dosName, defaultSddl;
     UNREFERENCED_PARAMETER(RegistryPath);
 
     RtlInitUnicodeString(&deviceName, XDVDFS_DEVICE_NAME);
+    RtlInitUnicodeString(&defaultSddl, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)");
     status = IoCreateDeviceSecure(DriverObject, 0, &deviceName,
         FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, FALSE,
-        L"D:P(A;;GA;;;SY)(A;;GA;;;BA)",
-        &GUID_DEVCLASS_XDVDFS_READER, &deviceObject);
+        &defaultSddl, &GUID_DEVCLASS_XDVDFS_READER, &deviceObject);
     if (!NT_SUCCESS(status))
         return status;
 
